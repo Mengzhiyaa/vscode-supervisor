@@ -26,15 +26,7 @@ export abstract class BaseWebviewProvider implements vscode.WebviewViewProvider 
     ): void | Thenable<void> {
         this._view = webviewView;
 
-        // Configure webview options
-        webviewView.webview.options = {
-            enableScripts: true,
-            localResourceRoots: [
-                vscode.Uri.joinPath(this._extensionUri, 'webview', 'dist'),
-                vscode.Uri.joinPath(this._extensionUri, 'resources'),
-                ...this._getAdditionalLocalResourceRoots(),
-            ]
-        };
+        this._applyWebviewOptions(webviewView.webview);
 
         // Set up JSON-RPC connection
         this._setupRpcConnection(webviewView.webview);
@@ -176,5 +168,28 @@ export abstract class BaseWebviewProvider implements vscode.WebviewViewProvider 
 
     protected _serializeInlineScriptData(value: unknown): string {
         return JSON.stringify(value).replace(/</g, '\\u003c');
+    }
+
+    protected _getWebviewLocalResourceRoots(): readonly vscode.Uri[] {
+        return [
+            vscode.Uri.joinPath(this._extensionUri, 'webview', 'dist'),
+            vscode.Uri.joinPath(this._extensionUri, 'resources'),
+            ...this._getAdditionalLocalResourceRoots(),
+        ];
+    }
+
+    protected _applyWebviewOptions(webview: vscode.Webview): void {
+        webview.options = {
+            enableScripts: true,
+            localResourceRoots: [...this._getWebviewLocalResourceRoots()],
+        };
+    }
+
+    protected _refreshWebviewOptions(): void {
+        if (!this._view) {
+            return;
+        }
+
+        this._applyWebviewOptions(this._view.webview);
     }
 }

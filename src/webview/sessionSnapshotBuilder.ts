@@ -66,6 +66,7 @@ export class SessionSnapshotBuilder {
                 session.sessionMetadata.sessionName ||
                 session.runtimeMetadata.runtimeName,
             runtimeName: session.runtimeMetadata.runtimeName,
+            languageId: session.runtimeMetadata.languageId,
             state: mapRuntimeStateToSessionState(session.state),
             runtimePath: session.runtimeMetadata.runtimePath,
             runtimeVersion: session.runtimeMetadata.languageVersion,
@@ -82,6 +83,7 @@ export class SessionSnapshotBuilder {
     ): SessionProtocol.SessionInfo {
         return {
             ...session,
+            languageId: instance.runtimeMetadata.languageId || session.languageId,
             state: mapConsoleStateToSessionState(instance.state),
             runtimePath: instance.runtimeMetadata.runtimePath || session.runtimePath,
             runtimeVersion: instance.runtimeMetadata.languageVersion || session.runtimeVersion,

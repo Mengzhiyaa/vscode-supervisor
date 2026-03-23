@@ -29,11 +29,17 @@ export interface SessionModelState {
 interface SessionState {
     editor: SessionModelState;
     history: SessionHistoryState;
+    languageId: string;
+}
+
+export interface KnownSessionInfo {
+    sessionId: string;
+    languageId: string;
 }
 
 export interface SessionModelManager {
-    ensureSession(sessionId: string): SessionModelState;
-    ensureSessions(sessionIds: string[]): void;
+    ensureSession(sessionId: string, languageId: string): SessionModelState;
+    ensureSessions(sessions: KnownSessionInfo[]): void;
     getHistoryState(sessionId: string): SessionHistoryState;
     setHistoryState(sessionId: string, historyState: SessionHistoryState): void;
     setViewState(
@@ -80,67 +86,156 @@ export function createSessionModelManager(
         };
     }
 
+    function normalizeLanguageId(languageId: string | undefined): string {
+        const normalizedLanguageId = languageId?.trim().toLowerCase();
+        return normalizedLanguageId || "plaintext";
+    }
+
+    function buildModelUri(
+        sessionId: string,
+        languageId: string,
+    ): MonacoApi.Uri {
+        const normalizedLanguageId = normalizeLanguageId(languageId).replace(
+            /[^a-z0-9_-]+/g,
+            "-",
+        );
+        return monaco.Uri.parse(
+            `inmemory://console/session-${encodeURIComponent(sessionId)}.${normalizedLanguageId}`,
+        );
+    }
+
     function registerSessionModel(
         model: MonacoApi.editor.ITextModel,
         sessionId: string,
+        languageId: string,
+        connectionOverride?: MessageConnection,
     ): void {
-        const connection = getConnection();
+        const connection = connectionOverride ?? getConnection();
         if (connection) {
-            void loadLanguageMonacoSupportModule("r").then((support) => {
+            void loadLanguageMonacoSupportModule(languageId).then((support) => {
                 support?.registerModel?.(model, sessionId, connection);
             });
         }
     }
 
-    function getOrCreateSessionState(sessionId: string): SessionState {
+    function unregisterSessionModel(
+        model: MonacoApi.editor.ITextModel,
+        languageId: string,
+    ): void {
+        void loadLanguageMonacoSupportModule(languageId).then((support) => {
+            support?.unregisterModel?.(model);
+        });
+    }
+
+    function createSessionState(
+        sessionId: string,
+        languageId: string,
+        historyState: SessionHistoryState,
+        viewState: MonacoApi.editor.ICodeEditorViewState | null,
+        initialValue = "",
+    ): SessionState {
+        const normalizedLanguageId = normalizeLanguageId(languageId);
+        const uri = buildModelUri(sessionId, normalizedLanguageId);
+        const existingModel = monaco.editor.getModel(uri);
+        const model =
+            existingModel ??
+            monaco.editor.createModel(initialValue, normalizedLanguageId, uri);
+
+        if (model.getValue() !== initialValue) {
+            model.setValue(initialValue);
+        }
+
+        registerSessionModel(model, sessionId, normalizedLanguageId);
+
+        return {
+            editor: {
+                model,
+                viewState,
+            },
+            history: cloneHistoryState(historyState),
+            languageId: normalizedLanguageId,
+        };
+    }
+
+    function replaceSessionLanguage(
+        sessionId: string,
+        sessionState: SessionState,
+        languageId: string,
+    ): SessionState {
+        const nextState = createSessionState(
+            sessionId,
+            languageId,
+            sessionState.history,
+            sessionState.editor.viewState,
+            sessionState.editor.model.getValue(),
+        );
+
+        unregisterSessionModel(sessionState.editor.model, sessionState.languageId);
+        sessionState.editor.model.dispose();
+        sessionStateById.set(sessionId, nextState);
+        return nextState;
+    }
+
+    function getOrCreateSessionState(
+        sessionId: string,
+        languageId: string,
+    ): SessionState {
+        const normalizedLanguageId = normalizeLanguageId(languageId);
+        const existing = sessionStateById.get(sessionId);
+        if (existing) {
+            if (existing.languageId !== normalizedLanguageId) {
+                return replaceSessionLanguage(
+                    sessionId,
+                    existing,
+                    normalizedLanguageId,
+                );
+            }
+            return existing;
+        }
+
+        const created = createSessionState(
+            sessionId,
+            normalizedLanguageId,
+            createDefaultHistoryState(),
+            null,
+        );
+        sessionStateById.set(sessionId, created);
+        return created;
+    }
+
+    function getExistingOrCreateSessionState(sessionId: string): SessionState {
         const existing = sessionStateById.get(sessionId);
         if (existing) {
             return existing;
         }
 
-        const uri = monaco.Uri.parse(
-            `inmemory://console/session-${encodeURIComponent(sessionId)}.R`,
-        );
-        const model =
-            monaco.editor.getModel(uri) ??
-            monaco.editor.createModel("", "r", uri);
-
-        registerSessionModel(model, sessionId);
-
-        const created: SessionState = {
-            editor: {
-                model,
-                viewState: null,
-            },
-            history: createDefaultHistoryState(),
-        };
-
-        sessionStateById.set(sessionId, created);
-        return created;
+        return getOrCreateSessionState(sessionId, "plaintext");
     }
 
     return {
-        ensureSession(sessionId) {
-            return getOrCreateSessionState(sessionId).editor;
+        ensureSession(sessionId, languageId) {
+            return getOrCreateSessionState(sessionId, languageId).editor;
         },
 
-        ensureSessions(sessionIds) {
-            for (const sessionId of sessionIds) {
-                getOrCreateSessionState(sessionId);
+        ensureSessions(sessions) {
+            for (const session of sessions) {
+                getOrCreateSessionState(session.sessionId, session.languageId);
             }
         },
 
         getHistoryState(sessionId) {
-            return cloneHistoryState(getOrCreateSessionState(sessionId).history);
+            return cloneHistoryState(
+                getExistingOrCreateSessionState(sessionId).history,
+            );
         },
 
         setHistoryState(sessionId, historyState) {
-            const state = getOrCreateSessionState(sessionId);
+            const state = getExistingOrCreateSessionState(sessionId);
             state.history = cloneHistoryState(historyState);
         },
 
         setViewState(sessionId, viewState) {
-            const state = getOrCreateSessionState(sessionId);
+            const state = getExistingOrCreateSessionState(sessionId);
             state.editor.viewState = viewState;
         },
 
@@ -163,9 +258,7 @@ export function createSessionModelManager(
                 return;
             }
 
-            void loadLanguageMonacoSupportModule("r").then((support) => {
-                support?.unregisterModel?.(state.editor.model);
-            });
+            unregisterSessionModel(state.editor.model, state.languageId);
             state.editor.model.dispose();
             sessionStateById.delete(sessionId);
             pendingCommandsBySession.delete(sessionId);
@@ -190,7 +283,12 @@ export function createSessionModelManager(
             }
 
             for (const [sessionId, state] of sessionStateById.entries()) {
-                registerModel(state.editor.model, sessionId, connection);
+                registerSessionModel(
+                    state.editor.model,
+                    sessionId,
+                    state.languageId,
+                    connection,
+                );
             }
         },
 

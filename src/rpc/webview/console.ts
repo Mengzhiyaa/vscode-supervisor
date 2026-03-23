@@ -272,6 +272,15 @@ export namespace ConsoleThemeChangedNotification {
     export const type = new NotificationType<Params>('console/themeChanged');
 }
 
+export namespace LanguageSupportAssetsChangedNotification {
+
+    export interface Params {
+        modules: Record<string, string>;
+    }
+
+    export const type = new NotificationType<Params>('console/languageSupportAssetsChanged');
+}
+
 export namespace HistoryAddNotification {
 
     export interface Params {

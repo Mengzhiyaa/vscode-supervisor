@@ -34,6 +34,8 @@
         runtimeItems: RuntimeItem[];
         sessionName?: string;
         languageName?: string;
+        languageId?: string;
+        languageAssetsVersion?: number;
         onReconnect?: () => void;
         onRestart?: () => void;
         charWidth?: number;
@@ -42,6 +44,8 @@
     let {
         runtimeItems,
         languageName = "R",
+        languageId = "plaintext",
+        languageAssetsVersion = 0,
         onReconnect = undefined,
         onRestart = undefined,
         charWidth = 0,
@@ -75,7 +79,12 @@
 
     {#each visibleItems as runtimeItem (runtimeItem.id)}
         {#if runtimeItem instanceof RuntimeItemActivity}
-            <RuntimeActivity runtimeItemActivity={runtimeItem} {charWidth} />
+            <RuntimeActivity
+                runtimeItemActivity={runtimeItem}
+                {languageId}
+                {languageAssetsVersion}
+                {charWidth}
+            />
         {:else if runtimeItem instanceof RuntimeItemStarted}
             <RuntimeStarted runtimeItemStarted={runtimeItem} />
         {:else if runtimeItem instanceof RuntimeItemStartup}

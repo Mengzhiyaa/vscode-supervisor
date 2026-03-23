@@ -309,6 +309,7 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
                 };
                 this._languageSupport.set(runtimeProvider.languageId, updatedRegistration);
                 this._setLanguageWebviewAssets(runtimeProvider.languageId, updatedRegistration.webviewAssets);
+                this._refreshLanguageSupportAssetsInWebviews();
 
                 if (this._activated) {
                     await this._initializeLanguageSupportAfterActivation(updatedRegistration);
@@ -321,6 +322,7 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
 
         this._languageSupport.set(runtimeProvider.languageId, normalizedRegistration);
         this._setLanguageWebviewAssets(runtimeProvider.languageId, normalizedRegistration.webviewAssets);
+        this._refreshLanguageSupportAssetsInWebviews();
         this._sessionManager.registerRuntimeProvider(runtimeProvider);
         this._runtimeManager.registerRuntimeProvider(runtimeProvider);
 
@@ -465,6 +467,10 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
         }
 
         this._languageWebviewAssets.set(languageId, assets);
+    }
+
+    private _refreshLanguageSupportAssetsInWebviews(): void {
+        this._webviewManager.refreshLanguageSupportAssets();
     }
 
     private _getLanguageWebviewLocalResourceRoots(): vscode.Uri[] {

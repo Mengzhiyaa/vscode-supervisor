@@ -55,6 +55,7 @@
         id: string;
         name: string;
         runtimeName: string;
+        languageId?: string;
         state: ConsoleState;
         runtimePath?: string;
         runtimeVersion?: string;
@@ -188,6 +189,7 @@
     let wordWrapBySession = $state(new Map<string, boolean>());
     let traceBySession = $state(new Map<string, boolean>());
     let resourceUsageBySession = $state(new Map<string, ResourceUsage[]>());
+    let languageAssetsVersion = $state(0);
 
     // Console width state (Positron pattern: dynamic width adjustment)
     let consoleWidthInChars = $state(80);
@@ -238,8 +240,8 @@
     }
 
     /**
-     * Handle width in characters change from ConsoleInput/Monaco (Positron pattern)
-     * Monaco provides accurate layout width and font metrics.
+     * Handle width in characters change from ConsoleInstance (Positron pattern)
+     * Width is derived from the visible console viewport, not the input widget.
      */
     function handleWidthInCharsChanged(
         sessionId: string,
@@ -264,6 +266,15 @@
                 sessionId: sessionId,
             });
         }, 200);
+    }
+
+    function replaceLanguageSupportModules(
+        modules: Record<string, string> | undefined,
+    ) {
+        globalThis.__arkLanguageMonacoSupportModules = {
+            ...(modules ?? {}),
+        };
+        languageAssetsVersion += 1;
     }
 
     // Get active session
@@ -1280,14 +1291,6 @@
         }
     }
 
-    function clearConsoleState(sessionId: string): void {
-        ensureSessionData(sessionId);
-        const data = getSessionData(sessionId);
-        data.runtimeItems = [];
-        data.runtimeItemActivities = new Map();
-        sessionDataMap = new Map(sessionDataMap);
-    }
-
     function restoreConsoleState(
         sessionId: string,
         state: SerializedConsoleState,
@@ -1567,6 +1570,13 @@
             "console/themeChanged",
             (params: { theme: ConsoleThemeData }) => {
                 consoleThemeData = params.theme;
+            },
+        );
+
+        connection.onNotification(
+            "console/languageSupportAssetsChanged",
+            (params: { modules: Record<string, string> }) => {
+                replaceLanguageSupportModules(params.modules);
             },
         );
 
@@ -1925,6 +1935,7 @@
         const prompt = getPrompt(activeSessionId);
         return {
             sessionId: activeSessionId,
+            languageId: session.languageId ?? "plaintext",
             state: session.state,
             inputPrompt: prompt.inputPrompt,
             continuationPrompt: prompt.continuationPrompt,
@@ -2014,6 +2025,7 @@
                             height={adjustedHeight}
                             runtimeItems={getSessionData(session.id).runtimeItems}
                             wordWrap={getWordWrap(session.id)}
+                            {languageAssetsVersion}
                             {charWidth}
                             {revealRequest}
                             {scrollToBottomRequest}
@@ -2024,6 +2036,7 @@
                             onPasteText={(text) => queuePastedInput(session.id, text)}
                             onRestart={() => restartSession(session.id)}
                             onInputAnchorReady={handleInputAnchorReady}
+                            onWidthInCharsChanged={handleWidthInCharsChanged}
                         />
                     {/each}
 
@@ -2032,6 +2045,7 @@
                         active={activeInputSession}
                         width={visibleConsolePaneWidth}
                         hidden={!activeInputSession}
+                        {languageAssetsVersion}
                         {connection}
                         {inputCommand}
                         themeData={consoleThemeData}
@@ -2049,8 +2063,10 @@
                         onOpenInEditor={handleOpenInEditor}
                         onClearConsole={handleClearConsole}
                         onCharWidthChanged={handleCharWidthChanged}
-                        onWidthInCharsChanged={handleWidthInCharsChanged}
-                        knownSessionIds={sessions.map((session) => session.id)}
+                        knownSessions={sessions.map((session) => ({
+                            sessionId: session.id,
+                            languageId: session.languageId ?? "plaintext",
+                        }))}
                         getAnchor={getInputAnchor}
                         anchorVersion={inputAnchorVersion}
                     />

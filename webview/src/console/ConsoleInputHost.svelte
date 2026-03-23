@@ -4,7 +4,10 @@
     import ConsoleInput from "./ConsoleInput.svelte";
     import type { MessageConnection } from "vscode-jsonrpc/browser";
     import type { ConsoleThemeData } from "$lib/monaco/languageSupport";
-    import type { ConsoleInputCommand } from "./services/sessionModelManager";
+    import type {
+        ConsoleInputCommand,
+        KnownSessionInfo,
+    } from "./services/sessionModelManager";
 
     type SessionState = ConsoleState;
 
@@ -16,6 +19,7 @@
 
     interface SessionInputHostState {
         sessionId: string;
+        languageId: string;
         state: SessionState;
         inputPrompt: string;
         continuationPrompt: string;
@@ -26,6 +30,7 @@
         hidden: boolean;
         active: boolean;
         sessionId: string;
+        languageId: string;
         state: SessionState;
         inputPrompt: string;
         continuationPrompt: string;
@@ -38,8 +43,8 @@
         onOpenInEditor?: (sessionId: string, code: string) => void;
         onClearConsole?: (sessionId: string) => void;
         onCharWidthChanged?: (charWidth: number) => void;
-        onWidthInCharsChanged?: (sessionId: string, widthInChars: number) => void;
-        knownSessionIds: string[];
+        languageAssetsVersion: number;
+        knownSessions: KnownSessionInfo[];
         connection: MessageConnection | undefined;
         inputCommand: ConsoleInputCommandEnvelope | undefined;
         themeData: ConsoleThemeData | undefined;
@@ -52,6 +57,7 @@
         width = 0,
         hidden = false,
         anchorVersion = 0,
+        languageAssetsVersion = 0,
         connection,
         inputCommand,
         themeData,
@@ -65,8 +71,7 @@
         onOpenInEditor,
         onClearConsole,
         onCharWidthChanged,
-        onWidthInCharsChanged,
-        knownSessionIds,
+        knownSessions,
         getAnchor,
     }: {
         activeSessionId: string | undefined;
@@ -74,6 +79,7 @@
         width: number;
         hidden?: boolean;
         anchorVersion?: number;
+        languageAssetsVersion?: number;
         connection: MessageConnection | undefined;
         inputCommand: ConsoleInputCommandEnvelope | undefined;
         themeData: ConsoleThemeData | undefined;
@@ -87,8 +93,7 @@
         onOpenInEditor?: (sessionId: string, code: string) => void;
         onClearConsole?: (sessionId: string) => void;
         onCharWidthChanged?: (charWidth: number) => void;
-        onWidthInCharsChanged?: (sessionId: string, widthInChars: number) => void;
-        knownSessionIds: string[];
+        knownSessions: KnownSessionInfo[];
         getAnchor: (sessionId: string) => HTMLDivElement | undefined;
     } = $props();
 
@@ -109,6 +114,7 @@
             hidden,
             active: true,
             sessionId: activeState.sessionId,
+            languageId: activeState.languageId,
             state: activeState.state,
             inputPrompt: activeState.inputPrompt,
             continuationPrompt: activeState.continuationPrompt,
@@ -121,8 +127,8 @@
             onOpenInEditor,
             onClearConsole,
             onCharWidthChanged,
-            onWidthInCharsChanged,
-            knownSessionIds,
+            languageAssetsVersion,
+            knownSessions,
             connection,
             inputCommand,
             themeData,
@@ -139,10 +145,12 @@
         mountedProps.hidden = hidden;
         mountedProps.active = true;
         mountedProps.sessionId = activeState.sessionId;
+        mountedProps.languageId = activeState.languageId;
         mountedProps.state = activeState.state;
         mountedProps.inputPrompt = activeState.inputPrompt;
         mountedProps.continuationPrompt = activeState.continuationPrompt;
-        mountedProps.knownSessionIds = knownSessionIds;
+        mountedProps.languageAssetsVersion = languageAssetsVersion;
+        mountedProps.knownSessions = knownSessions;
         mountedProps.connection = connection;
         mountedProps.inputCommand = inputCommand;
         mountedProps.themeData = themeData;

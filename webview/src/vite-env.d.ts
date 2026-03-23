@@ -32,3 +32,5 @@ declare global {
         | Record<string, string>
         | undefined;
 }
+
+export {};

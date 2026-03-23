@@ -8,6 +8,7 @@ export interface SessionInfo {
     id: string;
     name: string;
     runtimeName: string;
+    languageId: string;
     state: 'uninitialized' | 'starting' | 'ready' | 'busy' | 'offline' | 'interrupting' | 'restarting' | 'exiting' | 'exited' | 'disconnected';
     runtimePath?: string;
     runtimeVersion?: string;

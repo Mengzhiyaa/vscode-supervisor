@@ -208,6 +208,10 @@ export class WebviewManager implements vscode.Disposable {
         );
     }
 
+    refreshLanguageSupportAssets(): void {
+        this._consoleProvider?.refreshLanguageSupportAssets();
+    }
+
     /**
      * Called when a new session is created (multi-session support).
      * Subscribes all providers to the new session's events.

@@ -27,6 +27,7 @@
         id: string;
         name: string;
         runtimeName: string;
+        languageId?: string;
         state: ConsoleState;
     }
 
@@ -47,6 +48,7 @@
         revealRequest = undefined,
         scrollToBottomRequest = undefined,
         openSearchRequest = undefined,
+        languageAssetsVersion = 0,
         charWidth = 0,
         onSelectAll,
         onFocusInput,
@@ -54,6 +56,7 @@
         onPasteText,
         onRestart = undefined,
         onInputAnchorReady = undefined,
+        onWidthInCharsChanged = undefined,
     }: {
         session: SessionInfo;
         active: boolean;
@@ -66,6 +69,7 @@
             | undefined;
         scrollToBottomRequest: { sessionId: string; nonce: number } | undefined;
         openSearchRequest: { sessionId: string; nonce: number } | undefined;
+        languageAssetsVersion?: number;
         charWidth: number;
         onSelectAll: () => void;
         onFocusInput: () => void;
@@ -75,6 +79,10 @@
         onInputAnchorReady?: (
             sessionId: string,
             anchor: HTMLDivElement | null,
+        ) => void;
+        onWidthInCharsChanged?: (
+            sessionId: string,
+            widthInChars: number,
         ) => void;
     } = $props();
 
@@ -87,7 +95,9 @@
     let lastRevealNonce = $state<number | undefined>(undefined);
     let lastScrollNonce = $state<number | undefined>(undefined);
     let lastOpenSearchNonce = $state<number | undefined>(undefined);
+    let lastWidthInChars = $state<number | undefined>(undefined);
     let inputAnchorRef: HTMLDivElement;
+    let widthInCharsAnimationFrame: number | undefined;
 
     // Search state
     let searchVisible = $state(false);
@@ -584,6 +594,42 @@
         }, 2000);
     }
 
+    function updateWidthInCharsFromConsoleInstance() {
+        if (!onWidthInCharsChanged || charWidth <= 0) {
+            return;
+        }
+
+        let consoleInputWidth = adjustedWidth;
+        if (consoleInstanceRef?.scrollHeight >= consoleInstanceRef?.clientHeight) {
+            consoleInputWidth -= 14;
+        }
+
+        if (consoleInputWidth <= 0) {
+            return;
+        }
+
+        const widthInChars = Math.max(
+            40,
+            Math.floor(consoleInputWidth / charWidth),
+        );
+
+        if (widthInChars !== lastWidthInChars) {
+            lastWidthInChars = widthInChars;
+            onWidthInCharsChanged(session.id, widthInChars);
+        }
+    }
+
+    function scheduleWidthInCharsUpdate() {
+        if (widthInCharsAnimationFrame !== undefined) {
+            cancelAnimationFrame(widthInCharsAnimationFrame);
+        }
+
+        widthInCharsAnimationFrame = requestAnimationFrame(() => {
+            widthInCharsAnimationFrame = undefined;
+            updateWidthInCharsFromConsoleInstance();
+        });
+    }
+
     // Restore scroll position on mount
     onMount(() => {
         if (onInputAnchorReady && inputAnchorRef) {
@@ -596,6 +642,7 @@
             observeSearchContent();
             isInitialMount = false;
         });
+        scheduleWidthInCharsUpdate();
     });
 
     // Clean up search on destroy
@@ -609,6 +656,9 @@
             clearTimeout(searchContentRefreshTimer);
         }
         searchContentObserver?.disconnect();
+        if (widthInCharsAnimationFrame !== undefined) {
+            cancelAnimationFrame(widthInCharsAnimationFrame);
+        }
     });
 
     // Scroll to bottom when items change (if not locked and not initial mount)
@@ -658,6 +708,17 @@
 
     // Adjust width to account for indentation (Positron pattern)
     const adjustedWidth = $derived(width - 10);
+
+    $effect(() => {
+        void adjustedWidth;
+        void height;
+        void charWidth;
+        void runtimeItems.length;
+        void wordWrap;
+        void active;
+        void languageAssetsVersion;
+        scheduleWidthInCharsUpdate();
+    });
 </script>
 
 <div
@@ -699,7 +760,14 @@
 
     <div class="console-instance-container">
         <!-- prettier-ignore -->
-        <ConsoleInstanceItems {runtimeItems} {charWidth} {onRestart} sessionName={session.name || session.runtimeName || "Session"} />
+        <ConsoleInstanceItems
+            {runtimeItems}
+            languageId={session.languageId ?? "plaintext"}
+            {languageAssetsVersion}
+            {charWidth}
+            {onRestart}
+            sessionName={session.name || session.runtimeName || "Session"}
+        />
         <div class="console-input-anchor" bind:this={inputAnchorRef}></div>
     </div>
 </div>

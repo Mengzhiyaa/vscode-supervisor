@@ -27,10 +27,17 @@
 
     interface Props {
         runtimeItemActivity: RuntimeItemActivity;
+        languageId?: string;
+        languageAssetsVersion?: number;
         charWidth?: number;
     }
 
-    let { runtimeItemActivity, charWidth = 0 }: Props = $props();
+    let {
+        runtimeItemActivity,
+        languageId = "plaintext",
+        languageAssetsVersion = 0,
+        charWidth = 0,
+    }: Props = $props();
     let activityItemsStore = $derived(runtimeItemActivity.activityItemsStore);
 
     // Pre-filter visible items using $derived for better reactivity and performance
@@ -42,7 +49,12 @@
 <div class="runtime-activity" data-execution-id={runtimeItemActivity.id}>
     {#each visibleActivityItems as activityItem (activityItem.id)}
         {#if activityItem instanceof ActivityItemInput}
-            <ActivityInput activityItemInput={activityItem} {charWidth} />
+            <ActivityInput
+                activityItemInput={activityItem}
+                {languageId}
+                {languageAssetsVersion}
+                {charWidth}
+            />
         {:else if activityItem instanceof ActivityItemStream}
             {#if activityItem.type === ActivityItemStreamType.OUTPUT}
                 <ActivityOutputStream activityItemStream={activityItem} />

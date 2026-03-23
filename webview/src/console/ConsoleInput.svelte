@@ -25,6 +25,7 @@
     import {
         createSessionModelManager,
         type ConsoleInputCommand,
+        type KnownSessionInfo,
         type SessionHistoryState,
     } from "./services/sessionModelManager";
     import HistoryBrowserPopup from "./HistoryBrowserPopup.svelte";
@@ -50,7 +51,8 @@
         readonly hidden: boolean;
         readonly active: boolean;
         readonly sessionId: string;
-        readonly knownSessionIds?: string[];
+        readonly languageId: string;
+        readonly knownSessions?: KnownSessionInfo[];
         readonly state: ConsoleState;
         readonly inputPrompt: string;
         readonly continuationPrompt: string;
@@ -63,12 +65,9 @@
         readonly onOpenInEditor?: (sessionId: string, code: string) => void;
         readonly onClearConsole?: (sessionId: string) => void;
         readonly onCharWidthChanged?: (charWidth: number) => void;
-        readonly onWidthInCharsChanged?: (
-            sessionId: string,
-            widthInChars: number,
-        ) => void;
         readonly connection: MessageConnection | undefined;
         readonly consoleSettings: ConsoleSettings;
+        readonly languageAssetsVersion?: number;
         readonly inputCommand?:
             | {
                   sessionId: string;
@@ -84,7 +83,8 @@
         hidden,
         active = true,
         sessionId,
-        knownSessionIds = [],
+        languageId = "plaintext",
+        knownSessions = [],
         state: consoleState,
         inputPrompt = ">",
         continuationPrompt = "+",
@@ -97,9 +97,9 @@
         onOpenInEditor,
         onClearConsole,
         onCharWidthChanged,
-        onWidthInCharsChanged,
         connection,
         consoleSettings,
+        languageAssetsVersion = 0,
         inputCommand,
         themeData,
     }: ConsoleInputProps = $props();
@@ -112,7 +112,6 @@
     // State refs (Positron pattern)
     // svelte-ignore state_referenced_locally
     let codeEditorWidth = $state(width);
-    let lastWidthInChars = $state<number | undefined>(undefined);
 
     // History state (Positron pattern: HistoryNavigator2)
     let historyEntries = $state<IInputHistoryEntry[]>([]);
@@ -132,6 +131,7 @@
     let languageMonacoSupportModule:
         | LanguageMonacoSupportModule
         | undefined;
+    let languageMonacoSupportModuleLanguageId = "";
     let destroyed = false;
 
     const handledCommandNonces = new Set<number>();
@@ -153,16 +153,47 @@
     // Ref to prevent concurrent execute attempts from key-repeat or rapid Enter presses.
     const executeAttemptInProgressRef = { current: false };
 
-    async function ensureRMonacoSupportModule(): Promise<
+    function normalizeLanguageId(value: string | undefined): string {
+        const normalizedLanguageId = value?.trim().toLowerCase();
+        return normalizedLanguageId || "plaintext";
+    }
+
+    function currentLanguageId(): string {
+        return normalizeLanguageId(languageId);
+    }
+
+    async function ensureLanguageMonacoSupportModule(
+        targetLanguageId: string,
+    ): Promise<
         LanguageMonacoSupportModule | undefined
     > {
-        if (languageMonacoSupportModule) {
+        const normalizedLanguageId = normalizeLanguageId(targetLanguageId);
+        if (
+            languageMonacoSupportModule &&
+            languageMonacoSupportModuleLanguageId === normalizedLanguageId
+        ) {
             return languageMonacoSupportModule;
         }
 
         languageMonacoSupportModule =
-            await loadLanguageMonacoSupportModule("r");
+            await loadLanguageMonacoSupportModule(normalizedLanguageId);
+        languageMonacoSupportModuleLanguageId = normalizedLanguageId;
         return languageMonacoSupportModule;
+    }
+
+    async function ensureLanguageSupportRegistered(
+        targetLanguageId: string,
+    ): Promise<LanguageMonacoSupportModule | undefined> {
+        const languageMonacoSupport =
+            await ensureLanguageMonacoSupportModule(targetLanguageId);
+
+        if (destroyed) {
+            return languageMonacoSupport;
+        }
+
+        languageMonacoSupport?.registerLanguage();
+        languageMonacoSupport?.ensureProviders?.();
+        return languageMonacoSupport;
     }
 
     function applyMonacoTheme(theme: ConsoleThemeData) {
@@ -313,7 +344,6 @@
             width: layoutWidth,
             height: codeEditorWidget.getContentHeight(),
         });
-        updateWidthInCharsFromMonaco();
     }
 
     function currentSessionId(): string {
@@ -732,20 +762,35 @@
         }
     }
 
-    function activateSessionModel(nextSessionId: string): void {
+    function activateSessionModel(
+        nextSessionId: string,
+        nextLanguageId: string,
+        force = false,
+    ): void {
         if (!codeEditorWidget) {
             return;
         }
 
         const previousSessionId = currentSessionId();
         if (previousSessionId === nextSessionId) {
-            flushPendingCommands(nextSessionId);
-            return;
+            const nextState = sessionModelManager.ensureSession(
+                nextSessionId,
+                nextLanguageId,
+            );
+            if (!force && codeEditorWidget.getModel() === nextState.model) {
+                flushPendingCommands(nextSessionId);
+                return;
+            }
         }
 
-        saveSessionState(previousSessionId);
+        if (previousSessionId !== nextSessionId) {
+            saveSessionState(previousSessionId);
+        }
 
-        const nextState = sessionModelManager.ensureSession(nextSessionId);
+        const nextState = sessionModelManager.ensureSession(
+            nextSessionId,
+            nextLanguageId,
+        );
         editorHost.activateSession(
             nextSessionId,
             nextState.model,
@@ -753,7 +798,6 @@
         );
 
         applyHistoryState(sessionModelManager.getHistoryState(nextSessionId));
-        updateWidthInCharsFromMonaco();
         flushPendingCommands(nextSessionId);
     }
 
@@ -765,9 +809,9 @@
     }
 
     function syncKnownSessionModels(): void {
-        sessionModelManager.ensureSessions(knownSessionIds);
+        sessionModelManager.ensureSessions(knownSessions);
         sessionModelManager.pruneUnknownSessions(
-            knownSessionIds,
+            knownSessions.map((session) => session.sessionId),
             currentSessionId(),
         );
     }
@@ -908,14 +952,13 @@
                 return;
             }
 
+            const initialLanguageId = currentLanguageId();
             syncKnownSessionModels();
 
-            const monacoSupport = await ensureRMonacoSupportModule();
+            await ensureLanguageSupportRegistered(initialLanguageId);
             if (destroyed) {
                 return;
             }
-
-            monacoSupport?.registerLanguage();
 
             const fontFamily = consoleSettings.fontFamily || "monospace";
             const fontSize = consoleSettings.fontSize;
@@ -924,7 +967,7 @@
             // Create Monaco editor (Positron CodeEditorWidget pattern)
             codeEditorWidget = monaco.editor.create(codeEditorWidgetContainerRef, {
                 value: "",
-                language: "r",
+                language: initialLanguageId,
                 theme: themeData ? applyMonacoTheme(themeData) : getVSCodeTheme(),
                 minimap: { enabled: false },
                 scrollBeyondLastLine: false,
@@ -971,7 +1014,10 @@
 
             editorHost.setEditor(codeEditorWidget);
 
-            const initialSessionState = sessionModelManager.ensureSession(sessionId);
+            const initialSessionState = sessionModelManager.ensureSession(
+                sessionId,
+                initialLanguageId,
+            );
             editorHost.activateSession(
                 sessionId,
                 initialSessionState.model,
@@ -985,8 +1031,6 @@
             setupKeyBindings();
 
             // Ensure shared language providers are registered (singleton)
-            monacoSupport?.ensureProviders?.();
-
             if (active && !hidden) {
                 codeEditorWidget.focus();
             }
@@ -1105,7 +1149,6 @@
                             width: newWidth,
                             height: codeEditorWidget.getContentHeight(),
                         });
-                        updateWidthInCharsFromMonaco();
                     }
                 }
             });
@@ -1121,7 +1164,6 @@
                 width: initialWidth,
                 height: codeEditorWidget.getContentHeight(),
             });
-            updateWidthInCharsFromMonaco();
 
             // Get font info from Monaco and notify parent of character width (Positron pattern)
             // This uses Monaco's built-in font measurement which is more accurate than manual DOM measurement
@@ -1136,7 +1178,6 @@
                     onCharWidthChanged(charWidth);
                 }
             }
-            updateWidthInCharsFromMonaco();
 
             // Also listen for font info changes (e.g., when user changes font settings)
             disposables.push(
@@ -1155,17 +1196,9 @@
                                     onCharWidthChanged(newCharWidth);
                                 }
                             }
-                            updateWidthInCharsFromMonaco();
                         }
                     },
                 ),
-            );
-
-            // Listen for Monaco layout changes (e.g., when the editor size updates)
-            disposables.push(
-                codeEditorWidget.onDidLayoutChange(() => {
-                    updateWidthInCharsFromMonaco();
-                }),
             );
         })();
     });
@@ -1224,13 +1257,25 @@
             return;
         }
 
-        if (currentSessionId() !== sessionId) {
-            activateSessionModel(sessionId);
-        }
+        activateSessionModel(sessionId, currentLanguageId());
     });
 
     $effect(() => {
+        void languageAssetsVersion;
         syncKnownSessionModels();
+        sessionModelManager.updateConnection(connection);
+
+        void ensureLanguageSupportRegistered(currentLanguageId()).then(() => {
+            if (destroyed || !codeEditorWidget) {
+                return;
+            }
+
+            activateSessionModel(sessionId, currentLanguageId(), true);
+
+            if (themeData) {
+                applyMonacoTheme(themeData);
+            }
+        });
     });
 
     $effect(() => {
@@ -1264,26 +1309,6 @@
 
         applyConsoleFontSettings(currentConsoleSettings);
     });
-
-    /**
-     * Update console width in characters from Monaco Editor (Positron pattern)
-     * Uses layoutInfo.viewportColumn which is Monaco's built-in calculation:
-     * viewportColumn = Math.floor((contentWidth - verticalScrollbarWidth - 2) / typicalHalfwidthCharacterWidth)
-     * This properly accounts for content area, scrollbar, and line decorations.
-     */
-    function updateWidthInCharsFromMonaco() {
-        if (!codeEditorWidget || !onWidthInCharsChanged) return;
-
-        const layoutInfo = codeEditorWidget.getLayoutInfo();
-        if (layoutInfo.width <= 0) return;
-
-        const widthInChars = Math.max(40, layoutInfo.viewportColumn);
-
-        if (widthInChars !== lastWidthInChars) {
-            lastWidthInChars = widthInChars;
-            onWidthInCharsChanged(currentSessionId(), widthInChars);
-        }
-    }
 
     function shouldTriggerSuggestOnTab(): boolean {
         if (!codeEditorWidget) return false;

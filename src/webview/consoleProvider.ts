@@ -47,6 +47,7 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
     // Prevents redundant initial restore-state sends before instance-driven updates take over.
     private readonly _initializedSessions = new Set<string>();
     private readonly _sessionSyncSeq = new Map<string, number>();
+    private _pendingLanguageSupportAssetsRefresh = false;
 
     // Current console width in characters (Positron pattern: track for new sessions)
     private _currentWidthInChars = 80;
@@ -138,6 +139,17 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
         return this._lastClearReasons.get(sessionId);
     }
 
+    refreshLanguageSupportAssets(): void {
+        this._refreshWebviewOptions();
+
+        if (!this._connection || !this._webviewReady || !this._view) {
+            this._pendingLanguageSupportAssetsRefresh = true;
+            return;
+        }
+
+        this._sendLanguageSupportAssetsChanged();
+    }
+
     async openCodeInEditor(sessionId: string | undefined, code?: string): Promise<boolean> {
         const instance = sessionId
             ? this._consoleService?.getConsoleInstance(sessionId)
@@ -153,7 +165,7 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
         }
 
         const document = await vscode.workspace.openTextDocument({
-            language: instance?.runtimeMetadata.languageId || 'r',
+            language: instance?.runtimeMetadata.languageId || 'plaintext',
             content,
         });
 
@@ -784,6 +796,10 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
             this._sendRestoreStatesForInstances();
             this._pendingRestoreStatesForInstances = false;
         }
+
+        if (this._pendingLanguageSupportAssetsRefresh) {
+            this._sendLanguageSupportAssetsChanged();
+        }
     }
 
     private _buildSessionInfoSnapshot(): SessionProtocol.SessionInfoNotification.Params {
@@ -807,6 +823,21 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
         this._connection.sendNotification(ConsoleProtocol.ConsoleThemeChangedNotification.type, {
             theme,
         });
+    }
+
+    private _sendLanguageSupportAssetsChanged(): void {
+        if (!this._connection || !this._webviewReady || !this._view) {
+            this._pendingLanguageSupportAssetsRefresh = true;
+            return;
+        }
+
+        this._connection.sendNotification(
+            ConsoleProtocol.LanguageSupportAssetsChangedNotification.type,
+            {
+                modules: this._getLanguageMonacoSupportModuleUris(this._view.webview),
+            },
+        );
+        this._pendingLanguageSupportAssetsRefresh = false;
     }
 
     private _sendRuntimeStartupPhaseChanged(): void {
@@ -1251,6 +1282,10 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
             this._sendSessionMetadataUpdate(sessionId, {
                 trace: instance.trace,
             });
+        }));
+
+        disposables.push(instance.onDidAttachSession(() => {
+            this._sendSessionInfoUpdate();
         }));
 
         disposables.push(instance.onDidChangeState(() => {

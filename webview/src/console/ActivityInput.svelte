@@ -15,12 +15,14 @@
     interface Props {
         activityItemInput: ActivityItemInput;
         languageId?: string;
+        languageAssetsVersion?: number;
         charWidth?: number;
     }
 
     let {
         activityItemInput,
-        languageId = "r",
+        languageId = "plaintext",
+        languageAssetsVersion = 0,
         charWidth = 0,
     }: Props = $props();
 
@@ -142,6 +144,7 @@
         // Track dependency on codeOutputLines
         void activityItemInput.codeOutputLines;
         void languageId;
+        void languageAssetsVersion;
         colorizeCode();
     });
 </script>
