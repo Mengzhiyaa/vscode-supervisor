@@ -1,0 +1,420 @@
+/*
+ * Shared ActionBar CSS — Svelte port of Positron's positronActionBar.css,
+ * positronDynamicActionBar.css, and positronActionBarVariables.css
+ */
+
+:root {
+    --positron-action-bar-height: var(--vscode-positronActionBar-height, 28px);
+    --positron-action-bar-icon-size: var(--vscode-positronActionBar-iconSize, 24px);
+    --positron-action-bar-bg: var(--vscode-positronActionBar-background, var(--vscode-editor-background));
+    --positron-action-bar-border: var(--vscode-positronActionBar-border, var(--vscode-panel-border));
+    --positron-action-bar-dropdown-button-width: 36px;
+    --positron-action-bar-separator-width: 7px;
+}
+
+/* ==============================
+   Static PositronActionBar
+   ============================== */
+.positron-action-bar {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    box-sizing: border-box;
+    height: var(--positron-action-bar-height);
+    background-color: var(--positron-action-bar-bg);
+}
+
+.positron-action-bar.border-top {
+    border-top: 1px solid var(--positron-action-bar-border);
+}
+
+.positron-action-bar.border-bottom {
+    border-bottom: 1px solid var(--positron-action-bar-border);
+}
+
+/* ==============================
+   DynamicActionBar (grid layout)
+   ============================== */
+.exemplar {
+    top: -10000px;
+    left: -10000px;
+    font-size: 12px;
+    position: absolute;
+}
+
+.positron-dynamic-action-bar {
+    width: 100%;
+    display: grid;
+    align-items: center;
+    box-sizing: border-box;
+    grid-template-rows: 1fr;
+    grid-auto-flow: column;
+    grid-auto-columns: min-content;
+    height: var(--positron-action-bar-height);
+    background-color: var(--positron-action-bar-bg);
+}
+
+.positron-dynamic-action-bar .container {
+    width: 100%;
+    display: flex;
+    overflow: hidden;
+    align-items: center;
+    justify-content: center;
+    min-width: 0;
+}
+
+.positron-dynamic-action-bar.border-top {
+    border-top: 1px solid var(--positron-action-bar-border);
+}
+
+.positron-dynamic-action-bar.border-bottom {
+    border-bottom: 1px solid var(--positron-action-bar-border);
+}
+
+/* ==============================
+   ActionBarButton
+   ============================== */
+.action-bar-button {
+    padding: 0;
+    border: none;
+    display: flex;
+    margin: 0;
+    margin: 0 1px;
+    cursor: pointer;
+    overflow: visible;
+    border-radius: 4px;
+    align-items: center;
+    box-sizing: border-box;
+    background: transparent;
+    height: var(--positron-action-bar-icon-size);
+    color: var(--vscode-positronActionBar-foreground);
+}
+
+.action-bar-button.checked {
+    background: var(--vscode-positronActionBar-hoverBackground);
+}
+
+.action-bar-button:hover:not(:disabled) {
+    background: var(--vscode-positronActionBar-hoverBackground);
+}
+
+.action-bar-button:disabled {
+    cursor: default;
+}
+
+.hc-black .action-bar-button:hover:not(:disabled),
+.hc-light .action-bar-button:hover:not(:disabled) {
+    border: 1px dashed var(--vscode-focusBorder);
+}
+
+.action-bar-button:focus {
+    outline: none !important;
+}
+
+.action-bar-button:focus-visible {
+    border-radius: 4px;
+    outline: 1px solid var(--vscode-focusBorder) !important;
+}
+
+.action-bar-button.interrupt .codicon {
+    color: var(--vscode-testing-iconFailed, #f44747);
+}
+
+.action-bar-button .action-bar-button-face {
+    display: flex;
+    align-items: center;
+}
+
+.action-bar-button .action-bar-button-icon {
+    padding: 0 4px;
+    align-items: center;
+    justify-content: center;
+    display: flex !important;
+    height: var(--positron-action-bar-icon-size);
+}
+
+.action-bar-button .action-bar-button-icon::before {
+    color: var(--vscode-positronActionBar-foreground);
+}
+
+.action-bar-button:disabled .action-bar-button-icon::before {
+    color: var(--vscode-positronActionBar-disabledForeground);
+}
+
+.action-bar-button .action-bar-button-label {
+    display: flex;
+    font-size: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    margin-right: 4px;
+    text-overflow: ellipsis;
+}
+
+.action-bar-button:disabled .action-bar-button-label {
+    color: var(--vscode-positronActionBar-disabledForeground);
+}
+
+/* ==============================
+   ActionBarSeparator
+   ============================== */
+.action-bar-separator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--positron-action-bar-separator-width);
+}
+
+.action-bar-separator::after {
+    content: '';
+    width: 1px;
+    height: 16px;
+    background: var(--positron-action-bar-border);
+}
+
+/* ==============================
+   ActionBarMenuButton
+   ============================== */
+.action-bar-menu-button {
+    min-width: 0;
+    max-width: 100%;
+    justify-content: flex-start;
+}
+
+.action-bar-menu-button.has-label {
+    max-width: 100%;
+}
+
+.action-bar-menu-button .action-bar-button-face {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    width: 100%;
+}
+
+.action-bar-menu-button.border {
+    height: 22px;
+    background-color: var(--vscode-positronActionBar-background);
+    border: 1px solid var(--vscode-positronActionBar-selectBorder);
+}
+
+.action-bar-menu-button .action-bar-menu-icon,
+.action-bar-menu-button .action-bar-button-icon {
+    padding: 0 4px;
+    align-items: center;
+    justify-content: center;
+    display: flex !important;
+    height: var(--vscode-positronActionBar-iconSize);
+}
+
+.action-bar-menu-button .menu-label,
+.action-bar-menu-button .action-bar-button-label {
+    display: flex;
+    align-items: center;
+    flex: 1;
+    overflow: hidden;
+    margin-right: 4px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+
+.action-bar-menu-button.border .menu-label {
+    margin-right: 4px;
+}
+
+.action-bar-menu-button.border .menu-label,
+.action-bar-menu-button.border .action-bar-button-label {
+    margin-right: 4px;
+}
+
+.action-bar-menu-button.border .action-bar-button-face {
+    padding: 0 5px;
+    max-height: 100%;
+}
+
+.action-bar-menu-button .action-bar-menu-drop-down-container,
+.action-bar-menu-button .action-bar-button-drop-down-container {
+    display: flex;
+    padding-right: 5px;
+}
+
+.action-bar-menu-button .action-bar-menu-drop-down-arrow,
+.action-bar-menu-button .action-bar-button-drop-down-arrow {
+    align-items: center;
+    justify-content: center;
+    display: flex !important;
+    font-size: 18px !important;
+    height: var(--vscode-positronActionBar-iconSize);
+}
+
+.action-bar-menu-button .action-bar-menu-icon::before,
+.action-bar-menu-button .action-bar-button-icon::before,
+.action-bar-menu-button .action-bar-menu-drop-down-arrow::before,
+.action-bar-menu-button .action-bar-button-drop-down-arrow::before {
+    color: var(--vscode-positronActionBar-foreground);
+}
+
+.action-bar-menu-button:disabled .action-bar-menu-icon::before,
+.action-bar-menu-button:disabled .action-bar-button-icon::before,
+.action-bar-menu-button:disabled .action-bar-menu-drop-down-arrow::before,
+.action-bar-menu-button:disabled .action-bar-button-drop-down-arrow::before {
+    color: var(--vscode-positronActionBar-disabledForeground);
+}
+
+.hc-black .action-bar-menu-button:hover:not(:disabled),
+.hc-light .action-bar-menu-button:hover:not(:disabled) {
+    border: 1px dashed var(--vscode-focusBorder);
+}
+
+/* ==============================
+   ActionBarRegion
+   ============================== */
+.action-bar-region {
+    display: flex;
+    align-items: center;
+}
+
+.action-bar-region.left {
+    flex: 0;
+}
+
+.action-bar-region.center {
+    flex: 1;
+    justify-content: center;
+    min-width: 0;
+}
+
+.action-bar-region.right {
+    flex: 0;
+    margin-left: auto;
+}
+
+/* ==============================
+   Context Menu (overflow)
+   ============================== */
+.action-bar-context-menu {
+    position: fixed;
+    z-index: 10000;
+    min-width: 200px;
+    max-width: 280px;
+    max-height: 400px;
+    overflow-y: auto;
+    background: var(
+        --vscode-positronContextMenu-background,
+        var(--vscode-menu-background)
+    );
+    border: 1px solid
+        var(--vscode-positronContextMenu-border, var(--vscode-menu-border));
+    border-radius: 4px;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.12);
+    padding: 4px;
+}
+
+.action-bar-context-menu .menu-item {
+    display: grid;
+    align-items: center;
+    width: 100%;
+    min-height: 26px;
+    padding: 0 8px 0 6px;
+    border: none;
+    background: transparent;
+    color: var(
+        --vscode-positronContextMenu-foreground,
+        var(--vscode-menu-foreground)
+    );
+    font-size: 12px;
+    line-height: 16px;
+    text-align: left;
+    cursor: pointer;
+    white-space: nowrap;
+    grid-template-columns: [icon] 22px [title] 1fr [end];
+}
+
+.action-bar-context-menu .menu-item.checkable {
+    grid-template-columns:
+        [check] 22px
+        [icon] 22px
+        [title] 1fr
+        [end];
+}
+
+.action-bar-context-menu .menu-item:hover {
+    background: var(
+        --vscode-positronContextMenu-hoverBackground,
+        var(--vscode-menu-selectionBackground)
+    );
+    color: var(
+        --vscode-positronContextMenu-hoverForeground,
+        var(--vscode-menu-selectionForeground)
+    );
+}
+
+.action-bar-context-menu .menu-item:focus {
+    outline: none;
+}
+
+.action-bar-context-menu .menu-item:focus-visible {
+    background: var(
+        --vscode-positronContextMenu-hoverBackground,
+        var(--vscode-menu-selectionBackground)
+    );
+    color: var(
+        --vscode-positronContextMenu-hoverForeground,
+        var(--vscode-menu-selectionForeground)
+    );
+    outline: 1px solid var(--vscode-focusBorder);
+    outline-offset: -1px;
+}
+
+.action-bar-context-menu .menu-item:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+.action-bar-context-menu .menu-item:disabled:hover {
+    background: transparent;
+    color: var(
+        --vscode-positronContextMenu-foreground,
+        var(--vscode-menu-foreground)
+    );
+}
+
+.action-bar-context-menu .menu-item .check-slot {
+    width: 22px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    grid-column: check / icon;
+}
+
+.action-bar-context-menu .menu-item .menu-icon {
+    width: 22px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    grid-column: icon / title;
+}
+
+.action-bar-context-menu .menu-item .menu-icon::before,
+.action-bar-context-menu .menu-item .check-slot .codicon::before {
+    font-size: 16px;
+}
+
+.action-bar-context-menu .menu-item .menu-icon.icon-placeholder::before {
+    content: '';
+}
+
+.action-bar-context-menu .menu-item .menu-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    grid-column: title / end;
+}
+
+.action-bar-context-menu .menu-separator {
+    height: 1px;
+    margin: 4px 0;
+    background: var(
+        --vscode-positronContextMenu-separatorBackground,
+        var(--vscode-menu-separatorBackground)
+    );
+}

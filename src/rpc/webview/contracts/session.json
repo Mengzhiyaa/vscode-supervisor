@@ -1,0 +1,279 @@
+{
+  "$schema": "./schema/webview-rpc-contract.schema.json",
+  "domain": "session",
+  "declarations": [
+    {
+      "kind": "interface",
+      "name": "SessionInfo",
+      "fields": [
+        {
+          "name": "id",
+          "type": "string"
+        },
+        {
+          "name": "name",
+          "type": "string"
+        },
+        {
+          "name": "runtimeName",
+          "type": "string"
+        },
+        {
+          "name": "state",
+          "type": "'uninitialized' | 'starting' | 'ready' | 'busy' | 'offline' | 'interrupting' | 'restarting' | 'exiting' | 'exited' | 'disconnected'"
+        },
+        {
+          "name": "runtimePath",
+          "optional": true,
+          "type": "string"
+        },
+        {
+          "name": "runtimeVersion",
+          "optional": true,
+          "type": "string"
+        },
+        {
+          "name": "runtimeSource",
+          "optional": true,
+          "type": "string"
+        },
+        {
+          "name": "base64EncodedIconSvg",
+          "optional": true,
+          "type": "string"
+        },
+        {
+          "name": "promptActive",
+          "type": "boolean"
+        },
+        {
+          "name": "runtimeAttached",
+          "type": "boolean"
+        }
+      ]
+    },
+    {
+      "kind": "request",
+      "name": "ListSessionsRequest",
+      "method": "session/list",
+      "paramsType": "void",
+      "resultType": "Result",
+      "errorType": "void",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Result",
+          "fields": [
+            {
+              "name": "sessions",
+              "type": "SessionInfo[]"
+            },
+            {
+              "name": "activeSessionId",
+              "optional": true,
+              "type": "string"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "request",
+      "name": "CreateSessionRequest",
+      "method": "session/create",
+      "paramsType": "Params",
+      "resultType": "Result",
+      "errorType": "void",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "name",
+              "optional": true,
+              "type": "string"
+            },
+            {
+              "name": "showRuntimePicker",
+              "optional": true,
+              "type": "boolean"
+            }
+          ]
+        },
+        {
+          "kind": "interface",
+          "name": "Result",
+          "fields": [
+            {
+              "name": "session",
+              "optional": true,
+              "type": "SessionInfo"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "request",
+      "name": "StopSessionRequest",
+      "method": "session/stop",
+      "paramsType": "Params",
+      "resultType": "void",
+      "errorType": "void",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "sessionId",
+              "type": "string"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "request",
+      "name": "RestartSessionRequest",
+      "method": "session/restart",
+      "paramsType": "Params",
+      "resultType": "void",
+      "errorType": "void",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "sessionId",
+              "type": "string"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "request",
+      "name": "SwitchSessionRequest",
+      "method": "session/switch",
+      "paramsType": "Params",
+      "resultType": "void",
+      "errorType": "void",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "sessionId",
+              "type": "string"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "request",
+      "name": "RenameSessionRequest",
+      "method": "session/rename",
+      "paramsType": "Params",
+      "resultType": "void",
+      "errorType": "void",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "sessionId",
+              "type": "string"
+            },
+            {
+              "name": "newName",
+              "type": "string"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "request",
+      "name": "ListOutputChannelsRequest",
+      "method": "session/listOutputChannels",
+      "paramsType": "Params",
+      "resultType": "Result",
+      "errorType": "void",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "sessionId",
+              "type": "string"
+            }
+          ]
+        },
+        {
+          "kind": "interface",
+          "name": "Result",
+          "fields": [
+            {
+              "name": "channels",
+              "type": "('console' | 'kernel' | 'lsp')[]"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "request",
+      "name": "ShowOutputChannelRequest",
+      "method": "session/showOutputChannel",
+      "paramsType": "Params",
+      "resultType": "void",
+      "errorType": "void",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "sessionId",
+              "type": "string"
+            },
+            {
+              "name": "channel",
+              "type": "'console' | 'kernel' | 'lsp'"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "SessionInfoNotification",
+      "method": "session/info",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "sessions",
+              "type": "SessionInfo[]"
+            },
+            {
+              "name": "activeSessionId",
+              "optional": true,
+              "type": "string"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,100 @@
+{
+  "$schema": "./schema/webview-rpc-contract.schema.json",
+  "domain": "plotEditor",
+  "declarations": [
+    {
+      "kind": "notification",
+      "name": "PlotEditorReadyNotification",
+      "method": "plotEditor/ready",
+      "paramsType": "void"
+    },
+    {
+      "kind": "notification",
+      "name": "PlotEditorRenderNotification",
+      "method": "plotEditor/render",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "width",
+              "type": "number"
+            },
+            {
+              "name": "height",
+              "type": "number"
+            },
+            {
+              "name": "pixelRatio",
+              "type": "number"
+            },
+            {
+              "name": "format",
+              "type": "'png' | 'svg'"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "PlotEditorSaveNotification",
+      "method": "plotEditor/save",
+      "paramsType": "void"
+    },
+    {
+      "kind": "notification",
+      "name": "PlotEditorCopyNotification",
+      "method": "plotEditor/copy",
+      "paramsType": "void"
+    },
+    {
+      "kind": "notification",
+      "name": "PlotEditorCloseNotification",
+      "method": "plotEditor/close",
+      "paramsType": "void"
+    },
+    {
+      "kind": "notification",
+      "name": "PlotEditorSetImageNotification",
+      "method": "plotEditor/setImage",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "data",
+              "type": "string"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "PlotEditorRenderResultNotification",
+      "method": "plotEditor/renderResult",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "data",
+              "type": "string"
+            },
+            {
+              "name": "mimeType",
+              "type": "string"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

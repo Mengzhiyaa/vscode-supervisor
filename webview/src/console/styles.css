@@ -1,0 +1,119 @@
+/* Global styles for console webview */
+@import '$lib/codicons/positron-codicons.css';
+@import '../shared/actionBar.css';
+
+/* Monaco editor CSS — imported explicitly so it is always bundled with the
+   console entry point.  Without this, Vite may extract Monaco's JS into a
+   shared chunk while the accompanying side-effect CSS from the ESM modules
+   is silently dropped (the webview only loads console/index.css). */
+@import 'monaco-editor/min/vs/editor/editor.main.css';
+
+:root {
+    --console-ui-font-family: var(--vscode-font-family, sans-serif);
+    --console-ui-font-size: var(--vscode-font-size, 13px);
+    --console-ui-font-weight: var(--vscode-font-weight, normal);
+    --console-content-font-family: var(--vscode-editor-font-family, 'Consolas', 'Courier New', monospace);
+    --console-content-font-size: var(--vscode-editor-font-size, 14px);
+    --console-line-height: var(--vscode-editor-line-height, 1.4);
+}
+
+* {
+    box-sizing: border-box;
+}
+
+html,
+body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: var(--vscode-editor-background);
+    color: var(--vscode-editor-foreground);
+    font-family: var(--console-ui-font-family);
+    font-size: var(--console-ui-font-size);
+    font-weight: var(--console-ui-font-weight);
+}
+
+#app {
+    width: 100%;
+    height: 100%;
+}
+
+/* Tooltip styles - aligns with VS Code hover widget */
+.ark-tooltip {
+    position: fixed;
+    z-index: 10000;
+    max-width: 300px;
+    padding: 4px 8px;
+    font-size: 12px;
+    line-height: 1.4;
+    word-wrap: break-word;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.08s ease-out;
+    background-color: var(--vscode-editorHoverWidget-background, var(--vscode-editorWidget-background, #2d2d2d));
+    color: var(--vscode-editorHoverWidget-foreground, var(--vscode-editorWidget-foreground, #cccccc));
+    border: 1px solid var(--vscode-editorHoverWidget-border, var(--vscode-editorWidget-border, #454545));
+    border-radius: 3px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.36);
+}
+
+.ark-tooltip.visible {
+    opacity: 1;
+}
+
+/* Scrollbar styling (Positron pattern) */
+::-webkit-scrollbar {
+    width: 14px;
+    height: 14px;
+}
+
+::-webkit-scrollbar:vertical {
+    border-left: 1px solid var(--vscode-editorWidget-border, transparent);
+}
+
+::-webkit-scrollbar:horizontal {
+    border-top: 1px solid var(--vscode-editorWidget-border, transparent);
+}
+
+::-webkit-scrollbar-track {
+    opacity: 0;
+}
+
+::-webkit-scrollbar-thumb {
+    min-height: 20px;
+    background-color: var(--vscode-scrollbarSlider-background) !important;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    cursor: pointer !important;
+    background-color: var(--vscode-scrollbarSlider-hoverBackground) !important;
+}
+
+::-webkit-scrollbar-thumb:active {
+    background-color: var(--vscode-scrollbarSlider-activeBackground) !important;
+}
+
+::-webkit-scrollbar-corner {
+    border-top: 1px solid var(--vscode-editorWidget-border, transparent);
+    border-left: 1px solid var(--vscode-editorWidget-border, transparent);
+}
+
+/* Console output area - enable text selection for copy functionality */
+.console-output-area {
+    user-select: text;
+    -webkit-user-select: text;
+}
+
+.console-output-area:focus {
+    outline: none;
+}
+
+/* Ensure output text is selectable */
+.console-output-area pre,
+.console-output-area code,
+.console-output-area .output-item {
+    user-select: text;
+    -webkit-user-select: text;
+}

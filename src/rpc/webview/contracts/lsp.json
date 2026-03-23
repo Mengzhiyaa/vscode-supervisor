@@ -1,0 +1,352 @@
+{
+  "$schema": "./schema/webview-rpc-contract.schema.json",
+  "domain": "lsp",
+  "declarations": [
+    {
+      "kind": "interface",
+      "name": "LspPosition",
+      "fields": [
+        {
+          "name": "line",
+          "type": "number"
+        },
+        {
+          "name": "character",
+          "type": "number"
+        }
+      ]
+    },
+    {
+      "kind": "interface",
+      "name": "LspRange",
+      "fields": [
+        {
+          "name": "start",
+          "type": "LspPosition"
+        },
+        {
+          "name": "end",
+          "type": "LspPosition"
+        }
+      ]
+    },
+    {
+      "kind": "interface",
+      "name": "LspMarkupContent",
+      "fields": [
+        {
+          "name": "kind",
+          "type": "'plaintext' | 'markdown'"
+        },
+        {
+          "name": "value",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "kind": "enum",
+      "name": "LspCompletionItemKind",
+      "members": [
+        {
+          "name": "Text",
+          "value": 1
+        },
+        {
+          "name": "Method",
+          "value": 2
+        },
+        {
+          "name": "Function",
+          "value": 3
+        },
+        {
+          "name": "Constructor",
+          "value": 4
+        },
+        {
+          "name": "Field",
+          "value": 5
+        },
+        {
+          "name": "Variable",
+          "value": 6
+        },
+        {
+          "name": "Class",
+          "value": 7
+        },
+        {
+          "name": "Interface",
+          "value": 8
+        },
+        {
+          "name": "Module",
+          "value": 9
+        },
+        {
+          "name": "Property",
+          "value": 10
+        },
+        {
+          "name": "Unit",
+          "value": 11
+        },
+        {
+          "name": "Value",
+          "value": 12
+        },
+        {
+          "name": "Enum",
+          "value": 13
+        },
+        {
+          "name": "Keyword",
+          "value": 14
+        },
+        {
+          "name": "Snippet",
+          "value": 15
+        },
+        {
+          "name": "Color",
+          "value": 16
+        },
+        {
+          "name": "File",
+          "value": 17
+        },
+        {
+          "name": "Reference",
+          "value": 18
+        },
+        {
+          "name": "Folder",
+          "value": 19
+        },
+        {
+          "name": "Constant",
+          "value": 21
+        },
+        {
+          "name": "Operator",
+          "value": 24
+        }
+      ]
+    },
+    {
+      "kind": "interface",
+      "name": "LspCompletionItem",
+      "fields": [
+        {
+          "name": "label",
+          "type": "string"
+        },
+        {
+          "name": "kind",
+          "optional": true,
+          "type": "LspCompletionItemKind"
+        },
+        {
+          "name": "detail",
+          "optional": true,
+          "type": "string"
+        },
+        {
+          "name": "documentation",
+          "optional": true,
+          "type": "string | LspMarkupContent"
+        },
+        {
+          "name": "insertText",
+          "optional": true,
+          "type": "string"
+        },
+        {
+          "name": "filterText",
+          "optional": true,
+          "type": "string"
+        },
+        {
+          "name": "sortText",
+          "optional": true,
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "kind": "interface",
+      "name": "LspParameterInformation",
+      "fields": [
+        {
+          "name": "label",
+          "type": "string | [number, number]"
+        },
+        {
+          "name": "documentation",
+          "optional": true,
+          "type": "string | LspMarkupContent"
+        }
+      ]
+    },
+    {
+      "kind": "interface",
+      "name": "LspSignatureInformation",
+      "fields": [
+        {
+          "name": "label",
+          "type": "string"
+        },
+        {
+          "name": "documentation",
+          "optional": true,
+          "type": "string | LspMarkupContent"
+        },
+        {
+          "name": "parameters",
+          "optional": true,
+          "type": "LspParameterInformation[]"
+        },
+        {
+          "name": "activeParameter",
+          "optional": true,
+          "type": "number"
+        }
+      ]
+    },
+    {
+      "kind": "request",
+      "name": "LspCompletionRequest",
+      "method": "lsp/completion",
+      "paramsType": "Params",
+      "resultType": "Result",
+      "errorType": "void",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "sessionId",
+              "type": "string"
+            },
+            {
+              "name": "code",
+              "type": "string"
+            },
+            {
+              "name": "position",
+              "type": "LspPosition"
+            }
+          ]
+        },
+        {
+          "kind": "interface",
+          "name": "Result",
+          "fields": [
+            {
+              "name": "items",
+              "type": "LspCompletionItem[]"
+            },
+            {
+              "name": "isIncomplete",
+              "optional": true,
+              "type": "boolean"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "request",
+      "name": "LspHoverRequest",
+      "method": "lsp/hover",
+      "paramsType": "Params",
+      "resultType": "Result | null",
+      "errorType": "void",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "sessionId",
+              "type": "string"
+            },
+            {
+              "name": "code",
+              "type": "string"
+            },
+            {
+              "name": "position",
+              "type": "LspPosition"
+            }
+          ]
+        },
+        {
+          "kind": "interface",
+          "name": "Result",
+          "fields": [
+            {
+              "name": "contents",
+              "type": "LspMarkupContent | string"
+            },
+            {
+              "name": "range",
+              "optional": true,
+              "type": "LspRange"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "request",
+      "name": "LspSignatureHelpRequest",
+      "method": "lsp/signatureHelp",
+      "paramsType": "Params",
+      "resultType": "Result | null",
+      "errorType": "void",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "sessionId",
+              "type": "string"
+            },
+            {
+              "name": "code",
+              "type": "string"
+            },
+            {
+              "name": "position",
+              "type": "LspPosition"
+            }
+          ]
+        },
+        {
+          "kind": "interface",
+          "name": "Result",
+          "fields": [
+            {
+              "name": "signatures",
+              "type": "LspSignatureInformation[]"
+            },
+            {
+              "name": "activeSignature",
+              "optional": true,
+              "type": "number"
+            },
+            {
+              "name": "activeParameter",
+              "optional": true,
+              "type": "number"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

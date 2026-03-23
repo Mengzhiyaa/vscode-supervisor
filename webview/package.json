@@ -1,0 +1,28 @@
+{
+    "name": "vscode-supervisor-webview",
+    "private": true,
+    "version": "0.0.14",
+    "type": "module",
+    "scripts": {
+        "dev": "vite build --watch",
+        "build": "vite build",
+        "dev:serve": "vite",
+        "dev:console": "vite --config vite.config.ts --open /dev/console-hmr.html",
+        "check": "svelte-check --tsconfig ./tsconfig.json"
+    },
+    "dependencies": {
+        "@vscode/codicons": "^0.0.45",
+        "monaco-editor": "^0.55.1",
+        "vscode-jsonrpc": "^8.2.1",
+        "vscode-oniguruma": "^2.0.1",
+        "vscode-textmate": "^9.3.2"
+    },
+    "devDependencies": {
+        "@sveltejs/vite-plugin-svelte": "^7.0.0",
+        "@tsconfig/svelte": "^5.0.8",
+        "svelte": "^5.54.0",
+        "svelte-check": "^4.4.5",
+        "typescript": "^5.9.3",
+        "vite": "^8.0.1"
+    }
+}

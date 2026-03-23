@@ -1,0 +1,44 @@
+{
+  "$schema": "./schema/webview-rpc-contract.schema.json",
+  "domain": "viewer",
+  "declarations": [
+    {
+      "kind": "notification",
+      "name": "ViewerShowNotification",
+      "method": "viewer/show",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "url",
+              "type": "string"
+            },
+            {
+              "name": "title",
+              "optional": true,
+              "type": "string"
+            },
+            {
+              "name": "height",
+              "optional": true,
+              "type": "number"
+            },
+            {
+              "name": "sessionId",
+              "optional": true,
+              "type": "string"
+            },
+            {
+              "name": "kind",
+              "optional": true,
+              "type": "'url' | 'html'"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

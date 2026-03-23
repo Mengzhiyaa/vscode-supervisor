@@ -1,0 +1,224 @@
+/* Global styles for data explorer webview */
+@import '$lib/codicons/positron-codicons.css';
+@import '../shared/actionBar.css';
+
+* {
+    box-sizing: border-box;
+}
+
+:root {
+    --positron-data-explorer-font-family: var(--vscode-editor-font-family, var(--vscode-font-family));
+    --positron-data-explorer-font-size: var(--vscode-editor-font-size, var(--vscode-font-size));
+    --positron-data-explorer-font-weight: var(--vscode-editor-font-weight, var(--vscode-font-weight));
+    --positron-data-grid-column-header-title-font-weight: 600;
+    --positron-data-grid-column-header-description-font-size: 90%;
+    --positron-data-grid-column-header-sort-index-font-size: 80%;
+    --positron-data-grid-column-header-sort-index-font-weight: 600;
+    --positron-data-grid-column-header-sort-index-font-variant-numeric: tabular-nums;
+    --vscode-positronDataGrid-contrastBackground: color-mix(in srgb, var(--vscode-editor-background) 80%, white);
+    --vscode-positronDataGrid-selectionBorder: #175ab5;
+    --vscode-positronDataGrid-selectionInnerBorder: #214984;
+    --vscode-positronDataGrid-selectionBackground: rgba(28, 125, 250, 0.3);
+    --vscode-positronActionBar-height: 28px;
+    --vscode-positronActionBar-iconSize: 24px;
+    --vscode-positronActionBar-tooltipTop: 26px;
+    --vscode-positronActionBar-background: var(--vscode-positronDataExplorer-contrastBackground, var(--vscode-editor-background));
+    --vscode-positronActionBar-foreground: var(--vscode-foreground);
+    --vscode-positronActionBar-disabledForeground: var(--vscode-disabledForeground);
+    --vscode-positronActionBar-hoverBackground: var(--vscode-toolbar-hoverBackground, var(--vscode-list-hoverBackground));
+    --vscode-positronActionBar-selectBorder: var(--vscode-positronDataExplorer-border, var(--vscode-panel-border, transparent));
+    --vscode-positronActionBar-textInputBackground: var(--vscode-input-background);
+    --vscode-positronActionBar-textInputBorder: var(--vscode-input-border, transparent);
+    --vscode-positronActionBar-textInputSelectionForeground: var(--vscode-input-foreground);
+    --vscode-positronActionBar-textInputSelectionBackground: var(--vscode-editor-selectionBackground);
+    --vscode-positronDataExplorer-contrastBackground: color-mix(in srgb, var(--vscode-editor-background) 80%, white);
+    --vscode-positronDataExplorer-selectionBackground: color-mix(in srgb, var(--vscode-editor-background) 50%, white);
+    --vscode-positronDataExplorer-columnNullPercentGraphBackgroundFill: #ee6331;
+    --vscode-positronDataExplorer-columnNullPercentGraphBackgroundStroke: #738594;
+    --vscode-positronDataExplorer-columnNullPercentGraphIndicatorFill: #b0b9bf;
+    --vscode-positronDataExplorer-sparklineAxis: #b5b5b5;
+    --vscode-positronDataExplorer-sparklineFill: #56a2dd;
+    --vscode-positronDataExplorer-sparklineHover: #ff8c69;
+    --vscode-positronDataExplorer-sparklineStroke: #0066b6;
+    --vscode-positronContextMenu-foreground: var(--vscode-menu-foreground, var(--vscode-foreground));
+    --vscode-positronDropDownListBox-background: var(
+        --vscode-dropdown-background,
+        var(--vscode-editorWidget-background, var(--vscode-input-background))
+    );
+    --vscode-positronDropDownListBox-border: var(
+        --vscode-dropdown-border,
+        var(--vscode-input-border, var(--vscode-editorWidget-border, transparent))
+    );
+    --vscode-positronDropDownListBox-foreground: var(
+        --vscode-dropdown-foreground,
+        var(--vscode-input-foreground, var(--vscode-foreground))
+    );
+    --vscode-positronDropDownListBox-hoverBackground: var(
+        --vscode-list-hoverBackground,
+        var(--vscode-toolbar-hoverBackground)
+    );
+    --vscode-positronDropDownListBox-hoverForeground: var(
+        --vscode-list-hoverForeground,
+        var(--vscode-foreground)
+    );
+    --vscode-positronDropDownListBox-separatorBackground: var(
+        --vscode-menu-separatorBackground,
+        var(--vscode-panel-border, transparent)
+    );
+    --vscode-positronModalDialog-foreground: var(
+        --vscode-editorWidget-foreground,
+        var(--vscode-foreground)
+    );
+    --vscode-positronModalDialog-background: var(
+        --vscode-editorWidget-background,
+        var(--vscode-editor-background)
+    );
+    --vscode-positronModalDialog-border: var(
+        --vscode-editorWidget-border,
+        var(--vscode-panel-border, transparent)
+    );
+    --vscode-positronModalDialog-textInputBackground: var(
+        --vscode-input-background,
+        var(--vscode-editorWidget-background)
+    );
+    --vscode-positronModalDialog-textInputBorder: var(
+        --vscode-input-border,
+        var(--vscode-editorWidget-border, transparent)
+    );
+    --vscode-positronModalDialog-textInputSelectionForeground: var(
+        --vscode-input-foreground,
+        var(--vscode-foreground)
+    );
+    --vscode-positronModalDialog-textInputSelectionBackground: var(
+        --vscode-editor-selectionBackground
+    );
+    --vscode-positronModalDialog-defaultButtonForeground: var(
+        --vscode-button-foreground,
+        #ffffff
+    );
+    --vscode-positronModalDialog-defaultButtonBackground: var(
+        --vscode-button-background,
+        #0e639c
+    );
+    --vscode-positronModalDialog-defaultButtonHoverBackground: var(
+        --vscode-button-hoverBackground,
+        #1177bb
+    );
+    --vscode-positronModalDialog-titleBarBackground: var(
+        --vscode-titleBar-activeBackground,
+        var(--vscode-positronModalDialog-background)
+    );
+    --vscode-positronModalDialog-titleBarForeground: var(
+        --vscode-titleBar-activeForeground,
+        var(--vscode-positronModalDialog-foreground)
+    );
+    --vscode-positronModalDialog-buttonForeground: var(
+        --vscode-button-secondaryForeground,
+        var(--vscode-foreground)
+    );
+    --vscode-positronModalDialog-buttonBackground: var(
+        --vscode-button-secondaryBackground,
+        transparent
+    );
+    --vscode-positronModalDialog-buttonHoverBackground: var(
+        --vscode-button-secondaryHoverBackground,
+        var(--vscode-toolbar-hoverBackground)
+    );
+    --vscode-positronModalDialog-buttonBorder: var(
+        --vscode-button-border,
+        var(--vscode-panel-border, transparent)
+    );
+    --vscode-positronModalDialog-buttonDestructiveForeground: var(
+        --vscode-inputValidation-errorForeground,
+        #ffffff
+    );
+    --vscode-positronModalDialog-buttonDestructiveBackground: var(
+        --vscode-inputValidation-errorBackground,
+        #c72e0f
+    );
+    --vscode-positronModalDialog-checkboxForeground: var(
+        --vscode-input-foreground,
+        var(--vscode-foreground)
+    );
+    --vscode-positronModalDialog-checkboxBackground: var(
+        --vscode-checkbox-background,
+        var(--vscode-positronModalDialog-background)
+    );
+    --vscode-positronModalDialog-checkboxBorder: var(
+        --vscode-checkbox-border,
+        var(--vscode-positronModalDialog-buttonBorder)
+    );
+}
+
+body.vscode-light {
+    --vscode-positronDataGrid-contrastBackground: color-mix(in srgb, var(--vscode-editor-background) 98%, black);
+    --vscode-positronDataGrid-selectionBorder: #70a6e0;
+    --vscode-positronDataGrid-selectionInnerBorder: #a1c5ef;
+    --vscode-positronDataGrid-selectionBackground: rgba(172, 205, 243, 0.5);
+    --vscode-positronDataExplorer-contrastBackground: color-mix(in srgb, var(--vscode-editor-background) 98%, black);
+    --vscode-positronDataExplorer-selectionBackground: color-mix(in srgb, var(--vscode-editor-background) 92.5%, black);
+    --vscode-positronDataExplorer-columnNullPercentGraphBackgroundStroke: #7e94a5;
+    --vscode-positronDataExplorer-columnNullPercentGraphIndicatorFill: #e5edf3;
+}
+
+body.vscode-high-contrast,
+body.vscode-high-contrast-light {
+    --vscode-positronDataGrid-contrastBackground: var(--vscode-editor-background);
+    --vscode-positronDataGrid-selectionBorder: #ff0000;
+    --vscode-positronDataGrid-selectionInnerBorder: #ff0000;
+    --vscode-positronDataGrid-selectionBackground: rgba(255, 0, 0, 0.5);
+    --vscode-positronDataExplorer-contrastBackground: var(--vscode-editor-background);
+    --vscode-positronDataExplorer-selectionBackground: var(--vscode-editor-background);
+    --vscode-positronDataExplorer-columnNullPercentGraphBackgroundStroke: #7e94a5;
+    --vscode-positronDataExplorer-columnNullPercentGraphIndicatorFill: #e5edf3;
+}
+
+html,
+body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: var(--vscode-positronDataExplorer-background, var(--vscode-editor-background));
+    color: var(--vscode-positronDataExplorer-foreground, var(--vscode-editor-foreground));
+    font-family: var(--positron-data-explorer-font-family);
+    font-size: var(--positron-data-explorer-font-size);
+    font-weight: var(--positron-data-explorer-font-weight);
+}
+
+#app {
+    width: 100%;
+    height: 100%;
+}
+
+button,
+input,
+select,
+textarea {
+    font: inherit;
+    letter-spacing: inherit;
+}
+
+/* Tooltip styles - matches VS Code hover appearance */
+.positron-tooltip {
+    position: fixed;
+    z-index: 10000;
+    max-width: 300px;
+    padding: 4px 8px;
+    font-size: 12px;
+    line-height: 1.4;
+    word-wrap: break-word;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.1s ease-out;
+    background-color: var(--vscode-editorHoverWidget-background, var(--vscode-editorWidget-background, #2d2d2d));
+    color: var(--vscode-editorHoverWidget-foreground, var(--vscode-editorWidget-foreground, #cccccc));
+    border: 1px solid var(--vscode-editorHoverWidget-border, var(--vscode-editorWidget-border, #454545));
+    border-radius: 3px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.36);
+}
+
+.positron-tooltip.visible {
+    opacity: 1;
+}

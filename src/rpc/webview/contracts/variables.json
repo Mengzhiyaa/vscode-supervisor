@@ -1,0 +1,573 @@
+{
+  "$schema": "./schema/webview-rpc-contract.schema.json",
+  "domain": "variables",
+  "declarations": [
+    {
+      "kind": "interface",
+      "name": "Variable",
+      "fields": [
+        {
+          "name": "name",
+          "type": "string"
+        },
+        {
+          "name": "path",
+          "type": "string[]"
+        },
+        {
+          "name": "type",
+          "type": "string"
+        },
+        {
+          "name": "value",
+          "type": "string"
+        },
+        {
+          "name": "size",
+          "optional": true,
+          "type": "number"
+        },
+        {
+          "name": "hasChildren",
+          "type": "boolean"
+        },
+        {
+          "name": "kind",
+          "optional": true,
+          "type": "string"
+        },
+        {
+          "name": "hasViewer",
+          "optional": true,
+          "type": "boolean"
+        }
+      ]
+    },
+    {
+      "kind": "request",
+      "name": "ListVariablesRequest",
+      "method": "variables/list",
+      "paramsType": "Params",
+      "resultType": "Result",
+      "errorType": "void",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "sessionId",
+              "optional": true,
+              "type": "string"
+            }
+          ]
+        },
+        {
+          "kind": "interface",
+          "name": "Result",
+          "fields": [
+            {
+              "name": "variables",
+              "type": "Variable[]"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "request",
+      "name": "InspectVariableRequest",
+      "method": "variables/inspect",
+      "paramsType": "Params",
+      "resultType": "Result",
+      "errorType": "void",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "path",
+              "type": "string[]"
+            },
+            {
+              "name": "sessionId",
+              "optional": true,
+              "type": "string"
+            }
+          ]
+        },
+        {
+          "kind": "interface",
+          "name": "Result",
+          "fields": [
+            {
+              "name": "children",
+              "type": "Variable[]"
+            },
+            {
+              "name": "length",
+              "optional": true,
+              "type": "number"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "request",
+      "name": "SetActiveVariablesSessionRequest",
+      "method": "variables/setActiveSession",
+      "paramsType": "Params",
+      "resultType": "void",
+      "errorType": "void",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "sessionId",
+              "type": "string"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "VariablesUpdateNotification",
+      "method": "variables/update",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "assigned",
+              "type": "Variable[]"
+            },
+            {
+              "name": "removed",
+              "type": "string[]"
+            },
+            {
+              "name": "sessionId",
+              "optional": true,
+              "type": "string"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "VariablesReadyNotification",
+      "method": "variables/ready",
+      "paramsType": "void"
+    },
+    {
+      "kind": "interface",
+      "name": "VariablesInstanceInfo",
+      "fields": [
+        {
+          "name": "sessionId",
+          "type": "string"
+        },
+        {
+          "name": "state",
+          "type": "'uninitialized' | 'opening' | 'connected' | 'closing' | 'closed'"
+        },
+        {
+          "name": "status",
+          "type": "'idle' | 'busy' | 'disconnected'"
+        },
+        {
+          "name": "grouping",
+          "type": "'none' | 'kind' | 'size'"
+        },
+        {
+          "name": "sorting",
+          "type": "'name' | 'size' | 'recent'"
+        },
+        {
+          "name": "filterText",
+          "type": "string"
+        },
+        {
+          "name": "highlightRecent",
+          "type": "boolean"
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "VariablesInstanceStartedNotification",
+      "method": "variables/instanceStarted",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "instance",
+              "type": "VariablesInstanceInfo"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "VariablesInstanceStoppedNotification",
+      "method": "variables/instanceStopped",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "sessionId",
+              "type": "string"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "ActiveVariablesInstanceChangedNotification",
+      "method": "variables/activeInstanceChanged",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "sessionId",
+              "optional": true,
+              "type": "string"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "interface",
+      "name": "VariableEntry",
+      "fields": [
+        {
+          "name": "type",
+          "type": "'group' | 'item' | 'overflow'"
+        },
+        {
+          "name": "id",
+          "optional": true,
+          "type": "string"
+        },
+        {
+          "name": "title",
+          "optional": true,
+          "type": "string"
+        },
+        {
+          "name": "isExpanded",
+          "optional": true,
+          "type": "boolean"
+        },
+        {
+          "name": "indentLevel",
+          "optional": true,
+          "type": "number"
+        },
+        {
+          "name": "path",
+          "optional": true,
+          "type": "string[]"
+        },
+        {
+          "name": "displayName",
+          "optional": true,
+          "type": "string"
+        },
+        {
+          "name": "displayValue",
+          "optional": true,
+          "type": "string"
+        },
+        {
+          "name": "displayType",
+          "optional": true,
+          "type": "string"
+        },
+        {
+          "name": "size",
+          "optional": true,
+          "type": "number"
+        },
+        {
+          "name": "kind",
+          "optional": true,
+          "type": "string"
+        },
+        {
+          "name": "hasChildren",
+          "optional": true,
+          "type": "boolean"
+        },
+        {
+          "name": "hasViewer",
+          "optional": true,
+          "type": "boolean"
+        },
+        {
+          "name": "isRecent",
+          "optional": true,
+          "type": "boolean"
+        },
+        {
+          "name": "overflowValues",
+          "optional": true,
+          "type": "number"
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "VariableEntriesChangedNotification",
+      "method": "variables/entriesChanged",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "sessionId",
+              "type": "string"
+            },
+            {
+              "name": "entries",
+              "type": "VariableEntry[]"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "request",
+      "name": "ListVariableEntriesRequest",
+      "method": "variables/listEntries",
+      "paramsType": "Params",
+      "resultType": "Result",
+      "errorType": "void",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "sessionId",
+              "optional": true,
+              "type": "string"
+            }
+          ]
+        },
+        {
+          "kind": "interface",
+          "name": "Result",
+          "fields": [
+            {
+              "name": "entries",
+              "type": "VariableEntry[]"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "request",
+      "name": "ExpandVariableGroupRequest",
+      "method": "variables/expandGroup",
+      "paramsType": "Params",
+      "resultType": "void",
+      "errorType": "void",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "groupId",
+              "type": "string"
+            },
+            {
+              "name": "sessionId",
+              "optional": true,
+              "type": "string"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "request",
+      "name": "CollapseVariableGroupRequest",
+      "method": "variables/collapseGroup",
+      "paramsType": "Params",
+      "resultType": "void",
+      "errorType": "void",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "groupId",
+              "type": "string"
+            },
+            {
+              "name": "sessionId",
+              "optional": true,
+              "type": "string"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "request",
+      "name": "ExpandVariableItemRequest",
+      "method": "variables/expandItem",
+      "paramsType": "Params",
+      "resultType": "void",
+      "errorType": "void",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "path",
+              "type": "string[]"
+            },
+            {
+              "name": "sessionId",
+              "optional": true,
+              "type": "string"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "request",
+      "name": "CollapseVariableItemRequest",
+      "method": "variables/collapseItem",
+      "paramsType": "Params",
+      "resultType": "void",
+      "errorType": "void",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "path",
+              "type": "string[]"
+            },
+            {
+              "name": "sessionId",
+              "optional": true,
+              "type": "string"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "request",
+      "name": "SetVariablesGroupingRequest",
+      "method": "variables/setGrouping",
+      "paramsType": "Params",
+      "resultType": "void",
+      "errorType": "void",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "grouping",
+              "type": "'none' | 'kind' | 'size'"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "request",
+      "name": "SetVariablesSortingRequest",
+      "method": "variables/setSorting",
+      "paramsType": "Params",
+      "resultType": "void",
+      "errorType": "void",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "sorting",
+              "type": "'name' | 'size' | 'recent'"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "request",
+      "name": "SetVariablesFilterRequest",
+      "method": "variables/setFilter",
+      "paramsType": "Params",
+      "resultType": "void",
+      "errorType": "void",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "filterText",
+              "type": "string"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "request",
+      "name": "SetVariablesHighlightRecentRequest",
+      "method": "variables/setHighlightRecent",
+      "paramsType": "Params",
+      "resultType": "void",
+      "errorType": "void",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "highlightRecent",
+              "type": "boolean"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

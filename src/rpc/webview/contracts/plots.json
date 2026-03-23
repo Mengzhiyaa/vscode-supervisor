@@ -1,0 +1,984 @@
+{
+  "$schema": "./schema/webview-rpc-contract.schema.json",
+  "domain": "plots",
+  "declarations": [
+    {
+      "kind": "interface",
+      "name": "PlotData",
+      "fields": [
+        {
+          "name": "data",
+          "type": "string"
+        },
+        {
+          "name": "mimeType",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "kind": "request",
+      "name": "RenderPlotRequest",
+      "method": "plots/render",
+      "paramsType": "Params",
+      "resultType": "Result",
+      "errorType": "void",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "plotId",
+              "type": "string"
+            },
+            {
+              "name": "width",
+              "type": "number"
+            },
+            {
+              "name": "height",
+              "type": "number"
+            },
+            {
+              "name": "format",
+              "type": "'png' | 'svg'"
+            },
+            {
+              "name": "pixelRatio",
+              "optional": true,
+              "type": "number"
+            }
+          ]
+        },
+        {
+          "kind": "interface",
+          "name": "Result",
+          "fields": [
+            {
+              "name": "data",
+              "type": "string"
+            },
+            {
+              "name": "mimeType",
+              "type": "string"
+            },
+            {
+              "name": "renderVersion",
+              "type": "number"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "request",
+      "name": "ClaimHtmlPlotRequest",
+      "method": "plots/claimHtmlPlot",
+      "paramsType": "Params",
+      "resultType": "Result",
+      "errorType": "void",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "plotId",
+              "type": "string"
+            }
+          ]
+        },
+        {
+          "kind": "interface",
+          "name": "Result",
+          "fields": [
+            {
+              "name": "success",
+              "type": "boolean"
+            },
+            {
+              "name": "error",
+              "optional": true,
+              "type": "string"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "request",
+      "name": "ReleaseHtmlPlotRequest",
+      "method": "plots/releaseHtmlPlot",
+      "paramsType": "Params",
+      "resultType": "Result",
+      "errorType": "void",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "plotId",
+              "type": "string"
+            }
+          ]
+        },
+        {
+          "kind": "interface",
+          "name": "Result",
+          "fields": [
+            {
+              "name": "success",
+              "type": "boolean"
+            },
+            {
+              "name": "error",
+              "optional": true,
+              "type": "string"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "HtmlPlotLayoutNotification",
+      "method": "plots/layoutHtmlPlot",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "plotId",
+              "type": "string"
+            },
+            {
+              "name": "width",
+              "type": "number"
+            },
+            {
+              "name": "height",
+              "type": "number"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "PlotAddedNotification",
+      "method": "plots/added",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "plotId",
+              "type": "string"
+            },
+            {
+              "name": "thumbnail",
+              "optional": true,
+              "type": "string"
+            },
+            {
+              "name": "initialData",
+              "optional": true,
+              "type": "string"
+            },
+            {
+              "name": "initialRenderSettings",
+              "optional": true,
+              "type": "{ width: number; height: number; pixelRatio: number; }"
+            },
+            {
+              "name": "renderVersion",
+              "optional": true,
+              "type": "number"
+            },
+            {
+              "name": "sessionId",
+              "optional": true,
+              "type": "string"
+            },
+            {
+              "name": "kind",
+              "optional": true,
+              "type": "'static' | 'dynamic' | 'html'"
+            },
+            {
+              "name": "htmlUri",
+              "optional": true,
+              "type": "string"
+            },
+            {
+              "name": "originUri",
+              "optional": true,
+              "type": "string"
+            },
+            {
+              "name": "name",
+              "optional": true,
+              "type": "string"
+            },
+            {
+              "name": "code",
+              "optional": true,
+              "type": "string"
+            },
+            {
+              "name": "parentId",
+              "optional": true,
+              "type": "string"
+            },
+            {
+              "name": "languageId",
+              "optional": true,
+              "type": "string"
+            },
+            {
+              "name": "zoomLevel",
+              "optional": true,
+              "type": "number"
+            },
+            {
+              "name": "sizingPolicyId",
+              "optional": true,
+              "type": "string"
+            },
+            {
+              "name": "customSize",
+              "optional": true,
+              "type": "{ width: number; height: number; }"
+            },
+            {
+              "name": "hasIntrinsicSize",
+              "optional": true,
+              "type": "boolean"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "request",
+      "name": "SelectPlotZoomRequest",
+      "method": "plots/selectZoom",
+      "paramsType": "Params",
+      "resultType": "void",
+      "errorType": "void",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "plotId",
+              "type": "string"
+            },
+            {
+              "name": "zoomLevel",
+              "type": "number"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "PlotZoomChangedNotification",
+      "method": "plots/zoomChanged",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "plotId",
+              "type": "string"
+            },
+            {
+              "name": "zoomLevel",
+              "type": "number"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "PlotViewportChangedNotification",
+      "method": "plots/viewportChanged",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "width",
+              "type": "number"
+            },
+            {
+              "name": "height",
+              "type": "number"
+            },
+            {
+              "name": "pixelRatio",
+              "type": "number"
+            },
+            {
+              "name": "format",
+              "type": "'png' | 'svg'"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "enum",
+      "name": "PlotClientState",
+      "members": [
+        {
+          "name": "Unrendered",
+          "value": "unrendered"
+        },
+        {
+          "name": "RenderPending",
+          "value": "render_pending"
+        },
+        {
+          "name": "Rendering",
+          "value": "rendering"
+        },
+        {
+          "name": "Rendered",
+          "value": "rendered"
+        },
+        {
+          "name": "Closed",
+          "value": "closed"
+        }
+      ]
+    },
+    {
+      "kind": "interface",
+      "name": "SizingPolicyInfo",
+      "fields": [
+        {
+          "name": "id",
+          "type": "string"
+        },
+        {
+          "name": "name",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "kind": "interface",
+      "name": "IntrinsicSize",
+      "fields": [
+        {
+          "name": "width",
+          "type": "number"
+        },
+        {
+          "name": "height",
+          "type": "number"
+        },
+        {
+          "name": "unit",
+          "type": "'inches' | 'pixels'"
+        }
+      ]
+    },
+    {
+      "kind": "request",
+      "name": "GetSizingPoliciesRequest",
+      "method": "plots/getSizingPolicies",
+      "paramsType": "void",
+      "resultType": "Result",
+      "errorType": "void",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Result",
+          "fields": [
+            {
+              "name": "policies",
+              "type": "SizingPolicyInfo[]"
+            },
+            {
+              "name": "selectedPolicyId",
+              "type": "string"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "request",
+      "name": "SelectSizingPolicyRequest",
+      "method": "plots/selectSizingPolicy",
+      "paramsType": "Params",
+      "resultType": "void",
+      "errorType": "void",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "policyId",
+              "type": "string"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "request",
+      "name": "SetCustomSizeRequest",
+      "method": "plots/setCustomSize",
+      "paramsType": "Params",
+      "resultType": "void",
+      "errorType": "void",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "width",
+              "type": "number"
+            },
+            {
+              "name": "height",
+              "type": "number"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "request",
+      "name": "ClearCustomSizeRequest",
+      "method": "plots/clearCustomSize",
+      "paramsType": "void",
+      "resultType": "void",
+      "errorType": "void"
+    },
+    {
+      "kind": "request",
+      "name": "GetIntrinsicSizeRequest",
+      "method": "plots/getIntrinsicSize",
+      "paramsType": "Params",
+      "resultType": "Result",
+      "errorType": "void",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "plotId",
+              "type": "string"
+            }
+          ]
+        },
+        {
+          "kind": "interface",
+          "name": "Result",
+          "fields": [
+            {
+              "name": "intrinsicSize",
+              "optional": true,
+              "type": "IntrinsicSize"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "request",
+      "name": "GetPlotStateRequest",
+      "method": "plots/getPlotState",
+      "paramsType": "Params",
+      "resultType": "Result",
+      "errorType": "void",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "plotId",
+              "type": "string"
+            }
+          ]
+        },
+        {
+          "kind": "interface",
+          "name": "Result",
+          "fields": [
+            {
+              "name": "state",
+              "type": "PlotClientState"
+            },
+            {
+              "name": "renderEstimateMs",
+              "type": "number"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "request",
+      "name": "GetHistoryStateRequest",
+      "method": "plots/getHistoryState",
+      "paramsType": "void",
+      "resultType": "Result",
+      "errorType": "void",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Result",
+          "fields": [
+            {
+              "name": "policy",
+              "type": "'always' | 'never' | 'automatic'"
+            },
+            {
+              "name": "position",
+              "type": "'auto' | 'bottom' | 'right'"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "request",
+      "name": "SelectHistoryPolicyRequest",
+      "method": "plots/selectHistoryPolicy",
+      "paramsType": "Params",
+      "resultType": "void",
+      "errorType": "void",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "policy",
+              "type": "'always' | 'never' | 'automatic'"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "request",
+      "name": "SelectHistoryPositionRequest",
+      "method": "plots/selectHistoryPosition",
+      "paramsType": "Params",
+      "resultType": "void",
+      "errorType": "void",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "position",
+              "type": "'auto' | 'bottom' | 'right'"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "HistoryPolicyChangedNotification",
+      "method": "plots/historyPolicyChanged",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "policy",
+              "type": "'always' | 'never' | 'automatic'"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "HistoryPositionChangedNotification",
+      "method": "plots/historyPositionChanged",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "position",
+              "type": "'auto' | 'bottom' | 'right'"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "request",
+      "name": "GetDarkFilterModeRequest",
+      "method": "plots/getDarkFilterMode",
+      "paramsType": "void",
+      "resultType": "Result",
+      "errorType": "void",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Result",
+          "fields": [
+            {
+              "name": "mode",
+              "type": "'on' | 'off' | 'auto'"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "request",
+      "name": "SelectDarkFilterModeRequest",
+      "method": "plots/selectDarkFilterMode",
+      "paramsType": "Params",
+      "resultType": "void",
+      "errorType": "void",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "mode",
+              "type": "'on' | 'off' | 'auto'"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "DarkFilterModeChangedNotification",
+      "method": "plots/darkFilterModeChanged",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "mode",
+              "type": "'on' | 'off' | 'auto'"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "SizingPolicyChangedNotification",
+      "method": "plots/sizingPolicyChanged",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "plotId",
+              "optional": true,
+              "type": "string"
+            },
+            {
+              "name": "policyId",
+              "type": "string"
+            },
+            {
+              "name": "policyName",
+              "type": "string"
+            },
+            {
+              "name": "policies",
+              "optional": true,
+              "type": "SizingPolicyInfo[]"
+            },
+            {
+              "name": "customSize",
+              "optional": true,
+              "type": "{ width: number; height: number; }"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "PlotStateChangedNotification",
+      "method": "plots/plotStateChanged",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "plotId",
+              "type": "string"
+            },
+            {
+              "name": "state",
+              "type": "PlotClientState"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "PlotRenderCompletedNotification",
+      "method": "plots/renderCompleted",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "plotId",
+              "type": "string"
+            },
+            {
+              "name": "uri",
+              "optional": true,
+              "type": "string"
+            },
+            {
+              "name": "renderTimeMs",
+              "type": "number"
+            },
+            {
+              "name": "renderVersion",
+              "type": "number"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "IntrinsicSizeReceivedNotification",
+      "method": "plots/intrinsicSizeReceived",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "plotId",
+              "type": "string"
+            },
+            {
+              "name": "intrinsicSize",
+              "type": "IntrinsicSize"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "PlotUpdatedNotification",
+      "method": "plots/updated",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "plotId",
+              "type": "string"
+            },
+            {
+              "name": "name",
+              "optional": true,
+              "type": "string"
+            },
+            {
+              "name": "code",
+              "optional": true,
+              "type": "string"
+            },
+            {
+              "name": "parentId",
+              "optional": true,
+              "type": "string"
+            },
+            {
+              "name": "languageId",
+              "optional": true,
+              "type": "string"
+            },
+            {
+              "name": "originUri",
+              "optional": true,
+              "type": "string"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "PlotsReadyNotification",
+      "method": "plots/ready",
+      "paramsType": "void"
+    },
+    {
+      "kind": "interface",
+      "name": "PlotEmittedInfo",
+      "fields": [
+        {
+          "name": "id",
+          "type": "string"
+        },
+        {
+          "name": "sessionId",
+          "type": "string"
+        },
+        {
+          "name": "code",
+          "optional": true,
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "PlotEmittedNotification",
+      "method": "plots/emitted",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "plot",
+              "type": "PlotEmittedInfo"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "SelectedPlotChangedNotification",
+      "method": "plots/selectedChanged",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "plotId",
+              "optional": true,
+              "type": "string"
+            },
+            {
+              "name": "selectedSizingPolicyId",
+              "optional": true,
+              "type": "string"
+            },
+            {
+              "name": "sizingPolicies",
+              "optional": true,
+              "type": "SizingPolicyInfo[]"
+            },
+            {
+              "name": "customSize",
+              "optional": true,
+              "type": "{ width: number; height: number; }"
+            },
+            {
+              "name": "hasIntrinsicSize",
+              "optional": true,
+              "type": "boolean"
+            },
+            {
+              "name": "zoomLevel",
+              "optional": true,
+              "type": "number"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "request",
+      "name": "SelectPlotRequest",
+      "method": "plots/select",
+      "paramsType": "Params",
+      "resultType": "void",
+      "errorType": "void",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "plotId",
+              "type": "string"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "request",
+      "name": "RemovePlotRequest",
+      "method": "plots/remove",
+      "paramsType": "Params",
+      "resultType": "void",
+      "errorType": "void",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "plotId",
+              "type": "string"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Console Webview HMR</title>
+  <style>
+    :root {
+      --vscode-editor-font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+      --vscode-editor-font-size: 13px;
+      --vscode-editor-background: #fffffF;
+      --vscode-editor-foreground: #1e1e1e;
+      --vscode-descriptionForeground: #6a6a6a;
+      --vscode-inputValidation-warningBackground: #3a2f00;
+      --vscode-inputValidation-warningBorder: #b58900;
+      --vscode-inputValidation-infoBackground: #002b36;
+      --vscode-inputValidation-infoBorder: #268bd2;
+      --vscode-inputValidation-errorBackground: #3a0f0f;
+      --vscode-inputValidation-errorBorder: #dc322f;
+      --vscode-errorForeground: #f14c4c;
+      --vscode-terminal-ansiBlack: #000000;
+      --vscode-terminal-ansiRed: #cd3131;
+      --vscode-terminal-ansiGreen: #0dbc79;
+      --vscode-terminal-ansiYellow: #e5e510;
+      --vscode-terminal-ansiBlue: #2472c8;
+      --vscode-terminal-ansiMagenta: #bc3fbc;
+      --vscode-terminal-ansiCyan: #11a8cd;
+      --vscode-terminal-ansiWhite: #e5e5e5;
+      --vscode-terminal-ansiBrightBlack: #666666;
+      --vscode-terminal-ansiBrightRed: #f14c4c;
+      --vscode-terminal-ansiBrightGreen: #23d18b;
+      --vscode-terminal-ansiBrightYellow: #f5f543;
+      --vscode-terminal-ansiBrightBlue: #3b8eea;
+      --vscode-terminal-ansiBrightMagenta: #d670d6;
+      --vscode-terminal-ansiBrightCyan: #29b8db;
+      --vscode-terminal-ansiBrightWhite: #e5e5e5;
+    }
+
+    html, body {
+      height: 100%;
+      margin: 0;
+      background: var(--vscode-editor-background);
+      color: var(--vscode-editor-foreground);
+      font-family: var(--vscode-editor-font-family);
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    #toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+      padding: 8px 10px;
+      border-bottom: 1px solid #d0d0d0;
+      background: #f3f3f3;
+    }
+
+    #toolbar button {
+      background: #ffffff;
+      color: #1e1e1e;
+      border: 1px solid #c8c8c8;
+      padding: 4px 8px;
+      cursor: pointer;
+      border-radius: 3px;
+      font-size: 12px;
+    }
+
+    #toolbar button:hover {
+      background: #eaeaea;
+    }
+
+    #toolbar input {
+      background: #ffffff;
+      color: #1e1e1e;
+      border: 1px solid #c8c8c8;
+      padding: 4px 6px;
+      font-size: 12px;
+      min-width: 240px;
+    }
+
+    #toolbar .divider {
+      width: 1px;
+      height: 18px;
+      background: #c8c8c8;
+      margin: 0 4px;
+    }
+
+    #scenarioSelect {
+      background: #ffffff;
+      color: #1e1e1e;
+      border: 1px solid #c8c8c8;
+      padding: 4px 6px;
+      font-size: 12px;
+    }
+
+    #status-bar {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: #6a6a6a;
+    }
+
+    #status-bar .status-label {
+      padding: 2px 6px;
+      border: 1px solid #d0d0d0;
+      border-radius: 10px;
+      background: #ffffff;
+      font-variant-numeric: tabular-nums;
+    }
+
+    #test-log {
+      flex: 0 0 140px;
+      overflow: auto;
+      border-bottom: 1px solid #d0d0d0;
+      background: #fafafa;
+      padding: 6px 10px;
+      font-size: 12px;
+      line-height: 1.4;
+      color: #2a2a2a;
+    }
+
+    #test-log .log-line {
+      white-space: pre-wrap;
+    }
+
+    #test-log .log-line.pass {
+      color: #1a7f5a;
+    }
+
+    #test-log .log-line.fail {
+      color: #c23b3b;
+    }
+
+    #test-log .log-line.info {
+      color: #6a6a6a;
+    }
+
+    #app {
+      flex: 1 1 auto;
+      min-height: 0;
+    }
+  </style>
+</head>
+<body>
+  <div id="toolbar">
+    <button data-action="init">Init Session</button>
+    <button data-action="basic">Send Input + Output</button>
+    <button data-action="split">Send Split Stream</button>
+    <button data-action="cr-color">Send CR + ANSI</button>
+    <button data-action="stderr">Send Stderr</button>
+    <button data-action="error">Send Error</button>
+    <button data-action="html">Send HTML Output</button>
+    <button data-action="image">Send Image Output</button>
+    <button data-action="prompt">Send Prompt</button>
+    <button data-action="clear">Clear Output</button>
+    <button data-action="wrap">Toggle Word Wrap</button>
+    <button data-action="trace">Toggle Trace</button>
+    <input id="customText" placeholder="Custom stdout text" />
+    <button data-action="custom">Send Custom</button>
+    <span class="divider"></span>
+    <label for="scenarioSelect">Scenario:</label>
+    <select id="scenarioSelect"></select>
+    <button data-action="run-scenario">Run Scenario</button>
+    <button data-action="run-all">Run All</button>
+    <button data-action="reset">Reset</button>
+    <button data-action="clear-log">Clear Log</button>
+    <div id="status-bar">
+      <span id="status" class="status-label">Idle</span>
+      <span id="loop-status" class="status-label">Loop: idle</span>
+      <span id="ansi-status" class="status-label">ANSI: n/a</span>
+    </div>
+  </div>
+  <div id="test-log"></div>
+  <div id="app"></div>
+
+  <script type="module" src="./console-hmr.js"></script>
+</body>
+</html>

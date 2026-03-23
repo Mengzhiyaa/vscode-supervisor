@@ -1,0 +1,222 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ark.invalid/schemas/webview-rpc-contract.schema.json",
+  "title": "Webview RPC Contract",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "domain",
+    "declarations"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "domain": {
+      "type": "string",
+      "minLength": 1
+    },
+    "declarations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/declaration"
+      }
+    }
+  },
+  "$defs": {
+    "field": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "type"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "optional": {
+          "type": "boolean"
+        },
+        "type": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "enumMember": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "value"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "value": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            }
+          ]
+        }
+      }
+    },
+    "interfaceDeclaration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "name",
+        "fields"
+      ],
+      "properties": {
+        "kind": {
+          "const": "interface"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "fields": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/field"
+          }
+        }
+      }
+    },
+    "enumDeclaration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "name",
+        "members"
+      ],
+      "properties": {
+        "kind": {
+          "const": "enum"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "members": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/enumMember"
+          }
+        }
+      }
+    },
+    "localDeclaration": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/interfaceDeclaration"
+        },
+        {
+          "$ref": "#/$defs/enumDeclaration"
+        }
+      ]
+    },
+    "requestDeclaration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "name",
+        "method",
+        "paramsType",
+        "resultType"
+      ],
+      "properties": {
+        "kind": {
+          "const": "request"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "method": {
+          "type": "string",
+          "minLength": 1
+        },
+        "paramsType": {
+          "type": "string",
+          "minLength": 1
+        },
+        "resultType": {
+          "type": "string",
+          "minLength": 1
+        },
+        "errorType": {
+          "type": "string",
+          "minLength": 1
+        },
+        "declarations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/localDeclaration"
+          }
+        }
+      }
+    },
+    "notificationDeclaration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "name",
+        "method",
+        "paramsType"
+      ],
+      "properties": {
+        "kind": {
+          "const": "notification"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "method": {
+          "type": "string",
+          "minLength": 1
+        },
+        "paramsType": {
+          "type": "string",
+          "minLength": 1
+        },
+        "declarations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/localDeclaration"
+          }
+        }
+      }
+    },
+    "declaration": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/interfaceDeclaration"
+        },
+        {
+          "$ref": "#/$defs/enumDeclaration"
+        },
+        {
+          "$ref": "#/$defs/requestDeclaration"
+        },
+        {
+          "$ref": "#/$defs/notificationDeclaration"
+        }
+      ]
+    }
+  }
+}

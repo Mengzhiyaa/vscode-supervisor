@@ -1,0 +1,777 @@
+{
+  "$schema": "./schema/webview-rpc-contract.schema.json",
+  "domain": "dataExplorer",
+  "declarations": [
+    {
+      "kind": "notification",
+      "name": "DataExplorerReadyNotification",
+      "method": "dataExplorer/ready",
+      "paramsType": "void"
+    },
+    {
+      "kind": "notification",
+      "name": "DataExplorerCloseNotification",
+      "method": "dataExplorer/close",
+      "paramsType": "void"
+    },
+    {
+      "kind": "notification",
+      "name": "DataExplorerRequestDataNotification",
+      "method": "dataExplorer/requestData",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "startRow",
+              "type": "number"
+            },
+            {
+              "name": "endRow",
+              "type": "number"
+            },
+            {
+              "name": "columns",
+              "optional": true,
+              "type": "number[]"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "DataExplorerRequestSchemaNotification",
+      "method": "dataExplorer/requestSchema",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "columns",
+              "type": "number[]"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "DataExplorerSearchSchemaNotification",
+      "method": "dataExplorer/searchSchema",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "text",
+              "type": "string"
+            },
+            {
+              "name": "sortOrder",
+              "type": "string"
+            },
+            {
+              "name": "pinnedColumns",
+              "optional": true,
+              "type": "number[]"
+            },
+            {
+              "name": "requestId",
+              "optional": true,
+              "type": "number"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "DataExplorerRequestColumnProfilesNotification",
+      "method": "dataExplorer/requestColumnProfiles",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "columnIndices",
+              "type": "number[]"
+            },
+            {
+              "name": "expandedColumnIndices",
+              "optional": true,
+              "type": "number[]"
+            },
+            {
+              "name": "requestId",
+              "optional": true,
+              "type": "number"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "DataExplorerRefreshNotification",
+      "method": "dataExplorer/refresh",
+      "paramsType": "void"
+    },
+    {
+      "kind": "notification",
+      "name": "DataExplorerSortNotification",
+      "method": "dataExplorer/sort",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "sortKeys",
+              "type": "Array<{ columnIndex: number; ascending: boolean }>"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "DataExplorerClearSortNotification",
+      "method": "dataExplorer/clearSort",
+      "paramsType": "void"
+    },
+    {
+      "kind": "notification",
+      "name": "DataExplorerClearFiltersNotification",
+      "method": "dataExplorer/clearFilters",
+      "paramsType": "void"
+    },
+    {
+      "kind": "notification",
+      "name": "DataExplorerAddFilterNotification",
+      "method": "dataExplorer/addFilter",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "filter",
+              "type": "unknown"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "DataExplorerUpdateFilterNotification",
+      "method": "dataExplorer/updateFilter",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "filter",
+              "type": "unknown"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "DataExplorerRemoveFilterNotification",
+      "method": "dataExplorer/removeFilter",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "filterId",
+              "type": "string"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "DataExplorerCopyToClipboardNotification",
+      "method": "dataExplorer/copyToClipboard",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "selectionType",
+              "type": "'cell' | 'cells' | 'columns' | 'rows'"
+            },
+            {
+              "name": "columnIndex",
+              "optional": true,
+              "type": "number"
+            },
+            {
+              "name": "rowIndex",
+              "optional": true,
+              "type": "number"
+            },
+            {
+              "name": "columnIndexes",
+              "optional": true,
+              "type": "number[]"
+            },
+            {
+              "name": "rowIndexes",
+              "optional": true,
+              "type": "number[]"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "DataExplorerCopyTableDataNotification",
+      "method": "dataExplorer/copyTableData",
+      "paramsType": "void"
+    },
+    {
+      "kind": "notification",
+      "name": "DataExplorerExportDataNotification",
+      "method": "dataExplorer/exportData",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "format",
+              "type": "'tsv' | 'csv'"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "DataExplorerMoveToNewWindowNotification",
+      "method": "dataExplorer/moveToNewWindow",
+      "paramsType": "void"
+    },
+    {
+      "kind": "notification",
+      "name": "DataExplorerConvertToCodeNotification",
+      "method": "dataExplorer/convertToCode",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "suggestedSyntax",
+              "optional": true,
+              "type": "string"
+            },
+            {
+              "name": "availableSyntaxes",
+              "optional": true,
+              "type": "string[]"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "DataExplorerOpenAsPlaintextNotification",
+      "method": "dataExplorer/openAsPlaintext",
+      "paramsType": "void"
+    },
+    {
+      "kind": "notification",
+      "name": "DataExplorerToggleFileOptionsNotification",
+      "method": "dataExplorer/toggleFileOptions",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "hasHeaderRow",
+              "optional": true,
+              "type": "boolean"
+            },
+            {
+              "name": "supportsFileOptions",
+              "optional": true,
+              "type": "boolean"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "DataExplorerRunConvertToCodeNotification",
+      "method": "dataExplorer/runConvertToCode",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "desiredSyntax",
+              "type": "string"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "DataExplorerApplyFileOptionsNotification",
+      "method": "dataExplorer/applyFileOptions",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "hasHeaderRow",
+              "type": "boolean"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "DataExplorerRequestConvertToCodePreviewNotification",
+      "method": "dataExplorer/requestConvertToCodePreview",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "desiredSyntax",
+              "type": "string"
+            },
+            {
+              "name": "requestId",
+              "type": "number"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "DataExplorerSetLayoutNotification",
+      "method": "dataExplorer/setLayout",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "layout",
+              "type": "'SummaryOnLeft' | 'SummaryOnRight'"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "DataExplorerSetSummaryCollapsedNotification",
+      "method": "dataExplorer/setSummaryCollapsed",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "collapsed",
+              "type": "boolean"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "DataExplorerFocusChangedNotification",
+      "method": "dataExplorer/focusChanged",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "focused",
+              "type": "boolean"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "DataExplorerCopyNotification",
+      "method": "dataExplorer/copy",
+      "paramsType": "void"
+    },
+    {
+      "kind": "notification",
+      "name": "DataExplorerShowColumnContextMenuNotification",
+      "method": "dataExplorer/showColumnContextMenu",
+      "paramsType": "void"
+    },
+    {
+      "kind": "notification",
+      "name": "DataExplorerShowRowContextMenuNotification",
+      "method": "dataExplorer/showRowContextMenu",
+      "paramsType": "void"
+    },
+    {
+      "kind": "notification",
+      "name": "DataExplorerShowCellContextMenuNotification",
+      "method": "dataExplorer/showCellContextMenu",
+      "paramsType": "void"
+    },
+    {
+      "kind": "notification",
+      "name": "DataExplorerLayoutChangedNotification",
+      "method": "dataExplorer/layoutChanged",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "layout",
+              "type": "'SummaryOnLeft' | 'SummaryOnRight'"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "DataExplorerSummaryCollapsedChangedNotification",
+      "method": "dataExplorer/summaryCollapsedChanged",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "collapsed",
+              "type": "boolean"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "DataExplorerConvertToCodePreviewNotification",
+      "method": "dataExplorer/convertToCodePreview",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "desiredSyntax",
+              "type": "string"
+            },
+            {
+              "name": "requestId",
+              "type": "number"
+            },
+            {
+              "name": "code",
+              "type": "string"
+            },
+            {
+              "name": "error",
+              "optional": true,
+              "type": "string"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "DataExplorerInitializeNotification",
+      "method": "dataExplorer/initialize",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "identifier",
+              "type": "string"
+            },
+            {
+              "name": "displayName",
+              "type": "string"
+            },
+            {
+              "name": "languageName",
+              "type": "string"
+            },
+            {
+              "name": "backendState",
+              "type": "unknown | null"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "DataExplorerMetadataNotification",
+      "method": "dataExplorer/metadata",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "displayName",
+              "type": "string"
+            },
+            {
+              "name": "numRows",
+              "type": "number"
+            },
+            {
+              "name": "numColumns",
+              "type": "number"
+            },
+            {
+              "name": "hasRowLabels",
+              "optional": true,
+              "type": "boolean"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "DataExplorerSchemaNotification",
+      "method": "dataExplorer/schema",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "columns",
+              "type": "unknown[]"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "DataExplorerSummarySchemaNotification",
+      "method": "dataExplorer/summarySchema",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "columns",
+              "type": "unknown[]"
+            },
+            {
+              "name": "columnIndices",
+              "type": "number[]"
+            },
+            {
+              "name": "requestId",
+              "optional": true,
+              "type": "number"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "DataExplorerColumnProfilesNotification",
+      "method": "dataExplorer/columnProfiles",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "profiles",
+              "type": "Array<{ columnIndex: number; profile: unknown }>"
+            },
+            {
+              "name": "error",
+              "optional": true,
+              "type": "string"
+            },
+            {
+              "name": "requestId",
+              "optional": true,
+              "type": "number"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "DataExplorerDataNotification",
+      "method": "dataExplorer/data",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "columns",
+              "type": "unknown[][]"
+            },
+            {
+              "name": "schema",
+              "optional": true,
+              "type": "unknown[]"
+            },
+            {
+              "name": "startRow",
+              "type": "number"
+            },
+            {
+              "name": "endRow",
+              "type": "number"
+            },
+            {
+              "name": "columnIndices",
+              "optional": true,
+              "type": "number[]"
+            },
+            {
+              "name": "rowLabels",
+              "optional": true,
+              "type": "string[]"
+            },
+            {
+              "name": "totalRows",
+              "optional": true,
+              "type": "number"
+            },
+            {
+              "name": "totalColumns",
+              "optional": true,
+              "type": "number"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "DataExplorerBackendStateNotification",
+      "method": "dataExplorer/backendState",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "state",
+              "type": "unknown"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "DataExplorerLoadingNotification",
+      "method": "dataExplorer/loading",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "isLoading",
+              "type": "boolean"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "DataExplorerErrorNotification",
+      "method": "dataExplorer/error",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "message",
+              "type": "string"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,726 @@
+{
+  "publisher": "ark",
+  "version": "0.0.14",
+  "license": "SEE LICENSE IN LICENSE.txt",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Blakfs24/vscode-supervisor"
+  },
+  "homepage": "https://github.com/Blakfs24/vscode-supervisor#readme",
+  "bugs": {
+    "url": "https://github.com/Blakfs24/vscode-supervisor/issues"
+  },
+  "workspaces": [
+    "webview"
+  ],
+  "engines": {
+    "vscode": "^1.105.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Data Science"
+  ],
+  "icon": "images/logo.png",
+  "name": "vscode-supervisor",
+  "displayName": "Kernel Supervisor",
+  "description": "Multi-language kernel management framework for VS Code",
+  "activationEvents": [],
+  "main": "./dist/extension.js",
+  "scripts": {
+    "vscode:prepublish": "npm run build",
+    "compile": "webpack",
+    "watch": "webpack --watch",
+    "compile-tests": "node -e \"require('fs').rmSync('out', { recursive: true, force: true })\" && tsc -p . --outDir out",
+    "install:binaries": "node scripts/install-binaries.mjs",
+    "build:webview": "npm --prefix webview run build",
+    "watch:webview": "npm --prefix webview run dev",
+    "check:webview": "npm --prefix webview run check",
+    "build": "npm run build:webview && npm run compile",
+    "test:prepare": "npm run compile-tests && npm run build",
+    "test": "npm run test:prepare && node scripts/run-vscode-tests.mjs --label all",
+    "test:unit:ext": "npm run test:prepare && node scripts/run-vscode-tests.mjs --label unit",
+    "lint": "eslint src",
+    "vsce:package": "vsce package"
+  },
+  "positron": {
+    "binaryDependencies": {
+      "kallichore": "0.1.64",
+      "ark": "0.1.242"
+    }
+  },
+  "contributes": {
+    "languages": [],
+    "grammars": [],
+    "commands": [
+      {
+        "command": "supervisor.newSession",
+        "title": "Start New Interpreter Session",
+        "category": "Ark",
+        "icon": "$(add)"
+      },
+      {
+        "command": "supervisor.duplicateSession",
+        "title": "Duplicate Active Interpreter Session",
+        "category": "Ark",
+        "icon": "$(add)"
+      },
+      {
+        "command": "supervisor.quickLaunchSession",
+        "title": "Quick Launch Interpreter Session",
+        "category": "Ark",
+        "icon": "$(chevron-down)"
+      },
+      {
+        "command": "supervisor.interruptExecution",
+        "title": "Interrupt Execution",
+        "category": "Ark",
+        "icon": "$(debug-stop)"
+      },
+      {
+        "command": "supervisor.clearOutput",
+        "title": "Clear Console Output",
+        "category": "Ark",
+        "icon": "$(clear-all)"
+      },
+      {
+        "command": "supervisor.showSupervisorLog",
+        "title": "Show Kernel Supervisor Log",
+        "category": "Ark"
+      },
+      {
+        "command": "supervisor.openPlotsGallery",
+        "title": "Open Plots Gallery",
+        "category": "Ark",
+        "icon": "$(preview)"
+      },
+      {
+        "command": "supervisor.openPlotInEditor",
+        "title": "Open Plot in Editor",
+        "category": "Ark",
+        "icon": "$(go-to-file)"
+      },
+      {
+        "command": "supervisor.closeAuxiliaryPlotsPanel",
+        "title": "Close Auxiliary Plots Panel",
+        "category": "Ark"
+      },
+      {
+        "command": "supervisor.console.executeCode",
+        "title": "Execute Code in Console",
+        "category": "Ark Console"
+      },
+      {
+        "command": "supervisor.console.executeCodeWithoutAdvancing",
+        "title": "Execute Code (Keep Cursor)",
+        "category": "Ark Console"
+      },
+      {
+        "command": "supervisor.console.clearConsole",
+        "title": "Clear Console",
+        "category": "Ark Console"
+      },
+      {
+        "command": "supervisor.console.focusConsole",
+        "title": "Focus Console Input",
+        "category": "Ark Console"
+      },
+      {
+        "command": "supervisor.console.clearInputHistory",
+        "title": "Clear Input History",
+        "category": "Ark Console"
+      },
+      {
+        "command": "supervisor.console.executeCodeBeforeCursor",
+        "title": "Execute Code Before Cursor",
+        "category": "Ark Console"
+      },
+      {
+        "command": "supervisor.console.executeCodeAfterCursor",
+        "title": "Execute Code After Cursor",
+        "category": "Ark Console"
+      },
+      {
+        "command": "supervisor.console.navigateInputHistoryUp",
+        "title": "Navigate Input History Up",
+        "category": "Ark Console"
+      },
+      {
+        "command": "supervisor.console.navigateInputHistoryDown",
+        "title": "Navigate Input History Down",
+        "category": "Ark Console"
+      },
+      {
+        "command": "supervisor.console.navigateInputHistoryUpPrefixMatch",
+        "title": "Navigate Input History Up (Prefix Match)",
+        "category": "Ark Console"
+      },
+      {
+        "command": "supervisor.dataExplorer.copy",
+        "title": "Copy",
+        "category": "Ark Data Explorer",
+        "enablement": "supervisor.dataExplorerEditorActive && supervisor.dataExplorerFocused"
+      },
+      {
+        "command": "supervisor.dataExplorer.copyTableData",
+        "title": "Copy Table Data",
+        "category": "Ark Data Explorer",
+        "enablement": "supervisor.dataExplorerEditorActive && supervisor.dataExplorerFocused && supervisor.isDevelopment"
+      },
+      {
+        "command": "supervisor.dataExplorer.collapseSummary",
+        "title": "Collapse Summary",
+        "category": "Ark Data Explorer",
+        "enablement": "supervisor.dataExplorerEditorActive && !supervisor.dataExplorerSummaryCollapsed"
+      },
+      {
+        "command": "supervisor.dataExplorer.expandSummary",
+        "title": "Expand Summary",
+        "category": "Ark Data Explorer",
+        "enablement": "supervisor.dataExplorerEditorActive && supervisor.dataExplorerSummaryCollapsed"
+      },
+      {
+        "command": "supervisor.dataExplorer.summaryOnLeft",
+        "title": "Summary on Left",
+        "category": "Ark Data Explorer",
+        "icon": "$(layout-sidebar-left-off)",
+        "enablement": "supervisor.dataExplorerEditorActive"
+      },
+      {
+        "command": "supervisor.dataExplorer.summaryOnRight",
+        "title": "Summary on Right",
+        "category": "Ark Data Explorer",
+        "icon": "$(layout-sidebar-right-off)",
+        "enablement": "supervisor.dataExplorerEditorActive"
+      },
+      {
+        "command": "supervisor.dataExplorer.summaryOnLeftActive",
+        "title": "Summary on Left",
+        "category": "Ark Data Explorer",
+        "icon": "$(layout-sidebar-left)",
+        "enablement": "supervisor.dataExplorerEditorActive"
+      },
+      {
+        "command": "supervisor.dataExplorer.summaryOnRightActive",
+        "title": "Summary on Right",
+        "category": "Ark Data Explorer",
+        "icon": "$(layout-sidebar-right)",
+        "enablement": "supervisor.dataExplorerEditorActive"
+      },
+      {
+        "command": "supervisor.dataExplorer.clearColumnSorting",
+        "title": "Clear Column Sorting",
+        "category": "Ark Data Explorer",
+        "icon": "$(clear-all)",
+        "enablement": "supervisor.dataExplorerEditorActive && supervisor.dataExplorerIsColumnSorting"
+      },
+      {
+        "command": "supervisor.dataExplorer.convertToCode",
+        "title": "Convert to Code",
+        "category": "Ark Data Explorer",
+        "icon": "$(code)",
+        "enablement": "supervisor.dataExplorerEditorActive && supervisor.dataExplorerIsConvertToCodeEnabled && supervisor.dataExplorerCodeSyntaxesAvailable && (supervisor.dataExplorerIsColumnSorting || supervisor.dataExplorerIsRowFiltering)"
+      },
+      {
+        "command": "supervisor.dataExplorer.openAsPlaintext",
+        "title": "Open as Plain Text File",
+        "category": "Ark Data Explorer",
+        "icon": "$(file-text)",
+        "enablement": "supervisor.dataExplorerEditorActive && supervisor.dataExplorerIsPlaintext"
+      },
+      {
+        "command": "supervisor.dataExplorer.toggleFileOptions",
+        "title": "File Options",
+        "category": "Ark Data Explorer",
+        "icon": "$(settings-gear)",
+        "enablement": "supervisor.dataExplorerEditorActive && supervisor.dataExplorerIsPlaintext"
+      },
+      {
+        "command": "supervisor.dataExplorer.moveToNewWindow",
+        "title": "Move into New Window",
+        "category": "Ark Data Explorer",
+        "icon": "$(link-external)",
+        "enablement": "supervisor.dataExplorerEditorActive && !supervisor.dataExplorerInNewWindow"
+      },
+      {
+        "command": "supervisor.dataExplorer.showColumnContextMenu",
+        "title": "Show Column Context Menu",
+        "category": "Ark Data Explorer",
+        "enablement": "supervisor.dataExplorerEditorActive"
+      },
+      {
+        "command": "supervisor.dataExplorer.showRowContextMenu",
+        "title": "Show Row Context Menu",
+        "category": "Ark Data Explorer",
+        "enablement": "supervisor.dataExplorerEditorActive"
+      },
+      {
+        "command": "supervisor.dataExplorer.showCellContextMenu",
+        "title": "Show Cell Context Menu",
+        "category": "Ark Data Explorer",
+        "enablement": "supervisor.dataExplorerEditorActive"
+      },
+      {
+        "command": "supervisor.dataExplorer.openFile",
+        "title": "Open in Data Explorer",
+        "category": "Ark Data Explorer",
+        "icon": "$(table)"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "supervisor.closeAuxiliaryPlotsPanel",
+        "key": "ctrl+w",
+        "mac": "cmd+w",
+        "when": "activeWebviewPanelId == 'positronPlotEditor'"
+      },
+      {
+        "command": "supervisor.closeAuxiliaryPlotsPanel",
+        "key": "ctrl+w",
+        "mac": "cmd+w",
+        "when": "activeWebviewPanelId == 'positronPlotsGallery'"
+      },
+      {
+        "command": "supervisor.console.clearConsole",
+        "key": "ctrl+l",
+        "when": "view == supervisor.console"
+      },
+      {
+        "command": "supervisor.dataExplorer.convertToCode",
+        "key": "ctrl+k ctrl+c",
+        "mac": "cmd+k cmd+c",
+        "when": "supervisor.dataExplorerEditorActive && supervisor.dataExplorerCodeSyntaxesAvailable && (supervisor.dataExplorerIsColumnSorting || supervisor.dataExplorerIsRowFiltering)"
+      },
+      {
+        "command": "supervisor.dataExplorer.showColumnContextMenu",
+        "key": "ctrl+shift+f10",
+        "mac": "cmd+shift+f10",
+        "when": "supervisor.dataExplorerEditorActive"
+      },
+      {
+        "command": "supervisor.dataExplorer.showRowContextMenu",
+        "key": "alt+shift+f10",
+        "mac": "alt+shift+f10",
+        "when": "supervisor.dataExplorerEditorActive"
+      },
+      {
+        "command": "supervisor.dataExplorer.showCellContextMenu",
+        "key": "shift+f10",
+        "mac": "shift+f10",
+        "when": "supervisor.dataExplorerEditorActive"
+      }
+    ],
+    "submenus": [
+      {
+        "id": "supervisor.console.sessionMenu",
+        "label": "Start Session",
+        "icon": "$(add)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "supervisor.newSession",
+          "when": "view == supervisor.console && !supervisor.consoleSessionsExist",
+          "group": "navigation@1"
+        },
+        {
+          "submenu": "supervisor.console.sessionMenu",
+          "when": "view == supervisor.console && supervisor.consoleSessionsExist",
+          "group": "navigation@1"
+        }
+      ],
+      "supervisor.console.sessionMenu": [
+        {
+          "command": "supervisor.duplicateSession",
+          "group": "1_session@1"
+        },
+        {
+          "command": "supervisor.newSession",
+          "group": "1_session@2"
+        },
+        {
+          "command": "supervisor.quickLaunchSession",
+          "group": "2_advanced@1"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "supervisor.dataExplorer.summaryOnLeftActive",
+          "when": "supervisor.dataExplorerEditorActive && supervisor.dataExplorerLayout == 'SummaryOnLeft'",
+          "group": "1_data_explorer@1"
+        },
+        {
+          "command": "supervisor.dataExplorer.summaryOnLeft",
+          "when": "supervisor.dataExplorerEditorActive && supervisor.dataExplorerLayout != 'SummaryOnLeft'",
+          "group": "1_data_explorer@1"
+        },
+        {
+          "command": "supervisor.dataExplorer.summaryOnRightActive",
+          "when": "supervisor.dataExplorerEditorActive && supervisor.dataExplorerLayout == 'SummaryOnRight'",
+          "group": "1_data_explorer@2"
+        },
+        {
+          "command": "supervisor.dataExplorer.summaryOnRight",
+          "when": "supervisor.dataExplorerEditorActive && supervisor.dataExplorerLayout != 'SummaryOnRight'",
+          "group": "1_data_explorer@2"
+        },
+        {
+          "command": "supervisor.dataExplorer.clearColumnSorting",
+          "when": "supervisor.dataExplorerEditorActive",
+          "group": "navigation@5"
+        },
+        {
+          "command": "supervisor.dataExplorer.convertToCode",
+          "when": "supervisor.dataExplorerEditorActive && supervisor.dataExplorerIsConvertToCodeEnabled",
+          "group": "navigation@6"
+        },
+        {
+          "command": "supervisor.dataExplorer.openAsPlaintext",
+          "when": "supervisor.dataExplorerEditorActive && supervisor.dataExplorerIsPlaintext",
+          "group": "navigation@7"
+        },
+        {
+          "command": "supervisor.dataExplorer.toggleFileOptions",
+          "when": "supervisor.dataExplorerEditorActive && supervisor.dataExplorerIsPlaintext",
+          "group": "navigation@8"
+        },
+        {
+          "command": "supervisor.dataExplorer.moveToNewWindow",
+          "when": "supervisor.dataExplorerEditorActive",
+          "group": "navigation@9"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "supervisor.dataExplorer.copy",
+          "when": "supervisor.dataExplorerEditorActive && supervisor.dataExplorerFocused"
+        },
+        {
+          "command": "supervisor.dataExplorer.copyTableData",
+          "when": "supervisor.dataExplorerEditorActive && supervisor.dataExplorerFocused && supervisor.isDevelopment"
+        },
+        {
+          "command": "supervisor.dataExplorer.collapseSummary",
+          "when": "supervisor.dataExplorerEditorActive && !supervisor.dataExplorerSummaryCollapsed"
+        },
+        {
+          "command": "supervisor.dataExplorer.expandSummary",
+          "when": "supervisor.dataExplorerEditorActive && supervisor.dataExplorerSummaryCollapsed"
+        },
+        {
+          "command": "supervisor.dataExplorer.summaryOnLeft",
+          "when": "supervisor.dataExplorerEditorActive"
+        },
+        {
+          "command": "supervisor.dataExplorer.summaryOnRight",
+          "when": "supervisor.dataExplorerEditorActive"
+        },
+        {
+          "command": "supervisor.dataExplorer.summaryOnLeftActive",
+          "when": "false"
+        },
+        {
+          "command": "supervisor.dataExplorer.summaryOnRightActive",
+          "when": "false"
+        },
+        {
+          "command": "supervisor.dataExplorer.clearColumnSorting",
+          "when": "supervisor.dataExplorerEditorActive && supervisor.dataExplorerIsColumnSorting"
+        },
+        {
+          "command": "supervisor.dataExplorer.convertToCode",
+          "when": "supervisor.dataExplorerEditorActive && supervisor.dataExplorerIsConvertToCodeEnabled && supervisor.dataExplorerCodeSyntaxesAvailable && (supervisor.dataExplorerIsColumnSorting || supervisor.dataExplorerIsRowFiltering)"
+        },
+        {
+          "command": "supervisor.dataExplorer.openAsPlaintext",
+          "when": "supervisor.dataExplorerEditorActive && supervisor.dataExplorerIsPlaintext"
+        },
+        {
+          "command": "supervisor.dataExplorer.toggleFileOptions",
+          "when": "supervisor.dataExplorerEditorActive && supervisor.dataExplorerIsPlaintext"
+        },
+        {
+          "command": "supervisor.dataExplorer.moveToNewWindow",
+          "when": "supervisor.dataExplorerEditorActive && !supervisor.dataExplorerInNewWindow"
+        },
+        {
+          "command": "supervisor.dataExplorer.showColumnContextMenu",
+          "when": "supervisor.dataExplorerEditorActive"
+        },
+        {
+          "command": "supervisor.dataExplorer.showRowContextMenu",
+          "when": "supervisor.dataExplorerEditorActive"
+        },
+        {
+          "command": "supervisor.dataExplorer.showCellContextMenu",
+          "when": "supervisor.dataExplorerEditorActive"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "supervisor.dataExplorer.openFile",
+          "when": "resourceExtname =~ /^\\.(csv|tsv|parquet|parq)$/ || resourceFilename =~ /\\.(csv|tsv)\\.gz$/",
+          "group": "navigation@100"
+        }
+      ]
+    },
+    "viewsContainers": {
+      "panel": [
+        {
+          "id": "supervisor-console-panel",
+          "title": "Console",
+          "icon": "$(terminal)"
+        }
+      ],
+      "activitybar": [
+        {
+          "id": "supervisor-sidebar-session",
+          "title": "Session",
+          "icon": "$(symbol-variable)"
+        },
+        {
+          "id": "supervisor-sidebar-exploration",
+          "title": "Exploration",
+          "icon": "$(book)"
+        }
+      ]
+    },
+    "views": {
+      "supervisor-console-panel": [
+        {
+          "type": "webview",
+          "id": "supervisor.console",
+          "name": "Console",
+          "icon": "$(terminal)"
+        }
+      ],
+      "supervisor-sidebar-session": [
+        {
+          "name": "Variables",
+          "type": "webview",
+          "id": "supervisor.variables",
+          "contextualOnly": true,
+          "icon": "$(symbol-variable)"
+        },
+        {
+          "name": "Plots",
+          "type": "webview",
+          "id": "supervisor.plots",
+          "contextualOnly": true,
+          "icon": "$(preview)"
+        }
+      ],
+      "supervisor-sidebar-exploration": [
+        {
+          "type": "webview",
+          "id": "supervisor.help",
+          "name": "Help",
+          "icon": "$(book)"
+        },
+        {
+          "name": "Viewer",
+          "type": "webview",
+          "id": "supervisor.viewer",
+          "contextualOnly": true,
+          "icon": "$(preview)"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Ark",
+      "properties": {
+        "supervisor.interpreters.startupBehavior": {
+          "type": "string",
+          "default": "auto",
+          "enum": [
+            "always",
+            "auto",
+            "recommended",
+            "manual",
+            "disabled"
+          ],
+          "description": "Controls interpreter auto-start behavior for the workspace."
+        },
+        "kernelSupervisor.logLevel": {
+          "type": "string",
+          "default": "info",
+          "enum": [
+            "trace",
+            "debug",
+            "info",
+            "warn",
+            "error"
+          ],
+          "description": "Log level for the Kallichore kernel supervisor (kcserver)."
+        },
+        "kernelSupervisor.showTerminal": {
+          "type": "boolean",
+          "default": false,
+          "description": "Show kernel supervisor terminal output."
+        },
+        "kernelSupervisor.connectionTimeout": {
+          "type": "integer",
+          "default": 30,
+          "description": "Timeout in seconds while connecting to a kernel session."
+        },
+        "kernelSupervisor.startupTimeout": {
+          "type": "number",
+          "default": 10,
+          "minimum": 1,
+          "description": "Timeout in seconds while starting a kernel session."
+        },
+        "kernelSupervisor.shutdownTimeout": {
+          "type": "string",
+          "enum": [
+            "immediately",
+            "when idle",
+            "1",
+            "2",
+            "4",
+            "8",
+            "12",
+            "24",
+            "indefinitely"
+          ],
+          "enumDescriptions": [
+            "Shut down immediately when the window closes",
+            "Shut down after 30 seconds of idle time",
+            "Shut down after 1 hour of idle time",
+            "Shut down after 2 hours of idle time",
+            "Shut down after 4 hours of idle time",
+            "Shut down after 8 hours of idle time",
+            "Shut down after 12 hours of idle time",
+            "Shut down after 24 hours of idle time",
+            "Never shut down automatically"
+          ],
+          "default": "1",
+          "description": "Controls how long the kernel supervisor keeps sessions alive after the window closes. Non-immediate values enable session persistence across window restarts (default: 1 hour)."
+        },
+        "kernelSupervisor.attachOnStartup": {
+          "type": "boolean",
+          "default": false,
+          "description": "Delay kernel startup so a debugger can attach first."
+        },
+        "kernelSupervisor.runInShell": {
+          "type": "boolean",
+          "default": false,
+          "description": "Run kernel process under a shell instead of direct exec."
+        },
+        "kernelSupervisor.sleepOnStartup": {
+          "type": "number",
+          "description": "Delay kernel startup by N seconds."
+        },
+        "kernelSupervisor.maxBufferSizeMB": {
+          "type": "number",
+          "default": 10,
+          "minimum": 1,
+          "maximum": 2000,
+          "description": "Maximum buffer payload size (MB) accepted from runtime comm messages."
+        },
+        "kernelSupervisor.resourceUsagePollInterval": {
+          "type": "number",
+          "default": 1000,
+          "minimum": 0,
+          "maximum": 60000,
+          "description": "Resource usage polling interval in milliseconds. Set to 0 to disable."
+        },
+        "supervisor.console.fontSize": {
+          "type": "number",
+          "default": 14,
+          "minimum": 8,
+          "maximum": 32,
+          "description": "Font size for the console output (in pixels). If not explicitly set in user/workspace settings, the console follows the editor font size."
+        },
+        "supervisor.console.fontFamily": {
+          "type": "string",
+          "default": "",
+          "description": "Font family for the console. Leave empty to use the editor font."
+        },
+        "supervisor.console.lineHeight": {
+          "type": "number",
+          "default": 1.4,
+          "minimum": 1,
+          "maximum": 3,
+          "description": "Line height multiplier for console output. If not explicitly set in user/workspace settings, the console uses the editor line height when configured, otherwise falls back to 1.4."
+        },
+        "supervisor.console.scrollbackSize": {
+          "type": "number",
+          "default": 1000,
+          "minimum": 100,
+          "maximum": 10000,
+          "description": "Maximum number of lines to keep in scrollback buffer."
+        },
+        "supervisor.console.showResourceMonitor": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show CPU and memory usage in session tabs."
+        },
+        "supervisor.console.enableTrace": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable trace output in the console."
+        }
+      }
+    },
+    "configurationDefaults": {},
+    "breakpoints": [],
+    "debuggers": [],
+    "customEditors": [
+      {
+        "viewType": "positron.dataExplorerEditor",
+        "displayName": "Data Explorer",
+        "priority": "option",
+        "selector": [
+          {
+            "filenamePattern": "*.csv"
+          },
+          {
+            "filenamePattern": "*.tsv"
+          },
+          {
+            "filenamePattern": "*.parquet"
+          },
+          {
+            "filenamePattern": "*.parq"
+          },
+          {
+            "filenamePattern": "*.csv.gz"
+          },
+          {
+            "filenamePattern": "*.tsv.gz"
+          }
+        ]
+      }
+    ]
+  },
+  "dependencies": {
+    "@duckdb/duckdb-wasm": "^1.32.0",
+    "apache-arrow": "^21.1.0",
+    "axios": "^1.13.6",
+    "p-queue": "^6.6.2",
+    "tail": "^2.2.6",
+    "vscode-jsonrpc": "^8.2.1",
+    "vscode-languageclient": "^9.0.1",
+    "web-worker": "^1.5.0",
+    "ws": "^8.19.0"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.10",
+    "@types/node": "25.x",
+    "@types/tail": "^2.2.3",
+    "@types/vscode": "^1.105",
+    "@types/ws": "^8.18.1",
+    "@vscode/test-cli": "^0.0.12",
+    "@vscode/test-electron": "^2.5.2",
+    "@vscode/vsce": "^3.7.1",
+    "copy-webpack-plugin": "^14.0.0",
+    "eslint": "^10.1.0",
+    "ovsx": "^0.10.9",
+    "ts-loader": "^9.5.4",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.57.1",
+    "webpack": "^5.105.4",
+    "webpack-cli": "^7.0.2"
+  }
+}

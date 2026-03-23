@@ -1,0 +1,993 @@
+{
+  "$schema": "./schema/webview-rpc-contract.schema.json",
+  "domain": "console",
+  "declarations": [
+    {
+      "kind": "interface",
+      "name": "CompletionItem",
+      "fields": [
+        {
+          "name": "label",
+          "type": "string"
+        },
+        {
+          "name": "kind",
+          "optional": true,
+          "type": "string"
+        },
+        {
+          "name": "detail",
+          "optional": true,
+          "type": "string"
+        },
+        {
+          "name": "documentation",
+          "optional": true,
+          "type": "string"
+        },
+        {
+          "name": "insertText",
+          "optional": true,
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "kind": "interface",
+      "name": "RuntimeResourceUsage",
+      "fields": [
+        {
+          "name": "cpu_percent",
+          "type": "number"
+        },
+        {
+          "name": "memory_bytes",
+          "type": "number"
+        },
+        {
+          "name": "thread_count",
+          "optional": true,
+          "type": "number"
+        },
+        {
+          "name": "sampling_period_ms",
+          "optional": true,
+          "type": "number"
+        },
+        {
+          "name": "timestamp",
+          "optional": true,
+          "type": "number"
+        }
+      ]
+    },
+    {
+      "kind": "interface",
+      "name": "ConsoleThemeRule",
+      "fields": [
+        {
+          "name": "token",
+          "type": "string"
+        },
+        {
+          "name": "foreground",
+          "optional": true,
+          "type": "string"
+        },
+        {
+          "name": "background",
+          "optional": true,
+          "type": "string"
+        },
+        {
+          "name": "fontStyle",
+          "optional": true,
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "kind": "interface",
+      "name": "ConsoleThemeData",
+      "fields": [
+        {
+          "name": "base",
+          "type": "'vs' | 'vs-dark' | 'hc-black' | 'hc-light'"
+        },
+        {
+          "name": "rules",
+          "type": "ConsoleThemeRule[]"
+        }
+      ]
+    },
+    {
+      "kind": "interface",
+      "name": "ConsoleSettings",
+      "fields": [
+        {
+          "name": "scrollbackSize",
+          "type": "number"
+        },
+        {
+          "name": "fontFamily",
+          "type": "string"
+        },
+        {
+          "name": "fontSize",
+          "type": "number"
+        },
+        {
+          "name": "lineHeight",
+          "type": "number"
+        }
+      ]
+    },
+    {
+      "kind": "interface",
+      "name": "SerializedRuntimeItemPayload",
+      "fields": [
+        {
+          "name": "type",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "kind": "interface",
+      "name": "SerializedActivityItemPayload",
+      "fields": [
+        {
+          "name": "type",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "kind": "interface",
+      "name": "ConsoleRuntimeChange",
+      "fields": [
+        {
+          "name": "kind",
+          "type": "'appendRuntimeItem' | 'appendActivityItem' | 'replaceActivityOutput' | 'clearActivityOutput' | 'updateActivityInputState'"
+        },
+        {
+          "name": "parentId",
+          "optional": true,
+          "type": "string"
+        },
+        {
+          "name": "outputId",
+          "optional": true,
+          "type": "string"
+        },
+        {
+          "name": "state",
+          "optional": true,
+          "type": "'provisional' | 'executing' | 'completed' | 'cancelled'"
+        },
+        {
+          "name": "runtimeItem",
+          "optional": true,
+          "type": "SerializedRuntimeItemPayload"
+        },
+        {
+          "name": "activityItem",
+          "optional": true,
+          "type": "SerializedActivityItemPayload"
+        }
+      ]
+    },
+    {
+      "kind": "request",
+      "name": "ExecuteRequest",
+      "method": "console/execute",
+      "paramsType": "Params",
+      "resultType": "Result",
+      "errorType": "void",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "code",
+              "type": "string"
+            },
+            {
+              "name": "executionId",
+              "optional": true,
+              "type": "string"
+            },
+            {
+              "name": "allowIncomplete",
+              "optional": true,
+              "type": "boolean"
+            },
+            {
+              "name": "mode",
+              "optional": true,
+              "type": "'interactive' | 'non-interactive' | 'silent' | 'transient'"
+            },
+            {
+              "name": "errorBehavior",
+              "optional": true,
+              "type": "'continue' | 'stop'"
+            },
+            {
+              "name": "sessionId",
+              "optional": true,
+              "type": "string"
+            }
+          ]
+        },
+        {
+          "kind": "interface",
+          "name": "Result",
+          "fields": [
+            {
+              "name": "executionId",
+              "type": "string"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "request",
+      "name": "CompleteRequest",
+      "method": "console/complete",
+      "paramsType": "Params",
+      "resultType": "Result",
+      "errorType": "void",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "code",
+              "type": "string"
+            },
+            {
+              "name": "cursorPos",
+              "type": "number"
+            },
+            {
+              "name": "sessionId",
+              "optional": true,
+              "type": "string"
+            }
+          ]
+        },
+        {
+          "kind": "interface",
+          "name": "Result",
+          "fields": [
+            {
+              "name": "items",
+              "type": "CompletionItem[]"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "request",
+      "name": "IsCompleteRequest",
+      "method": "console/isComplete",
+      "paramsType": "Params",
+      "resultType": "Result",
+      "errorType": "void",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "code",
+              "type": "string"
+            },
+            {
+              "name": "sessionId",
+              "optional": true,
+              "type": "string"
+            }
+          ]
+        },
+        {
+          "kind": "interface",
+          "name": "Result",
+          "fields": [
+            {
+              "name": "status",
+              "type": "'complete' | 'incomplete' | 'invalid' | 'unknown'"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "request",
+      "name": "InterruptRequest",
+      "method": "console/interrupt",
+      "paramsType": "Params | void",
+      "resultType": "void",
+      "errorType": "void",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "sessionId",
+              "optional": true,
+              "type": "string"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "request",
+      "name": "ClearConsoleRequest",
+      "method": "console/clearConsole",
+      "paramsType": "Params | void",
+      "resultType": "void",
+      "errorType": "void",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "sessionId",
+              "optional": true,
+              "type": "string"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "request",
+      "name": "ToggleWordWrapRequest",
+      "method": "console/toggleWordWrap",
+      "paramsType": "Params | void",
+      "resultType": "void",
+      "errorType": "void",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "sessionId",
+              "optional": true,
+              "type": "string"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "request",
+      "name": "ToggleTraceRequest",
+      "method": "console/toggleTrace",
+      "paramsType": "Params | void",
+      "resultType": "void",
+      "errorType": "void",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "sessionId",
+              "optional": true,
+              "type": "string"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "request",
+      "name": "GetHistoryRequest",
+      "method": "console/getHistory",
+      "paramsType": "void",
+      "resultType": "Result",
+      "errorType": "void",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Result",
+          "fields": [
+            {
+              "name": "entries",
+              "type": "string[]"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "request",
+      "name": "AddHistoryRequest",
+      "method": "console/addHistory",
+      "paramsType": "Params",
+      "resultType": "void",
+      "errorType": "void",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "code",
+              "type": "string"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "request",
+      "name": "GetConsoleSettingsRequest",
+      "method": "console/getSettings",
+      "paramsType": "void",
+      "resultType": "ConsoleSettings",
+      "errorType": "void",
+      "declarations": []
+    },
+    {
+      "kind": "request",
+      "name": "ConsoleRequestFullStateRequest",
+      "method": "console/requestFullState",
+      "paramsType": "Params",
+      "resultType": "void",
+      "errorType": "void",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "sessionId",
+              "type": "string"
+            },
+            {
+              "name": "reason",
+              "type": "string"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "ClearOutputNotification",
+      "method": "console/clear",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "sessionId",
+              "type": "string"
+            },
+            {
+              "name": "reason",
+              "optional": true,
+              "type": "'user' | 'runtime'"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "RevealExecutionNotification",
+      "method": "console/revealExecution",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "executionId",
+              "type": "string"
+            },
+            {
+              "name": "sessionId",
+              "optional": true,
+              "type": "string"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "FocusInputNotification",
+      "method": "console/focusInput",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "sessionId",
+              "type": "string"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "PasteTextNotification",
+      "method": "console/pasteText",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "sessionId",
+              "type": "string"
+            },
+            {
+              "name": "text",
+              "type": "string"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "SelectAllNotification",
+      "method": "console/selectAll",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "sessionId",
+              "type": "string"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "NavigateInputHistoryUpNotification",
+      "method": "console/historyNavigateUp",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "sessionId",
+              "type": "string"
+            },
+            {
+              "name": "usingPrefixMatch",
+              "type": "boolean"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "NavigateInputHistoryDownNotification",
+      "method": "console/historyNavigateDown",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "sessionId",
+              "type": "string"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "ClearInputHistoryNotification",
+      "method": "console/historyClear",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "sessionId",
+              "type": "string"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "SetPendingCodeNotification",
+      "method": "console/setPendingCode",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "sessionId",
+              "type": "string"
+            },
+            {
+              "name": "code",
+              "optional": true,
+              "type": "string"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "ConsoleSettingsChangedNotification",
+      "method": "console/settingsChanged",
+      "paramsType": "ConsoleSettings",
+      "declarations": []
+    },
+    {
+      "kind": "notification",
+      "name": "ConsoleThemeChangedNotification",
+      "method": "console/themeChanged",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "theme",
+              "type": "ConsoleThemeData"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "HistoryAddNotification",
+      "method": "console/historyAdd",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "sessionId",
+              "type": "string"
+            },
+            {
+              "name": "input",
+              "type": "string"
+            },
+            {
+              "name": "when",
+              "optional": true,
+              "type": "number"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "ResourceUsageNotification",
+      "method": "console/resourceUsage",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "sessionId",
+              "type": "string"
+            },
+            {
+              "name": "usage",
+              "type": "RuntimeResourceUsage"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "request",
+      "name": "ReplyPromptRequest",
+      "method": "console/replyPrompt",
+      "paramsType": "Params",
+      "resultType": "void",
+      "errorType": "void",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "id",
+              "type": "string"
+            },
+            {
+              "name": "value",
+              "type": "string"
+            },
+            {
+              "name": "sessionId",
+              "optional": true,
+              "type": "string"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "RuntimeStartupPhaseNotification",
+      "method": "console/runtimeStartupPhase",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "RuntimeStartupEvent",
+          "fields": [
+            {
+              "name": "runtimeName",
+              "type": "string"
+            },
+            {
+              "name": "languageName",
+              "type": "string"
+            },
+            {
+              "name": "base64EncodedIconSvg",
+              "optional": true,
+              "type": "string"
+            },
+            {
+              "name": "newSession",
+              "type": "boolean"
+            }
+          ]
+        },
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "phase",
+              "type": "'initializing' | 'awaitingTrust' | 'reconnecting' | 'starting' | 'discovering' | 'complete'"
+            },
+            {
+              "name": "discoveredCount",
+              "optional": true,
+              "type": "number"
+            },
+            {
+              "name": "runtimeStartupEvent",
+              "optional": true,
+              "type": "RuntimeStartupEvent"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "interface",
+      "name": "SerializedConsoleState",
+      "fields": [
+        {
+          "name": "version",
+          "type": "number"
+        },
+        {
+          "name": "items",
+          "type": "unknown[]"
+        },
+        {
+          "name": "inputHistory",
+          "type": "string[]"
+        },
+        {
+          "name": "trace",
+          "type": "boolean"
+        },
+        {
+          "name": "wordWrap",
+          "type": "boolean"
+        },
+        {
+          "name": "inputPrompt",
+          "optional": true,
+          "type": "string"
+        },
+        {
+          "name": "continuationPrompt",
+          "optional": true,
+          "type": "string"
+        },
+        {
+          "name": "workingDirectory",
+          "optional": true,
+          "type": "string | null"
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "ConsoleRestoreStateNotification",
+      "method": "console/restoreState",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "sessionId",
+              "type": "string"
+            },
+            {
+              "name": "syncSeq",
+              "type": "number"
+            },
+            {
+              "name": "state",
+              "type": "SerializedConsoleState"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "ConsoleSessionMetadataChangedNotification",
+      "method": "console/sessionMetadataChanged",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "sessionId",
+              "type": "string"
+            },
+            {
+              "name": "syncSeq",
+              "type": "number"
+            },
+            {
+              "name": "trace",
+              "optional": true,
+              "type": "boolean"
+            },
+            {
+              "name": "wordWrap",
+              "optional": true,
+              "type": "boolean"
+            },
+            {
+              "name": "inputPrompt",
+              "optional": true,
+              "type": "string"
+            },
+            {
+              "name": "continuationPrompt",
+              "optional": true,
+              "type": "string"
+            },
+            {
+              "name": "workingDirectory",
+              "optional": true,
+              "type": "string | null"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "ConsoleRuntimeChangesNotification",
+      "method": "console/runtimeChanges",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "sessionId",
+              "type": "string"
+            },
+            {
+              "name": "syncSeq",
+              "type": "number"
+            },
+            {
+              "name": "changes",
+              "type": "ConsoleRuntimeChange[]"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "ConsoleReadyNotification",
+      "method": "console/ready",
+      "paramsType": "void"
+    },
+    {
+      "kind": "notification",
+      "name": "SetConsoleWidthNotification",
+      "method": "console/setWidthInChars",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "widthInChars",
+              "type": "number"
+            },
+            {
+              "name": "sessionId",
+              "optional": true,
+              "type": "string"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "ConsoleOpenExternalNotification",
+      "method": "console/openExternal",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "url",
+              "type": "string"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

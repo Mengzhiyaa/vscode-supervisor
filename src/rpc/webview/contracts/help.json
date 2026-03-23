@@ -1,0 +1,250 @@
+{
+  "$schema": "./schema/webview-rpc-contract.schema.json",
+  "domain": "help",
+  "declarations": [
+    {
+      "kind": "notification",
+      "name": "HelpStateNotification",
+      "method": "help/state",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "HelpEntryState",
+          "fields": [
+            {
+              "name": "sourceUrl",
+              "type": "string"
+            },
+            {
+              "name": "targetUrl",
+              "type": "string"
+            },
+            {
+              "name": "title",
+              "optional": true,
+              "type": "string"
+            },
+            {
+              "name": "scrollX",
+              "type": "number"
+            },
+            {
+              "name": "scrollY",
+              "type": "number"
+            },
+            {
+              "name": "isWelcome",
+              "optional": true,
+              "type": "boolean"
+            }
+          ]
+        },
+        {
+          "kind": "interface",
+          "name": "HistoryEntry",
+          "fields": [
+            {
+              "name": "sourceUrl",
+              "type": "string"
+            },
+            {
+              "name": "targetUrl",
+              "type": "string"
+            },
+            {
+              "name": "title",
+              "optional": true,
+              "type": "string"
+            }
+          ]
+        },
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "entry",
+              "optional": true,
+              "type": "HelpEntryState"
+            },
+            {
+              "name": "history",
+              "type": "HistoryEntry[]"
+            },
+            {
+              "name": "canNavigateBackward",
+              "type": "boolean"
+            },
+            {
+              "name": "canNavigateForward",
+              "type": "boolean"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "HelpNavigateNotification",
+      "method": "help/navigate",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "url",
+              "type": "string"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "HelpNavigateBackwardNotification",
+      "method": "help/navigateBackward",
+      "paramsType": "{}"
+    },
+    {
+      "kind": "notification",
+      "name": "HelpNavigateForwardNotification",
+      "method": "help/navigateForward",
+      "paramsType": "{}"
+    },
+    {
+      "kind": "notification",
+      "name": "HelpHistoryOpenNotification",
+      "method": "help/openHistory",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "index",
+              "type": "number"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "HelpShowWelcomeNotification",
+      "method": "help/showWelcome",
+      "paramsType": "{}"
+    },
+    {
+      "kind": "notification",
+      "name": "HelpFindNotification",
+      "method": "help/find",
+      "paramsType": "{}"
+    },
+    {
+      "kind": "notification",
+      "name": "HelpScrollNotification",
+      "method": "help/scroll",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "scrollX",
+              "type": "number"
+            },
+            {
+              "name": "scrollY",
+              "type": "number"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "HelpCompleteNotification",
+      "method": "help/complete",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "title",
+              "optional": true,
+              "type": "string"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "HelpStylesNotification",
+      "method": "help/styles",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "styles",
+              "type": "Record<string, string | number>"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "HelpExecuteCommandNotification",
+      "method": "help/executeCommand",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "command",
+              "type": "string"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "HelpCopySelectionNotification",
+      "method": "help/copySelection",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "selection",
+              "optional": true,
+              "type": "string"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "HelpThemeChangedNotification",
+      "method": "help/themeChanged",
+      "paramsType": "{}"
+    }
+  ]
+}

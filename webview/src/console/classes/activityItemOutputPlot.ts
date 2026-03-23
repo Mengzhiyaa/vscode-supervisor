@@ -1,0 +1,139 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (C) 2023-2025 Posit Software, PBC. All rights reserved.
+ *  Licensed under the Elastic License 2.0. See LICENSE.txt for license information.
+ *  Ported to vscode-ark by the vscode-ark team.
+ *--------------------------------------------------------------------------------------------*/
+
+import { ActivityItem } from './activityItem';
+import { ANSIOutput, type ANSIOutputLine } from '$lib/ansi/ansiOutput';
+import { formatOutputLinesForClipboard } from '../utils/clipboardUtils';
+import type { ILanguageRuntimeMessageOutputData } from './activityItemOutputMessage';
+
+/**
+ * ActivityItemOutputPlot class.
+ * Represents plot/image output from a language runtime.
+ * Mirrors: positron/src/vs/workbench/services/positronConsole/browser/classes/activityItemOutputPlot.ts
+ */
+export class ActivityItemOutputPlot extends ActivityItem {
+    //#region Private Properties
+
+    /**
+     * Gets the output lines.
+     */
+    private readonly _outputLines: readonly ANSIOutputLine[];
+
+    /**
+     * Gets or sets the scrollback size. This is used to truncate the output lines for display.
+     */
+    private _scrollbackSize?: number;
+
+    //#endregion Private Properties
+
+    //#region Public Properties
+
+    /**
+     * Gets the plot data, as a Base64-encoded string suitable for use in a data URI.
+     */
+    readonly plotUri: string;
+
+    /**
+     * Gets the plot's MIME type, e.g. "image/png" or "image/jpeg"
+     */
+    readonly mimeType: string;
+
+    //#endregion Public Properties
+
+    //#region Constructor
+
+    /**
+     * Constructor.
+     * @param id The identifier.
+     * @param parentId The parent identifier.
+     * @param when The date.
+     * @param data The data.
+     * @param onSelected A callback that is invoked when the item is selected.
+     * @param outputId The optional identifier of the output associated with this activity item.
+     */
+    constructor(
+        id: string,
+        parentId: string,
+        when: Date,
+        readonly data: ILanguageRuntimeMessageOutputData,
+        readonly onSelected: () => void,
+        readonly outputId?: string,
+    ) {
+        // Call the base class's constructor.
+        super(id, parentId, when);
+
+        // Get the output; this will serve as the figure caption.
+        const output = data['text/plain'];
+
+        // Find the first key in the data that starts with "image/". This is the MIME type, and is
+        // guaranteed to exist since we only create this object if there is an image.
+        const imageKey = Object.keys(data).find(key => key.startsWith('image/'));
+
+        // Get the MIME type and data.
+        this.mimeType = imageKey!;
+        if (this.mimeType === 'image/svg+xml') {
+            const svgData = encodeURIComponent(data[this.mimeType]!);
+            this.plotUri = `data:${this.mimeType};utf8,${svgData}`;
+        } else {
+            this.plotUri = `data:${this.mimeType};base64,${data[this.mimeType]!}`;
+        }
+
+        // If the output is empty, don't render any output lines; otherwise, process the output into
+        // output lines.
+        this._outputLines = !output ? [] : ANSIOutput.processOutput(output);
+    }
+
+    //#endregion Constructor
+
+    //#region Public Properties
+
+    /**
+     * Gets the output lines.
+     */
+    get outputLines(): readonly ANSIOutputLine[] {
+        // If scrollback size is undefined, return all of the output lines.
+        if (this._scrollbackSize === undefined) {
+            return this._outputLines;
+        }
+
+        // Truncate the output lines.
+        return this._outputLines.slice(-this._scrollbackSize);
+    }
+
+    //#endregion Public Properties
+
+    //#region Public Methods
+
+    /**
+     * Gets the clipboard representation of the activity item.
+     * @param commentPrefix The comment prefix to use.
+     * @returns The clipboard representation of the activity item.
+     */
+    public override getClipboardRepresentation(commentPrefix: string): string[] {
+        return formatOutputLinesForClipboard(this._outputLines, commentPrefix);
+    }
+
+    /**
+     * Optimizes scrollback.
+     * @param scrollbackSize The scrollback size.
+     * @param _clearData If true, permanently deletes data beyond scrollback limit.
+     * @returns The remaining scrollback size.
+     */
+    public override optimizeScrollback(scrollbackSize: number, _clearData: boolean = true) {
+        // If there are fewer output lines than the scrollback size, clear the scrollback size
+        // as all of them will be displayed, and return the remaining scrollback size.
+        if (this._outputLines.length <= scrollbackSize) {
+            this._scrollbackSize = undefined;
+            return scrollbackSize - this._outputLines.length;
+        }
+
+        // Set the scrollback size and return 0
+        this._scrollbackSize = scrollbackSize;
+        return 0;
+    }
+
+    //#endregion Public Methods
+}
