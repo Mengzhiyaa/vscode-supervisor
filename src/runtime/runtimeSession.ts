@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import {
     type ILanguageInstallationPickerOptions,
+    type INotebookSessionUriChangedEvent,
     type ILanguageRuntimeProvider,
     type JupyterKernelSpec,
     type LanguageRuntimeDynState,
@@ -13,6 +14,7 @@ import {
 } from '../api';
 import {
     RuntimeStartMode,
+    RuntimeExitReason,
     RuntimeState,
 } from '../internal/runtimeTypes';
 import { ActiveRuntimeSession } from './activeRuntimeSession';
@@ -46,6 +48,26 @@ interface SessionStartOptions {
     hasConsole: boolean;
 }
 
+interface RuntimeSessionCreationOptions {
+    sessionMode: LanguageRuntimeSessionMode;
+    notebookUri?: vscode.Uri;
+    sessionName?: string;
+    startReason: string;
+    workingDirectory?: string;
+}
+
+function getNotebookSessionMapKey(notebookUri: vscode.Uri): string {
+    return notebookUri.toString();
+}
+
+function getSessionStartKey(
+    sessionMode: LanguageRuntimeSessionMode,
+    runtimeId: string,
+    notebookUri?: vscode.Uri,
+): string {
+    return `${sessionMode}:${runtimeId}:${notebookUri ? notebookUri.toString() : ''}`;
+}
+
 /**
  * Positron-aligned runtime session service.
  * Owns session lifecycle, foreground session switching, and UI client wiring.
@@ -56,12 +78,18 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
     private readonly _sessionLifecycleDisposables = new Map<string, vscode.Disposable[]>();
     private readonly _runtimeProviders = new Map<string, ILanguageRuntimeProvider<any>>();
     private readonly _defaultInstallationsByLanguageId = new Map<string, unknown>();
+    private readonly _availableRuntimeMetadataByRuntimeId = new Map<string, LanguageRuntimeMetadata>();
+    private readonly _installationsByRuntimeId = new Map<string, unknown>();
+    private readonly _lastActiveConsoleSessionByLanguageId = new Map<string, RuntimeSession>();
+    private readonly _notebookSessionsByNotebookUri = new Map<string, RuntimeSession>();
+    private readonly _startingSessionsBySessionKey = new Map<string, Promise<string>>();
+    private readonly _shuttingDownNotebookSessionsByNotebookUri = new Map<string, Promise<void>>();
     private readonly _restoredSessionIds = new Set<string>();
     private readonly _restartingSessionPromises = new Map<string, Promise<void>>();
     private readonly _disposables: vscode.Disposable[] = [];
 
     private _localSupervisor: LocalSupervisorApi | undefined;
-    private _activeSessionId: string | undefined;
+    private _foregroundSessionId: string | undefined;
     private _activeSessionSwitchChain: Promise<void> = Promise.resolve();
     private _initialized = false;
     private _shutdownPromise: Promise<void> | undefined;
@@ -81,6 +109,10 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
 
     private readonly _onDidUpdateSessionName = new vscode.EventEmitter<RuntimeSession>();
     readonly onDidUpdateSessionName = this._onDidUpdateSessionName.event;
+
+    private readonly _onDidUpdateNotebookSessionUri =
+        new vscode.EventEmitter<INotebookSessionUriChangedEvent>();
+    readonly onDidUpdateNotebookSessionUri = this._onDidUpdateNotebookSessionUri.event;
 
     private readonly _onWillStartSession = new vscode.EventEmitter<IRuntimeSessionWillStartEvent>();
     readonly onWillStartSession = this._onWillStartSession.event;
@@ -113,6 +145,7 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
             this._onDidDeleteSession,
             this._onDidChangeActiveSession,
             this._onDidUpdateSessionName,
+            this._onDidUpdateNotebookSessionUri,
             this._onWillStartSession,
             this._onDidStartRuntime,
             this._onDidFailStartRuntime,
@@ -137,6 +170,19 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
 
     setDefaultInstallation<TInstallation>(languageId: string, installation: TInstallation): void {
         this._defaultInstallationsByLanguageId.set(languageId, installation);
+    }
+
+    registerDiscoveredRuntime<TInstallation>(
+        languageId: string,
+        installation: TInstallation,
+        metadata: LanguageRuntimeMetadata,
+    ): void {
+        this._availableRuntimeMetadataByRuntimeId.set(metadata.runtimeId, metadata);
+        this._installationsByRuntimeId.set(metadata.runtimeId, installation);
+
+        if (!this._defaultInstallationsByLanguageId.has(languageId)) {
+            this._defaultInstallationsByLanguageId.set(languageId, installation);
+        }
     }
 
     async initialize(): Promise<void> {
@@ -190,11 +236,19 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
     }
 
     get activeSession(): RuntimeSession | undefined {
-        return this._activeSessionId ? this._sessions.get(this._activeSessionId) : undefined;
+        return this.foregroundSession;
     }
 
     get foregroundSession(): RuntimeSession | undefined {
-        return this.activeSession;
+        return this._foregroundSessionId ? this._sessions.get(this._foregroundSessionId) : undefined;
+    }
+
+    set foregroundSession(session: RuntimeSession | undefined) {
+        void this._setForegroundSession(session?.sessionId);
+    }
+
+    get activeSessions(): RuntimeSession[] {
+        return this.sessions;
     }
 
     get sessions(): RuntimeSession[] {
@@ -202,7 +256,7 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
     }
 
     get activeSessionId(): string | undefined {
-        return this._activeSessionId;
+        return this._foregroundSessionId;
     }
 
     getActiveSession(sessionId: string): ActiveRuntimeSession | undefined {
@@ -211,6 +265,32 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
 
     getActiveSessions(): ActiveRuntimeSession[] {
         return Array.from(this._activeSessionsBySessionId.values());
+    }
+
+    getConsoleSessionForRuntime(runtimeId: string): RuntimeSession | undefined {
+        return this.sessions
+            .filter((session) =>
+                session.runtimeMetadata.runtimeId === runtimeId &&
+                session.sessionMetadata.sessionMode === LanguageRuntimeSessionMode.Console &&
+                session.state !== RuntimeState.Exited,
+            )
+            .sort((left, right) => right.created - left.created)[0];
+    }
+
+    getConsoleSessionForLanguage(languageId: string): RuntimeSession | undefined {
+        const foregroundSession = this.foregroundSession;
+        if (
+            foregroundSession?.runtimeMetadata.languageId === languageId &&
+            foregroundSession.sessionMetadata.sessionMode === LanguageRuntimeSessionMode.Console
+        ) {
+            return foregroundSession;
+        }
+
+        return this._lastActiveConsoleSessionByLanguageId.get(languageId);
+    }
+
+    getNotebookSessionForNotebookUri(notebookUri: vscode.Uri): RuntimeSession | undefined {
+        return this._notebookSessionsByNotebookUri.get(getNotebookSessionMapKey(notebookUri));
     }
 
     wasSessionRestored(sessionId: string): boolean {
@@ -230,7 +310,11 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
 
         const provider = this._requireRuntimeProvider<TInstallation>(languageId);
         const installation = await this._resolveInstallationForNewSession(provider);
-        return this._createSessionWithProvider(provider, installation, sessionName);
+        return this._createSessionWithProvider(provider, installation, {
+            sessionMode: LanguageRuntimeSessionMode.Console,
+            sessionName,
+            startReason: 'createSessionForLanguage',
+        });
     }
 
     async createSessionForLanguageInstallation<TInstallation>(
@@ -242,7 +326,11 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
 
         const provider = this._requireRuntimeProvider<TInstallation>(languageId);
         this.setDefaultInstallation(languageId, installation);
-        return this._createSessionWithProvider(provider, installation, sessionName);
+        return this._createSessionWithProvider(provider, installation, {
+            sessionMode: LanguageRuntimeSessionMode.Console,
+            sessionName,
+            startReason: 'createSessionForLanguageInstallation',
+        });
     }
 
     async startSession(
@@ -274,8 +362,11 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
             case RuntimeState.Idle:
             case RuntimeState.Busy:
             case RuntimeState.Interrupting:
-                if (options.activate ?? true) {
-                    await this._setActiveSession(session.sessionId);
+                if (
+                    (options.activate ?? true) &&
+                    session.sessionMetadata.sessionMode === LanguageRuntimeSessionMode.Console
+                ) {
+                    await this._setForegroundSession(session.sessionId);
                 }
                 return session;
 
@@ -317,7 +408,7 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
 
         if (existingSession) {
             await this._ensureSessionReadyForInteraction(existingSession);
-            await this._setActiveSession(existingSession.sessionId);
+            await this._setForegroundSession(existingSession.sessionId);
             return existingSession;
         }
 
@@ -356,6 +447,143 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
             installation,
             sessionName,
         );
+    }
+
+    async startNewRuntimeSession(
+        runtimeId: string,
+        sessionName: string,
+        sessionMode: LanguageRuntimeSessionMode,
+        notebookUri: vscode.Uri | undefined,
+        source: string,
+        startMode: RuntimeStartMode = RuntimeStartMode.Starting,
+        activate: boolean,
+    ): Promise<string> {
+        const sessionKey = getSessionStartKey(sessionMode, runtimeId, notebookUri);
+        const existingStart = this._startingSessionsBySessionKey.get(sessionKey);
+        if (existingStart) {
+            return existingStart;
+        }
+
+        const startPromise = (async () => {
+            const runtimeEntry = this._requireRuntimeEntry(runtimeId);
+            const existingSession = sessionMode === LanguageRuntimeSessionMode.Console
+                ? this.getConsoleSessionForRuntime(runtimeId)
+                : notebookUri
+                    ? this.getNotebookSessionForNotebookUri(notebookUri)
+                    : undefined;
+
+            if (existingSession) {
+                if (
+                    sessionMode === LanguageRuntimeSessionMode.Console &&
+                    activate
+                ) {
+                    await this._setForegroundSession(existingSession.sessionId);
+                }
+                return existingSession.sessionId;
+            }
+
+            const session = await this._createSessionWithProvider(
+                runtimeEntry.provider,
+                runtimeEntry.installation,
+                {
+                    sessionMode,
+                    notebookUri,
+                    sessionName,
+                    startReason: source,
+                },
+            );
+
+            await this.startSession(session.sessionId, {
+                startMode,
+                activate: sessionMode === LanguageRuntimeSessionMode.Console ? activate : false,
+                hasConsole: sessionMode !== LanguageRuntimeSessionMode.Background,
+            });
+
+            return session.sessionId;
+        })().finally(() => {
+            if (this._startingSessionsBySessionKey.get(sessionKey) === startPromise) {
+                this._startingSessionsBySessionKey.delete(sessionKey);
+            }
+        });
+
+        this._startingSessionsBySessionKey.set(sessionKey, startPromise);
+        return startPromise;
+    }
+
+    async autoStartRuntime(
+        metadata: LanguageRuntimeMetadata,
+        source: string,
+        activate: boolean,
+    ): Promise<string> {
+        this._availableRuntimeMetadataByRuntimeId.set(metadata.runtimeId, metadata);
+
+        if (!this._resolveRuntimeEntry(metadata.runtimeId) && !this._resolveRuntimeEntryFromMetadata(metadata)) {
+            this._outputChannel.warn(
+                `[RuntimeSession] Cannot auto-start ${metadata.runtimeName}: installation metadata is unavailable`,
+            );
+            return '';
+        }
+
+        return this.startNewRuntimeSession(
+            metadata.runtimeId,
+            metadata.runtimeName,
+            LanguageRuntimeSessionMode.Console,
+            undefined,
+            source,
+            RuntimeStartMode.Starting,
+            activate,
+        );
+    }
+
+    async selectRuntime(runtimeId: string, source: string, notebookUri?: vscode.Uri): Promise<void> {
+        const runtimeEntry = this._requireRuntimeEntry(runtimeId);
+        const sessionMode = notebookUri
+            ? LanguageRuntimeSessionMode.Notebook
+            : LanguageRuntimeSessionMode.Console;
+
+        if (notebookUri) {
+            const activeNotebookSession = this.getNotebookSessionForNotebookUri(notebookUri);
+            if (activeNotebookSession?.runtimeMetadata.runtimeId === runtimeId) {
+                return;
+            }
+
+            if (activeNotebookSession) {
+                await this.shutdownNotebookSession(
+                    notebookUri,
+                    RuntimeExitReason.SwitchRuntime,
+                    source,
+                );
+            }
+        } else {
+            const existingConsoleSession = this.getConsoleSessionForRuntime(runtimeId);
+            if (existingConsoleSession) {
+                this.focusSession(existingConsoleSession.sessionId);
+                return;
+            }
+        }
+
+        await this.startNewRuntimeSession(
+            runtimeId,
+            runtimeEntry.metadata.runtimeName,
+            sessionMode,
+            notebookUri,
+            source,
+            notebookUri ? RuntimeStartMode.Switching : RuntimeStartMode.Starting,
+            !notebookUri,
+        );
+    }
+
+    focusSession(sessionId: string): void {
+        const session = this._sessions.get(sessionId);
+        if (!session) {
+            throw new Error(`Session ${sessionId} not found`);
+        }
+
+        if (session.sessionMetadata.sessionMode !== LanguageRuntimeSessionMode.Console) {
+            throw new Error('Cannot focus a notebook or background session');
+        }
+
+        this.foregroundSession = session;
     }
 
     async selectInstallation<TInstallation>(
@@ -422,6 +650,7 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
             continuationPrompt: '+',
             busy: false,
             currentWorkingDirectory: workingDirectory,
+            currentNotebookUri: metadata.notebookUri,
         };
 
         const session = this._createRuntimeSession(
@@ -430,6 +659,8 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
                 ...metadata,
                 sessionName,
                 workingDirectory,
+                createdTimestamp: metadata.createdTimestamp ?? Date.now(),
+                startReason: metadata.startReason ?? 'restoreRuntimeSession',
             },
             provider.lspFactory,
             {
@@ -472,7 +703,7 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
 
     async setActiveSession(sessionId: string): Promise<void> {
         if (this._sessions.has(sessionId)) {
-            await this._setActiveSession(sessionId);
+            await this._setForegroundSession(sessionId);
         }
     }
 
@@ -480,10 +711,14 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
         if (!this._sessions.has(sessionId)) {
             throw new Error(`Session ${sessionId} not found`);
         }
-        await this._setActiveSession(sessionId);
+        await this._setForegroundSession(sessionId);
     }
 
     renameSession(sessionId: string, newName: string): void {
+        this.updateSessionName(sessionId, newName);
+    }
+
+    updateSessionName(sessionId: string, newName: string): void {
         const session = this._sessions.get(sessionId);
         if (!session) {
             throw new Error(`Session ${sessionId} not found`);
@@ -503,24 +738,47 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
     }
 
     async stopSession(sessionId: string): Promise<void> {
+        await this.deleteSession(sessionId);
+    }
+
+    async interruptSession(sessionId: string): Promise<void> {
         const session = this._sessions.get(sessionId);
         if (!session) {
             throw new Error(`Session ${sessionId} not found`);
         }
 
-        this._outputChannel.debug(`[RuntimeSession] Stopping session ${sessionId}...`);
+        await session.interrupt();
+    }
 
-        try {
-            await session.shutdown();
-        } catch (error) {
-            this._outputChannel.warn(`[RuntimeSession] Shutdown failed for ${sessionId}: ${error}`);
+    async deleteSession(sessionId: string): Promise<boolean> {
+        const session = this._sessions.get(sessionId);
+        if (!session) {
+            throw new Error(`Session ${sessionId} not found`);
+        }
+
+        this._outputChannel.debug(`[RuntimeSession] Deleting session ${sessionId}...`);
+
+        if (session.state === RuntimeState.Busy) {
+            const interrupted = await this._promptToInterruptSession(session, 'delete');
+            if (!interrupted) {
+                return false;
+            }
+        }
+
+        if (session.state !== RuntimeState.Uninitialized && session.state !== RuntimeState.Exited) {
+            try {
+                await session.shutdown();
+            } catch (error) {
+                this._outputChannel.warn(`[RuntimeSession] Shutdown failed for ${sessionId}: ${error}`);
+            }
         }
 
         await this._removeSession(session);
-        this._outputChannel.debug(`[RuntimeSession] Session ${sessionId} stopped`);
+        this._outputChannel.debug(`[RuntimeSession] Session ${sessionId} deleted`);
+        return true;
     }
 
-    async restartSession(sessionId: string): Promise<void> {
+    async restartSession(sessionId: string, _source: string, interrupt?: boolean): Promise<void> {
         const session = this._sessions.get(sessionId);
         if (!session) {
             throw new Error(`Session ${sessionId} not found`);
@@ -531,7 +789,7 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
             return existingRestart;
         }
 
-        const restartPromise = this._restartSession(session).finally(() => {
+        const restartPromise = this._restartSession(session, interrupt).finally(() => {
             if (this._restartingSessionPromises.get(sessionId) === restartPromise) {
                 this._restartingSessionPromises.delete(sessionId);
             }
@@ -539,6 +797,59 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
 
         this._restartingSessionPromises.set(sessionId, restartPromise);
         return restartPromise;
+    }
+
+    async shutdownNotebookSession(
+        notebookUri: vscode.Uri,
+        exitReason: RuntimeExitReason,
+        _source: string,
+    ): Promise<void> {
+        const notebookKey = getNotebookSessionMapKey(notebookUri);
+        const existingShutdown = this._shuttingDownNotebookSessionsByNotebookUri.get(notebookKey);
+        if (existingShutdown) {
+            return existingShutdown;
+        }
+
+        const shutdownPromise = (async () => {
+            const session = this.getNotebookSessionForNotebookUri(notebookUri);
+            if (!session) {
+                return;
+            }
+
+            if (session.state !== RuntimeState.Uninitialized && session.state !== RuntimeState.Exited) {
+                await session.shutdown(exitReason);
+            }
+
+            await this._removeSession(session);
+        })().finally(() => {
+            if (this._shuttingDownNotebookSessionsByNotebookUri.get(notebookKey) === shutdownPromise) {
+                this._shuttingDownNotebookSessionsByNotebookUri.delete(notebookKey);
+            }
+        });
+
+        this._shuttingDownNotebookSessionsByNotebookUri.set(notebookKey, shutdownPromise);
+        return shutdownPromise;
+    }
+
+    async updateNotebookSessionUri(oldUri: vscode.Uri, newUri: vscode.Uri): Promise<string | undefined> {
+        const oldKey = getNotebookSessionMapKey(oldUri);
+        const newKey = getNotebookSessionMapKey(newUri);
+        const session = this._notebookSessionsByNotebookUri.get(oldKey);
+        if (!session || session.state === RuntimeState.Exited) {
+            return undefined;
+        }
+
+        this._notebookSessionsByNotebookUri.set(newKey, session);
+        session.sessionMetadata.notebookUri = newUri;
+        session.dynState.currentNotebookUri = newUri;
+        this._notebookSessionsByNotebookUri.delete(oldKey);
+
+        this._onDidUpdateNotebookSessionUri.fire({
+            sessionId: session.sessionId,
+            oldUri,
+            newUri,
+        });
+        return session.sessionId;
     }
 
     getKallichorePath(): string | undefined {
@@ -672,8 +983,8 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
             await readyPromise;
             this._onDidStartRuntime.fire(session);
 
-            if (activate) {
-                await this._setActiveSession(session.sessionId);
+            if (activate && session.sessionMetadata.sessionMode === LanguageRuntimeSessionMode.Console) {
+                await this._setForegroundSession(session.sessionId);
             }
         } catch (error) {
             this._onDidFailStartRuntime.fire(session);
@@ -746,6 +1057,68 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
         return provider;
     }
 
+    private _resolveRuntimeEntry(
+        runtimeId: string,
+    ): {
+        metadata: LanguageRuntimeMetadata;
+        installation: unknown;
+        provider: ILanguageRuntimeProvider<any>;
+    } | undefined {
+        const metadata = this._availableRuntimeMetadataByRuntimeId.get(runtimeId);
+        if (!metadata) {
+            return undefined;
+        }
+
+        const provider = this.getRuntimeProvider(metadata.languageId);
+        if (!provider) {
+            return undefined;
+        }
+
+        const installation = this._installationsByRuntimeId.get(runtimeId)
+            ?? provider.restoreInstallationFromMetadata?.(metadata);
+        if (!installation) {
+            return undefined;
+        }
+
+        return { metadata, installation, provider };
+    }
+
+    private _resolveRuntimeEntryFromMetadata(
+        metadata: LanguageRuntimeMetadata,
+    ): {
+        metadata: LanguageRuntimeMetadata;
+        installation: unknown;
+        provider: ILanguageRuntimeProvider<any>;
+    } | undefined {
+        const provider = this.getRuntimeProvider(metadata.languageId);
+        if (!provider) {
+            return undefined;
+        }
+
+        const installation = this._installationsByRuntimeId.get(metadata.runtimeId)
+            ?? provider.restoreInstallationFromMetadata?.(metadata);
+        if (!installation) {
+            return undefined;
+        }
+
+        this._availableRuntimeMetadataByRuntimeId.set(metadata.runtimeId, metadata);
+        this._installationsByRuntimeId.set(metadata.runtimeId, installation);
+        return { metadata, installation, provider };
+    }
+
+    private _requireRuntimeEntry(runtimeId: string): {
+        metadata: LanguageRuntimeMetadata;
+        installation: unknown;
+        provider: ILanguageRuntimeProvider<any>;
+    } {
+        const runtimeEntry = this._resolveRuntimeEntry(runtimeId);
+        if (!runtimeEntry) {
+            throw new Error(`No runtime with id '${runtimeId}' is available`);
+        }
+
+        return runtimeEntry;
+    }
+
     private _requireLocalSupervisor(): LocalSupervisorApi {
         if (!this._localSupervisor) {
             throw new Error('Supervisor not initialized. Call initialize() first.');
@@ -803,10 +1176,14 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
     private async _createSessionWithProvider<TInstallation>(
         provider: ILanguageRuntimeProvider<TInstallation>,
         installation: TInstallation,
-        sessionName?: string,
+        options: RuntimeSessionCreationOptions,
         dynState?: LanguageRuntimeDynState,
     ): Promise<RuntimeSession> {
-        const sessionMode: LanguageSessionMode = 'console';
+        const sessionMode: LanguageSessionMode = options.sessionMode === LanguageRuntimeSessionMode.Notebook
+            ? 'notebook'
+            : options.sessionMode === LanguageRuntimeSessionMode.Background
+                ? 'background'
+                : 'console';
         const sessionId = this._generateSessionId(provider.languageId, sessionMode);
         const baseRuntimeMetadata = provider.createRuntimeMetadata(
             this._context,
@@ -821,9 +1198,12 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
 
         const sessionMetadata: IRuntimeSessionMetadata = {
             sessionId,
-            sessionName: sessionName || runtimeMetadata.runtimeName,
-            sessionMode: LanguageRuntimeSessionMode.Console,
-            workingDirectory: dynState?.currentWorkingDirectory,
+            sessionName: options.sessionName || runtimeMetadata.runtimeName,
+            sessionMode: options.sessionMode,
+            notebookUri: options.notebookUri,
+            workingDirectory: options.workingDirectory ?? dynState?.currentWorkingDirectory,
+            createdTimestamp: Date.now(),
+            startReason: options.startReason,
         };
 
         const kernelSpec = await provider.createKernelSpec(
@@ -836,6 +1216,8 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
         this._outputChannel.info(`[RuntimeSession] Creating session ${sessionId}...`);
         this._outputChannel.debug(`[RuntimeSession] Kernel argv: ${kernelSpec.argv.join(' ')}`);
         this._outputChannel.trace(`[RuntimeSession] Kernel spec: ${JSON.stringify(kernelSpec, null, 2)}`);
+
+        this.registerDiscoveredRuntime(provider.languageId, installation, runtimeMetadata);
 
         return this._createRuntimeSession(
             runtimeMetadata,
@@ -850,7 +1232,8 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
                     inputPrompt: '>',
                     continuationPrompt: '+',
                     busy: false,
-                    currentWorkingDirectory: undefined,
+                    currentWorkingDirectory: sessionMetadata.workingDirectory,
+                    currentNotebookUri: options.notebookUri,
                 },
             },
         );
@@ -872,7 +1255,14 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
             provisioning,
         );
 
+        this._availableRuntimeMetadataByRuntimeId.set(runtimeMetadata.runtimeId, runtimeMetadata);
         this._sessions.set(session.sessionId, session);
+        if (sessionMetadata.notebookUri) {
+            this._notebookSessionsByNotebookUri.set(
+                getNotebookSessionMapKey(sessionMetadata.notebookUri),
+                session,
+            );
+        }
         this._onDidCreateSession.fire(session);
         return session;
     }
@@ -890,7 +1280,7 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
                 return;
 
             case RuntimeState.Exited:
-                await this.restartSession(session.sessionId);
+                await this.restartSession(session.sessionId, 'ensureSessionForLanguage');
                 return;
 
             case RuntimeState.Ready:
@@ -918,14 +1308,16 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
         return id;
     }
 
-    private async _restartSession(session: RuntimeSession): Promise<void> {
+    private async _restartSession(session: RuntimeSession, interrupt?: boolean): Promise<void> {
         const state = session.state;
         this._outputChannel.info(
             `[RuntimeSession] Restarting session ${session.sessionId} from state '${state}'...`,
         );
 
         if (state === RuntimeState.Busy) {
-            const interrupted = await this._promptToInterruptSession(session, 'restart');
+            const interrupted = interrupt
+                ? await this._interruptSessionForAction(session, 'restart')
+                : await this._promptToInterruptSession(session, 'restart');
             if (!interrupted) {
                 return;
             }
@@ -946,7 +1338,9 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
             case RuntimeState.Busy:
                 await session.restart(session.workingDirectory);
                 await this._waitForSessionReady(session, 10000);
-                await this._setActiveSession(session.sessionId);
+                if (session.sessionMetadata.sessionMode === LanguageRuntimeSessionMode.Console) {
+                    await this._setForegroundSession(session.sessionId);
+                }
                 return;
 
             case RuntimeState.Starting:
@@ -988,6 +1382,23 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
         }
     }
 
+    private async _interruptSessionForAction(
+        session: RuntimeSession,
+        action: string,
+    ): Promise<boolean> {
+        await session.interrupt();
+
+        try {
+            await this._waitForSessionReady(session, 10000);
+            return true;
+        } catch (error) {
+            void vscode.window.showWarningMessage(
+                `Failed to interrupt the ${session.runtimeMetadata.languageName} session before ${action}. Reason: ${error}`,
+            );
+            return false;
+        }
+    }
+
     private _waitForSessionReady(
         session: RuntimeSession,
         timeoutMs: number,
@@ -1024,26 +1435,32 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
         });
     }
 
-    private async _setActiveSession(sessionId: string | undefined): Promise<void> {
-        await this._enqueueActiveSessionSwitch(() => this._setActiveSessionInternal(sessionId));
+    private async _setForegroundSession(sessionId: string | undefined): Promise<void> {
+        await this._enqueueActiveSessionSwitch(() => this._setForegroundSessionInternal(sessionId));
     }
 
-    private async _setActiveSessionInternal(sessionId: string | undefined): Promise<void> {
-        if (this._activeSessionId === sessionId) {
+    private async _setForegroundSessionInternal(sessionId: string | undefined): Promise<void> {
+        if (this._foregroundSessionId === sessionId) {
             return;
         }
 
-        const oldSession = this.activeSession;
+        const oldSession = this.foregroundSession;
         const newSession = sessionId ? this._sessions.get(sessionId) : undefined;
 
         if (oldSession && oldSession.sessionId !== sessionId) {
             oldSession.setForeground(false);
         }
 
-        this._activeSessionId = sessionId;
+        this._foregroundSessionId = sessionId;
 
         if (newSession) {
             newSession.setForeground(true);
+            if (newSession.sessionMetadata.sessionMode === LanguageRuntimeSessionMode.Console) {
+                this._lastActiveConsoleSessionByLanguageId.set(
+                    newSession.runtimeMetadata.languageId,
+                    newSession,
+                );
+            }
         }
 
         this._onDidChangeForegroundSession.fire(newSession);
@@ -1089,8 +1506,8 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
 
         if (state === RuntimeState.Ready) {
             void activeSession.startUiClient().catch(() => undefined);
-            if (activate) {
-                void this._setActiveSession(session.sessionId);
+            if (activate && session.sessionMetadata.sessionMode === LanguageRuntimeSessionMode.Console) {
+                void this._setForegroundSession(session.sessionId);
             }
         }
     }
@@ -1260,15 +1677,48 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
 
     private async _removeSession(session: RuntimeSession): Promise<void> {
         const sessionId = session.sessionId;
+        const notebookUri = session.sessionMetadata.notebookUri;
 
         this._disposeSessionLifecycleDisposables(sessionId);
         this._sessions.delete(sessionId);
         this._restoredSessionIds.delete(sessionId);
         this._restartingSessionPromises.delete(sessionId);
+        this._startingSessionsBySessionKey.delete(
+            getSessionStartKey(
+                session.sessionMetadata.sessionMode,
+                session.runtimeMetadata.runtimeId,
+                notebookUri,
+            ),
+        );
 
-        if (this._activeSessionId === sessionId) {
-            const nextSessionId = Array.from(this._sessions.keys())[0];
-            await this._setActiveSession(nextSessionId);
+        if (notebookUri) {
+            this._notebookSessionsByNotebookUri.delete(getNotebookSessionMapKey(notebookUri));
+            this._shuttingDownNotebookSessionsByNotebookUri.delete(getNotebookSessionMapKey(notebookUri));
+        }
+
+        const lastActiveConsoleSession = this._lastActiveConsoleSessionByLanguageId.get(
+            session.runtimeMetadata.languageId,
+        );
+        if (lastActiveConsoleSession?.sessionId === sessionId) {
+            const nextConsoleSession = this.sessions.find((candidate) =>
+                candidate.runtimeMetadata.languageId === session.runtimeMetadata.languageId &&
+                candidate.sessionMetadata.sessionMode === LanguageRuntimeSessionMode.Console,
+            );
+            if (nextConsoleSession) {
+                this._lastActiveConsoleSessionByLanguageId.set(
+                    session.runtimeMetadata.languageId,
+                    nextConsoleSession,
+                );
+            } else {
+                this._lastActiveConsoleSessionByLanguageId.delete(session.runtimeMetadata.languageId);
+            }
+        }
+
+        if (this._foregroundSessionId === sessionId) {
+            const nextSessionId = this.sessions.find((candidate) =>
+                candidate.sessionMetadata.sessionMode === LanguageRuntimeSessionMode.Console,
+            )?.sessionId;
+            await this._setForegroundSession(nextSessionId);
         }
 
         await session.dispose();

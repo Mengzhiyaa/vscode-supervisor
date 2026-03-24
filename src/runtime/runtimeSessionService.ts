@@ -1,22 +1,23 @@
 import * as vscode from 'vscode';
-import { RuntimeStartMode, RuntimeState } from '../internal/runtimeTypes';
-import type { IRuntimeSessionMetadata, LanguageRuntimeMetadata } from '../api';
+import { RuntimeState } from '../internal/runtimeTypes';
+import type {
+    ILanguageRuntimeSessionStateEvent as PublicLanguageRuntimeSessionStateEvent,
+    IRuntimeSessionWillStartEvent as PublicRuntimeSessionWillStartEvent,
+    INotebookSessionUriChangedEvent,
+    IRuntimeSessionMetadata,
+    IRuntimeSessionService as PublicRuntimeSessionService,
+    LanguageRuntimeMetadata,
+} from '../api';
 import type { RuntimeSession } from './session';
 import type { UiClientInstance } from './UiClientInstance';
 import type { ILanguageRuntimeGlobalEvent } from './runtimeEvents';
+import type { ActiveRuntimeSession } from './activeRuntimeSession';
 
-export interface IRuntimeSessionWillStartEvent {
+export interface IRuntimeSessionWillStartEvent extends Omit<PublicRuntimeSessionWillStartEvent, 'session'> {
     session: RuntimeSession;
-    startMode: RuntimeStartMode;
-    hasConsole: boolean;
-    activate: boolean;
 }
 
-export interface ILanguageRuntimeSessionStateEvent {
-    session_id: string;
-    old_state: RuntimeState;
-    new_state: RuntimeState;
-}
+export type ILanguageRuntimeSessionStateEvent = PublicLanguageRuntimeSessionStateEvent;
 
 export interface IRuntimeUiClientStartedEvent {
     sessionId: string;
@@ -40,17 +41,20 @@ export interface IRuntimeSessionRestoreOptions {
     workingDirectory?: string;
 }
 
-export interface IRuntimeSessionService extends vscode.Disposable {
+export interface IRuntimeSessionService extends PublicRuntimeSessionService, vscode.Disposable {
     readonly activeSession: RuntimeSession | undefined;
-    readonly foregroundSession: RuntimeSession | undefined;
+    foregroundSession: RuntimeSession | undefined;
+    readonly activeSessions: readonly RuntimeSession[];
     readonly sessions: readonly RuntimeSession[];
     readonly onWillStartSession: vscode.Event<IRuntimeSessionWillStartEvent>;
     readonly onDidStartRuntime: vscode.Event<RuntimeSession>;
     readonly onDidFailStartRuntime: vscode.Event<RuntimeSession>;
-    readonly onDidChangeRuntimeState: vscode.Event<ILanguageRuntimeSessionStateEvent>;
     readonly onDidReceiveRuntimeEvent: vscode.Event<ILanguageRuntimeGlobalEvent>;
     readonly onDidChangeForegroundSession: vscode.Event<RuntimeSession | undefined>;
+    readonly onDidUpdateNotebookSessionUri: vscode.Event<INotebookSessionUriChangedEvent>;
     readonly onDidStartUiClient: vscode.Event<IRuntimeUiClientStartedEvent>;
+    getActiveSession(sessionId: string): ActiveRuntimeSession | undefined;
+    getActiveSessions(): ActiveRuntimeSession[];
     hasStartingOrRunningConsole(languageId?: string): boolean;
     validateRuntimeSession(
         runtimeMetadata: LanguageRuntimeMetadata,

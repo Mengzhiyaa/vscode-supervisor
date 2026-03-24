@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import {
     type IDiscoveredLanguageRuntime,
+    type IRuntimeManager,
     type ILanguageRuntimeProvider,
     type LanguageRuntimeMetadata,
 } from '../api';
@@ -10,13 +11,17 @@ import { RuntimeSessionService } from './runtimeSession';
  * Manages discovery and registration of language runtimes.
  * Providers own discovery logic; the manager owns caching and orchestration.
  */
-export class RuntimeManager implements vscode.Disposable {
+export class RuntimeManager implements vscode.Disposable, IRuntimeManager {
+    private static _nextRuntimeManagerId = 1;
+
     private readonly _disposables: vscode.Disposable[] = [];
     private readonly _runtimeProviders = new Map<string, ILanguageRuntimeProvider<any>>();
     private readonly _runtimes = new Map<string, LanguageRuntimeMetadata>();
     private readonly _installationsByLanguageId = new Map<string, unknown[]>();
     private _isDiscovering = false;
     private _discoveryComplete = false;
+
+    readonly id = RuntimeManager._nextRuntimeManagerId++;
 
     private readonly _onDidDiscoverRuntime = new vscode.EventEmitter<IDiscoveredLanguageRuntime>();
     readonly onDidDiscoverRuntime = this._onDidDiscoverRuntime.event;
@@ -70,6 +75,10 @@ export class RuntimeManager implements vscode.Disposable {
     }
 
     async startDiscovery(): Promise<void> {
+        await this.discoverAllRuntimes([]);
+    }
+
+    async discoverAllRuntimes(disabledLanguageIds: string[]): Promise<void> {
         if (this._isDiscovering) {
             this._outputChannel.debug('Discovery already in progress, skipping...');
             return;
@@ -80,6 +89,9 @@ export class RuntimeManager implements vscode.Disposable {
 
         try {
             for (const provider of this._runtimeProviders.values()) {
+                if (disabledLanguageIds.includes(provider.languageId)) {
+                    continue;
+                }
                 await this._discoverProvider(provider);
             }
         } catch (error) {
@@ -94,9 +106,34 @@ export class RuntimeManager implements vscode.Disposable {
         }
     }
 
+    async recommendWorkspaceRuntimes(disabledLanguageIds: string[]): Promise<LanguageRuntimeMetadata[]> {
+        const recommendations: LanguageRuntimeMetadata[] = [];
+
+        for (const provider of this._runtimeProviders.values()) {
+            if (disabledLanguageIds.includes(provider.languageId) || !provider.shouldRecommendForWorkspace) {
+                continue;
+            }
+
+            if (!(await provider.shouldRecommendForWorkspace())) {
+                continue;
+            }
+
+            const installation = this.getBestInstallation(provider.languageId);
+            if (!installation) {
+                continue;
+            }
+
+            recommendations.push(
+                provider.createRuntimeMetadata(this._context, installation, this._outputChannel),
+            );
+        }
+
+        return recommendations;
+    }
+
     async discoverRuntimesForLanguage(languageId: string): Promise<LanguageRuntimeMetadata[]> {
         if (!this._discoveryComplete && !this._isDiscovering) {
-            await this.startDiscovery();
+            await this.discoverAllRuntimes([]);
         } else if (this._isDiscovering) {
             await new Promise<void>(resolve => {
                 const disposable = this._onDidFinishDiscovery.event(() => {
@@ -163,6 +200,11 @@ export class RuntimeManager implements vscode.Disposable {
                 this._outputChannel
             );
             this._runtimes.set(metadata.runtimeId, metadata);
+            this._sessionManager.registerDiscoveredRuntime(
+                provider.languageId,
+                installation,
+                metadata,
+            );
 
             this._onDidDiscoverRuntime.fire({
                 provider,

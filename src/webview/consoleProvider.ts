@@ -90,9 +90,9 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
                 }),
                 this._runtimeStartupService.onWillAutoStartRuntime((event) => {
                     this._runtimeStartupEvent = {
-                        runtimeName: event.runtimeName,
-                        languageName: event.languageName,
-                        base64EncodedIconSvg: event.base64EncodedIconSvg,
+                        runtimeName: event.runtime.runtimeName,
+                        languageName: event.runtime.languageName,
+                        base64EncodedIconSvg: event.runtime.base64EncodedIconSvg,
                         newSession: event.newSession,
                     };
                     this._sendRuntimeStartupPhaseChanged();
@@ -486,7 +486,7 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
                 return;
             }
 
-            await this._sessionManager.stopSession(params.sessionId);
+            await this._sessionManager.deleteSession(params.sessionId);
             this._sendSessionInfoUpdate();
         });
 
@@ -501,7 +501,10 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
                 return;
             }
 
-            await this._sessionManager.restartSession(params.sessionId);
+            await this._sessionManager.restartSession(
+                params.sessionId,
+                'console/restartSession request',
+            );
         });
 
         // Handle switch session request
@@ -514,7 +517,7 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
                 this._warnMissingSession('switchSession');
                 return;
             }
-            await this._sessionManager.switchSession(params.sessionId);
+            this._sessionManager.focusSession(params.sessionId);
             this._sendSessionInfoUpdate();
         });
 
@@ -528,7 +531,7 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
                 this._warnMissingSession('renameSession');
                 return;
             }
-            this._sessionManager.renameSession(params.sessionId, params.newName);
+            this._sessionManager.updateSessionName(params.sessionId, params.newName);
             this._sendSessionInfoUpdate();
         });
 
@@ -858,6 +861,8 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
             case RuntimeStartupPhase.Reconnecting:
                 return 'reconnecting';
             case RuntimeStartupPhase.Starting:
+                return 'starting';
+            case RuntimeStartupPhase.NewFolderTasks:
                 return 'starting';
             case RuntimeStartupPhase.Discovering:
                 return 'discovering';

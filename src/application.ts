@@ -169,6 +169,9 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
             this._outputChannel
         );
         this._disposables.push(this._runtimeStartupService);
+        this._disposables.push(
+            this._runtimeStartupService.registerRuntimeManager(this._runtimeManager),
+        );
 
         // Initialize service-class services (1:1 Positron pattern)
         this._consoleService = new PositronConsoleService(this._sessionManager, this._outputChannel, this._context);
@@ -380,6 +383,7 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
         return {
             logChannel: this._outputChannel,
             runtimeSessionService: this._sessionManager,
+            runtimeStartupService: this._runtimeStartupService,
             positronConsoleService: {
                 onDidChangeConsoleWidth: this._consoleService.onDidChangeConsoleWidth,
                 showConsole: () => {
@@ -452,7 +456,7 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
         if (this._runtimeManager.discoveryComplete) {
             await this._runtimeStartupService.rediscoverAllRuntimes();
         } else {
-            void this._runtimeManager.startDiscovery().catch((error) => {
+            void this._runtimeManager.discoverAllRuntimes([]).catch((error) => {
                 this._outputChannel.error(`[Discovery] Failed to refresh runtime discovery: ${error}`);
             });
         }
@@ -831,7 +835,7 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
             }
 
             if (selected.action === 'switchSession' && selected.sessionId) {
-                this._sessionManager.setActiveSession(selected.sessionId);
+                this._sessionManager.focusSession(selected.sessionId);
                 return;
             }
 

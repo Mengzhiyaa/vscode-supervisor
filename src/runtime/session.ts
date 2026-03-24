@@ -348,6 +348,10 @@ export class RuntimeSession implements vscode.Disposable {
         return this._created;
     }
 
+    get metadata(): IRuntimeSessionMetadata {
+        return this.sessionMetadata;
+    }
+
     /**
      * Gets the RuntimeClientManager for comm handling.
      * Used by ConsoleViewProvider to route comm messages.
@@ -369,6 +373,10 @@ export class RuntimeSession implements vscode.Disposable {
      */
     get workingDirectory(): string | undefined {
         return this._workingDirectory;
+    }
+
+    getRuntimeState(): RuntimeState {
+        return this._state;
     }
 
     /**
