@@ -45,9 +45,9 @@ suite('[Unit] Supervisor package manifest', () => {
         assert.strictEqual(packageJson.icon, 'images/logo.png');
         assert.strictEqual(packageJson.main, './dist/extension.js');
         assert.strictEqual(packageJson.repository?.type, 'git');
-        assert.strictEqual(packageJson.repository?.url, 'https://github.com/Blakfs24/vscode-supervisor');
-        assert.strictEqual(packageJson.homepage, 'https://github.com/Blakfs24/vscode-supervisor#readme');
-        assert.strictEqual(packageJson.bugs?.url, 'https://github.com/Blakfs24/vscode-supervisor/issues');
+        assert.strictEqual(packageJson.repository?.url, 'https://github.com/Mengzhiyaa/vscode-supervisor');
+        assert.strictEqual(packageJson.homepage, 'https://github.com/Mengzhiyaa/vscode-supervisor#readme');
+        assert.strictEqual(packageJson.bugs?.url, 'https://github.com/Mengzhiyaa/vscode-supervisor/issues');
         assert.deepStrictEqual(packageJson.activationEvents, ['onStartupFinished']);
         assert.deepStrictEqual(packageJson.workspaces, ['webview']);
         assert.strictEqual(packageJson.positron?.binaryDependencies?.kallichore, '0.1.64');

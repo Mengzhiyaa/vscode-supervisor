@@ -4,11 +4,11 @@
   "license": "SEE LICENSE IN LICENSE.txt",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Blakfs24/vscode-supervisor"
+    "url": "https://github.com/Mengzhiyaa/vscode-supervisor"
   },
-  "homepage": "https://github.com/Blakfs24/vscode-supervisor#readme",
+  "homepage": "https://github.com/Mengzhiyaa/vscode-supervisor#readme",
   "bugs": {
-    "url": "https://github.com/Blakfs24/vscode-supervisor/issues"
+    "url": "https://github.com/Mengzhiyaa/vscode-supervisor/issues"
   },
   "workspaces": [
     "webview"
