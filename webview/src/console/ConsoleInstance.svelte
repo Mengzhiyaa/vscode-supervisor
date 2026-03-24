@@ -22,6 +22,10 @@
         clearHighlights,
         scrollCurrentMatchIntoView,
     } from "./utils/consoleSearch";
+    import {
+        copyScopedSelection,
+        getScopedSelection,
+    } from "./utils/selectionUtils";
 
     interface SessionInfo {
         id: string;
@@ -44,9 +48,10 @@
         width = 600,
         height = 400,
         runtimeItems = [],
+        runtimeItemsMarker = 0,
+        forceScrollMarker = 0,
         wordWrap = true,
         revealRequest = undefined,
-        scrollToBottomRequest = undefined,
         openSearchRequest = undefined,
         languageAssetsVersion = 0,
         charWidth = 0,
@@ -63,11 +68,12 @@
         width: number;
         height: number;
         runtimeItems: RuntimeItem[];
+        runtimeItemsMarker: number;
+        forceScrollMarker: number;
         wordWrap: boolean;
         revealRequest:
             | { sessionId: string; executionId: string; nonce: number }
             | undefined;
-        scrollToBottomRequest: { sessionId: string; nonce: number } | undefined;
         openSearchRequest: { sessionId: string; nonce: number } | undefined;
         languageAssetsVersion?: number;
         charWidth: number;
@@ -93,11 +99,12 @@
     let isInitialMount = $state(true);
     let hasRestoredScroll = $state(false);
     let lastRevealNonce = $state<number | undefined>(undefined);
-    let lastScrollNonce = $state<number | undefined>(undefined);
     let lastOpenSearchNonce = $state<number | undefined>(undefined);
     let lastWidthInChars = $state<number | undefined>(undefined);
     let inputAnchorRef: HTMLDivElement;
     let widthInCharsAnimationFrame: number | undefined;
+    let lastRuntimeItemsMarker = $state(0);
+    let lastForceScrollMarker = $state(0);
 
     // Search state
     let searchVisible = $state(false);
@@ -216,6 +223,9 @@
     function scrollToBottomIfNeeded() {
         if (!scrollLocked && consoleInstanceRef) {
             requestAnimationFrame(() => {
+                if (scrollLocked || !consoleInstanceRef) {
+                    return;
+                }
                 consoleInstanceRef.scrollTop = consoleInstanceRef.scrollHeight;
                 saveScrollPosition();
             });
@@ -234,26 +244,11 @@
     }
 
     function getConsoleSelection(): Selection | null {
-        const selection = window.getSelection();
-        if (!selection || selection.rangeCount === 0 || !consoleInstanceRef) {
-            return null;
-        }
-
-        for (let index = 0; index < selection.rangeCount; index++) {
-            const range = selection.getRangeAt(index);
-            if (!consoleInstanceRef.contains(range.commonAncestorContainer)) {
-                return null;
-            }
-        }
-
-        return selection;
+        return getScopedSelection(consoleInstanceRef);
     }
 
     function copySelection() {
-        const selection = getConsoleSelection();
-        if (selection?.type === "Range") {
-            document.execCommand("copy");
-        }
+        copyScopedSelection(consoleInstanceRef);
     }
 
     function pasteText(text: string) {
@@ -477,9 +472,7 @@
                 }
                 case "c": {
                     // Copy selected text
-                    const selection = window.getSelection();
-                    if (selection && selection.type === "Range") {
-                        document.execCommand("copy");
+                    if (copyScopedSelection(consoleInstanceRef)) {
                         e.preventDefault();
                         e.stopPropagation();
                     }
@@ -661,10 +654,14 @@
         }
     });
 
-    // Scroll to bottom when items change (if not locked and not initial mount)
     $effect(() => {
+        if (runtimeItemsMarker === lastRuntimeItemsMarker) {
+            return;
+        }
+
+        lastRuntimeItemsMarker = runtimeItemsMarker;
         if (
-            runtimeItems.length > 0 &&
+            runtimeItemsMarker > 0 &&
             !scrollLocked &&
             !isInitialMount &&
             hasRestoredScroll
@@ -685,12 +682,12 @@
     });
 
     $effect(() => {
-        if (
-            scrollToBottomRequest &&
-            scrollToBottomRequest.sessionId === session.id &&
-            scrollToBottomRequest.nonce !== lastScrollNonce
-        ) {
-            lastScrollNonce = scrollToBottomRequest.nonce;
+        if (forceScrollMarker === lastForceScrollMarker) {
+            return;
+        }
+
+        lastForceScrollMarker = forceScrollMarker;
+        if (forceScrollMarker > 0) {
             scrollToBottom();
         }
     });

@@ -2,7 +2,6 @@ import * as vscode from 'vscode';
 import {
     type ILanguageContributionServices,
     type IBinaryProvider,
-    type ILanguageInstallationPickerOptions,
     type ILanguageLspFactory,
     type ILanguageRuntimeProvider,
     type ILanguageRuntimeRegistration,
@@ -29,13 +28,11 @@ import { DataExplorerCommandId } from './services/dataExplorer/dataExplorerEdito
 import { CoreCommandIds, ContextKeys, InternalCommandIds, TestCommandIds } from './coreCommandIds';
 import { UiFrontendEvent } from './runtime/comms/positronUiComm';
 import {
-    getReticulateAutoEnabled,
     initializePositronCompatibility,
     LanguageRuntimeMessageType,
     type LanguageRuntimeSession,
     RuntimeExitReason,
     setForegroundSessionProvider,
-    setReticulateAutoEnabled,
 } from './supervisor/positron';
 import { ensureBinaries } from './binaryManager';
 
@@ -256,12 +253,7 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
     }
 
     get sessionManager(): ISupervisorFrameworkApi['sessionManager'] {
-        return {
-            selectInstallation: <TInstallation = unknown>(
-                languageId: string,
-                options?: ILanguageInstallationPickerOptions
-            ) => this._sessionManager.selectInstallation<TInstallation>(languageId, options),
-        };
+        return this._sessionManager;
     }
 
     getApi(): ISupervisorFrameworkApi {
@@ -385,8 +377,12 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
             logChannel: this._outputChannel,
             sessionService: this._sessionManager,
             consoleService: {
+                onDidChangeConsoleWidth: this._consoleService.onDidChangeConsoleWidth,
                 showConsole: () => {
                     this._webviewManager.showConsole();
+                },
+                getConsoleWidth: () => {
+                    return this._consoleService.getConsoleWidth();
                 },
                 executeCode: (languageId, sessionId, code, attribution, focus) =>
                     this._consoleService.executeCode(
@@ -1028,20 +1024,6 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
      * Registers extension commands
      */
     private _registerCommands(): void {
-        this._disposables.push(
-            vscode.commands.registerCommand('positron.reticulate.isAutoEnabled', () => {
-                return getReticulateAutoEnabled();
-            }),
-            vscode.commands.registerCommand('positron.reticulate.setAutoEnabled', async () => {
-                await setReticulateAutoEnabled(true);
-                return null;
-            }),
-            vscode.commands.registerCommand('positron.reticulate.resetAutoEnabled', async () => {
-                await setReticulateAutoEnabled(false);
-                return null;
-            })
-        );
-
         // Register console actions (execute code, clear console, etc.)
         const consoleActions = registerConsoleActions(this._consoleService, this._outputChannel);
         this._disposables.push(...consoleActions);

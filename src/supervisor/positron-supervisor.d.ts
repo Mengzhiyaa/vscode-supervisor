@@ -478,7 +478,7 @@ export interface DapComm {
 	handleMessage(msg: any): Promise<boolean>;
 
 	/** Connect to the DAP server. */
-	connect(): Promise<void>;
+	connect(): Promise<boolean>;
 
 	/** Disconnect from the DAP server. */
 	disconnect(): Promise<void>;

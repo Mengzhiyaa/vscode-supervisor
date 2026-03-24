@@ -1,11 +1,12 @@
 import * as vscode from 'vscode';
-import PQueue from 'p-queue';
 import {
     type LanguageRuntimeDynState,
     type LanguageRuntimeMetadata,
     type RuntimeSessionMetadata,
     type ILanguageLsp,
     type ILanguageLspFactory,
+    type ILanguageRuntimeClientInstance,
+    LanguageRuntimeClientType,
     LanguageLspState,
 } from '../api';
 import {
@@ -36,7 +37,7 @@ import {
     type LanguageRuntimeDebugEvent,
     type LanguageRuntimeDebugReply,
     LanguageRuntimeMessageType,
-    RuntimeClientType,
+    RuntimeClientType as InternalRuntimeClientType,
     RuntimeClientState,
     RuntimeExitReason,
     RuntimeCodeExecutionMode,
@@ -53,6 +54,47 @@ import {
     type RuntimeMessageEnvelope,
 } from './runtimeMessageEnvelope';
 import type { PlotRenderSettings } from './comms/positronPlotComm';
+
+export interface LanguageRuntimeStartupFailure {
+    message: string;
+    details: string;
+}
+
+function toLanguageRuntimeStartupFailure(error: unknown): LanguageRuntimeStartupFailure {
+    if (error instanceof Error) {
+        const errorWithMetadata = error as Error & {
+            details?: unknown;
+            errors?: unknown[];
+        };
+        const details: string[] = [];
+
+        if (typeof errorWithMetadata.details === 'string' && errorWithMetadata.details.trim().length > 0) {
+            details.push(errorWithMetadata.details.trim());
+        }
+
+        if (Array.isArray(errorWithMetadata.errors) && errorWithMetadata.errors.length > 0) {
+            details.push(
+                errorWithMetadata.errors
+                    .map(entry => entry instanceof Error ? entry.toString() : String(entry))
+                    .join('\n\n')
+            );
+        }
+
+        if (typeof error.stack === 'string' && error.stack.trim().length > 0) {
+            details.push(error.stack.trim());
+        }
+
+        return {
+            message: error.message || error.name || String(error),
+            details: details.join('\n\n'),
+        };
+    }
+
+    return {
+        message: String(error),
+        details: '',
+    };
+}
 
 class NullLanguageLsp implements ILanguageLsp {
     readonly state = LanguageLspState.Stopped;
@@ -102,6 +144,7 @@ export class RuntimeSession implements vscode.Disposable {
     private readonly _stateEmitter = new vscode.EventEmitter<RuntimeState>();
     private readonly _exitEmitter = new vscode.EventEmitter<LanguageRuntimeExit>();
     private readonly _startupCompleteEmitter = new vscode.EventEmitter<LanguageRuntimeInfo>();
+    private readonly _startupFailureEmitter = new vscode.EventEmitter<LanguageRuntimeStartupFailure>();
     private readonly _workingDirectoryEmitter = new vscode.EventEmitter<string>();
     private readonly _clientManagerEmitter = new vscode.EventEmitter<RuntimeClientManager>();
     private readonly _resourceUsageEmitter = new vscode.EventEmitter<RuntimeResourceUsage>();
@@ -126,6 +169,7 @@ export class RuntimeSession implements vscode.Disposable {
     private _workingDirectory: string | undefined;
     private _pendingConsoleWidthInChars: number | undefined;
     private _applyingConsoleWidthPromise: Promise<void> | undefined;
+    private readonly _created = Date.now();
 
     /** Event clock of the last processed runtime event. */
     private _eventClock = 0;
@@ -143,20 +187,18 @@ export class RuntimeSession implements vscode.Disposable {
     private _lsp: ILanguageLsp;
     private readonly _supportsLsp: boolean;
     private _dapComm?: Promise<DapComm>;
-    private _servicesQueue: PQueue;
     private _lspStartingPromise: Promise<number> = Promise.resolve(0);
     private _lspClientId?: string;
     private _lspTransportKind: 'serverComm' | undefined;
     public dynState: LanguageRuntimeDynState;
 
     // Flag to indicate if this session is the foreground (active) session
-    // LSP will only be activated when this is true AND kernel is Ready/Idle
     private _isForeground: boolean = false;
-    private _lspActivated: boolean = false;
 
     readonly onDidChangeRuntimeState = this._stateEmitter.event;
     readonly onDidEndSession = this._exitEmitter.event;
     readonly onDidCompleteStartup = this._startupCompleteEmitter.event;
+    readonly onDidEncounterStartupFailure = this._startupFailureEmitter.event;
     readonly onDidChangeWorkingDirectory = this._workingDirectoryEmitter.event;
     readonly onDidCreateClientManager = this._clientManagerEmitter.event;
     readonly onDidUpdateResourceUsage = this._resourceUsageEmitter.event;
@@ -199,11 +241,10 @@ export class RuntimeSession implements vscode.Disposable {
             this.dynState,
             this._logChannel
         ) ?? new NullLanguageLsp();
-        this._servicesQueue = new PQueue({ concurrency: 1 });
-
         this._disposables.push(this._stateEmitter);
         this._disposables.push(this._exitEmitter);
         this._disposables.push(this._startupCompleteEmitter);
+        this._disposables.push(this._startupFailureEmitter);
         this._disposables.push(this._workingDirectoryEmitter);
         this._disposables.push(this._clientManagerEmitter);
         this._disposables.push(this._resourceUsageEmitter);
@@ -282,6 +323,10 @@ export class RuntimeSession implements vscode.Disposable {
      */
     get state(): RuntimeState {
         return this._state;
+    }
+
+    get created(): number {
+        return this._created;
     }
 
     /**
@@ -371,18 +416,6 @@ export class RuntimeSession implements vscode.Disposable {
                 // call comm_info_request, which itself produces busy/idle transitions.
                 if (state === RuntimeState.Ready) {
                     this._initializeClientsAsync();
-
-                    // Start DAP first, then activate services so connect() can
-                    // attach if this is the foreground session.
-                    void this.startDap()
-                        .catch((err) => {
-                            this.log(`Error starting DAP: ${err}`, vscode.LogLevel.Error);
-                        })
-                        .finally(() => {
-                            if (this._isForeground) {
-                                void this.activateServices('kernel became ready');
-                            }
-                        });
                 }
             })
         );
@@ -412,16 +445,13 @@ export class RuntimeSession implements vscode.Disposable {
             kernel.onDidEndSession((exit) => {
                 this.log(`Session ended: exit_code=${exit.exit_code}, reason=${exit.reason}`, vscode.LogLevel.Info);
 
-                // The runtime process exited (including restart). Reset local
-                // activation state and stop stale services to allow clean reactivation.
-                this._lspActivated = false;
                 const dapComm = this._dapComm;
                 void Promise.all([
-                    this.deactivateServices(`runtime ended (${exit.reason})`),
+                    this._deactivateLsp(),
                     dapComm?.then((dap) => dap.dispose()),
                 ])
-                    .catch((err) => {
-                        this.log(`Failed to deactivate services after runtime end: ${err}`, vscode.LogLevel.Warning);
+                    .catch((error) => {
+                        this.log(`Failed to clean up session services after runtime end: ${error}`, vscode.LogLevel.Warning);
                     })
                     .finally(() => {
                         if (this._dapComm === dapComm) {
@@ -609,7 +639,7 @@ export class RuntimeSession implements vscode.Disposable {
         invoke: (uiComm: PositronUiComm) => Promise<T>
     ): Promise<{ available: boolean; value?: T }> {
         const uiClient = this._clientManager?.clientInstances.find(
-            (client) => client.getClientType() === RuntimeClientType.Ui
+            (client) => client.getClientType() === InternalRuntimeClientType.Ui
         );
         if (!uiClient) {
             return { available: false };
@@ -684,7 +714,15 @@ export class RuntimeSession implements vscode.Disposable {
         if (!this._kernel) {
             throw new Error('Kernel not attached');
         }
-        const info = await this._kernel.start();
+        let info: LanguageRuntimeInfo;
+        try {
+            info = await this._kernel.start();
+        } catch (error) {
+            const startupFailure = toLanguageRuntimeStartupFailure(error);
+            this.log(`Startup failed: ${startupFailure.message}`, vscode.LogLevel.Error);
+            this._startupFailureEmitter.fire(startupFailure);
+            throw error;
+        }
 
         if (typeof info.input_prompt === 'string') {
             this.dynState.inputPrompt = info.input_prompt.trimEnd();
@@ -872,8 +910,10 @@ export class RuntimeSession implements vscode.Disposable {
         if (!this._kernel) {
             return;
         }
-        // Deactivate LSP before shutting down
-        await this.deactivateServices('shutting down session');
+        await Promise.all([
+            this._deactivateLsp(),
+            this.disconnectDap(),
+        ]);
         return this._kernel.shutdown(exitReason);
     }
 
@@ -889,6 +929,35 @@ export class RuntimeSession implements vscode.Disposable {
         const normalizedWidth = Math.max(1, Math.trunc(widthInChars));
         this._pendingConsoleWidthInChars = normalizedWidth;
         await this._flushPendingConsoleWidth();
+    }
+
+    watchRuntimeClient(
+        clientType: LanguageRuntimeClientType,
+        handler: (client: ILanguageRuntimeClientInstance) => void
+    ): vscode.Disposable {
+        const disposables: vscode.Disposable[] = [];
+
+        const attach = (manager?: RuntimeClientManager) => {
+            if (!manager) {
+                return;
+            }
+
+            disposables.push(
+                manager.watchClient(
+                    clientType as unknown as InternalRuntimeClientType,
+                    (client) => handler(client as unknown as ILanguageRuntimeClientInstance)
+                )
+            );
+        };
+
+        attach(this._clientManager);
+        disposables.push(this.onDidCreateClientManager((manager) => {
+            attach(manager);
+        }));
+
+        return new vscode.Disposable(() => {
+            disposables.forEach((disposable) => disposable.dispose());
+        });
     }
 
     /**
@@ -944,7 +1013,6 @@ export class RuntimeSession implements vscode.Disposable {
 
     /**
      * Sets whether this session is the foreground (active) session.
-     * LSP will only be activated when this is true AND kernel is Ready/Idle.
      */
     public setForeground(isForeground: boolean): void {
         this._isForeground = isForeground;
@@ -965,69 +1033,55 @@ export class RuntimeSession implements vscode.Disposable {
         return this._lsp;
     }
 
-    // =============================================
-    // Services Activation/Deactivation (LSP + DAP)
-    // (Based on positron-r/src/session.ts)
-    // =============================================
-
-    /**
-     * Activate services (LSP + DAP).
-     * Returns a promise that resolves when the services have been activated.
-     * Should only be called by the session manager when this becomes the foreground session.
-     */
-    public async activateServices(reason: string): Promise<void> {
-        this.log(
-            `Queueing services activation. Reason: ${reason}. ` +
-            `Queue size: ${this._servicesQueue.size}, ` +
-            `pending: ${this._servicesQueue.pending}`,
-            vscode.LogLevel.Debug
-        );
-        return this._servicesQueue.add(async () => {
-            if (!this._kernel) {
-                this.log('Cannot activate services; kernel not started', vscode.LogLevel.Warning);
-                return;
-            }
-
-            this.log(
-                `Services activation started. Reason: ${reason}. ` +
-                `Queue size: ${this._servicesQueue.size}, ` +
-                `pending: ${this._servicesQueue.pending}`,
-                vscode.LogLevel.Debug
-            );
-
-            await Promise.all([
-                this._activateLsp(),
-                this._dapComm?.then((dap) => dap.connect()),
-            ]);
-            this._lspActivated = this._lsp.state === LanguageLspState.Running;
-        });
+    public activateLsp(): Promise<void> {
+        return this._activateLsp();
     }
 
-    /**
-     * Deactivate services (LSP + DAP).
-     * Returns a promise that resolves when the services have been deactivated.
-     */
-    public async deactivateServices(reason: string): Promise<void> {
-        this.log(
-            `Queueing services deactivation. Reason: ${reason}. ` +
-            `Queue size: ${this._servicesQueue.size}, ` +
-            `pending: ${this._servicesQueue.pending}`,
-            vscode.LogLevel.Debug
-        );
-        return this._servicesQueue.add(async () => {
-            this.log(
-                `Services deactivation started. Reason: ${reason}. ` +
-                `Queue size: ${this._servicesQueue.size}, ` +
-                `pending: ${this._servicesQueue.pending}`,
-                vscode.LogLevel.Debug
-            );
+    public deactivateLsp(): Promise<void> {
+        return this._deactivateLsp();
+    }
 
-            await Promise.all([
-                this._deactivateLsp(),
-                this._dapComm?.then((dap) => dap.disconnect()),
-            ]);
-            this._lspActivated = false;
-        });
+    public async startDap(
+        targetName: string,
+        debugType: string,
+        debugName: string,
+    ): Promise<void> {
+        if (!this._kernel) {
+            this.log('Cannot start DAP: kernel not started', vscode.LogLevel.Warning);
+            return;
+        }
+
+        if (this._dapComm) {
+            await this._dapComm;
+            return;
+        }
+
+        try {
+            this._dapComm = this._kernel.createDapComm(targetName, debugType, debugName);
+            await this._dapComm;
+            void this.startDapMessageLoop();
+        } catch (error) {
+            this.log(`Error starting DAP: ${error}`, vscode.LogLevel.Error);
+            this._dapComm = undefined;
+            throw error;
+        }
+    }
+
+    public async connectDap(): Promise<boolean> {
+        if (!this._dapComm) {
+            this.log('Skipping DAP connect: comm not initialized', vscode.LogLevel.Debug);
+            return false;
+        }
+
+        return (await this._dapComm).connect();
+    }
+
+    public async disconnectDap(): Promise<void> {
+        if (!this._dapComm) {
+            return;
+        }
+
+        await (await this._dapComm).disconnect();
     }
 
     private async _activateLsp(): Promise<void> {
@@ -1090,34 +1144,6 @@ export class RuntimeSession implements vscode.Disposable {
             return this._lsp;
         } else {
             return undefined;
-        }
-    }
-
-    /**
-     * Start DAP comm and message loop.
-     * Idempotent: creating twice reuses the existing comm promise.
-     */
-    private async startDap(): Promise<void> {
-        if (!this._kernel) {
-            this.log('Cannot start DAP: kernel not started', vscode.LogLevel.Warning);
-            return;
-        }
-
-        if (this._dapComm) {
-            await this._dapComm;
-            return;
-        }
-
-        try {
-            this._dapComm = this._kernel.createDapComm('ark_dap', 'ark', 'Ark Positron R');
-            await this._dapComm;
-
-            // Not awaited: this is an infinite receiver loop.
-            void this.startDapMessageLoop();
-        } catch (err) {
-            this.log(`Error starting DAP: ${err}`, vscode.LogLevel.Error);
-            this._dapComm = undefined;
-            throw err;
         }
     }
 

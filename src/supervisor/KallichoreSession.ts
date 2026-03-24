@@ -78,6 +78,8 @@ export interface DisconnectedEvent {
 	reason: DisconnectReason;
 }
 
+type SessionStartupPhase = 'establish' | 'startSession' | 'websocket';
+
 export class KallichoreSession implements JupyterLanguageRuntimeSession {
 	/**
 	 * The runtime messages emitter; consumes Jupyter messages and translates
@@ -1244,6 +1246,9 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 					}
 					| undefined;
 				let message = startupErr?.error?.message ?? summarizeAxiosError(err);
+				message =
+					`Startup failed at ${this._getStartupSourceLabel('startSession')} for session ${this.metadata.sessionId}: ` +
+					message;
 				if (startupErr?.output) {
 					message += `\n${startupErr.output}`;
 				}
@@ -1277,6 +1282,73 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 		}
 	}
 
+	private _getStartupTimeoutMs(): number {
+		const config = vscode.workspace.getConfiguration('kernelSupervisor');
+		return config.get<number>('startupTimeout', 10) * 1000;
+	}
+
+	private _getStartupSourceLabel(phase: SessionStartupPhase): string {
+		switch (phase) {
+			case 'establish':
+				return 'supervisor session establishment';
+			case 'startSession':
+				return 'supervisor startSession API';
+			case 'websocket':
+				return 'session websocket connect';
+		}
+	}
+
+	private _createStartupError(
+		phase: SessionStartupPhase,
+		reason: string,
+		cause?: unknown,
+	): Error {
+		const error = new Error(
+			`Startup failed at ${this._getStartupSourceLabel(phase)} for session ${this.metadata.sessionId}: ${reason}`
+		);
+		error.name = 'RuntimeStartupError';
+
+		if (cause instanceof Error && cause.stack) {
+			error.stack = cause.stack;
+		}
+
+		return error;
+	}
+
+	private _isStructuredStartupError(error: unknown): error is Error {
+		return error instanceof Error &&
+			(error.name === 'RuntimeStartupError' ||
+				error.message.startsWith('Startup failed at '));
+	}
+
+	private async _withStartupTimeout<T>(
+		promise: Promise<T>,
+		phase: SessionStartupPhase,
+		action: string,
+	): Promise<T> {
+		const timeoutMs = this._getStartupTimeoutMs();
+		const timeoutMessage = `Startup timed out after ${timeoutMs}ms while ${action}`;
+		return withTimeout(
+			promise,
+			timeoutMs,
+			timeoutMessage
+		).catch((error) => {
+			if (this._isStructuredStartupError(error)) {
+				throw error;
+			}
+
+			if (!(error instanceof Error) || error.message !== timeoutMessage) {
+				throw error;
+			}
+
+			throw this._createStartupError(
+				phase,
+				error.message,
+				error,
+			);
+		});
+	}
+
 	/**
 	 * Attempts to start the session; returns a promise that resolves when the
 	 * session is ready to use.
@@ -1288,7 +1360,11 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 		// Wait for the session to be established before connecting. This
 		// ensures either that we've created the session (if it's new) or that
 		// we've restored it (if it's not new).
-		await withTimeout(this._established.wait(), 2000, `Start failed: timed out waiting for session ${this.metadata.sessionId} to be established`);
+		await this._withStartupTimeout(
+			this._established.wait(),
+			'establish',
+			'waiting for the session to be established'
+		);
 
 		let runtimeInfo: positron.LanguageRuntimeInfo | undefined = this._runtimeInfo;
 
@@ -1298,7 +1374,11 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 		// If it's a new session, wait for it to be created before connecting
 		if (this._new) {
 			try {
-				const result = await this._api.startSession(this.metadata.sessionId);
+				const result = await this._withStartupTimeout(
+					this._api.startSession(this.metadata.sessionId),
+					'startSession',
+					'waiting for the supervisor startSession API response'
+				);
 				// Typically, the API returns the kernel info as the result of
 				// starting a new session, but the server doesn't validate the
 				// result returned by the kernel, so check for a `status` field
@@ -1308,7 +1388,11 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 				}
 			} catch (err) {
 				if (!retry) {
-					throw err;
+					if (this._isStructuredStartupError(err)) {
+						throw err;
+					}
+
+					throw this._createStartupError('startSession', summarizeError(err), err);
 				}
 				if (err.code === 'ECONNREFUSED' || err.code === 'ENOENT') {
 					// If it looks like the server is not running, try to
@@ -1321,8 +1405,11 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 					// Try to start the session again, but don't retry again
 					return this.tryStart(false);
 				} else {
-					// Some other error; just rethrow it
-					throw err;
+					if (this._isStructuredStartupError(err)) {
+						throw err;
+					}
+
+					throw this._createStartupError('startSession', summarizeError(err), err);
 				}
 			}
 		}
@@ -1340,7 +1427,19 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 		}
 
 		// Connect to the session's websocket
-		await withTimeout(this.connect(), 2000, `Start failed: timed out connecting to session ${this.metadata.sessionId}`);
+		try {
+			await this._withStartupTimeout(
+				this.connect(),
+				'websocket',
+				'connecting to the session websocket'
+			);
+		} catch (err) {
+			if (this._isStructuredStartupError(err)) {
+				throw err;
+			}
+
+			throw this._createStartupError('websocket', summarizeError(err), err);
+		}
 
 		if (this._new) {
 			// If it's a new session and we got runtime info from starting it,

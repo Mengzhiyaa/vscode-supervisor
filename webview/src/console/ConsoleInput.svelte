@@ -37,6 +37,7 @@
         HistoryPrefixMatchStrategy,
         HistoryInfixMatchStrategy,
     } from "./history";
+    import { copyScopedSelection } from "./utils/selectionUtils";
 
     // Position constants (Positron pattern - using const instead of enum for Svelte compatibility)
     const Position = {
@@ -135,6 +136,7 @@
         | undefined;
     let languageMonacoSupportModuleLanguageId = "";
     let destroyed = false;
+    let inputVisibilityAnimationFrame: number | undefined;
 
     const handledCommandNonces = new Set<number>();
     const editorHost = createEditorHost();
@@ -425,6 +427,42 @@
         });
     }
 
+    function resolveConsoleInstance(): HTMLElement | undefined {
+        const candidate = codeEditorWidgetContainerRef?.closest(
+            ".console-instance",
+        );
+        return candidate instanceof HTMLElement ? candidate : undefined;
+    }
+
+    function scheduleEnsureInputBottomVisible() {
+        if (inputVisibilityAnimationFrame !== undefined) {
+            cancelAnimationFrame(inputVisibilityAnimationFrame);
+        }
+
+        inputVisibilityAnimationFrame = requestAnimationFrame(() => {
+            inputVisibilityAnimationFrame = undefined;
+
+            if (hidden || !activeRef.current || !codeEditorWidgetContainerRef) {
+                return;
+            }
+
+            const consoleInstance = resolveConsoleInstance();
+            if (!consoleInstance) {
+                return;
+            }
+
+            const bottomMarginPx = 8;
+            const consoleRect = consoleInstance.getBoundingClientRect();
+            const editorRect = codeEditorWidgetContainerRef.getBoundingClientRect();
+            const overflowBottom =
+                editorRect.bottom - (consoleRect.bottom - bottomMarginPx);
+
+            if (overflowBottom > 0) {
+                consoleInstance.scrollTop += overflowBottom;
+            }
+        });
+    }
+
     /**
      * Updates the code editor widget position (Positron pattern).
      * @param linePosition The line position.
@@ -445,8 +483,8 @@
 
             codeEditorWidget.setPosition({ lineNumber, column });
 
-            // Ensure the code editor widget is scrolled into view
-            codeEditorWidgetContainerRef?.scrollIntoView({ behavior: "auto" });
+            // Ensure the bottom of the expanding input stays visible inside the console viewport.
+            scheduleEnsureInputBottomVisible();
         }
     }
 
@@ -645,10 +683,6 @@
 
         codeEditorWidget.executeEdits("console", edits);
         updateCodeEditorWidgetPosition(Position.Last, Position.Last);
-        codeEditorWidgetContainerRef?.scrollIntoView({
-            behavior: "auto",
-            block: "end",
-        });
     }
 
     function clearHistory() {
@@ -1067,6 +1101,8 @@
                         width: currentWidth,
                         height: contentHeight,
                     });
+
+                    scheduleEnsureInputBottomVisible();
                 }),
             );
 
@@ -1082,16 +1118,6 @@
 
             const editorDomNode = codeEditorWidget.getDomNode();
             if (editorDomNode) {
-                const resolveConsoleInstance = (): HTMLElement | undefined => {
-                    const candidate =
-                        codeEditorWidgetContainerRef?.closest(
-                            ".console-instance",
-                        );
-                    return candidate instanceof HTMLElement
-                        ? candidate
-                        : undefined;
-                };
-
                 const forwardConsumedWheelToConsole = (event: WheelEvent) => {
                     if (!event.defaultPrevented) {
                         return;
@@ -1152,6 +1178,7 @@
                     if (!activeRef.current) {
                         onActivate(currentSessionId());
                     }
+                    scheduleEnsureInputBottomVisible();
                 }),
             );
 
@@ -1231,6 +1258,9 @@
         handledCommandNonces.clear();
 
         disposables.forEach((d) => d.dispose());
+        if (inputVisibilityAnimationFrame !== undefined) {
+            cancelAnimationFrame(inputVisibilityAnimationFrame);
+        }
         if (codeEditorWidget) {
             codeEditorWidget.dispose();
         }
@@ -1545,6 +1575,27 @@
                 }
 
                 // Ctrl+C: interrupt when there is no selection, otherwise let Monaco copy.
+                if (
+                    ctrlCmd &&
+                    e.keyCode === monaco.KeyCode.KeyC &&
+                    !e.shiftKey &&
+                    !e.altKey
+                ) {
+                    const consoleInstance =
+                        codeEditorWidgetContainerRef?.closest(
+                            ".console-instance",
+                        );
+                    if (
+                        consoleInstance instanceof HTMLElement &&
+                        copyScopedSelection(consoleInstance)
+                    ) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        return;
+                    }
+                }
+
+                // Ctrl+C: interrupt when there is no Monaco selection, otherwise let Monaco copy.
                 if (
                     e.ctrlKey &&
                     !e.metaKey &&

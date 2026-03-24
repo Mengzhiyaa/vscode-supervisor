@@ -11,7 +11,6 @@ import { RuntimeStartupService, RuntimeStartupPhase } from '../runtime/runtimeSt
 import {
     LanguageRuntimeSessionChannel,
     RuntimeCodeFragmentStatus,
-    RuntimeState,
 } from '../internal/runtimeTypes';
 import {
     UiFrontendEvent,
@@ -200,15 +199,6 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
 
         const disposables: vscode.Disposable[] = [];
 
-        // Listen for state changes with sessionId
-        disposables.push(
-            session.onDidChangeRuntimeState(state => {
-                if (state === RuntimeState.Ready) {
-                    this._applyCurrentConsoleWidth(session, sessionId, 'runtime became ready');
-                }
-            })
-        );
-
         // Listen for startup complete event (Positron pattern: onDidCompleteStartup)
         disposables.push(
             session.onDidCompleteStartup(info => {
@@ -247,17 +237,6 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
         }
 
         this._allSessionSubscriptions.set(sessionId, disposables);
-    }
-
-    /**
-     * Applies the current console width to a runtime session.
-     * Mirrors Positron behavior: re-sync width whenever the runtime reaches Ready.
-     */
-    private _applyCurrentConsoleWidth(session: RuntimeSession, sessionId: string, reason: string): void {
-        const widthInChars = this._consoleService?.getConsoleWidth() ?? this._currentWidthInChars;
-        this._currentWidthInChars = widthInChars;
-        this.log(`Applying console width ${widthInChars} for ${sessionId} (${reason})`, vscode.LogLevel.Debug);
-        void session.setConsoleWidth(widthInChars);
     }
 
     private _nextSyncSeq(sessionId: string): number {
@@ -459,20 +438,33 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
             if (!this._sessionManager) {
                 throw new Error('Session manager not available');
             }
-            const requestedName = params.name?.trim();
-            const session = params.showRuntimePicker
-                ? await this._sessionManager.createSessionFromPicker(requestedName || undefined)
-                : await this._sessionManager.createSession(requestedName || undefined);
+            try {
+                const requestedName = params.name?.trim();
+                const session = params.showRuntimePicker
+                    ? await this._sessionManager.createSessionFromPicker(requestedName || undefined)
+                    : await this._sessionManager.createSession(requestedName || undefined);
 
-            if (!session) {
-                return {};
+                if (!session) {
+                    return {};
+                }
+
+                // Webview-initiated sessions bypass SupervisorApplication's
+                // lifecycle wiring, so subscribe here to keep follow-up startup
+                // and session-info updates flowing.
+                this.subscribeToSession(session);
+                await session.start();
+                this._sendSessionInfoUpdate();
+                const sessions = this._sessionSnapshotBuilder.buildSessionsWithConsoleOverlay();
+                return {
+                    session: sessions.find(candidate => candidate.id === session.sessionId),
+                };
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                this.log(`Create session request failed: ${message}`, vscode.LogLevel.Error);
+                void vscode.window.showErrorMessage(`Failed to create session: ${message}`);
+                this._sendSessionInfoUpdate();
+                throw error;
             }
-
-            await session.start();
-            const sessions = this._sessionSnapshotBuilder.buildSessionsWithConsoleOverlay();
-            return {
-                session: sessions.find(candidate => candidate.id === session.sessionId),
-            };
         });
 
         // Handle stop session request
@@ -577,19 +569,12 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
             }
         });
 
-        // Handle console width change notification
-        // Positron pattern: broadcast to ALL sessions, not just active
-        // This ensures all kernels have consistent output width
+        // Handle console width change notification.
+        // The language extension layer owns syncing width into language runtimes.
         connection.onNotification(ConsoleProtocol.SetConsoleWidthNotification.type, (params) => {
-            this.log(`Console width change: ${params.widthInChars} chars (broadcasting to all sessions)`, vscode.LogLevel.Debug);
-            // Save current width for new session initialization
+            this.log(`Console width change: ${params.widthInChars} chars`, vscode.LogLevel.Debug);
             this._currentWidthInChars = params.widthInChars;
-            // Update service-level console width (Positron pattern)
             this._consoleService?.setConsoleWidth(params.widthInChars);
-            const allSessions = this._sessionManager?.sessions ?? [];
-            for (const session of allSessions) {
-                session.setConsoleWidth(params.widthInChars);
-            }
         });
 
         connection.onNotification(ConsoleProtocol.ConsoleOpenExternalNotification.type, (params) => {

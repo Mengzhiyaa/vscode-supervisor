@@ -21,6 +21,7 @@ import {
     RuntimeItemStarted,
     RuntimeItemRestarted,
     RuntimeItemStartup,
+    RuntimeItemStartupFailure,
     RuntimeItemExited,
     RuntimeItemOffline,
     RuntimeItemPendingInput,
@@ -41,7 +42,7 @@ import {
     ILanguageRuntimeMessageOutputData
 } from './classes/runtimeItem';
 import { ThrottledEmitter } from './classes/throttledEmitter';
-import { RuntimeSession } from '../../runtime/session';
+import { LanguageRuntimeStartupFailure, RuntimeSession } from '../../runtime/session';
 import type {
     PromptStateEvent,
     WorkingDirectoryEvent,
@@ -67,6 +68,7 @@ import type {
 } from '../../internal/runtimeTypes';
 import {
     RuntimeCodeFragmentStatus,
+    RuntimeExitReason,
     RuntimeState,
 } from '../../internal/runtimeTypes';
 
@@ -99,6 +101,7 @@ export type SerializedRuntimeItem =
     | SerializedRuntimeStarted
     | SerializedRuntimeRestarted
     | SerializedRuntimeStartup
+    | SerializedRuntimeStartupFailure
     | SerializedRuntimeExited
     | SerializedRuntimeOffline
     | SerializedRuntimePendingInput
@@ -132,6 +135,14 @@ export interface SerializedRuntimeStartup {
     when: number;
     banner: string;
     version: string;
+}
+
+export interface SerializedRuntimeStartupFailure {
+    type: 'startupFailure';
+    id: string;
+    when: number;
+    message: string;
+    details: string;
 }
 
 export interface SerializedRuntimeExited {
@@ -289,6 +300,8 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
     private _scrollbackSize = 1000;
     private _widthInChars = 80;
     private _nextId = 0;
+    private _startupFailureHandled = false;
+    private _startupFailureFallbackHandle: ReturnType<typeof setTimeout> | undefined;
     private readonly _disposables: vscode.Disposable[] = [];
 
     // Pending code queue (Positron pattern)
@@ -523,6 +536,14 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
                         new Date(item.when),
                         item.banner,
                         item.version
+                    ));
+                    break;
+                case 'startupFailure':
+                    this._runtimeItems.push(new RuntimeItemStartupFailure(
+                        item.id,
+                        new Date(item.when),
+                        item.message,
+                        item.details
                     ));
                     break;
                 case 'exited':
@@ -1273,6 +1294,8 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
 
         this._session = session;
         this._runtimeAttached = true;
+        this._startupFailureHandled = false;
+        this._clearStartupFailureFallback();
 
         if (session) {
             const inputPrompt = session.dynState.inputPrompt?.trimEnd();
@@ -1484,6 +1507,16 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
                 when: item.when.getTime(),
                 banner: item.banner,
                 version: item.version
+            };
+        }
+
+        if (item instanceof RuntimeItemStartupFailure) {
+            return {
+                type: 'startupFailure',
+                id: item.id,
+                when: item.when.getTime(),
+                message: item.message,
+                details: item.getClipboardRepresentation('').join('\n')
             };
         }
 
@@ -1985,6 +2018,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
         this._runtimeAttached = false;
         this._activeActivityItemPrompt = undefined;
         this._promptActive = false;
+        this._clearStartupFailureFallback();
 
         // Clear executing state for all inputs when detaching (Positron pattern).
         for (const [executionId, activity] of this._runtimeItemActivities.entries()) {
@@ -2049,6 +2083,39 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
                     if (this._trace) {
                         this.addRuntimeItemTrace(`onDidEndSession (code ${exit.exit_code}, reason '${exit.reason}')`);
                     }
+
+                    if (exit.reason === RuntimeExitReason.StartupFailed) {
+                        if (this._startupFailureHandled) {
+                            if (this._runtimeAttached) {
+                                this.detachRuntimeSession();
+                            }
+                            return;
+                        }
+
+                        this._clearStartupFailureFallback();
+                        this._startupFailureFallbackHandle = setTimeout(() => {
+                            this._startupFailureFallbackHandle = undefined;
+                            this._startupFailureHandled = true;
+                            this.clearStartingItem();
+
+                            const fallbackMessage = exit.message || `${this.sessionName} failed to start.`;
+                            this.addRuntimeItem(new RuntimeItemExited(
+                                this.generateId(),
+                                new Date(),
+                                this.sessionName,
+                                exit.exit_code,
+                                fallbackMessage,
+                            ));
+
+                            if (this._runtimeAttached) {
+                                this.detachRuntimeSession();
+                            }
+
+                            this.setState(PositronConsoleState.Exited);
+                        }, 1000);
+                        return;
+                    }
+
                     this.clearStartingItem();
                     const message = `${this.sessionName} exited (code ${exit.exit_code}).`;
                     this.addRuntimeItem(new RuntimeItemExited(
@@ -2063,6 +2130,53 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
                 })
             );
         }
+
+        this._disposables.push(
+            session.onDidEncounterStartupFailure((startupFailure) => {
+                this._handleStartupFailure(startupFailure);
+            })
+        );
+    }
+
+    private _clearStartupFailureFallback(): void {
+        if (this._startupFailureFallbackHandle) {
+            clearTimeout(this._startupFailureFallbackHandle);
+            this._startupFailureFallbackHandle = undefined;
+        }
+    }
+
+    private _handleStartupFailure(startupFailure: LanguageRuntimeStartupFailure): void {
+        if (this._trace) {
+            this.addRuntimeItemTrace('onDidEncounterStartupFailure');
+        }
+
+        this._startupFailureHandled = true;
+        this._clearStartupFailureFallback();
+        this.clearStartingItem();
+
+        this.addRuntimeItem(new RuntimeItemExited(
+            this.generateId(),
+            new Date(),
+            this.sessionName,
+            0,
+            startupFailure.message,
+        ));
+        this.addRuntimeItem(new RuntimeItemStartupFailure(
+            this.generateId(),
+            new Date(),
+            startupFailure.message,
+            startupFailure.details,
+        ));
+
+        if (
+            (this._session?.state === RuntimeState.Exited ||
+                this._session?.state === RuntimeState.Uninitialized) &&
+            this._runtimeAttached
+        ) {
+            this.detachRuntimeSession();
+        }
+
+        this.setState(PositronConsoleState.Exited);
     }
 
     private handleRuntimeStateChange(state: RuntimeState): void {

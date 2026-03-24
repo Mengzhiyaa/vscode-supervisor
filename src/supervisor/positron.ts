@@ -123,14 +123,6 @@ function readWhenClauseIdentifier(identifier: string): unknown {
     return undefined;
 }
 
-export function getReticulateAutoEnabled(): boolean {
-    return false;
-}
-
-export async function setReticulateAutoEnabled(_enabled: boolean): Promise<void> {
-    return;
-}
-
 function compareWhenClauseValues(left: unknown, operator: string, right: unknown): boolean {
     const lhs = left as any;
     const rhs = right as any;
@@ -385,17 +377,6 @@ function evaluateWhenClause(whenClause: string): boolean {
 }
 
 async function executeCompatCommand(commandId: string): Promise<unknown> {
-    switch (commandId) {
-        case 'positron.reticulate.isAutoEnabled':
-            return getReticulateAutoEnabled();
-        case 'positron.reticulate.setAutoEnabled':
-            await setReticulateAutoEnabled(true);
-            return null;
-        case 'positron.reticulate.resetAutoEnabled':
-            await setReticulateAutoEnabled(false);
-            return null;
-    }
-
     const result = await vscode.commands.executeCommand(commandId);
     return result === undefined ? null : result;
 }

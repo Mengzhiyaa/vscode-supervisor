@@ -222,6 +222,21 @@ export class RuntimeItemStartup extends RuntimeItemStandard {
 }
 
 /**
+ * RuntimeItemStartupFailure class.
+ * Represents a runtime startup failure with diagnostic details.
+ */
+export class RuntimeItemStartupFailure extends RuntimeItemStandard {
+    constructor(
+        id: string,
+        when: Date,
+        public readonly message: string,
+        details: string,
+    ) {
+        super(id, when, details);
+    }
+}
+
+/**
  * RuntimeItemStarted class (1:1 Positron).
  * Represents console started notification.
  */

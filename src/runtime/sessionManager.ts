@@ -42,12 +42,6 @@ import type {
 } from './runtimeEvents';
 
 /**
- * Key for storing the last foreground session ID in workspace state.
- * Following Positron's pattern for session persistence across extension restarts.
- */
-const LAST_FOREGROUND_SESSION_ID_KEY = 'vscode-supervisor.lastForegroundSessionId';
-
-/**
  * Key for storing the list of persisted sessions in workspace state.
  */
 const PERSISTED_SESSIONS_KEY = 'vscode-supervisor.persistedSessions';
@@ -85,23 +79,25 @@ export class SessionManager implements vscode.Disposable {
     private readonly _sessionLifecycleDisposables = new Map<string, vscode.Disposable[]>();
     private readonly _runtimeEventManagerDisposables = new Map<string, vscode.Disposable[]>();
     private readonly _runtimeEventUiDisposables = new Map<string, vscode.Disposable[]>();
-    private readonly _unsupportedReticulateNotifiedSessionIds = new Set<string>();
     private readonly _restartingSessionPromises = new Map<string, Promise<void>>();
     private _activeSessionSwitchChain: Promise<void> = Promise.resolve();
     private _shutdownPromise: Promise<void> | undefined;
     private _isRestoringPersistedSessions = false;
     private _restorePersistedSessionsPromise: Promise<void> | undefined;
-    private _serviceSessionId: string | undefined;
 
     private readonly _onDidChangeForegroundSession = new vscode.EventEmitter<RuntimeSession | undefined>();
     readonly onDidChangeForegroundSession = this._onDidChangeForegroundSession.event;
 
-    // Fired when editor-facing services (LSP/DAP) have finished switching.
+    private readonly _onDidCreateSession = new vscode.EventEmitter<RuntimeSession>();
+    readonly onDidCreateSession = this._onDidCreateSession.event;
+
+    private readonly _onDidDeleteSession = new vscode.EventEmitter<string>();
+    readonly onDidDeleteSession = this._onDidDeleteSession.event;
+
     private readonly _onDidChangeActiveSession = new vscode.EventEmitter<RuntimeSession | undefined>();
     readonly onDidChangeActiveSession = this._onDidChangeActiveSession.event;
 
-    private readonly _onDidDeleteRuntimeSession = new vscode.EventEmitter<string>();
-    readonly onDidDeleteRuntimeSession = this._onDidDeleteRuntimeSession.event;
+    readonly onDidDeleteRuntimeSession = this._onDidDeleteSession.event;
 
     private readonly _onDidUpdateSessionName = new vscode.EventEmitter<RuntimeSession>();
     readonly onDidUpdateSessionName = this._onDidUpdateSessionName.event;
@@ -130,8 +126,9 @@ export class SessionManager implements vscode.Disposable {
         private readonly _outputChannel: vscode.LogOutputChannel
     ) {
         this._disposables.push(this._onDidChangeForegroundSession);
+        this._disposables.push(this._onDidCreateSession);
+        this._disposables.push(this._onDidDeleteSession);
         this._disposables.push(this._onDidChangeActiveSession);
-        this._disposables.push(this._onDidDeleteRuntimeSession);
         this._disposables.push(this._onDidUpdateSessionName);
         this._disposables.push(this._onWillStartSession);
         this._disposables.push(this._onDidReceiveRuntimeEvent);
@@ -294,6 +291,10 @@ export class SessionManager implements vscode.Disposable {
             return this._sessions.get(this._activeSessionId);
         }
         return undefined;
+    }
+
+    get foregroundSession(): RuntimeSession | undefined {
+        return this.activeSession;
     }
 
     /**
@@ -521,22 +522,35 @@ export class SessionManager implements vscode.Disposable {
 
             // Attach kernel to session
             session.attachKernel(kernel);
+            this._outputChannel.debug(`[SessionManager] ${sessionId}: kernel attached`);
 
             // Register state/working directory listeners
             this.registerSessionStateListener(session);
+            this._outputChannel.debug(`[SessionManager] ${sessionId}: session lifecycle listeners registered`);
+            this._onDidCreateSession.fire(session);
 
-            // Set as active (foreground) - services will activate when kernel becomes Ready/Idle.
-            await this._setActiveSession(sessionId);
+            // Set as active foreground session.
+            this._outputChannel.debug(`[SessionManager] ${sessionId}: switching to foreground`);
+            await this._logSlowOperation(
+                `[SessionManager] ${sessionId}: set active session`,
+                () => this._setActiveSession(sessionId),
+            );
+            this._outputChannel.debug(`[SessionManager] ${sessionId}: foreground switch complete`);
 
             // Save session list for persistence
-            await this.saveWorkspaceSessions();
+            this._outputChannel.debug(`[SessionManager] ${sessionId}: saving workspace sessions`);
+            await this._logSlowOperation(
+                `[SessionManager] ${sessionId}: save workspace sessions`,
+                () => this.saveWorkspaceSessions(),
+            );
+            this._outputChannel.debug(`[SessionManager] ${sessionId}: workspace sessions saved`);
 
             this._outputChannel.info(`[SessionManager] Session ${sessionId} created successfully`);
             return session;
 
         } catch (error) {
             this._sessions.delete(sessionId);
-            this._onDidDeleteRuntimeSession.fire(sessionId);
+            this._onDidDeleteSession.fire(sessionId);
             try {
                 await session.dispose();
             } catch (disposeError) {
@@ -623,7 +637,7 @@ export class SessionManager implements vscode.Disposable {
             this._restoredSessionIds.delete(sessionId);
 
             // Fire deletion event so services can clean up
-            this._onDidDeleteRuntimeSession.fire(sessionId);
+            this._onDidDeleteSession.fire(sessionId);
 
             if (this._activeSessionId === sessionId) {
                 // Switch to another session or undefined
@@ -736,7 +750,7 @@ export class SessionManager implements vscode.Disposable {
         this._restoredSessionIds.delete(sessionId);
 
         // Fire deletion event so services can clean up
-        this._onDidDeleteRuntimeSession.fire(sessionId);
+        this._onDidDeleteSession.fire(sessionId);
 
         // If this was the active session, clear it
         if (this._activeSessionId === sessionId) {
@@ -979,9 +993,15 @@ export class SessionManager implements vscode.Disposable {
     private async _setActiveSessionInternal(sessionId: string | undefined): Promise<void> {
         const oldSession = this.activeSession;
         const newSession = sessionId ? this._sessions.get(sessionId) : undefined;
+        this._outputChannel.debug(
+            `[SessionManager] Foreground switch start: ${oldSession?.sessionId ?? 'none'} -> ${newSession?.sessionId ?? 'none'}`
+        );
 
         // Skip if no change
         if (this._activeSessionId === sessionId) {
+            this._outputChannel.debug(
+                `[SessionManager] Foreground switch skipped; ${sessionId ?? 'none'} already active`
+            );
             return;
         }
 
@@ -991,15 +1011,23 @@ export class SessionManager implements vscode.Disposable {
         }
 
         this._activeSessionId = sessionId;
-        await this.setLastForegroundSessionId(sessionId ?? null);
 
         if (newSession) {
             this._outputChannel.debug(`[SessionManager] Session ${newSession.sessionId} is now foreground`);
             newSession.setForeground(true);
         }
 
+        this._outputChannel.debug(
+            `[SessionManager] Firing foreground change event for ${newSession?.sessionId ?? 'none'}`
+        );
         this._onDidChangeForegroundSession.fire(newSession);
-        await this._syncForegroundServicesInternal(newSession, 'foreground session changed');
+        this._onDidChangeActiveSession.fire(newSession);
+        this._outputChannel.debug(
+            `[SessionManager] Foreground change event completed for ${newSession?.sessionId ?? 'none'}`
+        );
+        this._outputChannel.debug(
+            `[SessionManager] Foreground switch finished: ${oldSession?.sessionId ?? 'none'} -> ${newSession?.sessionId ?? 'none'}`
+        );
     }
 
     private async _enqueueActiveSessionSwitch(task: () => Promise<void>): Promise<void> {
@@ -1009,100 +1037,6 @@ export class SessionManager implements vscode.Disposable {
 
         this._activeSessionSwitchChain = switchPromise;
         await switchPromise;
-    }
-
-    private async _syncForegroundServices(session: RuntimeSession | undefined, reason: string): Promise<void> {
-        await this._enqueueActiveSessionSwitch(() => this._syncForegroundServicesInternal(session, reason));
-    }
-
-    private async _syncForegroundServicesInternal(
-        session: RuntimeSession | undefined,
-        reason: string,
-    ): Promise<void> {
-        const currentServiceSession = this._serviceSessionId
-            ? this._sessions.get(this._serviceSessionId)
-            : undefined;
-
-        if (!session) {
-            if (currentServiceSession) {
-                try {
-                    await currentServiceSession.deactivateServices(reason);
-                } catch (err) {
-                    this._outputChannel.warn(`[SessionManager] Error deactivating services on ${currentServiceSession.sessionId}: ${err}`);
-                }
-            }
-
-            this._setServiceSession(undefined);
-            return;
-        }
-
-        if (session.state !== RuntimeState.Ready && session.state !== RuntimeState.Idle) {
-            const currentServiceSessionId = currentServiceSession?.sessionId ?? 'none';
-            this._outputChannel.debug(
-                `[SessionManager] Foreground session ${session.sessionId} is not ready; keeping services on ${currentServiceSessionId}`
-            );
-            return;
-        }
-
-        if (currentServiceSession?.sessionId === session.sessionId) {
-            try {
-                await session.activateServices(reason);
-            } catch (err) {
-                this._outputChannel.warn(`[SessionManager] Error refreshing services on foreground session ${session.sessionId}: ${err}`);
-            }
-            this._setServiceSession(session);
-            return;
-        }
-
-        try {
-            await session.activateServices(reason);
-        } catch (err) {
-            this._outputChannel.warn(`[SessionManager] Error activating services on new foreground session ${session.sessionId}: ${err}`);
-            return;
-        }
-
-        this._setServiceSession(session);
-
-        if (!currentServiceSession) {
-            return;
-        }
-
-        try {
-            await currentServiceSession.deactivateServices(`services moved to foreground session ${session.sessionId}`);
-        } catch (err) {
-            this._outputChannel.warn(`[SessionManager] Error deactivating services on old session ${currentServiceSession.sessionId}: ${err}`);
-        }
-    }
-
-    private _setServiceSession(session: RuntimeSession | undefined): void {
-        const nextSessionId = session?.sessionId;
-        if (this._serviceSessionId === nextSessionId) {
-            return;
-        }
-
-        this._serviceSessionId = nextSessionId;
-        this._onDidChangeActiveSession.fire(session);
-    }
-
-    // =============================================
-    // Persistent Foreground Session (Positron pattern)
-    // =============================================
-
-    /**
-     * Gets the ID of the last foreground session from workspace state.
-     * Used to restore the foreground session after extension restart.
-     */
-    public getLastForegroundSessionId(): string | null {
-        return this._context.workspaceState.get<string>(LAST_FOREGROUND_SESSION_ID_KEY)
-            ?? null;
-    }
-
-    /**
-     * Sets the ID of the last foreground session in workspace state.
-     * Called when the active session changes.
-     */
-    private async setLastForegroundSessionId(sessionId: string | null): Promise<void> {
-        await this._context.workspaceState.update(LAST_FOREGROUND_SESSION_ID_KEY, sessionId);
     }
 
     // =============================================
@@ -1170,8 +1104,41 @@ export class SessionManager implements vscode.Disposable {
         }
 
         const persistedSessions = Array.from(nextPersistedSessions.values());
-        await this._context.workspaceState.update(PERSISTED_SESSIONS_KEY, persistedSessions);
+        await this._logSlowOperation(
+            `[SessionManager] workspaceState.update(persistedSessions=${persistedSessions.length})`,
+            () => this._context.workspaceState.update(PERSISTED_SESSIONS_KEY, persistedSessions),
+        );
         this._outputChannel.trace(`[SessionManager] Saved ${persistedSessions.length} session(s) for persistence`);
+    }
+
+    private async _logSlowOperation<T>(
+        label: string,
+        operation: () => PromiseLike<T>,
+        warnAfterMs = 3000,
+    ): Promise<T> {
+        const started = Date.now();
+        let warned = false;
+        const timer = setTimeout(() => {
+            warned = true;
+            this._outputChannel.warn(`${label} is still pending after ${warnAfterMs}ms`);
+        }, warnAfterMs);
+
+        try {
+            const result = await operation();
+            const elapsed = Date.now() - started;
+            this._outputChannel.debug(`${label} completed in ${elapsed}ms`);
+            return result;
+        } catch (error) {
+            const elapsed = Date.now() - started;
+            this._outputChannel.warn(`${label} failed after ${elapsed}ms: ${error}`);
+            throw error;
+        } finally {
+            clearTimeout(timer);
+            if (warned) {
+                const elapsed = Date.now() - started;
+                this._outputChannel.warn(`${label} eventually completed after ${elapsed}ms`);
+            }
+        }
     }
 
     private _withOperationTimeout<T>(
@@ -1262,27 +1229,6 @@ export class SessionManager implements vscode.Disposable {
         disposables.push(
             manager.watchClient(RuntimeClientType.Ui, (client) => {
                 this._attachUiClientInstance(session, client);
-            })
-        );
-        disposables.push(
-            manager.watchClient(RuntimeClientType.Reticulate, (client) => {
-                if (!this._unsupportedReticulateNotifiedSessionIds.has(sessionId)) {
-                    this._unsupportedReticulateNotifiedSessionIds.add(sessionId);
-                    this._outputChannel.warn(
-                        `[SessionManager] Closing unsupported reticulate client ` +
-                        `'${client.getClientId()}' for session ${sessionId}`
-                    );
-                    void vscode.window.showWarningMessage(
-                        'Reticulate is not supported in Ark.'
-                    );
-                } else {
-                    this._outputChannel.debug(
-                        `[SessionManager] Closing unsupported reticulate client ` +
-                        `'${client.getClientId()}' for session ${sessionId}`
-                    );
-                }
-
-                client.dispose();
             })
         );
 
@@ -1547,7 +1493,6 @@ export class SessionManager implements vscode.Disposable {
             managerDisposables.forEach((disposable) => disposable.dispose());
             this._runtimeEventManagerDisposables.delete(sessionId);
         }
-        this._unsupportedReticulateNotifiedSessionIds.delete(sessionId);
 
         this._disposeRuntimeEventUiClient(sessionId);
     }
@@ -1592,44 +1537,6 @@ export class SessionManager implements vscode.Disposable {
                 activate: false,
             });
         }
-
-        if (
-            this._isRestoringPersistedSessions &&
-            !this._activeSessionId &&
-            this._restoredSessionIds.has(session.sessionId) &&
-            (state === RuntimeState.Ready || state === RuntimeState.Idle)
-        ) {
-            const lastForegroundSessionId = this.getLastForegroundSessionId();
-            if (lastForegroundSessionId === session.sessionId) {
-                // Re-activate services for restored foreground session.
-                if (!session.isForeground) {
-                    this._outputChannel.debug(`[SessionManager] Reactivating foreground session ${session.sessionId} after restore`);
-                    await this._setActiveSession(session.sessionId);
-                }
-            }
-        }
-
-        if (state === RuntimeState.Ready || state === RuntimeState.Idle) {
-            if (session.isForeground) {
-                await this._syncForegroundServices(session, 'foreground session became ready');
-            }
-        }
-
-        if (state === RuntimeState.Exited && this._serviceSessionId === session.sessionId) {
-            this._setServiceSession(undefined);
-            const foregroundSession = this.activeSession;
-            if (
-                foregroundSession &&
-                foregroundSession.sessionId !== session.sessionId &&
-                (foregroundSession.state === RuntimeState.Ready || foregroundSession.state === RuntimeState.Idle)
-            ) {
-                await this._syncForegroundServices(
-                    foregroundSession,
-                    'previous service session exited',
-                );
-            }
-        }
-
         // Update saved sessions on state change (for state tracking)
         if (state === RuntimeState.Exited) {
             await this.saveWorkspaceSessions(session.sessionId);
@@ -1736,6 +1643,7 @@ export class SessionManager implements vscode.Disposable {
 
                     // Register state listener for service reactivation.
                     this.registerSessionStateListener(session);
+                    this._onDidCreateSession.fire(session);
 
                     // Fire onWillStartSession with Reconnecting mode.
                     // Fired after restoreSession succeeds to avoid creating orphan console instances.
@@ -1777,13 +1685,9 @@ export class SessionManager implements vscode.Disposable {
                 }
             }
 
-            // Restore foreground session focus
-            const lastForegroundId = this.getLastForegroundSessionId();
-            if (lastForegroundId && this._sessions.has(lastForegroundId)) {
-                const session = this._sessions.get(lastForegroundId)!;
-                this._outputChannel.debug(`[SessionManager] Restoring foreground session: ${lastForegroundId}`);
-                await this._setActiveSession(lastForegroundId);
-            } else if (this._sessions.size > 0) {
+            // Restore foreground focus to the first available session. Language-specific
+            // foreground ownership is handled in the language extension layer.
+            if (this._sessions.size > 0) {
                 // Activate the first available session
                 const firstSessionId = Array.from(this._sessions.keys())[0];
                 await this._setActiveSession(firstSessionId);
@@ -1807,12 +1711,8 @@ export class SessionManager implements vscode.Disposable {
             this._activeSessionId = undefined;
         }
 
-        if (this._serviceSessionId === sessionId) {
-            this._setServiceSession(undefined);
-        }
-
         if (removed) {
-            this._onDidDeleteRuntimeSession.fire(sessionId);
+            this._onDidDeleteSession.fire(sessionId);
         }
 
         try {
@@ -1842,7 +1742,6 @@ export class SessionManager implements vscode.Disposable {
             }
 
             this._activeSessionId = undefined;
-            this._serviceSessionId = undefined;
             this._localSupervisor?.dispose();
             this._localSupervisor = undefined;
             this._disposables.forEach(d => d.dispose());

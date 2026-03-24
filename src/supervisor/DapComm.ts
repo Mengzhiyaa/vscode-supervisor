@@ -13,6 +13,8 @@ import { Debounced } from './util';
  * See `positron-supervisor.d.ts` for documentation.
  */
 export class DapComm {
+	private static readonly DEBUG_SESSION_START_TIMEOUT_MS = 5000;
+
 	public get comm(): Comm {
 		return this._comm;
 	}
@@ -21,10 +23,12 @@ export class DapComm {
 	}
 
 	private _debugSession?: vscode.DebugSession;
-	private _startingSession?: Promise<void>;
+	private _startingSession?: Promise<boolean>;
 	private _stopDebug = new Debounced(100);
 	private connected = false;
+	private _autoAttachDisabled = false;
 	private readonly disposables: vscode.Disposable[] = [];
+	private _debugStartTimeoutWarningShown = false;
 
 	// Message counter used for creating unique message IDs
 	private messageCounter = 0;
@@ -52,7 +56,7 @@ export class DapComm {
 
 			this._debugSession = undefined;
 
-			if (!this.connected) {
+			if (!this.connected || this._autoAttachDisabled) {
 				return;
 			}
 
@@ -108,16 +112,25 @@ export class DapComm {
 		);
 	}
 
-	async connect() {
-		this.connected = true;
-
+	async connect(): Promise<boolean> {
 		if (this._debugSession) {
-			return;
+			this.connected = true;
+			return true;
 		}
 		if (this._startingSession) {
 			return this._startingSession;
 		}
+		if (this._autoAttachDisabled) {
+			return false;
+		}
+		if (!this.hasDebuggerContribution()) {
+			this.disableAutoAttach(
+				`Skipping DAP attach for debug type '${this.debugType}': no debugger contribution is registered`
+			);
+			return false;
+		}
 
+		this.connected = true;
 		this.session.emitJupyterLog(
 			`Connecting to DAP server on port ${this._port}`,
 			vscode.LogLevel.Info
@@ -125,7 +138,13 @@ export class DapComm {
 
 		this._startingSession = (async () => {
 			try {
-				this._debugSession = await this.startDebugSession();
+				const debugSession = await this.startDebugSession();
+				if (!debugSession) {
+					return false;
+				}
+
+				this._debugSession = debugSession;
+				return true;
 			} finally {
 				this._startingSession = undefined;
 			}
@@ -179,6 +198,13 @@ export class DapComm {
 			case 'start_debug': {
 				// Cancel any pending stop handler. We debounce these to avoid flickering.
 				this._stopDebug.cancel();
+				if (!this._debugSession) {
+					this.session.emitJupyterLog(
+						`Ignoring start_debug for '${this.debugName}': debug session is not attached`,
+						vscode.LogLevel.Warning
+					);
+					break;
+				}
 				(vscode.debug as any).setDebugSessionForeground?.(this.debugSession(), true);
 				break;
 			}
@@ -226,13 +252,31 @@ export class DapComm {
 
 	private async startDebugSession(): Promise<vscode.DebugSession | undefined> {
 		let disposable: vscode.Disposable | undefined;
+		let timeout: ReturnType<typeof setTimeout> | undefined;
 		const promise = new Promise<vscode.DebugSession | undefined>((resolve) => {
-			disposable = vscode.debug.onDidStartDebugSession((session) => {
-				if (session.type === this.config.type && session.name === this.config.name) {
+			disposable = vscode.debug.onDidStartDebugSession((session: vscode.DebugSession) => {
+				if (this.isMatchingDebugSession(session)) {
+					if (timeout) {
+						clearTimeout(timeout);
+					}
 					disposable?.dispose();
 					resolve(session);
 				}
 			});
+
+			timeout = setTimeout(() => {
+				disposable?.dispose();
+
+				if (!this._debugStartTimeoutWarningShown) {
+					this._debugStartTimeoutWarningShown = true;
+					this.disableAutoAttach(
+						`Timed out after ${DapComm.DEBUG_SESSION_START_TIMEOUT_MS}ms waiting for debug session ` +
+						`'${this.config.name}' (${this.config.type}) to start; continuing without DAP attach`
+					);
+				}
+
+				resolve(undefined);
+			}, DapComm.DEBUG_SESSION_START_TIMEOUT_MS);
 		});
 
 		try {
@@ -240,15 +284,46 @@ export class DapComm {
 				throw new Error('Failed to start debug session');
 			}
 		} catch (err) {
+			if (timeout) {
+				clearTimeout(timeout);
+			}
 			disposable?.dispose();
-			this.session.emitJupyterLog(
-				`Can't start debug session for DAP server ${this._comm.id}: ${err}`,
-				vscode.LogLevel.Warning
+			this.disableAutoAttach(
+				`Can't start debug session for DAP server ${this._comm.id}: ${err}`
 			);
 			return undefined;
 		}
 
 		return promise;
+	}
+
+	private isMatchingDebugSession(session: vscode.DebugSession): boolean {
+		const debugServer = (session.configuration as vscode.DebugConfiguration | undefined)?.debugServer;
+		if (typeof debugServer === 'number' && debugServer === this._port) {
+			return true;
+		}
+
+		return session.type === this.config.type && session.name === this.config.name;
+	}
+
+	private disableAutoAttach(message: string): void {
+		this.connected = false;
+		if (this._autoAttachDisabled) {
+			return;
+		}
+
+		this._autoAttachDisabled = true;
+		this.session.emitJupyterLog(message, vscode.LogLevel.Warning);
+	}
+
+	private hasDebuggerContribution(): boolean {
+		return vscode.extensions.all.some((extension) => {
+			const debuggers = (extension.packageJSON as { contributes?: { debuggers?: Array<{ type?: string }> } })
+				?.contributes?.debuggers;
+			return Array.isArray(debuggers) && debuggers.some((debuggerContribution) => {
+				return debuggerContribution?.type === this.debugType;
+			});
+		});
 	}
 
 	register<T extends vscode.Disposable>(disposable: T): T {
@@ -258,6 +333,7 @@ export class DapComm {
 
 	dispose(): void {
 		this.connected = false;
+		this._autoAttachDisabled = true;
 
 		// Best-effort: stop an active or in-flight debug session.
 		const activeSession = this._debugSession;

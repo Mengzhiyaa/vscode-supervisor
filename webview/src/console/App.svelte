@@ -23,6 +23,7 @@
         RuntimeItemActivity,
         RuntimeItemStarted,
         RuntimeItemStartup,
+        RuntimeItemStartupFailure,
         RuntimeItemExited,
         RuntimeItemOffline,
         RuntimeItemPendingInput,
@@ -69,6 +70,8 @@
     interface SessionData {
         runtimeItems: RuntimeItem[];
         runtimeItemActivities: Map<string, RuntimeItemActivity>;
+        runtimeItemsMarker: number;
+        forceScrollMarker: number;
     }
 
     interface RuntimeStartupEvent {
@@ -158,6 +161,7 @@
     let sessionDataMap = $state(new Map<string, SessionData>());
     const sessionSyncSeqMap = new Map<string, number>();
     const pendingFullStateRequests = new Set<string>();
+    const pendingFirstOutputScrollSessionIds = new Set<string>();
     let inputCommand = $state<ConsoleInputCommandEnvelope | undefined>(
         undefined,
     );
@@ -210,10 +214,6 @@
     let runtimeStartupEvent = $state<RuntimeStartupEvent | undefined>(
         undefined,
     );
-    let scrollToBottomRequest = $state<
-        { sessionId: string; nonce: number } | undefined
-    >(undefined);
-    let scrollToBottomCounter = 0;
     let openSearchRequest = $state<
         { sessionId: string; nonce: number } | undefined
     >(undefined);
@@ -333,6 +333,7 @@
                 sessionDataMap.delete(sessionId);
                 sessionSyncSeqMap.delete(sessionId);
                 pendingFullStateRequests.delete(sessionId);
+                pendingFirstOutputScrollSessionIds.delete(sessionId);
             }
         }
         sessionDataMap = new Map(sessionDataMap);
@@ -438,6 +439,27 @@
         return mergedSessions;
     }
 
+    function upsertSession(nextSession: SessionInfo): SessionInfo[] {
+        const existingIndex = sessions.findIndex(
+            (session) => session.id === nextSession.id,
+        );
+        const mergedSession = mergeIncomingSession(
+            nextSession,
+            existingIndex >= 0 ? sessions[existingIndex] : undefined,
+        );
+
+        if (existingIndex >= 0) {
+            sessions = sessions.map((session, index) =>
+                index === existingIndex ? mergedSession : session,
+            );
+            return sessions;
+        }
+
+        sessions = [...sessions, mergedSession];
+        updateLayout();
+        return sessions;
+    }
+
     function stateLabelForSession(session: SessionInfo | undefined): string {
         if (!session) {
             return "";
@@ -489,6 +511,8 @@
             return {
                 runtimeItems: [],
                 runtimeItemActivities: new Map(),
+                runtimeItemsMarker: 0,
+                forceScrollMarker: 0,
             };
         }
         return data;
@@ -500,6 +524,8 @@
             sessionDataMap.set(sessionId, {
                 runtimeItems: [],
                 runtimeItemActivities: new Map(),
+                runtimeItemsMarker: 0,
+                forceScrollMarker: 0,
             });
             sessionDataMap = new Map(sessionDataMap); // Trigger reactivity
         }
@@ -615,11 +641,14 @@
         sessionDataMap = new Map(sessionDataMap);
     }
 
-    function requestScrollToBottom(sessionId: string): void {
-        scrollToBottomRequest = {
-            sessionId,
-            nonce: ++scrollToBottomCounter,
-        };
+    function armForceScrollOnNextOutput(sessionId: string): void {
+        pendingFirstOutputScrollSessionIds.add(sessionId);
+    }
+
+    function consumeForceScrollOnNextOutput(sessionId: string): boolean {
+        const shouldForce = pendingFirstOutputScrollSessionIds.has(sessionId);
+        pendingFirstOutputScrollSessionIds.delete(sessionId);
+        return shouldForce;
     }
 
     function requestOpenSearch(sessionId: string): void {
@@ -876,15 +905,16 @@
 
     function syncSessionRuntimeItems(
         sessionId: string,
-        scrollToBottom: boolean = false,
+        forceScrollToBottom: boolean = false,
     ): void {
         const data = getSessionData(sessionId);
         optimizeScrollbackForSession(sessionId);
         data.runtimeItems = [...data.runtimeItems];
-        sessionDataMap = new Map(sessionDataMap);
-        if (scrollToBottom) {
-            requestScrollToBottom(sessionId);
+        data.runtimeItemsMarker += 1;
+        if (forceScrollToBottom) {
+            data.forceScrollMarker += 1;
         }
+        sessionDataMap = new Map(sessionDataMap);
     }
 
     function deserializeActivityItem(
@@ -1030,6 +1060,15 @@
                 return {
                     runtimeItem: new RuntimeItemStartup(item.id, item.banner),
                 };
+            case "startupFailure":
+                return {
+                    runtimeItem: new RuntimeItemStartupFailure(
+                        item.id,
+                        (item.message as string | undefined) ??
+                            "Runtime failed to start.",
+                        (item.details as string | undefined) ?? "",
+                    ),
+                };
             case "exited": {
                 const fallbackSessionName =
                     sessions.find((session) => session.id === sessionId)
@@ -1119,7 +1158,7 @@
         }
         data.runtimeItems.push(deserialized.runtimeItem);
         if (sync) {
-            syncSessionRuntimeItems(sessionId, true);
+            syncSessionRuntimeItems(sessionId);
         }
         return true;
     }
@@ -1147,7 +1186,7 @@
         }
 
         if (sync) {
-            syncSessionRuntimeItems(sessionId, true);
+            syncSessionRuntimeItems(sessionId);
         }
         return true;
     }
@@ -1180,7 +1219,7 @@
         }
 
         if (sync) {
-            syncSessionRuntimeItems(sessionId, true);
+            syncSessionRuntimeItems(sessionId);
         }
         return true;
     }
@@ -1200,7 +1239,7 @@
 
         activity.clearOutputItems();
         if (sync) {
-            syncSessionRuntimeItems(sessionId, true);
+            syncSessionRuntimeItems(sessionId);
         }
         return true;
     }
@@ -1298,7 +1337,9 @@
         }
 
         if (changed) {
-            syncSessionRuntimeItems(sessionId, shouldScroll);
+            const forceScrollToBottom =
+                shouldScroll && consumeForceScrollOnNextOutput(sessionId);
+            syncSessionRuntimeItems(sessionId, forceScrollToBottom);
         }
     }
 
@@ -1333,7 +1374,6 @@
 
         data.runtimeItems = runtimeItems;
         data.runtimeItemActivities = runtimeItemActivities;
-        syncSessionRuntimeItems(sessionId);
         applySessionMetadataUpdate(sessionId, state);
 
         const historyEntries = state.inputHistory ?? [];
@@ -1344,8 +1384,7 @@
                 entries,
             });
         }, 0);
-
-        requestScrollToBottom(sessionId);
+        syncSessionRuntimeItems(sessionId, true);
     }
 
     onMount(() => {
@@ -1758,9 +1797,19 @@
         }
 
         try {
-            await connection.sendRequest("session/create", {
+            const result = (await connection.sendRequest("session/create", {
                 showRuntimePicker: true,
-            });
+            })) as { session?: SessionInfo };
+
+            if (result.session) {
+                const previousActiveSessionId = activeSessionId;
+                const mergedSessions = upsertSession(result.session);
+                activeSessionId = resolveActiveSessionId(
+                    mergedSessions,
+                    result.session.id,
+                    previousActiveSessionId,
+                );
+            }
         } catch (error) {
             console.error("Failed to create session:", error);
         }
@@ -2041,11 +2090,12 @@
                             width={visibleConsolePaneWidth}
                             height={adjustedHeight}
                             runtimeItems={getSessionData(session.id).runtimeItems}
+                            runtimeItemsMarker={getSessionData(session.id).runtimeItemsMarker}
+                            forceScrollMarker={getSessionData(session.id).forceScrollMarker}
                             wordWrap={getWordWrap(session.id)}
                             {languageAssetsVersion}
                             {charWidth}
                             {revealRequest}
-                            {scrollToBottomRequest}
                             {openSearchRequest}
                             onSelectAll={() => selectAllRuntimeItems(session.id)}
                             onFocusInput={() => requestInputFocus(session.id)}
@@ -2073,7 +2123,7 @@
                         onSelectAll={() => selectAllRuntimeItems(activeSessionId)}
                         onCodeExecuted={() => {
                             if (activeSessionId) {
-                                requestScrollToBottom(activeSessionId);
+                                armForceScrollOnNextOutput(activeSessionId);
                             }
                         }}
                         onOpenSearch={requestOpenSearch}
