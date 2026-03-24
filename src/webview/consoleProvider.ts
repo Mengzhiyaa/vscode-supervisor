@@ -7,7 +7,7 @@ import * as LspProtocol from '../rpc/webview/lsp';
 import * as SessionProtocol from '../rpc/webview/session';
 import { RuntimeSession } from '../runtime/session';
 import { RuntimeSessionService } from '../runtime/runtimeSession';
-import { RuntimeStartupService, RuntimeStartupPhase } from '../runtime/runtimeStartupService';
+import { RuntimeStartupService, RuntimeStartupPhase } from '../runtime/runtimeStartup';
 import {
     LanguageRuntimeSessionChannel,
     RuntimeCodeFragmentStatus,

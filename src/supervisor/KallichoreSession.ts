@@ -193,7 +193,7 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 	 * and `false` when it is restored (reconnected).
 	 * @param _extra Extra functionality to enable for this session
 	 */
-	constructor(readonly metadata: positron.RuntimeSessionMetadata,
+	constructor(readonly metadata: positron.IRuntimeSessionMetadata,
 		readonly runtimeMetadata: positron.LanguageRuntimeMetadata,
 		readonly dynState: positron.LanguageRuntimeDynState,
 		private _api: DefaultApi,

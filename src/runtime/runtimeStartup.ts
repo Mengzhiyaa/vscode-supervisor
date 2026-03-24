@@ -4,7 +4,7 @@ import {
     LanguageRuntimeSessionMode,
     type LanguageRuntimeMetadata,
     LanguageRuntimeStartupBehavior,
-    type RuntimeSessionMetadata,
+    type IRuntimeSessionMetadata,
 } from '../api';
 import { CoreConfigurationSections } from '../coreCommandIds';
 import { RuntimeState } from '../internal/runtimeTypes';
@@ -511,7 +511,7 @@ export class RuntimeStartupService implements vscode.Disposable {
         }
 
         const raw = entry as Record<string, unknown>;
-        const metadata = (raw.metadata ?? raw.sessionMetadata) as RuntimeSessionMetadata | undefined;
+        const metadata = (raw.metadata ?? raw.sessionMetadata) as IRuntimeSessionMetadata | undefined;
         const runtimeMetadata = raw.runtimeMetadata as LanguageRuntimeMetadata | undefined;
         if (!metadata || !runtimeMetadata || typeof metadata.sessionId !== 'string') {
             return undefined;

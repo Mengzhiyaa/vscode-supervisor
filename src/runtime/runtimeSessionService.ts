@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { RuntimeStartMode, RuntimeState } from '../internal/runtimeTypes';
-import type { LanguageRuntimeMetadata, RuntimeSessionMetadata } from '../api';
+import type { IRuntimeSessionMetadata, LanguageRuntimeMetadata } from '../api';
 import type { RuntimeSession } from './session';
 import type { UiClientInstance } from './UiClientInstance';
 import type { ILanguageRuntimeGlobalEvent } from './runtimeEvents';
@@ -26,7 +26,7 @@ export interface IRuntimeUiClientStartedEvent {
 export interface SerializedSessionMetadata {
     sessionName: string;
     runtimeMetadata: LanguageRuntimeMetadata;
-    metadata: RuntimeSessionMetadata;
+    metadata: IRuntimeSessionMetadata;
     sessionState: RuntimeState;
     workingDirectory?: string;
     hasConsole?: boolean;
@@ -58,7 +58,7 @@ export interface IRuntimeSessionService extends vscode.Disposable {
     ): Promise<boolean>;
     restoreRuntimeSession(
         runtimeMetadata: LanguageRuntimeMetadata,
-        metadata: RuntimeSessionMetadata,
+        metadata: IRuntimeSessionMetadata,
         sessionName: string,
         createConsole: boolean,
         activate: boolean,

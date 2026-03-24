@@ -14,7 +14,7 @@ import { WebviewManager } from './webview/manager';
 import { RuntimeManager } from './runtime/manager';
 import { RuntimeSession } from './runtime/session';
 import { RuntimeSessionService } from './runtime/runtimeSession';
-import { RuntimeStartupService } from './runtime/runtimeStartupService';
+import { RuntimeStartupService } from './runtime/runtimeStartup';
 import { PositronConsoleService } from './services/console';
 import { PositronVariablesService } from './services/variables';
 import { PositronPreviewService } from './services/preview';
@@ -251,13 +251,18 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
         this._outputChannel.debug('[Ark] Application initialized');
     }
 
-    get sessionManager(): ISupervisorFrameworkApi['sessionManager'] {
+    get runtimeSessionService(): ISupervisorFrameworkApi['runtimeSessionService'] {
         return this._sessionManager;
+    }
+
+    get runtimeStartupService(): ISupervisorFrameworkApi['runtimeStartupService'] {
+        return this._runtimeStartupService;
     }
 
     getApi(): ISupervisorFrameworkApi {
         return {
-            sessionManager: this.sessionManager,
+            runtimeSessionService: this.runtimeSessionService,
+            runtimeStartupService: this.runtimeStartupService,
             version: this.version,
             registerLanguageSupport: <TInstallation = unknown>(
                 registration: ILanguageSupportRegistration<TInstallation>
@@ -374,8 +379,8 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
     private _getLanguageContributionServices(): ILanguageContributionServices {
         return {
             logChannel: this._outputChannel,
-            sessionService: this._sessionManager,
-            consoleService: {
+            runtimeSessionService: this._sessionManager,
+            positronConsoleService: {
                 onDidChangeConsoleWidth: this._consoleService.onDidChangeConsoleWidth,
                 showConsole: () => {
                     this._webviewManager.showConsole();
@@ -392,7 +397,7 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
                         focus
                     ),
             },
-            helpService: this._helpService,
+            positronHelpService: this._helpService,
         };
     }
 

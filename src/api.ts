@@ -2,6 +2,9 @@ import * as vscode from 'vscode';
 import type { LanguageRuntimeExit } from './internal/runtimeTypes';
 import { RuntimeState } from './internal/runtimeTypes';
 
+export type { LanguageRuntimeExit } from './internal/runtimeTypes';
+export { RuntimeState } from './internal/runtimeTypes';
+
 export enum LanguageRuntimeSessionMode {
     Console = 'console',
     Notebook = 'notebook',
@@ -37,7 +40,7 @@ export interface LanguageRuntimeMetadata {
     extraRuntimeData?: unknown;
 }
 
-export interface RuntimeSessionMetadata {
+export interface IRuntimeSessionMetadata {
     sessionId: string;
     sessionName: string;
     sessionMode: LanguageRuntimeSessionMode;
@@ -138,7 +141,7 @@ export interface ILanguageLspFactory {
     readonly languageId: string;
     create(
         runtimeMetadata: LanguageRuntimeMetadata,
-        sessionMetadata: RuntimeSessionMetadata,
+        sessionMetadata: IRuntimeSessionMetadata,
         dynState: LanguageRuntimeDynState,
         logChannel: vscode.LogOutputChannel
     ): ILanguageLsp;
@@ -220,7 +223,7 @@ export interface ILanguageRuntimeClientInstance extends vscode.Disposable {
     getClientType(): LanguageRuntimeClientType;
 }
 
-export interface ILanguageSession {
+export interface ILanguageRuntimeSession {
     readonly sessionId: string;
     readonly state: RuntimeState;
     readonly isForeground: boolean;
@@ -228,7 +231,7 @@ export interface ILanguageSession {
     readonly created: number;
     readonly dynState: LanguageRuntimeDynState;
     readonly runtimeMetadata: LanguageRuntimeMetadata;
-    readonly sessionMetadata: RuntimeSessionMetadata;
+    readonly sessionMetadata: IRuntimeSessionMetadata;
     readonly lsp: ILanguageLsp;
     readonly onDidChangeRuntimeState: vscode.Event<RuntimeState>;
     readonly onDidEndSession: vscode.Event<LanguageRuntimeExit>;
@@ -247,16 +250,16 @@ export interface ILanguageSession {
     interrupt(): Promise<void>;
 }
 
-export interface ILanguageSessionService {
-    readonly activeSession: ILanguageSession | undefined;
-    readonly foregroundSession: ILanguageSession | undefined;
-    readonly sessions: readonly ILanguageSession[];
-    readonly onDidCreateSession: vscode.Event<ILanguageSession>;
+export interface IRuntimeSessionService {
+    readonly activeSession: ILanguageRuntimeSession | undefined;
+    readonly foregroundSession: ILanguageRuntimeSession | undefined;
+    readonly sessions: readonly ILanguageRuntimeSession[];
+    readonly onDidCreateSession: vscode.Event<ILanguageRuntimeSession>;
     readonly onDidDeleteSession: vscode.Event<string>;
-    readonly onDidChangeActiveSession: vscode.Event<ILanguageSession | undefined>;
-    readonly onDidChangeForegroundSession: vscode.Event<ILanguageSession | undefined>;
-    getSession(sessionId: string): ILanguageSession | undefined;
-    ensureSessionForLanguage(languageId: string, sessionName?: string): Promise<ILanguageSession>;
+    readonly onDidChangeActiveSession: vscode.Event<ILanguageRuntimeSession | undefined>;
+    readonly onDidChangeForegroundSession: vscode.Event<ILanguageRuntimeSession | undefined>;
+    getSession(sessionId: string): ILanguageRuntimeSession | undefined;
+    ensureSessionForLanguage(languageId: string, sessionName?: string): Promise<ILanguageRuntimeSession>;
     restartSession(sessionId: string): Promise<void>;
     selectInstallation<TInstallation = unknown>(
         languageId: string,
@@ -264,7 +267,7 @@ export interface ILanguageSessionService {
     ): Promise<TInstallation | undefined>;
 }
 
-export interface IConsoleContributionService {
+export interface IPositronConsoleService {
     readonly onDidChangeConsoleWidth: vscode.Event<number>;
     showConsole(): void;
     getConsoleWidth(): number;
@@ -277,17 +280,65 @@ export interface IConsoleContributionService {
     ): Promise<string>;
 }
 
-export interface IHelpContributionService {
+export interface IPositronHelpService {
     showHelpTopic(languageId: string, topic: string): Promise<boolean>;
     find(): Promise<void>;
     showWelcomePage(): void;
 }
 
+export interface ISessionRestoreFailedEvent {
+    sessionId: string;
+    error: Error;
+}
+
+export enum RuntimeStartupPhase {
+    Initializing = 'initializing',
+    AwaitingTrust = 'awaitingTrust',
+    Reconnecting = 'reconnecting',
+    Starting = 'starting',
+    Discovering = 'discovering',
+    Complete = 'complete',
+}
+
+export interface IRuntimeAutoStartEvent {
+    runtimeName: string;
+    languageName: string;
+    base64EncodedIconSvg?: string;
+    newSession: boolean;
+}
+
+export interface SerializedSessionMetadata {
+    sessionName: string;
+    runtimeMetadata: LanguageRuntimeMetadata;
+    metadata: IRuntimeSessionMetadata;
+    sessionState: RuntimeState;
+    workingDirectory?: string;
+    hasConsole?: boolean;
+    lastUsed: number;
+    localWindowId?: string;
+}
+
+export interface IRuntimeStartupService {
+    readonly startupPhase: RuntimeStartupPhase;
+    readonly discoveredRuntimeCount: number;
+    readonly onDidChangeRuntimeStartupPhase: vscode.Event<RuntimeStartupPhase>;
+    readonly onWillAutoStartRuntime: vscode.Event<IRuntimeAutoStartEvent>;
+    readonly onSessionRestoreFailure: vscode.Event<ISessionRestoreFailedEvent>;
+    startup(): Promise<void>;
+    hasAffiliatedRuntime(): boolean;
+    getAffiliatedRuntimeMetadata(languageId: string): LanguageRuntimeMetadata | undefined;
+    getAffiliatedRuntimes(): LanguageRuntimeMetadata[];
+    clearAffiliatedRuntime(languageId: string): void;
+    getPreferredRuntime(languageId: string): LanguageRuntimeMetadata | undefined;
+    getRestoredSessions(): SerializedSessionMetadata[];
+    rediscoverAllRuntimes(): Promise<void>;
+}
+
 export interface ILanguageContributionServices {
     readonly logChannel: vscode.LogOutputChannel;
-    readonly sessionService: ILanguageSessionService;
-    readonly consoleService: IConsoleContributionService;
-    readonly helpService: IHelpContributionService;
+    readonly runtimeSessionService: IRuntimeSessionService;
+    readonly positronConsoleService: IPositronConsoleService;
+    readonly positronHelpService: IPositronHelpService;
 }
 
 export type LanguageContributionRegistrationResult =
@@ -323,10 +374,9 @@ export interface ILanguageRuntimeRegistration<TInstallation = unknown> {
     readonly provider: ILanguageRuntimeProvider<TInstallation>;
 }
 
-export interface ISupervisorSessionManagerApi extends ILanguageSessionService {}
-
 export interface ISupervisorFrameworkApi {
-    readonly sessionManager: ISupervisorSessionManagerApi;
+    readonly runtimeSessionService: IRuntimeSessionService;
+    readonly runtimeStartupService: IRuntimeStartupService;
     readonly version: string;
     registerLanguageSupport<TInstallation = unknown>(
         registration: ILanguageSupportRegistration<TInstallation>

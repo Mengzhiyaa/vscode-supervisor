@@ -9,7 +9,7 @@ import {
     LanguageRuntimeSessionMode,
     LanguageRuntimeStartupBehavior,
     type LanguageSessionMode,
-    type RuntimeSessionMetadata,
+    type IRuntimeSessionMetadata,
 } from '../api';
 import {
     RuntimeStartMode,
@@ -394,7 +394,7 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
 
     async restoreRuntimeSession(
         runtimeMetadata: LanguageRuntimeMetadata,
-        metadata: RuntimeSessionMetadata,
+        metadata: IRuntimeSessionMetadata,
         sessionName: string,
         hasConsole: boolean,
         activate: boolean,
@@ -819,7 +819,7 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
             sessionLocation: this.getSessionLocation(),
         };
 
-        const sessionMetadata: RuntimeSessionMetadata = {
+        const sessionMetadata: IRuntimeSessionMetadata = {
             sessionId,
             sessionName: sessionName || runtimeMetadata.runtimeName,
             sessionMode: LanguageRuntimeSessionMode.Console,
@@ -858,7 +858,7 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
 
     private _createRuntimeSession(
         runtimeMetadata: LanguageRuntimeMetadata,
-        sessionMetadata: RuntimeSessionMetadata,
+        sessionMetadata: IRuntimeSessionMetadata,
         lspFactory: ILanguageRuntimeProvider<any>['lspFactory'],
         provisioning?: RuntimeSessionProvisioningOptions,
     ): RuntimeSession {

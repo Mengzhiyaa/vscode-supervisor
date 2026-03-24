@@ -3,7 +3,7 @@ import {
     type LanguageRuntimeDynState,
     type LanguageRuntimeMetadata,
     type JupyterKernelSpec,
-    type RuntimeSessionMetadata,
+    type IRuntimeSessionMetadata,
     type ILanguageLsp,
     type ILanguageLspFactory,
     type ILanguageRuntimeClientInstance,
@@ -232,7 +232,7 @@ export class RuntimeSession implements vscode.Disposable {
     constructor(
         readonly sessionId: string,
         readonly runtimeMetadata: LanguageRuntimeMetadata,
-        readonly sessionMetadata: RuntimeSessionMetadata,
+        readonly sessionMetadata: IRuntimeSessionMetadata,
         private readonly _logChannel: vscode.LogOutputChannel,
         sessionName?: string,
         lspFactory?: ILanguageLspFactory,

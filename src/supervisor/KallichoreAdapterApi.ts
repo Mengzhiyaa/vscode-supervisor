@@ -937,7 +937,7 @@ export class KCApi implements PositronSupervisorApi {
 	 */
 	async createSession(
 		runtimeMetadata: positron.LanguageRuntimeMetadata,
-		sessionMetadata: positron.RuntimeSessionMetadata,
+		sessionMetadata: positron.IRuntimeSessionMetadata,
 		kernel: JupyterKernelSpec,
 		dynState: positron.LanguageRuntimeDynState,
 		_extra?: JupyterKernelExtra | undefined): Promise<JupyterLanguageRuntimeSession> {
@@ -1202,7 +1202,7 @@ export class KCApi implements PositronSupervisorApi {
 	 */
 	async restoreSession(
 		runtimeMetadata: positron.LanguageRuntimeMetadata,
-		sessionMetadata: positron.RuntimeSessionMetadata,
+		sessionMetadata: positron.IRuntimeSessionMetadata,
 		dynState: positron.LanguageRuntimeDynState
 	): Promise<JupyterLanguageRuntimeSession> {
 

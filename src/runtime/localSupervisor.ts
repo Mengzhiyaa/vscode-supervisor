@@ -11,7 +11,7 @@ import {
     type JupyterKernelSpec,
     type LanguageRuntimeDynState,
     type LanguageRuntimeMetadata,
-    type RuntimeSessionMetadata,
+    type IRuntimeSessionMetadata,
 } from '../api';
 import { KCApi } from '../supervisor/KallichoreAdapterApi';
 import { KallichoreTransport } from '../supervisor/KallichoreApiInstance';
@@ -111,7 +111,7 @@ export class LocalSupervisorApi implements vscode.Disposable {
      */
     async createSession(
         runtimeMetadata: LanguageRuntimeMetadata,
-        sessionMetadata: RuntimeSessionMetadata,
+        sessionMetadata: IRuntimeSessionMetadata,
         kernelSpec: JupyterKernelSpec,
         dynState: LanguageRuntimeDynState,
         extra?: JupyterKernelExtra
@@ -157,7 +157,7 @@ export class LocalSupervisorApi implements vscode.Disposable {
      */
     async restoreSession(
         runtimeMetadata: LanguageRuntimeMetadata,
-        sessionMetadata: RuntimeSessionMetadata,
+        sessionMetadata: IRuntimeSessionMetadata,
         dynState: LanguageRuntimeDynState
     ): Promise<JupyterLanguageRuntimeSession> {
         if (!this._adapterApi) {

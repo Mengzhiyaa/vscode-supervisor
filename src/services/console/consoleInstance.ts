@@ -49,7 +49,7 @@ import type {
 } from '../../runtime/comms/positronUiComm';
 import type {
     LanguageRuntimeMetadata,
-    RuntimeSessionMetadata,
+    IRuntimeSessionMetadata,
 } from '../../api';
 import {
     RuntimeOutputKind,
@@ -346,7 +346,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
     //#endregion
 
     constructor(
-        private readonly _sessionMetadata: RuntimeSessionMetadata,
+        private readonly _sessionMetadata: IRuntimeSessionMetadata,
         private readonly _runtimeMetadata: LanguageRuntimeMetadata,
         private readonly _outputChannel: vscode.LogOutputChannel
     ) {
@@ -355,7 +355,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
 
     //#region IPositronConsoleInstance Implementation
     get state(): PositronConsoleState { return this._state; }
-    get sessionMetadata(): RuntimeSessionMetadata { return this._sessionMetadata; }
+    get sessionMetadata(): IRuntimeSessionMetadata { return this._sessionMetadata; }
     get runtimeMetadata(): LanguageRuntimeMetadata { return this._runtimeMetadata; }
     get sessionId(): string { return this._sessionMetadata.sessionId; }
     get sessionName(): string { return this._sessionMetadata.sessionName || this._runtimeMetadata.runtimeName; }

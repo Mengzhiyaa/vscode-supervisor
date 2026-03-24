@@ -13,7 +13,7 @@ import type {
 } from '../../../runtime/runtimeOutputKind';
 import type {
     LanguageRuntimeMetadata,
-    RuntimeSessionMetadata,
+    IRuntimeSessionMetadata,
 } from '../../../api';
 import type {
     LanguageRuntimeClearOutput,
@@ -208,7 +208,7 @@ export interface IPositronConsoleService extends vscode.Disposable {
  */
 export interface IPositronConsoleInstance extends vscode.Disposable {
     readonly state: PositronConsoleState;
-    readonly sessionMetadata: RuntimeSessionMetadata;
+    readonly sessionMetadata: IRuntimeSessionMetadata;
     readonly runtimeMetadata: LanguageRuntimeMetadata;
     readonly sessionId: string;
     readonly sessionName: string;

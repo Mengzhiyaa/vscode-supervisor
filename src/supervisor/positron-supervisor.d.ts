@@ -251,7 +251,7 @@ export interface PositronSupervisorApi extends vscode.Disposable {
 	 */
 	createSession(
 		runtimeMetadata: positron.LanguageRuntimeMetadata,
-		sessionMetadata: positron.RuntimeSessionMetadata,
+		sessionMetadata: positron.IRuntimeSessionMetadata,
 		kernel: JupyterKernelSpec,
 		dynState: positron.LanguageRuntimeDynState,
 		extra?: JupyterKernelExtra | undefined,
@@ -274,7 +274,7 @@ export interface PositronSupervisorApi extends vscode.Disposable {
 	 */
 	restoreSession(
 		runtimeMetadata: positron.LanguageRuntimeMetadata,
-		sessionMetadata: positron.RuntimeSessionMetadata,
+		sessionMetadata: positron.IRuntimeSessionMetadata,
 		dynState: positron.LanguageRuntimeDynState,
 	): Promise<JupyterLanguageRuntimeSession>;
 }

@@ -12,7 +12,7 @@ import { PositronVariablesService } from '../services/variables';
 import { PositronPlotsService } from '../runtime/positronPlotsService';
 import { PositronPreviewService } from '../services/preview';
 import { PositronHelpService } from '../services/help';
-import { RuntimeStartupService } from '../runtime/runtimeStartupService';
+import { RuntimeStartupService } from '../runtime/runtimeStartup';
 
 /**
  * Manages all webview providers for the extension.

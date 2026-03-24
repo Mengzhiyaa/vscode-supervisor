@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import type {
     LanguageRuntimeDynState,
     LanguageRuntimeMetadata,
-    RuntimeSessionMetadata,
+    IRuntimeSessionMetadata,
 } from '../api';
 import type { RuntimeClientInstance } from '../runtime/RuntimeClientInstance';
 
@@ -286,7 +286,7 @@ export interface LanguageRuntimeDebugReply extends LanguageRuntimeMessage {
 }
 
 export interface LanguageRuntimeSession extends vscode.Disposable {
-    readonly metadata: RuntimeSessionMetadata;
+    readonly metadata: IRuntimeSessionMetadata;
     readonly runtimeMetadata: LanguageRuntimeMetadata;
     readonly dynState: LanguageRuntimeDynState;
     readonly runtimeInfo?: LanguageRuntimeInfo;
