@@ -9,25 +9,24 @@
  *--------------------------------------------------------------------------------------------*/
 
 // Use the default @duckdb/duckdb-wasm import for types.
-// At runtime, webpack bundles duckdb-node.cjs (and apache-arrow) into extension.js.
-// The WASM binaries and worker files are copied separately by CopyWebpackPlugin.
+// At runtime, esbuild bundles duckdb-node.cjs (and apache-arrow) into extension.js.
+// The WASM binaries and worker files are copied separately by scripts/copy-duckdb-assets.mjs.
 import type * as DuckDBTypes from '@duckdb/duckdb-wasm';
 import * as path from 'path';
 
-// The DuckDB WASM/worker files are copied to dist/duckdb/ by CopyWebpackPlugin.
-// __dirname resolves to the dist/ folder at runtime after webpack bundling.
+// The DuckDB WASM/worker files are copied to dist/duckdb/ by copy-duckdb-assets.mjs.
+// __dirname resolves to the dist/ folder at runtime after bundling.
 const DUCKDB_BUNDLE_DIR = path.join(__dirname, 'duckdb');
 
-// Dynamically load the Node.js entry of duckdb-wasm — webpack will bundle this
+// Dynamically load the Node.js entry of duckdb-wasm — esbuild will bundle this
 // along with its apache-arrow dependency into extension.js.
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const duckdb: typeof DuckDBTypes = require('@duckdb/duckdb-wasm/dist/duckdb-node.cjs');
 
-// Load worker_threads at runtime so webpack keeps using Node's native worker
-// implementation instead of bundling a browser-style worker shim.
-// eslint-disable-next-line @typescript-eslint/naming-convention, no-var, @typescript-eslint/no-var-requires
-declare const __non_webpack_require__: typeof require;
-const workerThreads: typeof import('worker_threads') = __non_webpack_require__('worker_threads');
+// Load worker_threads using Node's native require.
+// esbuild treats Node.js builtins as external automatically.
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const workerThreads: typeof import('worker_threads') = require('worker_threads');
 
 type DuckDBWorkerEvent = 'message' | 'error' | 'close';
 type DuckDBWorkerListener = (event: unknown) => void;
@@ -36,7 +35,7 @@ type DuckDBWorkerListener = (event: unknown) => void;
  * Adapts Node's Worker API to the small Web Worker surface AsyncDuckDB expects.
  *
  * We use a custom adapter because the `web-worker` polyfill cannot be used in
- * a webpack-bundled extension (node_modules are not deployed at runtime).
+ * a bundled extension (node_modules are not deployed at runtime).
  * DuckDB's node worker entry is a CommonJS module and must execute inside a
  * real Node worker thread where `module`, `exports`, and `require` exist.
  */
