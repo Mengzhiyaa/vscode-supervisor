@@ -11,7 +11,7 @@ import type { RuntimeClientManager } from '../../runtime/runtimeClientManager';
 import { DataExplorerClientInstance } from './dataExplorerClientInstance';
 import { DataExplorerBackendRequest, PositronDataExplorerComm } from '../../runtime/comms/positronDataExplorerComm';
 import type { IDataExplorerService, IDataExplorerInstance } from './dataExplorerService';
-import { RuntimeClientType, RuntimeState } from '../../positronTypes';
+import { RuntimeClientType, RuntimeState } from '../../internal/runtimeTypes';
 
 function parseVariablePath(raw: unknown): string[] | undefined {
     if (!Array.isArray(raw) || raw.some((value) => typeof value !== 'string')) {

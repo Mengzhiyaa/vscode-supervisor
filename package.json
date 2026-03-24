@@ -24,7 +24,9 @@
   "name": "vscode-supervisor",
   "displayName": "Kernel Supervisor",
   "description": "Multi-language kernel management framework for VS Code",
-  "activationEvents": [],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "main": "./dist/extension.js",
   "scripts": {
     "vscode:prepublish": "npm run build",
@@ -32,6 +34,8 @@
     "watch": "webpack --watch",
     "compile-tests": "node -e \"require('fs').rmSync('out', { recursive: true, force: true })\" && tsc -p . --outDir out",
     "install:binaries": "node scripts/install-binaries.mjs",
+    "sync:api-dts": "node scripts/sync-api-dts.mjs",
+    "verify:api-dts": "node scripts/sync-api-dts.mjs --check",
     "build:webview": "npm --prefix webview run build",
     "watch:webview": "npm --prefix webview run dev",
     "check:webview": "npm --prefix webview run check",
@@ -44,8 +48,7 @@
   },
   "positron": {
     "binaryDependencies": {
-      "kallichore": "0.1.64",
-      "ark": "0.1.242"
+      "kallichore": "0.1.64"
     }
   },
   "contributes": {
@@ -85,6 +88,21 @@
       {
         "command": "supervisor.showSupervisorLog",
         "title": "Show Kernel Supervisor Log",
+        "category": "Ark"
+      },
+      {
+        "command": "positron.supervisor.showRunningSupervisors",
+        "title": "Show Running Supervisors",
+        "category": "Ark"
+      },
+      {
+        "command": "positron.supervisor.restartSupervisor",
+        "title": "Restart Kernel Supervisor",
+        "category": "Ark"
+      },
+      {
+        "command": "positron.supervisor.showKernelSupervisorLog",
+        "title": "Show Kernel Supervisor Log (Legacy)",
         "category": "Ark"
       },
       {

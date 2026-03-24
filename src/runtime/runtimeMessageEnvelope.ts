@@ -2,7 +2,7 @@ import {
     type LanguageRuntimeMessage,
     type LanguageRuntimeMessageType,
     type RuntimeState,
-} from '../positronTypes';
+} from '../internal/runtimeTypes';
 
 /**
  * Runtime message envelope with Positron-style queue metadata.

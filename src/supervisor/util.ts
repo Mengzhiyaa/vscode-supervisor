@@ -3,7 +3,7 @@
  *  Licensed under the Elastic License 2.0. See LICENSE.txt for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { AxiosError, isAxiosError } from 'axios';
+import { AxiosError, isAxiosError } from './httpClient';
 import { Buffer } from 'buffer';
 import * as vscode from 'vscode';
 

@@ -12,7 +12,7 @@ import {
     LanguageRuntimeSessionChannel,
     RuntimeCodeFragmentStatus,
     RuntimeState,
-} from '../positronTypes';
+} from '../internal/runtimeTypes';
 import {
     UiFrontendEvent,
 } from '../runtime/comms/positronUiComm';
@@ -64,6 +64,9 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
         private readonly _runtimeStartupService?: RuntimeStartupService,
         getAdditionalLocalResourceRoots: () => readonly vscode.Uri[] = () => [],
         private readonly _getLanguageMonacoSupportModuleUris: (webview: vscode.Webview) => Readonly<Record<string, string>> = () => ({}),
+        private readonly _getLanguageTextMateGrammarDefinitions: (
+            webview: vscode.Webview,
+        ) => Readonly<Record<string, { scopeName: string; grammarUrl: string }>> = () => ({}),
     ) {
         super(extensionUri, outputChannel, getAdditionalLocalResourceRoots);
         this._sessionSnapshotBuilder = new SessionSnapshotBuilder(this._sessionManager, this._consoleService);
@@ -835,6 +838,7 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
             ConsoleProtocol.LanguageSupportAssetsChangedNotification.type,
             {
                 modules: this._getLanguageMonacoSupportModuleUris(this._view.webview),
+                grammars: this._getLanguageTextMateGrammarDefinitions(this._view.webview),
             },
         );
         this._pendingLanguageSupportAssetsRefresh = false;
@@ -921,6 +925,9 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
         const languageMonacoSupportModules = this._serializeInlineScriptData(
             this._getLanguageMonacoSupportModuleUris(webview)
         );
+        const languageTextMateGrammars = this._serializeInlineScriptData(
+            this._getLanguageTextMateGrammarDefinitions(webview)
+        );
         const nonce = this._getNonce();
 
         return `<!DOCTYPE html>
@@ -936,6 +943,7 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
     <div id="app"></div>
     <script nonce="${nonce}">
         globalThis.__arkLanguageMonacoSupportModules = ${languageMonacoSupportModules};
+        globalThis.__arkLanguageTextMateGrammars = ${languageTextMateGrammars};
     </script>
     <script type="module" nonce="${nonce}" src="${scriptUri}"></script>
 </body>
@@ -1264,6 +1272,7 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
                 inputPrompt: instance.inputPrompt,
                 continuationPrompt: instance.continuationPrompt,
             });
+            this._sendSessionInfoUpdate();
         }));
 
         disposables.push(instance.onDidChangeWorkingDirectory((workingDirectory) => {

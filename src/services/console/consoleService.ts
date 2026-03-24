@@ -19,7 +19,7 @@ import { PositronConsoleInstance, SerializedConsoleState } from './consoleInstan
 import { ConsoleStateStore } from './consoleStateStore';
 import { SessionManager } from '../../runtime/sessionManager';
 import { RuntimeSession } from '../../runtime/session';
-import { RuntimeStartMode } from '../../positronTypes';
+import { RuntimeStartMode } from '../../internal/runtimeTypes';
 import {
     PromptStateEvent,
     UiFrontendEvent,

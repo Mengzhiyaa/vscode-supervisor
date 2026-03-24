@@ -19,6 +19,11 @@
           "type": "string"
         },
         {
+          "name": "languageId",
+          "optional": true,
+          "type": "string"
+        },
+        {
           "name": "state",
           "type": "'uninitialized' | 'starting' | 'ready' | 'busy' | 'offline' | 'interrupting' | 'restarting' | 'exiting' | 'exited' | 'disconnected'"
         },

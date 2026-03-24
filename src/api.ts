@@ -1,10 +1,65 @@
 import * as vscode from 'vscode';
-import type {
-    LanguageRuntimeDynState,
-    LanguageRuntimeMetadata,
-    RuntimeSessionMetadata,
-} from './positronTypes';
-import type { JupyterKernelSpec } from './supervisor/positron-supervisor';
+
+export enum LanguageRuntimeSessionMode {
+    Console = 'console',
+    Notebook = 'notebook',
+    Background = 'background',
+}
+
+export enum LanguageRuntimeSessionLocation {
+    Machine = 'machine',
+    Workspace = 'workspace',
+    Browser = 'browser',
+}
+
+export enum LanguageRuntimeStartupBehavior {
+    Immediate = 'immediate',
+    Implicit = 'implicit',
+    Explicit = 'explicit',
+    Manual = 'manual',
+}
+
+export interface LanguageRuntimeMetadata {
+    runtimeId: string;
+    runtimeName: string;
+    runtimePath: string;
+    runtimeVersion: string;
+    runtimeShortName: string;
+    runtimeSource: string;
+    languageId: string;
+    languageName: string;
+    languageVersion: string;
+    base64EncodedIconSvg?: string;
+    sessionLocation?: LanguageRuntimeSessionLocation;
+    startupBehavior?: LanguageRuntimeStartupBehavior;
+    extraRuntimeData?: unknown;
+}
+
+export interface RuntimeSessionMetadata {
+    sessionId: string;
+    sessionName: string;
+    sessionMode: LanguageRuntimeSessionMode;
+    notebookUri?: vscode.Uri;
+    workingDirectory?: string;
+}
+
+export interface LanguageRuntimeDynState {
+    sessionName: string;
+    inputPrompt: string;
+    continuationPrompt: string;
+    busy?: boolean;
+    currentWorkingDirectory?: string;
+}
+
+export interface JupyterKernelSpec {
+    argv: Array<string>;
+    display_name: string;
+    language: string;
+    interrupt_mode?: 'signal' | 'message';
+    env?: NodeJS.ProcessEnv;
+    kernel_protocol_version: string;
+    startup_command?: string;
+}
 
 export interface ILanguageInstallation {
     readonly languageId: string;
@@ -117,6 +172,8 @@ export interface ILanguageRuntimeProvider<TInstallation = unknown> {
         sessionMode: LanguageSessionMode,
         logChannel: vscode.LogOutputChannel
     ): Promise<JupyterKernelSpec>;
+    validateMetadata?(metadata: LanguageRuntimeMetadata): Promise<LanguageRuntimeMetadata>;
+    validateSession?(sessionId: string): Promise<boolean>;
     restoreInstallationFromMetadata?(metadata: LanguageRuntimeMetadata): TInstallation | undefined;
     shouldRecommendForWorkspace?(): Promise<boolean>;
     getSessionIdPrefix?(sessionMode: LanguageSessionMode): string;
@@ -124,6 +181,7 @@ export interface ILanguageRuntimeProvider<TInstallation = unknown> {
 
 export interface BinaryDefinition {
     repo: string;
+    version?: string;
     binaryName: string;
     archivePattern: (version: string, platform: string) => string;
     installDir: string;
@@ -198,9 +256,15 @@ export interface ILanguageExtensionContribution {
     ): LanguageContributionRegistrationResult | Promise<LanguageContributionRegistrationResult>;
 }
 
+export interface ILanguageTextMateGrammarContribution {
+    readonly scopeName: string;
+    readonly grammarUri: vscode.Uri;
+}
+
 export interface ILanguageWebviewAssets {
     readonly localResourceRoots?: readonly vscode.Uri[];
     readonly monacoSupportModule?: vscode.Uri;
+    readonly textMateGrammar?: ILanguageTextMateGrammarContribution;
 }
 
 export interface ILanguageSupportRegistration<TInstallation = unknown> {

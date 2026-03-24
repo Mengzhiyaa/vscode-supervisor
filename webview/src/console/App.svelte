@@ -268,11 +268,22 @@
         }, 200);
     }
 
-    function replaceLanguageSupportModules(
-        modules: Record<string, string> | undefined,
+    function replaceLanguageSupportAssets(
+        params:
+            | {
+                  modules?: Record<string, string>;
+                  grammars?: Record<
+                      string,
+                      { scopeName: string; grammarUrl: string }
+                  >;
+              }
+            | undefined,
     ) {
         globalThis.__arkLanguageMonacoSupportModules = {
-            ...(modules ?? {}),
+            ...(params?.modules ?? {}),
+        };
+        globalThis.__arkLanguageTextMateGrammars = {
+            ...(params?.grammars ?? {}),
         };
         languageAssetsVersion += 1;
     }
@@ -1575,8 +1586,14 @@
 
         connection.onNotification(
             "console/languageSupportAssetsChanged",
-            (params: { modules: Record<string, string> }) => {
-                replaceLanguageSupportModules(params.modules);
+            (params: {
+                modules: Record<string, string>;
+                grammars: Record<
+                    string,
+                    { scopeName: string; grammarUrl: string }
+                >;
+            }) => {
+                replaceLanguageSupportAssets(params);
             },
         );
 

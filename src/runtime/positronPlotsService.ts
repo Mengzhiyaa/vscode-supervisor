@@ -32,7 +32,7 @@ import {
     type LanguageRuntimeInput,
     type LanguageRuntimeMessageCommOpen,
     RuntimeClientType,
-} from '../positronTypes';
+} from '../internal/runtimeTypes';
 import {
     type IPositronPlotsService,
     type IPositronPlotClient,

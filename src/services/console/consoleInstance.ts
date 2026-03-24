@@ -46,6 +46,10 @@ import type {
     PromptStateEvent,
     WorkingDirectoryEvent,
 } from '../../runtime/comms/positronUiComm';
+import type {
+    LanguageRuntimeMetadata,
+    RuntimeSessionMetadata,
+} from '../../api';
 import {
     RuntimeOutputKind,
     type LanguageRuntimeOutputWithKind,
@@ -55,18 +59,16 @@ import {
 import type {
     LanguageRuntimeError as LanguageRuntimeErrorMessage,
     LanguageRuntimeInput,
-    LanguageRuntimeMetadata,
     LanguageRuntimePrompt,
     LanguageRuntimeClearOutput,
     LanguageRuntimeState,
     LanguageRuntimeStream,
     RuntimeOnlineState,
-    RuntimeSessionMetadata,
-} from '../../positronTypes';
+} from '../../internal/runtimeTypes';
 import {
     RuntimeCodeFragmentStatus,
     RuntimeState,
-} from '../../positronTypes';
+} from '../../internal/runtimeTypes';
 
 const ON_DID_CHANGE_RUNTIME_ITEMS_THROTTLE_THRESHOLD = 20;
 const ON_DID_CHANGE_RUNTIME_ITEMS_THROTTLE_INTERVAL = 50;

@@ -40,7 +40,7 @@ import { createUniqueId, delay, summarizeError, summarizeAxiosError } from './ut
 import { AdoptedSession } from './AdoptedSession';
 import { DebugRequest } from './jupyter/DebugRequest';
 import { JupyterMessageType } from './jupyter/JupyterMessageType';
-import { isAxiosError } from 'axios';
+import { isAxiosError } from './httpClient';
 import { KallichoreTransport } from './KallichoreApiInstance';
 import { JupyterCommClose } from './jupyter/JupyterCommClose';
 import { CommBackendRequest, CommRpcMessage, CommImpl } from './Comm';
@@ -1236,15 +1236,21 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 				// When the server returns a 500 error, it means the startup
 				// failed. In this case the API returns a structured startup
 				// error we can use to report the problem with more detail.
-				const startupErr = err.response?.data;
-				let message = startupErr.error.message;
-				if (startupErr.output) {
+				const startupErr = err.response?.data as
+					| {
+						error?: { message?: string };
+						output?: string;
+						exit_code?: number;
+					}
+					| undefined;
+				let message = startupErr?.error?.message ?? summarizeAxiosError(err);
+				if (startupErr?.output) {
 					message += `\n${startupErr.output}`;
 				}
 				const event: positron.LanguageRuntimeExit = {
 					runtime_name: this.runtimeMetadata.runtimeName,
 					session_name: this.dynState.sessionName,
-					exit_code: startupErr.exit_code ?? 0,
+					exit_code: startupErr?.exit_code ?? 0,
 					reason: positron.RuntimeExitReason.StartupFailed,
 					message
 				};

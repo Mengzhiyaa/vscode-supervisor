@@ -7,7 +7,7 @@ import { DefaultApi } from './kcclient/api';
 import { Configuration } from './kcclient/configuration';
 import { createHttpAgent } from './NamedPipeHttpAgent';
 import { KallichoreServerState } from './ServerState';
-import axios, { AxiosInstance } from 'axios';
+import axios, { AxiosInstance } from './httpClient';
 
 import * as http from 'http';
 import * as os from 'os';

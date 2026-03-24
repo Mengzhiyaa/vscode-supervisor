@@ -38,6 +38,9 @@ export class WebviewManager implements vscode.Disposable {
         private readonly _runtimeStartupService: RuntimeStartupService,
         private readonly _getAdditionalLocalResourceRoots: () => readonly vscode.Uri[],
         private readonly _getLanguageMonacoSupportModuleUris: (webview: vscode.Webview) => Readonly<Record<string, string>>,
+        private readonly _getLanguageTextMateGrammarDefinitions: (
+            webview: vscode.Webview,
+        ) => Readonly<Record<string, { scopeName: string; grammarUrl: string }>>,
     ) { }
 
     /**
@@ -53,6 +56,7 @@ export class WebviewManager implements vscode.Disposable {
             this._runtimeStartupService,
             this._getAdditionalLocalResourceRoots,
             this._getLanguageMonacoSupportModuleUris,
+            this._getLanguageTextMateGrammarDefinitions,
         );
         this._consoleService.setConsoleViewProvider(this._consoleProvider);
         this._disposables.push(

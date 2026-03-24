@@ -30,7 +30,7 @@ import {
     RuntimeClientState as SupervisorClientState,
     RuntimeClientType,
     RuntimeState,
-} from '../../positronTypes';
+} from '../../internal/runtimeTypes';
 
 /**
  * VariableItem class for internal state management.

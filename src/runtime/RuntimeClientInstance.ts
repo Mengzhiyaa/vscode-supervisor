@@ -11,7 +11,7 @@ import {
     RuntimeClientState,
     RuntimeClientType,
     RuntimeOnlineState,
-} from '../positronTypes';
+} from '../internal/runtimeTypes';
 
 /**
  * Output from a runtime client, containing data and optional buffers.

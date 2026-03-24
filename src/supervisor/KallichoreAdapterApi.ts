@@ -14,7 +14,7 @@ import { DisconnectedEvent, DisconnectReason, KallichoreSession } from './Kallic
 import { Barrier, PromiseHandles, withTimeout } from './async';
 import { LogStreamer } from './LogStreamer';
 import { createUniqueId, summarizeError, summarizeAxiosError } from './util';
-import { isAxiosError } from 'axios';
+import { isAxiosError } from './httpClient';
 import { KallichoreServerState } from './ServerState';
 import { KallichoreApiInstance, KallichoreTransport } from './KallichoreApiInstance';
 import { KallichoreInstances } from './KallichoreInstances';

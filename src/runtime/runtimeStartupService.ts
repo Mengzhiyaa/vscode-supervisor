@@ -1,14 +1,16 @@
 import * as fs from 'fs';
 import * as vscode from 'vscode';
+import {
+    type LanguageRuntimeMetadata,
+    LanguageRuntimeStartupBehavior,
+} from '../api';
 import { CoreConfigurationSections } from '../coreCommandIds';
 import { RuntimeManager } from './manager';
 import { RuntimeSession } from './session';
 import { SessionManager } from './sessionManager';
 import {
-    LanguageRuntimeMetadata,
-    LanguageRuntimeStartupBehavior,
     RuntimeState,
-} from '../positronTypes';
+} from '../internal/runtimeTypes';
 
 const AFFILIATED_RUNTIME_KEY_PREFIX = 'vscode-supervisor.affiliatedRuntimeMetadata.v1';
 
@@ -168,6 +170,11 @@ export class RuntimeStartupService implements vscode.Disposable {
 
     private async _startupSequence(): Promise<void> {
         await this._awaitWorkspaceTrust();
+
+        if (this._sessionManager.isRestoringPersistedSessions) {
+            this._setStartupPhase(RuntimeStartupPhase.Reconnecting);
+        }
+        await this._sessionManager.waitForPersistedSessionRestore();
 
         if (this._sessionManager.sessions.length > 0) {
             this._setStartupPhase(RuntimeStartupPhase.Reconnecting);

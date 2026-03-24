@@ -1,7 +1,7 @@
 import * as assert from 'assert';
 import { PositronConsoleState } from '../../services/console';
 import { SessionSnapshotBuilder } from '../../webview/sessionSnapshotBuilder';
-import { RuntimeState } from '../../positronTypes';
+import { RuntimeState } from '../../internal/runtimeTypes';
 
 function createSession(sessionId: string, state: RuntimeState, name: string) {
     return {

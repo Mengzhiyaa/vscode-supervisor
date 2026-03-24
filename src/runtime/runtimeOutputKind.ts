@@ -2,7 +2,7 @@ import type {
     LanguageRuntimeOutput,
     LanguageRuntimeResult,
     LanguageRuntimeUpdateOutput,
-} from '../positronTypes';
+} from '../internal/runtimeTypes';
 
 /**
  * Output kind classification for runtime messages.

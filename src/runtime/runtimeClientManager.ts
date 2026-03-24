@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
-import { JupyterLanguageRuntimeSession } from '../types/positron-supervisor';
+import { JupyterLanguageRuntimeSession } from '../supervisor/positron-supervisor';
 import {
     type LanguageRuntimeMessageCommData,
     type LanguageRuntimeMessageCommOpen,
@@ -14,7 +14,7 @@ import {
     RuntimeClientType,
     RuntimeClientState,
     RuntimeState,
-} from '../positronTypes';
+} from '../internal/runtimeTypes';
 import { createUniqueId } from '../supervisor/util';
 import { RuntimeClientInstance } from './RuntimeClientInstance';
 import {

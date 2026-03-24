@@ -8,7 +8,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { delay } from '../supervisor/util';
-import { JupyterKernelExtra } from '../types/positron-supervisor';
+import { JupyterKernelExtra } from '../supervisor/positron-supervisor';
 
 /**
  * Helps a debugger attach to the ARK kernel at startup by using a notifier file.

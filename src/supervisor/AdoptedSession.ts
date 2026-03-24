@@ -9,14 +9,14 @@ import { KernelInfoReply } from './jupyter/KernelInfoRequest';
 import { ConnectionInfo, DefaultApi } from './kcclient/api';
 import { summarizeAxiosError } from './util';
 import { Barrier } from './async';
-import { isAxiosError } from 'axios';
+import { isAxiosError } from './httpClient';
 
 /**
  * Represents a Jupyter kernel that has been adopted by a supervisor. These
  * sessions are typically started outside the control of the supervisor, and
  * then adopted by the supervisor once started.
  *
- * Currently, only Reticulate kernels use this mechanism.
+ * This mechanism is generic and may be used by runtimes adopted after launch.
  */
 export class AdoptedSession implements JupyterKernel {
 	private _runtimeInfo: KernelInfoReply | undefined;

@@ -1,5 +1,10 @@
 import * as vscode from 'vscode';
-import type { RuntimeClientInstance } from './runtime/RuntimeClientInstance';
+import type {
+    LanguageRuntimeDynState,
+    LanguageRuntimeMetadata,
+    RuntimeSessionMetadata,
+} from '../api';
+import type { RuntimeClientInstance } from '../runtime/RuntimeClientInstance';
 
 export enum RuntimeState {
     Uninitialized = 'uninitialized',
@@ -118,62 +123,11 @@ export enum LanguageRuntimeStreamName {
     Stderr = 'stderr',
 }
 
-export enum LanguageRuntimeSessionMode {
-    Console = 'console',
-    Notebook = 'notebook',
-    Background = 'background',
-}
-
-export enum LanguageRuntimeSessionLocation {
-    Machine = 'machine',
-    Workspace = 'workspace',
-    Browser = 'browser',
-}
-
-export enum LanguageRuntimeStartupBehavior {
-    Immediate = 'immediate',
-    Implicit = 'implicit',
-    Explicit = 'explicit',
-    Manual = 'manual',
-}
-
 export enum RuntimeStartMode {
     Starting = 'starting',
     Restarting = 'restarting',
     Reconnecting = 'reconnecting',
     Switching = 'switching',
-}
-
-export interface LanguageRuntimeMetadata {
-    runtimeId: string;
-    runtimeName: string;
-    runtimePath: string;
-    runtimeVersion: string;
-    runtimeShortName: string;
-    runtimeSource: string;
-    languageId: string;
-    languageName: string;
-    languageVersion: string;
-    base64EncodedIconSvg?: string;
-    sessionLocation?: LanguageRuntimeSessionLocation;
-    startupBehavior?: LanguageRuntimeStartupBehavior;
-    extraRuntimeData?: unknown;
-}
-
-export interface RuntimeSessionMetadata {
-    sessionId: string;
-    sessionName: string;
-    sessionMode: LanguageRuntimeSessionMode;
-    notebookUri?: vscode.Uri;
-    workingDirectory?: string;
-}
-
-export interface LanguageRuntimeDynState {
-    sessionName: string;
-    inputPrompt: string;
-    continuationPrompt: string;
-    busy?: boolean;
-    currentWorkingDirectory?: string;
 }
 
 export interface LanguageRuntimeInfo {
@@ -335,10 +289,12 @@ export interface LanguageRuntimeSession extends vscode.Disposable {
     readonly metadata: RuntimeSessionMetadata;
     readonly runtimeMetadata: LanguageRuntimeMetadata;
     readonly dynState: LanguageRuntimeDynState;
+    readonly runtimeInfo?: LanguageRuntimeInfo;
 
     onDidReceiveRuntimeMessage: vscode.Event<LanguageRuntimeMessage>;
     onDidChangeRuntimeState: vscode.Event<RuntimeState>;
     onDidEndSession: vscode.Event<LanguageRuntimeExit>;
+    onDidUpdateResourceUsage?: vscode.Event<RuntimeResourceUsage>;
 
     execute(
         code: string,
@@ -368,7 +324,7 @@ export interface LanguageRuntimeSession extends vscode.Disposable {
 
     interrupt(): Thenable<void>;
 
-    restart(): Thenable<void>;
+    restart(workingDirectory?: string): Thenable<void>;
 
     setWorkingDirectory?(workingDirectory: string): Thenable<void>;
 
@@ -383,4 +339,5 @@ export interface LanguageRuntimeSession extends vscode.Disposable {
     showProfile?(): void;
 
     getDynState?(): Thenable<LanguageRuntimeDynState>;
+    updateSessionName?(sessionName: string): void;
 }

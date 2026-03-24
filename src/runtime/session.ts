@@ -1,24 +1,24 @@
 import * as vscode from 'vscode';
 import PQueue from 'p-queue';
 import {
+    type LanguageRuntimeDynState,
+    type LanguageRuntimeMetadata,
+    type RuntimeSessionMetadata,
     type ILanguageLsp,
     type ILanguageLspFactory,
     LanguageLspState,
 } from '../api';
 import {
-    JupyterLanguageRuntimeSession,
-    DapCommLike,
+    DapComm,
     EvaluateCodeResult,
+    JupyterLanguageRuntimeSession,
     RuntimeLaunchInfo,
-} from '../types/positron-supervisor';
+} from '../supervisor/positron-supervisor';
 import {
-    LanguageRuntimeMetadata,
-    RuntimeSessionMetadata,
     RuntimeState,
     RuntimeCodeFragmentStatus,
     LanguageRuntimeInfo,
     LanguageRuntimeExit,
-    LanguageRuntimeDynState,
     RuntimeResourceUsage,
     type LanguageRuntimeMessage,
     type LanguageRuntimeMessageCommClosed,
@@ -42,7 +42,7 @@ import {
     RuntimeCodeExecutionMode,
     RuntimeErrorBehavior,
     LanguageRuntimeSessionChannel,
-} from '../positronTypes';
+} from '../internal/runtimeTypes';
 import { RuntimeClientManager } from './runtimeClientManager';
 import { inferPositronOutputKind, type LanguageRuntimeOutputWithKind, type LanguageRuntimeResultWithKind, type LanguageRuntimeUpdateOutputWithKind } from './runtimeOutputKind';
 import { PositronUiComm, UiParam } from './comms/positronUiComm';
@@ -142,7 +142,7 @@ export class RuntimeSession implements vscode.Disposable {
     // LSP/DAP support (from positron-r)
     private _lsp: ILanguageLsp;
     private readonly _supportsLsp: boolean;
-    private _dapComm?: Promise<DapCommLike>;
+    private _dapComm?: Promise<DapComm>;
     private _servicesQueue: PQueue;
     private _lspStartingPromise: Promise<number> = Promise.resolve(0);
     private _lspClientId?: string;
@@ -390,8 +390,9 @@ export class RuntimeSession implements vscode.Disposable {
         this._disposables.push(
             kernel.onDidReceiveRuntimeMessage((message) => {
                 // Positron-style logging: <<< RECV msg_type [channel]: content
-                const channel = message.channel || 'iopub';
-                const msgContent = JSON.stringify(message.data || message);
+                const rawMessage = message as unknown as Record<string, unknown>;
+                const channel = typeof rawMessage.channel === 'string' ? rawMessage.channel : 'iopub';
+                const msgContent = JSON.stringify(rawMessage.data ?? message);
                 this.log(`<<< RECV ${message.type} [${channel}]: ${msgContent}`, vscode.LogLevel.Debug);
 
                 const runtimeMessage = message as LanguageRuntimeMessage;

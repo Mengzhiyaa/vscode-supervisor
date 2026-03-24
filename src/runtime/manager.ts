@@ -2,8 +2,8 @@ import * as vscode from 'vscode';
 import {
     type IDiscoveredLanguageRuntime,
     type ILanguageRuntimeProvider,
+    type LanguageRuntimeMetadata,
 } from '../api';
-import type { LanguageRuntimeMetadata } from '../positronTypes';
 import { SessionManager } from './sessionManager';
 
 /**

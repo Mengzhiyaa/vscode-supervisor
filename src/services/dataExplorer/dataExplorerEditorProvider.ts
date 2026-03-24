@@ -185,6 +185,9 @@ export class DataExplorerEditorProvider implements vscode.Disposable {
         private readonly _logChannel: vscode.LogOutputChannel,
         private readonly _getAdditionalLocalResourceRoots: () => readonly vscode.Uri[] = () => [],
         private readonly _getLanguageMonacoSupportModuleUris: (webview: vscode.Webview) => Readonly<Record<string, string>> = () => ({}),
+        private readonly _getLanguageTextMateGrammarDefinitions: (
+            webview: vscode.Webview,
+        ) => Readonly<Record<string, { scopeName: string; grammarUrl: string }>> = () => ({}),
     ) {
         this._resetContexts();
 
@@ -1701,6 +1704,9 @@ export class DataExplorerEditorProvider implements vscode.Disposable {
         const languageMonacoSupportModules = this._serializeInlineScriptData(
             this._getLanguageMonacoSupportModuleUris(webview)
         );
+        const languageTextMateGrammars = this._serializeInlineScriptData(
+            this._getLanguageTextMateGrammarDefinitions(webview)
+        );
 
         // Use nonce for security
         const nonce = this._getNonce();
@@ -1718,6 +1724,7 @@ export class DataExplorerEditorProvider implements vscode.Disposable {
     <div id="app"></div>
     <script nonce="${nonce}">
         globalThis.__arkLanguageMonacoSupportModules = ${languageMonacoSupportModules};
+        globalThis.__arkLanguageTextMateGrammars = ${languageTextMateGrammars};
     </script>
     <script nonce="${nonce}">
         const vscode = globalThis.__arkVsCodeApi ?? acquireVsCodeApi();

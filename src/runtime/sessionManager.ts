@@ -2,22 +2,22 @@ import * as vscode from 'vscode';
 import {
     type ILanguageInstallationPickerOptions,
     type ILanguageRuntimeProvider,
+    type LanguageRuntimeDynState,
+    type LanguageRuntimeMetadata,
+    LanguageRuntimeSessionLocation,
+    LanguageRuntimeSessionMode,
+    LanguageRuntimeStartupBehavior,
     type LanguageSessionMode,
+    type RuntimeSessionMetadata,
 } from '../api';
 import { RuntimeSession } from './session';
 import { LocalSupervisorApi } from './localSupervisor';
 import { createJupyterKernelExtra } from './startup';
 import {
-    LanguageRuntimeMetadata,
     RuntimeClientType,
     RuntimeStartMode,
-    RuntimeSessionMetadata,
-    LanguageRuntimeSessionMode,
-    LanguageRuntimeDynState,
     RuntimeState,
-    LanguageRuntimeSessionLocation,
-    LanguageRuntimeStartupBehavior,
-} from '../positronTypes';
+} from '../internal/runtimeTypes';
 import { RuntimeClientInstance } from './RuntimeClientInstance';
 import {
     type BusyEvent,
@@ -51,6 +51,7 @@ const LAST_FOREGROUND_SESSION_ID_KEY = 'vscode-supervisor.lastForegroundSessionI
  * Key for storing the list of persisted sessions in workspace state.
  */
 const PERSISTED_SESSIONS_KEY = 'vscode-supervisor.persistedSessions';
+const PERSISTED_SESSION_RESTORE_TIMEOUT_MS = 15_000;
 
 /**
  * Serialized session metadata for persistence.
@@ -84,10 +85,12 @@ export class SessionManager implements vscode.Disposable {
     private readonly _sessionLifecycleDisposables = new Map<string, vscode.Disposable[]>();
     private readonly _runtimeEventManagerDisposables = new Map<string, vscode.Disposable[]>();
     private readonly _runtimeEventUiDisposables = new Map<string, vscode.Disposable[]>();
+    private readonly _unsupportedReticulateNotifiedSessionIds = new Set<string>();
     private readonly _restartingSessionPromises = new Map<string, Promise<void>>();
     private _activeSessionSwitchChain: Promise<void> = Promise.resolve();
     private _shutdownPromise: Promise<void> | undefined;
     private _isRestoringPersistedSessions = false;
+    private _restorePersistedSessionsPromise: Promise<void> | undefined;
     private _serviceSessionId: string | undefined;
 
     private readonly _onDidChangeForegroundSession = new vscode.EventEmitter<RuntimeSession | undefined>();
@@ -188,8 +191,6 @@ export class SessionManager implements vscode.Disposable {
             this._initialized = true;
             this._outputChannel.debug('[SessionManager] Initialized');
 
-            // Restore any persisted sessions from previous reload/restart
-            await this.restorePersistedSessions();
         } catch (error) {
             this._outputChannel.error(`[SessionManager] Error initializing: ${error}`);
             throw error;
@@ -201,6 +202,27 @@ export class SessionManager implements vscode.Disposable {
      */
     get isInitialized(): boolean {
         return this._initialized;
+    }
+
+    get isRestoringPersistedSessions(): boolean {
+        return this._isRestoringPersistedSessions;
+    }
+
+    restorePersistedSessionsInBackground(): Promise<void> {
+        if (this._shutdownPromise) {
+            return Promise.resolve();
+        }
+
+        if (this._isRestoringPersistedSessions && this._restorePersistedSessionsPromise) {
+            return this._restorePersistedSessionsPromise;
+        }
+
+        this._restorePersistedSessionsPromise = this.restorePersistedSessions();
+        return this._restorePersistedSessionsPromise;
+    }
+
+    waitForPersistedSessionRestore(): Promise<void> {
+        return this._restorePersistedSessionsPromise?.catch(() => undefined) ?? Promise.resolve();
     }
 
     private _getDefaultRuntimeProvider(): ILanguageRuntimeProvider<any> {
@@ -1102,6 +1124,24 @@ export class SessionManager implements vscode.Disposable {
      * @param removeSessionId Optional session ID to exclude from persistence (for removal)
      */
     private async saveWorkspaceSessions(removeSessionId?: string): Promise<void> {
+        const nextPersistedSessions = new Map<string, SerializedRuntimeSession>();
+
+        for (const persisted of this.getPersistedSessions()) {
+            if (removeSessionId && persisted.sessionId === removeSessionId) {
+                continue;
+            }
+
+            if (this._sessions.has(persisted.sessionId)) {
+                continue;
+            }
+
+            // Preserve persisted sessions for languages that have not
+            // registered a runtime provider in this extension host yet.
+            if (!this._runtimeProviders.has(persisted.runtimeMetadata.languageId)) {
+                nextPersistedSessions.set(persisted.sessionId, persisted);
+            }
+        }
+
         const activeSessions = Array.from(this._sessions.values())
             .filter(session => {
                 // Skip the session being removed
@@ -1125,8 +1165,36 @@ export class SessionManager implements vscode.Disposable {
                 lastUsed: Date.now()
             }));
 
-        await this._context.workspaceState.update(PERSISTED_SESSIONS_KEY, activeSessions);
-        this._outputChannel.trace(`[SessionManager] Saved ${activeSessions.length} session(s) for persistence`);
+        for (const persisted of activeSessions) {
+            nextPersistedSessions.set(persisted.sessionId, persisted);
+        }
+
+        const persistedSessions = Array.from(nextPersistedSessions.values());
+        await this._context.workspaceState.update(PERSISTED_SESSIONS_KEY, persistedSessions);
+        this._outputChannel.trace(`[SessionManager] Saved ${persistedSessions.length} session(s) for persistence`);
+    }
+
+    private _withOperationTimeout<T>(
+        operation: () => Promise<T>,
+        timeoutMs: number,
+        message: string,
+    ): Promise<T> {
+        return new Promise<T>((resolve, reject) => {
+            const timeout = setTimeout(() => {
+                reject(new Error(message));
+            }, timeoutMs);
+
+            void operation().then(
+                (value) => {
+                    clearTimeout(timeout);
+                    resolve(value);
+                },
+                (error) => {
+                    clearTimeout(timeout);
+                    reject(error);
+                },
+            );
+        });
     }
 
     /**
@@ -1194,6 +1262,27 @@ export class SessionManager implements vscode.Disposable {
         disposables.push(
             manager.watchClient(RuntimeClientType.Ui, (client) => {
                 this._attachUiClientInstance(session, client);
+            })
+        );
+        disposables.push(
+            manager.watchClient(RuntimeClientType.Reticulate, (client) => {
+                if (!this._unsupportedReticulateNotifiedSessionIds.has(sessionId)) {
+                    this._unsupportedReticulateNotifiedSessionIds.add(sessionId);
+                    this._outputChannel.warn(
+                        `[SessionManager] Closing unsupported reticulate client ` +
+                        `'${client.getClientId()}' for session ${sessionId}`
+                    );
+                    void vscode.window.showWarningMessage(
+                        'Reticulate is not supported in Ark.'
+                    );
+                } else {
+                    this._outputChannel.debug(
+                        `[SessionManager] Closing unsupported reticulate client ` +
+                        `'${client.getClientId()}' for session ${sessionId}`
+                    );
+                }
+
+                client.dispose();
             })
         );
 
@@ -1458,6 +1547,7 @@ export class SessionManager implements vscode.Disposable {
             managerDisposables.forEach((disposable) => disposable.dispose());
             this._runtimeEventManagerDisposables.delete(sessionId);
         }
+        this._unsupportedReticulateNotifiedSessionIds.delete(sessionId);
 
         this._disposeRuntimeEventUiClient(sessionId);
     }
@@ -1570,17 +1660,41 @@ export class SessionManager implements vscode.Disposable {
             for (const persisted of persistedSessions) {
                 let session: RuntimeSession | undefined;
                 try {
-                    // Validate session is still alive in supervisor
-                    const isValid = await supervisor.validateSession(persisted.sessionId);
+                    this._outputChannel.debug(`[SessionManager] Restoring session ${persisted.sessionId} (${persisted.sessionName})`);
+                    persisted.runtimeMetadata = this._applyRuntimeMetadataDefaults(persisted.runtimeMetadata);
+                    const provider = this.getRuntimeProvider(persisted.runtimeMetadata.languageId);
+                    if (!provider) {
+                        this._outputChannel.debug(
+                            `[SessionManager] Deferring restore for ${persisted.sessionId}: language support for ` +
+                            `${persisted.runtimeMetadata.languageId} is not registered yet`
+                        );
+                        continue;
+                    }
+
+                    if (provider.validateMetadata) {
+                        persisted.runtimeMetadata = this._applyRuntimeMetadataDefaults(
+                            await this._withOperationTimeout(
+                                () => provider.validateMetadata!(persisted.runtimeMetadata),
+                                PERSISTED_SESSION_RESTORE_TIMEOUT_MS,
+                                `Timed out validating persisted runtime metadata ${persisted.runtimeMetadata.runtimeId}`,
+                            )
+                        );
+                    }
+
+                    const validateSession = provider.validateSession
+                        ? () => provider.validateSession!(persisted.sessionId)
+                        : () => supervisor.validateSession(persisted.sessionId);
+
+                    const isValid = await this._withOperationTimeout(
+                        validateSession,
+                        PERSISTED_SESSION_RESTORE_TIMEOUT_MS,
+                        `Timed out validating persisted session ${persisted.sessionId}`,
+                    );
 
                     if (!isValid) {
                         this._outputChannel.debug(`[SessionManager] Session ${persisted.sessionId} is no longer valid, skipping`);
                         continue;
                     }
-
-                    this._outputChannel.debug(`[SessionManager] Restoring session ${persisted.sessionId} (${persisted.sessionName})`);
-                    persisted.runtimeMetadata = this._applyRuntimeMetadataDefaults(persisted.runtimeMetadata);
-                    const provider = this.getRuntimeProvider(persisted.runtimeMetadata.languageId);
 
                     // Create session wrapper
                     session = new RuntimeSession(
@@ -1593,16 +1707,20 @@ export class SessionManager implements vscode.Disposable {
                     );
 
                     // Restore the session via supervisor
-                    const restoredKernel = await supervisor.restoreSession(
-                        persisted.runtimeMetadata,
-                        persisted.sessionMetadata,
-                        {
-                            sessionName: persisted.sessionName,
-                            inputPrompt: '>',
-                            continuationPrompt: '+',
-                            busy: false,
-                            currentWorkingDirectory: persisted.workingDirectory,
-                        }
+                    const restoredKernel = await this._withOperationTimeout(
+                        () => supervisor.restoreSession(
+                            persisted.runtimeMetadata,
+                            persisted.sessionMetadata,
+                            {
+                                sessionName: persisted.sessionName,
+                                inputPrompt: '>',
+                                continuationPrompt: '+',
+                                busy: false,
+                                currentWorkingDirectory: persisted.workingDirectory,
+                            }
+                        ),
+                        PERSISTED_SESSION_RESTORE_TIMEOUT_MS,
+                        `Timed out attaching to persisted session ${persisted.sessionId}`,
                     );
 
                     // Attach the restored kernel
@@ -1629,8 +1747,13 @@ export class SessionManager implements vscode.Disposable {
 
                     // Reconnect to the restored session (Positron pattern)
                     try {
+                        const restoringSession = session;
                         this._outputChannel.debug(`[SessionManager] Reconnecting to session ${persisted.sessionId}...`);
-                        await session.start();
+                        await this._withOperationTimeout(
+                            () => restoringSession.start(),
+                            PERSISTED_SESSION_RESTORE_TIMEOUT_MS,
+                            `Timed out reconnecting persisted session ${persisted.sessionId}`,
+                        );
                         this._outputChannel.info(`[SessionManager] Session ${persisted.sessionId} restored successfully`);
                     } catch (err) {
                         this._outputChannel.error(`[SessionManager] Failed to reconnect session ${persisted.sessionId}: ${err}`);

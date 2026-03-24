@@ -31,6 +31,9 @@ declare global {
     var __arkLanguageMonacoSupportModules:
         | Record<string, string>
         | undefined;
+    var __arkLanguageTextMateGrammars:
+        | Record<string, { scopeName: string; grammarUrl: string }>
+        | undefined;
 }
 
 export {};

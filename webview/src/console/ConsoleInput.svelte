@@ -16,6 +16,8 @@
     import type { MessageConnection } from "vscode-jsonrpc/browser";
     import { monaco, ensureMonacoRuntime } from "$lib/monaco/setup";
     import {
+        ensureLanguageTextMateTokenizerReady,
+        getTextMateThemeRules,
         loadLanguageMonacoSupportModule,
         type ConsoleThemeData,
         type LanguageMonacoSupportModule,
@@ -175,30 +177,45 @@
             return languageMonacoSupportModule;
         }
 
-        languageMonacoSupportModule =
-            await loadLanguageMonacoSupportModule(normalizedLanguageId);
-        languageMonacoSupportModuleLanguageId = normalizedLanguageId;
+        try {
+            languageMonacoSupportModule =
+                await loadLanguageMonacoSupportModule(normalizedLanguageId);
+            languageMonacoSupportModuleLanguageId =
+                languageMonacoSupportModule
+                    ? normalizedLanguageId
+                    : "";
+        } catch (error) {
+            console.warn(
+                `[ConsoleInput] Failed to load language support for '${normalizedLanguageId}'`,
+                error,
+            );
+            languageMonacoSupportModule = undefined;
+            languageMonacoSupportModuleLanguageId = "";
+        }
         return languageMonacoSupportModule;
     }
 
     async function ensureLanguageSupportRegistered(
         targetLanguageId: string,
     ): Promise<LanguageMonacoSupportModule | undefined> {
+        const normalizedLanguageId = normalizeLanguageId(targetLanguageId);
         const languageMonacoSupport =
-            await ensureLanguageMonacoSupportModule(targetLanguageId);
+            await ensureLanguageMonacoSupportModule(normalizedLanguageId);
 
         if (destroyed) {
             return languageMonacoSupport;
         }
 
-        languageMonacoSupport?.registerLanguage();
-        languageMonacoSupport?.ensureProviders?.();
+        languageMonacoSupport?.registerLanguage(monaco);
+        await ensureLanguageTextMateTokenizerReady(
+            monaco,
+            normalizedLanguageId,
+        );
+        languageMonacoSupport?.ensureProviders?.(monaco);
         return languageMonacoSupport;
     }
 
     function applyMonacoTheme(theme: ConsoleThemeData) {
-        languageMonacoSupportModule?.updateTextMateThemeRules?.(theme);
-
         const body = document.body;
         const cs = getComputedStyle(body);
 
@@ -314,8 +331,7 @@
         monaco.editor.defineTheme(themeName, {
             base: theme.base,
             inherit: true,
-            rules:
-                languageMonacoSupportModule?.getTextMateThemeRules?.() ?? [],
+            rules: getTextMateThemeRules(theme),
             colors,
         });
         monaco.editor.setTheme(themeName);

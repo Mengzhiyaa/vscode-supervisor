@@ -10,6 +10,7 @@ interface PackageJsonShape {
     bugs?: { url?: string };
     repository?: { type?: string; url?: string };
     main?: string;
+    activationEvents?: string[];
     extensionDependencies?: string[];
     scripts?: Record<string, string | undefined>;
     workspaces?: string[];
@@ -47,9 +48,10 @@ suite('[Unit] Supervisor package manifest', () => {
         assert.strictEqual(packageJson.repository?.url, 'https://github.com/Blakfs24/vscode-supervisor');
         assert.strictEqual(packageJson.homepage, 'https://github.com/Blakfs24/vscode-supervisor#readme');
         assert.strictEqual(packageJson.bugs?.url, 'https://github.com/Blakfs24/vscode-supervisor/issues');
+        assert.deepStrictEqual(packageJson.activationEvents, ['onStartupFinished']);
         assert.deepStrictEqual(packageJson.workspaces, ['webview']);
         assert.strictEqual(packageJson.positron?.binaryDependencies?.kallichore, '0.1.64');
-        assert.strictEqual(packageJson.positron?.binaryDependencies?.ark, '0.1.242');
+        assert.strictEqual(packageJson.positron?.binaryDependencies?.ark, undefined);
         assert.ok(packageJson.devDependencies?.['@vscode/vsce']);
         assert.ok(packageJson.devDependencies?.ovsx);
         assert.strictEqual(packageJson.scripts?.['vsce:package'], 'vsce package');

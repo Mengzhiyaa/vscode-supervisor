@@ -7,25 +7,19 @@
 
 import * as vscode from 'vscode';
 import * as os from 'os';
+import {
+    type JupyterKernelSpec,
+    type LanguageRuntimeDynState,
+    type LanguageRuntimeMetadata,
+    type RuntimeSessionMetadata,
+} from '../api';
 import { KCApi } from '../supervisor/KallichoreAdapterApi';
 import { KallichoreTransport } from '../supervisor/KallichoreApiInstance';
 import { KallichoreInstances } from '../supervisor/KallichoreInstances';
 import {
-    JupyterLanguageRuntimeSession as SupervisorJupyterLanguageRuntimeSession,
-    JupyterKernelSpec as SupervisorJupyterKernelSpec,
-    JupyterKernelExtra as SupervisorJupyterKernelExtra
-} from '../supervisor/positron-supervisor';
-import * as positron from '../supervisor/positron';
-import {
-    JupyterLanguageRuntimeSession,
-    JupyterKernelSpec,
     JupyterKernelExtra,
-} from '../types/positron-supervisor';
-import {
-    LanguageRuntimeDynState,
-    LanguageRuntimeMetadata,
-    RuntimeSessionMetadata,
-} from '../positronTypes';
+    JupyterLanguageRuntimeSession,
+} from '../supervisor/positron-supervisor';
 
 /**
  * Local implementation of the Supervisor API using migrated Kallichore code.
@@ -52,50 +46,6 @@ export class LocalSupervisorApi implements vscode.Disposable {
      */
     get supervisorLog(): vscode.LogOutputChannel {
         return this._supervisorLog;
-    }
-
-    private toPositronRuntimeMetadata(metadata: LanguageRuntimeMetadata): positron.LanguageRuntimeMetadata {
-        return {
-            ...metadata,
-        };
-    }
-
-    private toPositronSessionMetadata(metadata: RuntimeSessionMetadata): positron.RuntimeSessionMetadata {
-        return {
-            ...metadata,
-        };
-    }
-
-    private toPositronDynState(state: LanguageRuntimeDynState): positron.LanguageRuntimeDynState {
-        return {
-            ...state,
-        };
-    }
-
-    private toSupervisorKernelSpec(spec: JupyterKernelSpec): SupervisorJupyterKernelSpec {
-        return {
-            argv: spec.argv,
-            display_name: spec.display_name,
-            language: spec.language,
-            interrupt_mode: spec.interrupt_mode,
-            env: spec.env,
-            kernel_protocol_version: spec.kernel_protocol_version,
-            startup_command: spec.startup_command,
-        };
-    }
-
-    private toSupervisorKernelExtra(extra: JupyterKernelExtra | undefined): SupervisorJupyterKernelExtra | undefined {
-        if (!extra) {
-            return undefined;
-        }
-        return {
-            attachOnStartup: extra.attachOnStartup,
-            sleepOnStartup: extra.sleepOnStartup,
-        };
-    }
-
-    private toRuntimeSession(session: SupervisorJupyterLanguageRuntimeSession): JupyterLanguageRuntimeSession {
-        return session as unknown as JupyterLanguageRuntimeSession;
     }
 
     /**
@@ -127,6 +77,18 @@ export class LocalSupervisorApi implements vscode.Disposable {
                 this._supervisorLog,  // Use supervisor-specific log channel
                 transport,
                 true // enable session reconnect
+            );
+
+            // Restore the supervisor-management commands that upstream Positron
+            // exposes at extension activation time.
+            this._adapterApi.registerCommands();
+            this._disposables.push(
+                vscode.commands.registerCommand('positron.supervisor.showRunningSupervisors', () => {
+                    return KallichoreInstances.showRunningSupervisors();
+                }),
+                vscode.commands.registerCommand('positron.supervisor.showKernelSupervisorLog', () => {
+                    this.showLog();
+                }),
             );
 
             // Log Kallichore path
@@ -165,16 +127,16 @@ export class LocalSupervisorApi implements vscode.Disposable {
         this._supervisorLog.trace(`  Kernel spec: ${JSON.stringify(kernelSpec.argv)}`);
 
         const session = await this._adapterApi.createSession(
-            this.toPositronRuntimeMetadata(runtimeMetadata),
-            this.toPositronSessionMetadata(sessionMetadata),
-            this.toSupervisorKernelSpec(kernelSpec),
-            this.toPositronDynState(dynState),
-            this.toSupervisorKernelExtra(extra)
+            runtimeMetadata,
+            sessionMetadata,
+            kernelSpec,
+            dynState,
+            extra
         );
 
         this._supervisorLog.info(`Session ${sessionMetadata.sessionId} created successfully`);
         this._outputChannel.debug(`Session ${sessionMetadata.sessionId} created`);
-        return this.toRuntimeSession(session);
+        return session;
     }
 
     /**
@@ -205,14 +167,14 @@ export class LocalSupervisorApi implements vscode.Disposable {
         this._supervisorLog.info(`Restoring session ${sessionMetadata.sessionId}...`);
 
         const session = await this._adapterApi.restoreSession(
-            this.toPositronRuntimeMetadata(runtimeMetadata),
-            this.toPositronSessionMetadata(sessionMetadata),
-            this.toPositronDynState(dynState)
+            runtimeMetadata,
+            sessionMetadata,
+            dynState
         );
 
         this._supervisorLog.info(`Session ${sessionMetadata.sessionId} restored successfully`);
         this._outputChannel.debug(`Session ${sessionMetadata.sessionId} restored`);
-        return this.toRuntimeSession(session);
+        return session;
     }
 
     /**

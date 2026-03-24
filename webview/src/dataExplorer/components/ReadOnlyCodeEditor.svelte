@@ -1,6 +1,9 @@
 <script lang="ts">
     import { onMount } from "svelte";
-    import { loadLanguageMonacoSupportModule } from "$lib/monaco/languageSupport";
+    import {
+        ensureLanguageTextMateTokenizerReady,
+        loadLanguageMonacoSupportModule,
+    } from "$lib/monaco/languageSupport";
 
     type MonacoApi = typeof import("monaco-editor");
     type MonacoEditor = import("monaco-editor").editor.IStandaloneCodeEditor;
@@ -93,13 +96,14 @@
     }
 
     async function ensureLanguageRegistered(languageId: string): Promise<void> {
-        if (languageId !== "r") {
+        if (languageId !== "r" || !monacoApi) {
             return;
         }
 
         const languageSupport =
             await loadLanguageMonacoSupportModule(languageId);
-        languageSupport?.registerLanguage();
+        languageSupport?.registerLanguage(monacoApi);
+        await ensureLanguageTextMateTokenizerReady(monacoApi, languageId);
     }
 
     async function syncModelLanguage(nextLanguageId: string): Promise<void> {

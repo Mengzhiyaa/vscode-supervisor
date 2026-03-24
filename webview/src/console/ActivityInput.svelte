@@ -6,8 +6,11 @@
 -->
 <script lang="ts">
     import { onMount } from "svelte";
-    import { ensureMonacoRuntime } from "$lib/monaco/setup";
-    import { loadLanguageMonacoSupportModule } from "$lib/monaco/languageSupport";
+    import { monaco, ensureMonacoRuntime } from "$lib/monaco/setup";
+    import {
+        ensureLanguageTextMateTokenizerReady,
+        loadLanguageMonacoSupportModule,
+    } from "$lib/monaco/languageSupport";
     import { colorizeActivityInputLines } from "$lib/monaco/activityInputColorizer";
     import { ActivityItemInput, ActivityItemInputState } from "./classes";
     import OutputRun from "./OutputRun.svelte";
@@ -113,7 +116,8 @@
 
             const languageSupport =
                 await loadLanguageMonacoSupportModule(languageId);
-            await languageSupport?.ensureTokenizerReady();
+            languageSupport?.registerLanguage(monaco);
+            await ensureLanguageTextMateTokenizerReady(monaco, languageId);
 
             const result = await colorizeActivityInputLines(
                 plainLines,

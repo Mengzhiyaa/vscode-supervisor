@@ -11,19 +11,17 @@ import { registerRuntimeClientInstance } from '../runtime/runtimeClientRegistry'
 import {
     RuntimeMethodErrorCode,
     type LanguageRuntimeSession,
-} from '../positronTypes';
+} from '../internal/runtimeTypes';
 
-export * from '../positronTypes';
+export * from '../api';
+export * from '../internal/runtimeTypes';
 
-const RETICULATE_AUTO_ENABLED_STORAGE_KEY = 'positron.reticulate-auto-enabled';
-
-let extensionContext: vscode.ExtensionContext | undefined;
 let foregroundSessionProvider:
     (() => LanguageRuntimeSession | undefined | Promise<LanguageRuntimeSession | undefined>)
     | undefined;
 
-export function initializePositronCompatibility(context: vscode.ExtensionContext): void {
-    extensionContext = context;
+export function initializePositronCompatibility(_context: vscode.ExtensionContext): void {
+    return;
 }
 
 export function setForegroundSessionProvider(
@@ -126,17 +124,11 @@ function readWhenClauseIdentifier(identifier: string): unknown {
 }
 
 export function getReticulateAutoEnabled(): boolean {
-    return extensionContext?.workspaceState.get<boolean>(
-        RETICULATE_AUTO_ENABLED_STORAGE_KEY,
-        false
-    ) ?? false;
+    return false;
 }
 
-export async function setReticulateAutoEnabled(enabled: boolean): Promise<void> {
-    await extensionContext?.workspaceState.update(
-        RETICULATE_AUTO_ENABLED_STORAGE_KEY,
-        enabled ? true : undefined
-    );
+export async function setReticulateAutoEnabled(_enabled: boolean): Promise<void> {
+    return;
 }
 
 function compareWhenClauseValues(left: unknown, operator: string, right: unknown): boolean {

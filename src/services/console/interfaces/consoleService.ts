@@ -12,16 +12,18 @@ import type {
     LanguageRuntimeUpdateOutputWithKind,
 } from '../../../runtime/runtimeOutputKind';
 import type {
+    LanguageRuntimeMetadata,
+    RuntimeSessionMetadata,
+} from '../../../api';
+import type {
     LanguageRuntimeClearOutput,
     LanguageRuntimeError as LanguageRuntimeErrorMessage,
     LanguageRuntimeInput,
     LanguageRuntimeMessage,
-    LanguageRuntimeMetadata,
     LanguageRuntimePrompt,
     LanguageRuntimeState,
     LanguageRuntimeStream,
-    RuntimeSessionMetadata,
-} from '../../../positronTypes';
+} from '../../../internal/runtimeTypes';
 import type {
     PromptStateEvent,
     WorkingDirectoryEvent,

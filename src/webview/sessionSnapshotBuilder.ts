@@ -6,7 +6,7 @@ import {
     IPositronConsoleInstance,
     PositronConsoleState,
 } from '../services/console/interfaces/consoleService';
-import { RuntimeState } from '../positronTypes';
+import { RuntimeState } from '../internal/runtimeTypes';
 
 /**
  * Shared helper for building the `session/info` snapshot sent to webviews.
@@ -66,7 +66,6 @@ export class SessionSnapshotBuilder {
                 session.sessionMetadata.sessionName ||
                 session.runtimeMetadata.runtimeName,
             runtimeName: session.runtimeMetadata.runtimeName,
-            languageId: session.runtimeMetadata.languageId,
             state: mapRuntimeStateToSessionState(session.state),
             runtimePath: session.runtimeMetadata.runtimePath,
             runtimeVersion: session.runtimeMetadata.languageVersion,
@@ -74,6 +73,9 @@ export class SessionSnapshotBuilder {
             base64EncodedIconSvg: session.runtimeMetadata.base64EncodedIconSvg,
             promptActive: false,
             runtimeAttached: false,
+            ...(session.runtimeMetadata.languageId
+                ? { languageId: session.runtimeMetadata.languageId }
+                : {}),
         };
     }
 
@@ -81,9 +83,9 @@ export class SessionSnapshotBuilder {
         session: SessionProtocol.SessionInfo,
         instance: IPositronConsoleInstance,
     ): SessionProtocol.SessionInfo {
+        const languageId = instance.runtimeMetadata.languageId || session.languageId;
         return {
             ...session,
-            languageId: instance.runtimeMetadata.languageId || session.languageId,
             state: mapConsoleStateToSessionState(instance.state),
             runtimePath: instance.runtimeMetadata.runtimePath || session.runtimePath,
             runtimeVersion: instance.runtimeMetadata.languageVersion || session.runtimeVersion,
@@ -91,6 +93,7 @@ export class SessionSnapshotBuilder {
             base64EncodedIconSvg: instance.runtimeMetadata.base64EncodedIconSvg || session.base64EncodedIconSvg,
             promptActive: instance.promptActive,
             runtimeAttached: instance.runtimeAttached,
+            ...(languageId ? { languageId } : {}),
         };
     }
 }

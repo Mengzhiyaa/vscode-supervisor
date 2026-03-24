@@ -104,6 +104,15 @@ export function createSessionModelManager(
         );
     }
 
+    function syncModelLanguage(
+        model: MonacoApi.editor.ITextModel,
+        languageId: string,
+    ): void {
+        if (model.getLanguageId() !== languageId) {
+            monaco.editor.setModelLanguage(model, languageId);
+        }
+    }
+
     function registerSessionModel(
         model: MonacoApi.editor.ITextModel,
         sessionId: string,
@@ -112,9 +121,21 @@ export function createSessionModelManager(
     ): void {
         const connection = connectionOverride ?? getConnection();
         if (connection) {
-            void loadLanguageMonacoSupportModule(languageId).then((support) => {
-                support?.registerModel?.(model, sessionId, connection);
-            });
+            void loadLanguageMonacoSupportModule(languageId)
+                .then((support) => {
+                    support?.registerModel?.(
+                        monaco,
+                        model,
+                        sessionId,
+                        connection,
+                    );
+                })
+                .catch((error) => {
+                    console.warn(
+                        `[sessionModelManager] Failed to register model for '${languageId}'`,
+                        error,
+                    );
+                });
         }
     }
 
@@ -122,9 +143,16 @@ export function createSessionModelManager(
         model: MonacoApi.editor.ITextModel,
         languageId: string,
     ): void {
-        void loadLanguageMonacoSupportModule(languageId).then((support) => {
-            support?.unregisterModel?.(model);
-        });
+        void loadLanguageMonacoSupportModule(languageId)
+            .then((support) => {
+                support?.unregisterModel?.(monaco, model);
+            })
+            .catch((error) => {
+                console.warn(
+                    `[sessionModelManager] Failed to unregister model for '${languageId}'`,
+                    error,
+                );
+            });
     }
 
     function createSessionState(
@@ -140,6 +168,8 @@ export function createSessionModelManager(
         const model =
             existingModel ??
             monaco.editor.createModel(initialValue, normalizedLanguageId, uri);
+
+        syncModelLanguage(model, normalizedLanguageId);
 
         if (model.getValue() !== initialValue) {
             model.setValue(initialValue);
@@ -183,6 +213,7 @@ export function createSessionModelManager(
         const normalizedLanguageId = normalizeLanguageId(languageId);
         const existing = sessionStateById.get(sessionId);
         if (existing) {
+            syncModelLanguage(existing.editor.model, normalizedLanguageId);
             if (existing.languageId !== normalizedLanguageId) {
                 return replaceSessionLanguage(
                     sessionId,

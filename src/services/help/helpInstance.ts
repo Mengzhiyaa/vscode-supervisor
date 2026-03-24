@@ -13,7 +13,7 @@ import {
     RuntimeClientState as SupervisorClientState,
     RuntimeClientType,
     RuntimeState,
-} from '../../positronTypes';
+} from '../../internal/runtimeTypes';
 
 export class PositronHelpInstance implements vscode.Disposable {
     private readonly _runtimeDisposables: vscode.Disposable[] = [];

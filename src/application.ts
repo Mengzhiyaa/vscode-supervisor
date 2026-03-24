@@ -122,6 +122,8 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
     private readonly _languageWebviewAssets = new Map<string, ILanguageWebviewAssets>();
     private readonly _activatedLanguageContributionIds = new Set<string>();
     private _activated = false;
+    private _persistedSessionRestoreStarted = false;
+    private _runtimeStartupStarted = false;
     readonly version = '0.1.0';
 
     // Service-class session management (1:1 Positron pattern)
@@ -207,6 +209,7 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
             this._outputChannel,
             () => this._getLanguageWebviewLocalResourceRoots(),
             (webview) => this._getLanguageMonacoSupportModuleUris(webview),
+            (webview) => this._getLanguageTextMateGrammarDefinitions(webview),
         );
         this._disposables.push(this._dataExplorerEditorProvider);
 
@@ -237,6 +240,7 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
             this._runtimeStartupService,
             () => this._getLanguageWebviewLocalResourceRoots(),
             (webview) => this._getLanguageMonacoSupportModuleUris(webview),
+            (webview) => this._getLanguageTextMateGrammarDefinitions(webview),
         );
         this._disposables.push(this._webviewManager);
 
@@ -313,6 +317,7 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
 
                 if (this._activated) {
                     await this._initializeLanguageSupportAfterActivation(updatedRegistration);
+                    this._startDeferredActivationTasks();
                 }
                 return;
             }
@@ -331,6 +336,7 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
         }
 
         await this._initializeLanguageSupportAfterActivation(normalizedRegistration);
+        this._startDeferredActivationTasks();
     }
 
     async registerLanguageRuntime<TInstallation = unknown>(
@@ -473,6 +479,28 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
         this._webviewManager.refreshLanguageSupportAssets();
     }
 
+    private _startDeferredActivationTasks(): void {
+        if (!this._activated || this._languageSupport.size === 0) {
+            return;
+        }
+
+        if (!this._persistedSessionRestoreStarted) {
+            this._persistedSessionRestoreStarted = true;
+            void this._sessionManager.restorePersistedSessionsInBackground().catch((error) => {
+                this._persistedSessionRestoreStarted = false;
+                this._outputChannel.error(`[SessionRestore] Failed to restore persisted sessions: ${error}`);
+            });
+        }
+
+        if (!this._runtimeStartupStarted) {
+            this._runtimeStartupStarted = true;
+            void this._runtimeStartupService.startup().catch((error) => {
+                this._runtimeStartupStarted = false;
+                this._outputChannel.error(`[RuntimeStartup] Failed to start runtime startup sequence: ${error}`);
+            });
+        }
+    }
+
     private _getLanguageWebviewLocalResourceRoots(): vscode.Uri[] {
         const uniqueRoots = new Map<string, vscode.Uri>();
 
@@ -498,6 +526,29 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
                     return [[
                         languageId,
                         webview.asWebviewUri(assets.monacoSupportModule).toString(),
+                    ]];
+                })
+        );
+    }
+
+    private _getLanguageTextMateGrammarDefinitions(
+        webview: vscode.Webview
+    ): Readonly<Record<string, { scopeName: string; grammarUrl: string }>> {
+        return Object.fromEntries(
+            Array.from(this._languageWebviewAssets.entries())
+                .flatMap(([languageId, assets]) => {
+                    if (!assets.textMateGrammar) {
+                        return [];
+                    }
+
+                    return [[
+                        languageId,
+                        {
+                            scopeName: assets.textMateGrammar.scopeName,
+                            grammarUrl: webview.asWebviewUri(
+                                assets.textMateGrammar.grammarUri,
+                            ).toString(),
+                        },
                     ]];
                 })
         );
@@ -919,12 +970,9 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
 
         this._updateConsoleSessionsExistContext();
 
-        void this._runtimeStartupService.startup().catch((error) => {
-            this._outputChannel.error(`[RuntimeStartup] Failed to start runtime startup sequence: ${error}`);
-        });
-
         this._activated = true;
         this._outputChannel.info('[Ark] Extension activated');
+        this._startDeferredActivationTasks();
     }
 
     private _normalizeRuntimeRegistration<TInstallation>(

@@ -5,7 +5,7 @@
 
 import * as vscode from 'vscode';
 import { RuntimeClientInstance, RuntimeClientOutput } from '../RuntimeClientInstance';
-import { RuntimeClientState } from '../../positronTypes';
+import { RuntimeClientState } from '../../internal/runtimeTypes';
 import { createUniqueId } from '../../supervisor/util';
 
 /**

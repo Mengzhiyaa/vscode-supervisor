@@ -14,8 +14,8 @@
 
 
 import type { Configuration } from './configuration';
-import type { AxiosPromise, AxiosInstance, RawAxiosRequestConfig } from 'axios';
-import globalAxios from 'axios';
+import type { AxiosPromise, AxiosInstance, RawAxiosRequestConfig } from '../httpClient';
+import globalAxios from '../httpClient';
 // Some imports not used depending on template conditions
 // @ts-ignore
 import { DUMMY_BASE_URL, assertParamExists, setApiKeyToObject, setBasicAuthToObject, setBearerAuthToObject, setOAuthToObject, setSearchParams, serializeDataIfNeeded, toPathString, createRequestFunction, replaceWithSerializableTypeIfNeeded } from './common';
@@ -1525,6 +1525,5 @@ export class DefaultApi extends BaseAPI {
         return DefaultApiFp(this.configuration).startSession(sessionId, options).then((request) => request(this.axios, this.basePath));
     }
 }
-
 
 

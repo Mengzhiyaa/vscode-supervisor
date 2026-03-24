@@ -1,9 +1,9 @@
 /**
  * Binary Manager — Runtime auto-download for universal VSIX installs.
  *
- * On extension activation, checks whether ark and kallichore binaries are
- * present under resources/. If missing, downloads them from GitHub Releases
- * with a VS Code progress notification.
+ * On extension activation, checks whether core and language-provided binaries
+ * are available. If missing, downloads them from GitHub Releases with a VS
+ * Code progress notification.
  */
 
 import * as fs from 'fs';
@@ -43,18 +43,54 @@ interface BinaryDownloadInfo {
     destPath: string;
 }
 
-function getBinaryDefs(binaryProviders: ReadonlyArray<IBinaryProvider>): Record<string, BinaryDefinition> {
-    const defs: Record<string, BinaryDefinition> = {
+interface ResolvedBinaryDefinition {
+    definition: BinaryDefinition;
+    version?: string;
+}
+
+function resolveInstallDir(
+    extensionPath: string,
+    installDir: string,
+): string {
+    return path.isAbsolute(installDir)
+        ? installDir
+        : path.join(extensionPath, installDir);
+}
+
+function getBundledBinaryVersions(extensionPath: string): Record<string, string> {
+    const pkgPath = path.join(extensionPath, 'package.json');
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+    const deps = pkg?.positron?.binaryDependencies;
+    if (!deps) {
+        throw new Error('Could not find positron.binaryDependencies in package.json');
+    }
+    return deps as Record<string, string>;
+}
+
+function getBinaryDefs(
+    extensionPath: string,
+    binaryProviders: ReadonlyArray<IBinaryProvider>,
+): Record<string, ResolvedBinaryDefinition> {
+    const bundledVersions = getBundledBinaryVersions(extensionPath);
+    const defs: Record<string, ResolvedBinaryDefinition> = {
         kallichore: {
-            repo: 'posit-dev/kallichore-builds',
-            binaryName: isWindows ? 'kcserver.exe' : 'kcserver',
-            archivePattern: (version, platform) => `kallichore-${version}-${platform}.zip`,
-            installDir: 'resources/kallichore',
+            definition: {
+                repo: 'posit-dev/kallichore-builds',
+                binaryName: isWindows ? 'kcserver.exe' : 'kcserver',
+                archivePattern: (version, platform) => `kallichore-${version}-${platform}.zip`,
+                installDir: 'resources/kallichore',
+            },
+            version: bundledVersions.kallichore,
         },
     };
 
     for (const provider of binaryProviders) {
-        Object.assign(defs, provider.getBinaryDefinitions());
+        for (const [name, definition] of Object.entries(provider.getBinaryDefinitions())) {
+            defs[name] = {
+                definition,
+                version: definition.version ?? bundledVersions[name],
+            };
+        }
     }
 
     return defs;
@@ -94,7 +130,7 @@ function getDownloadInfo(
     const platform = def.platformOverride ? def.platformOverride(basePlatform) : basePlatform;
     const archiveFile = def.archivePattern(version, platform);
     const downloadUrl = `https://github.com/${def.repo}/releases/download/${version}/${archiveFile}`;
-    const installDir = path.join(extensionPath, def.installDir);
+    const installDir = resolveInstallDir(extensionPath, def.installDir);
     const destPath = path.join(installDir, def.binaryName);
 
     return { platform, archiveFile, downloadUrl, installDir, destPath };
@@ -236,20 +272,6 @@ function findBinary(dir: string, binaryName: string): string | null {
     return null;
 }
 
-// ---------------------------------------------------------------------------
-// Version resolution from package.json
-// ---------------------------------------------------------------------------
-
-function getVersions(extensionPath: string): Record<string, string> {
-    const pkgPath = path.join(extensionPath, 'package.json');
-    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
-    const deps = pkg?.positron?.binaryDependencies;
-    if (!deps) {
-        throw new Error('Could not find positron.binaryDependencies in package.json');
-    }
-    return deps as Record<string, string>;
-}
-
 function resolveInstalledVersion(binaryPath: string): string | undefined {
     try {
         const stdout = execFileSync(binaryPath, ['--version'], {
@@ -348,8 +370,7 @@ export async function ensureBinaries(
     log: vscode.LogOutputChannel,
     binaryProviders: ReadonlyArray<IBinaryProvider> = [],
 ): Promise<void> {
-    const defs = getBinaryDefs(binaryProviders);
-    const versions = getVersions(context.extensionPath);
+    const defs = getBinaryDefs(context.extensionPath, binaryProviders);
     const platform = detectPlatform();
 
     // Check which binaries are missing
@@ -357,9 +378,12 @@ export async function ensureBinaries(
     const installedVersions = context.globalState.get<Record<string, string>>(BINARY_VERSION_STATE_KEY, {});
     let installedVersionsChanged = false;
 
-    for (const [name, def] of Object.entries(defs)) {
-        const binaryPath = path.join(context.extensionPath, def.installDir, def.binaryName);
-        const expectedVersion = versions[name];
+    for (const [name, resolvedDef] of Object.entries(defs)) {
+        const { definition: def, version: expectedVersion } = resolvedDef;
+        const binaryPath = path.join(
+            resolveInstallDir(context.extensionPath, def.installDir),
+            def.binaryName,
+        );
 
         if (!fs.existsSync(binaryPath)) {
             missing.push(name);
@@ -392,12 +416,12 @@ export async function ensureBinaries(
         }
     }
 
-        if (missing.length === 0) {
-            if (installedVersionsChanged) {
-                await context.globalState.update(BINARY_VERSION_STATE_KEY, installedVersions);
-            }
-            log.debug('[BinaryManager] All binaries present, skipping download');
-            return;
+    if (missing.length === 0) {
+        if (installedVersionsChanged) {
+            await context.globalState.update(BINARY_VERSION_STATE_KEY, installedVersions);
+        }
+        log.debug('[BinaryManager] All binaries present, skipping download');
+        return;
     }
 
     log.info(`[BinaryManager] Missing binaries: ${missing.join(', ')}. Starting download...`);
@@ -411,11 +435,11 @@ export async function ensureBinaries(
         },
         async (progress) => {
             for (const name of missing) {
-                const def = defs[name];
-                const version = versions[name];
+                const resolvedDef = defs[name];
+                const { definition: def, version } = resolvedDef;
 
                 if (!version) {
-                    log.warn(`[BinaryManager] No version found for ${name} in package.json, skipping`);
+                    log.warn(`[BinaryManager] No version found for ${name}, skipping`);
                     continue;
                 }
 

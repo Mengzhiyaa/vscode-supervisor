@@ -8,7 +8,7 @@ import {
     type LanguageRuntimeMessageCommData,
     type LanguageRuntimeMessageCommOpen,
     RuntimeClientType,
-} from '../positronTypes';
+} from '../internal/runtimeTypes';
 import { RuntimeClientInstance, RuntimeClientMessageSender } from './RuntimeClientInstance';
 import type { IPlotSize, IPositronPlotSizingPolicy } from './sizingPolicy';
 import type { IntrinsicSize, PlotOrigin, PlotRenderSettings, PlotResult } from './comms/positronPlotComm';
