@@ -5,7 +5,7 @@ import * as PlotsProtocol from '../rpc/webview/plots';
 import * as SessionProtocol from '../rpc/webview/session';
 import { CoreCommandIds, ViewIds, WorkbenchViewContainerCommands } from '../coreCommandIds';
 import { RuntimeSession } from '../runtime/session';
-import { SessionManager } from '../runtime/sessionManager';
+import { RuntimeSessionService } from '../runtime/runtimeSession';
 import { PlotClientInstance, RenderedPlot, ZoomLevel } from '../runtime/PlotClientInstance';
 import { StaticPlotClient } from '../runtime/staticPlotClient';
 import { HtmlPlotClient } from '../runtime/htmlPlotClient';
@@ -96,7 +96,7 @@ export class PlotsViewProvider extends BaseWebviewProvider {
     constructor(
         extensionUri: vscode.Uri,
         outputChannel: vscode.LogOutputChannel,
-        private readonly _sessionManager: SessionManager | undefined,
+        private readonly _sessionManager: RuntimeSessionService | undefined,
         private readonly _plotsService: PositronPlotsService,
         private readonly _consoleService: PositronConsoleService,
         getAdditionalLocalResourceRoots: () => readonly vscode.Uri[] = () => [],

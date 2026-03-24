@@ -5,7 +5,7 @@ import { PlotsViewProvider } from './plotsProvider';
 import { ViewerViewProvider } from './viewerProvider';
 import { HelpViewProvider } from './helpProvider';
 import { ViewCommands, ViewIds } from '../coreCommandIds';
-import { SessionManager } from '../runtime/sessionManager';
+import { RuntimeSessionService } from '../runtime/runtimeSession';
 import { RuntimeSession } from '../runtime/session';
 import { PositronConsoleService } from '../services/console';
 import { PositronVariablesService } from '../services/variables';
@@ -29,7 +29,7 @@ export class WebviewManager implements vscode.Disposable {
     constructor(
         private readonly _context: vscode.ExtensionContext,
         private readonly _outputChannel: vscode.LogOutputChannel,
-        private readonly _sessionManager: SessionManager,
+        private readonly _sessionManager: RuntimeSessionService,
         private readonly _consoleService: PositronConsoleService,
         private readonly _variablesService: PositronVariablesService,
         private readonly _plotsService: PositronPlotsService,

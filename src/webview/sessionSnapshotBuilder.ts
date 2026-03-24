@@ -1,5 +1,5 @@
 import { RuntimeSession } from '../runtime/session';
-import { SessionManager } from '../runtime/sessionManager';
+import { RuntimeSessionService } from '../runtime/runtimeSession';
 import * as SessionProtocol from '../rpc/webview/session';
 import { PositronConsoleService } from '../services/console/consoleService';
 import {
@@ -15,7 +15,7 @@ import { RuntimeState } from '../internal/runtimeTypes';
  */
 export class SessionSnapshotBuilder {
     constructor(
-        private readonly _sessionManager?: SessionManager,
+        private readonly _sessionManager?: RuntimeSessionService,
         private readonly _consoleService?: PositronConsoleService,
     ) { }
 

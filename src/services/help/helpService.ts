@@ -5,7 +5,7 @@
 
 import * as vscode from 'vscode';
 import { ViewIds } from '../../coreCommandIds';
-import { SessionManager } from '../../runtime/sessionManager';
+import { RuntimeSessionService } from '../../runtime/runtimeSession';
 import { RuntimeSession } from '../../runtime/session';
 import { HelpClientInstance } from '../../runtime/HelpClientInstance';
 import { ShowHelpEvent, ShowHelpKind } from '../../runtime/comms/positronHelpComm';
@@ -37,7 +37,7 @@ export class PositronHelpService implements IPositronHelpService {
     private readonly _onDidChangeCurrentHelpEntryEmitter = new vscode.EventEmitter<IHelpEntry | undefined>();
 
     constructor(
-        private readonly _sessionManager: SessionManager,
+        private readonly _sessionManager: RuntimeSessionService,
         private readonly _outputChannel: vscode.LogOutputChannel,
         extensionUri: vscode.Uri
     ) {

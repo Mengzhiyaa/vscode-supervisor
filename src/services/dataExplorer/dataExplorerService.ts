@@ -7,7 +7,7 @@
 import * as vscode from 'vscode';
 import { DataExplorerClientInstance } from './dataExplorerClientInstance';
 import { BackendState, TableSchema, DatasetImportOptions, SetDatasetImportOptionsResult } from '../../runtime/comms/positronDataExplorerComm';
-import { SessionManager } from '../../runtime/sessionManager';
+import { RuntimeSessionService } from '../../runtime/runtimeSession';
 import { RuntimeSession } from '../../runtime/session';
 import { DataExplorerSessionInstance } from './dataExplorerInstance';
 import { DuckDBInstance } from '../duckdb/duckdbInstance';
@@ -325,7 +325,7 @@ export class DataExplorerService implements IDataExplorerService {
     private readonly _onDidRegisterInstance = new vscode.EventEmitter<IDataExplorerInstance>();
 
     constructor(
-        private readonly _sessionManager: SessionManager,
+        private readonly _sessionManager: RuntimeSessionService,
         private readonly _logChannel: vscode.LogOutputChannel
     ) {
         this._disposables.push(this._onDidCreateInstance);

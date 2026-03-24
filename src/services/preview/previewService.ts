@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
-import { SessionManager } from '../../runtime/sessionManager';
+import { RuntimeSessionService } from '../../runtime/runtimeSession';
 import { PositronPlotsService } from '../../runtime/positronPlotsService';
 import { HtmlProxyService } from './htmlProxyService';
 import {
@@ -35,7 +35,7 @@ export class PositronPreviewService implements vscode.Disposable {
     readonly onDidShowPreview = this._onDidShowPreviewEmitter.event;
 
     constructor(
-        private readonly _sessionManager: SessionManager,
+        private readonly _sessionManager: RuntimeSessionService,
         private readonly _plotsService: PositronPlotsService,
         private readonly _outputChannel: vscode.LogOutputChannel
     ) {

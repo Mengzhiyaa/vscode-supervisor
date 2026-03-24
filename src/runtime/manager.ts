@@ -4,7 +4,7 @@ import {
     type ILanguageRuntimeProvider,
     type LanguageRuntimeMetadata,
 } from '../api';
-import { SessionManager } from './sessionManager';
+import { RuntimeSessionService } from './runtimeSession';
 
 /**
  * Manages discovery and registration of language runtimes.
@@ -26,7 +26,7 @@ export class RuntimeManager implements vscode.Disposable {
 
     constructor(
         private readonly _context: vscode.ExtensionContext,
-        private readonly _sessionManager: SessionManager,
+        private readonly _sessionManager: RuntimeSessionService,
         private readonly _outputChannel: vscode.LogOutputChannel
     ) {
         this._disposables.push(this._onDidDiscoverRuntime);

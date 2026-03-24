@@ -17,7 +17,7 @@ import {
 } from './interfaces/consoleService';
 import { PositronConsoleInstance, SerializedConsoleState } from './consoleInstance';
 import { ConsoleStateStore } from './consoleStateStore';
-import { SessionManager } from '../../runtime/sessionManager';
+import { RuntimeSessionService } from '../../runtime/runtimeSession';
 import { RuntimeSession } from '../../runtime/session';
 import { RuntimeStartMode } from '../../internal/runtimeTypes';
 import {
@@ -52,7 +52,7 @@ export class PositronConsoleService implements IPositronConsoleService {
     //#endregion
 
     constructor(
-        private readonly _sessionManager: SessionManager,
+        private readonly _sessionManager: RuntimeSessionService,
         private readonly _outputChannel: vscode.LogOutputChannel,
         context?: vscode.ExtensionContext
     ) {
@@ -236,8 +236,14 @@ export class PositronConsoleService implements IPositronConsoleService {
             // Create new session if needed
             this._outputChannel.debug('[PositronConsoleService] No active console, creating new session');
             const session = await this._sessionManager.createSession();
-            instance = this.startPositronConsoleInstance(session, SessionAttachMode.Starting, true);
-            await session.start();
+            await this._sessionManager.startSession(session.sessionId, {
+                activate: true,
+                hasConsole: true,
+            });
+            instance = this._consoleInstancesBySessionId.get(session.sessionId);
+            if (!instance) {
+                throw new Error(`Console instance was not created for session ${session.sessionId}`);
+            }
         }
 
         // Execute code

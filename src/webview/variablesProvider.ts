@@ -4,7 +4,7 @@ import { BaseWebviewProvider } from './baseProvider';
 import * as VariablesProtocol from '../rpc/webview/variables';
 import * as SessionProtocol from '../rpc/webview/session';
 import { RuntimeSession } from '../runtime/session';
-import { SessionManager } from '../runtime/sessionManager';
+import { RuntimeSessionService } from '../runtime/runtimeSession';
 import {
     PositronVariablesService,
     IPositronVariablesInstance,
@@ -41,7 +41,7 @@ export class VariablesViewProvider extends BaseWebviewProvider {
     constructor(
         extensionUri: vscode.Uri,
         outputChannel: vscode.LogOutputChannel,
-        private readonly _sessionManager: SessionManager | undefined,
+        private readonly _sessionManager: RuntimeSessionService | undefined,
         private readonly _variablesService: PositronVariablesService,
         getAdditionalLocalResourceRoots: () => readonly vscode.Uri[] = () => [],
     ) {

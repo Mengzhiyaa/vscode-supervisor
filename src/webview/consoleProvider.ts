@@ -6,7 +6,7 @@ import * as ConsoleProtocol from '../rpc/webview/console';
 import * as LspProtocol from '../rpc/webview/lsp';
 import * as SessionProtocol from '../rpc/webview/session';
 import { RuntimeSession } from '../runtime/session';
-import { SessionManager } from '../runtime/sessionManager';
+import { RuntimeSessionService } from '../runtime/runtimeSession';
 import { RuntimeStartupService, RuntimeStartupPhase } from '../runtime/runtimeStartupService';
 import {
     LanguageRuntimeSessionChannel,
@@ -58,7 +58,7 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
     constructor(
         extensionUri: vscode.Uri,
         outputChannel: vscode.LogOutputChannel,
-        private readonly _sessionManager?: SessionManager,
+        private readonly _sessionManager?: RuntimeSessionService,
         private readonly _consoleService?: PositronConsoleService,
         private readonly _runtimeStartupService?: RuntimeStartupService,
         getAdditionalLocalResourceRoots: () => readonly vscode.Uri[] = () => [],
@@ -452,7 +452,10 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
                 // lifecycle wiring, so subscribe here to keep follow-up startup
                 // and session-info updates flowing.
                 this.subscribeToSession(session);
-                await session.start();
+                await this._sessionManager.startSession(session.sessionId, {
+                    activate: true,
+                    hasConsole: true,
+                });
                 this._sendSessionInfoUpdate();
                 const sessions = this._sessionSnapshotBuilder.buildSessionsWithConsoleOverlay();
                 return {
@@ -1116,7 +1119,7 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
     // =========================================================================
 
     /**
-     * Subscribes to SessionManager runtime-global UI events.
+     * Subscribes to RuntimeSessionService runtime-global UI events.
      */
     private _subscribeToRuntimeEvents(): void {
         if (!this._sessionManager) {

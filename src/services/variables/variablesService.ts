@@ -9,7 +9,7 @@ import {
     IPositronVariablesInstance
 } from './interfaces/variablesService';
 import { PositronVariablesInstance } from './variablesInstance';
-import { SessionManager } from '../../runtime/sessionManager';
+import { RuntimeSessionService } from '../../runtime/runtimeSession';
 import { RuntimeSession } from '../../runtime/session';
 
 /**
@@ -30,7 +30,7 @@ export class PositronVariablesService implements IPositronVariablesService {
     //#endregion
 
     constructor(
-        private readonly _sessionManager: SessionManager,
+        private readonly _sessionManager: RuntimeSessionService,
         private readonly _outputChannel: vscode.LogOutputChannel
     ) {
         this._outputChannel.debug('[PositronVariablesService] Created');

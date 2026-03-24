@@ -13,7 +13,7 @@ import {
 import { WebviewManager } from './webview/manager';
 import { RuntimeManager } from './runtime/manager';
 import { RuntimeSession } from './runtime/session';
-import { SessionManager } from './runtime/sessionManager';
+import { RuntimeSessionService } from './runtime/runtimeSession';
 import { RuntimeStartupService } from './runtime/runtimeStartupService';
 import { PositronConsoleService } from './services/console';
 import { PositronVariablesService } from './services/variables';
@@ -110,7 +110,7 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
     private readonly _disposables: vscode.Disposable[] = [];
     private readonly _webviewManager: WebviewManager;
     private readonly _runtimeManager: RuntimeManager;
-    private readonly _sessionManager: SessionManager;
+    private readonly _sessionManager: RuntimeSessionService;
     private readonly _runtimeStartupService: RuntimeStartupService;
     private readonly _outputChannel: vscode.LogOutputChannel;
     private readonly _languageSupport = new Map<string, ILanguageSupportRegistration<any>>();
@@ -119,7 +119,6 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
     private readonly _languageWebviewAssets = new Map<string, ILanguageWebviewAssets>();
     private readonly _activatedLanguageContributionIds = new Set<string>();
     private _activated = false;
-    private _persistedSessionRestoreStarted = false;
     private _runtimeStartupStarted = false;
     readonly version = '0.1.0';
 
@@ -149,7 +148,7 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
         this._disposables.push(this._outputChannel);
 
         // Initialize session manager first (webview needs it)
-        this._sessionManager = new SessionManager(_context, this._outputChannel);
+        this._sessionManager = new RuntimeSessionService(_context, this._outputChannel);
         this._disposables.push(this._sessionManager);
         this._disposables.push(
             setForegroundSessionProvider(() =>
@@ -480,14 +479,6 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
             return;
         }
 
-        if (!this._persistedSessionRestoreStarted) {
-            this._persistedSessionRestoreStarted = true;
-            void this._sessionManager.restorePersistedSessionsInBackground().catch((error) => {
-                this._persistedSessionRestoreStarted = false;
-                this._outputChannel.error(`[SessionRestore] Failed to restore persisted sessions: ${error}`);
-            });
-        }
-
         if (!this._runtimeStartupStarted) {
             this._runtimeStartupStarted = true;
             void this._runtimeStartupService.startup().catch((error) => {
@@ -784,7 +775,10 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
             this._wireSessionLifecycle(result.session);
         }
 
-        await result.session.start();
+        await this._sessionManager.startSession(result.session.sessionId, {
+            activate: true,
+            hasConsole: true,
+        });
         this._updateConsoleSessionsExistContext();
         this._outputChannel.info('[Ark] New session created successfully');
     }

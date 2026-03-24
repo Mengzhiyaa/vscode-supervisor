@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import {
     type LanguageRuntimeDynState,
     type LanguageRuntimeMetadata,
+    type JupyterKernelSpec,
     type RuntimeSessionMetadata,
     type ILanguageLsp,
     type ILanguageLspFactory,
@@ -12,6 +13,7 @@ import {
 import {
     DapComm,
     EvaluateCodeResult,
+    JupyterKernelExtra,
     JupyterLanguageRuntimeSession,
     RuntimeLaunchInfo,
 } from '../supervisor/positron-supervisor';
@@ -45,6 +47,7 @@ import {
     LanguageRuntimeSessionChannel,
 } from '../internal/runtimeTypes';
 import { RuntimeClientManager } from './runtimeClientManager';
+import { LocalSupervisorApi } from './localSupervisor';
 import { inferPositronOutputKind, type LanguageRuntimeOutputWithKind, type LanguageRuntimeResultWithKind, type LanguageRuntimeUpdateOutputWithKind } from './runtimeOutputKind';
 import { PositronUiComm, UiParam } from './comms/positronUiComm';
 import {
@@ -136,6 +139,13 @@ class NullLanguageLsp implements ILanguageLsp {
 
 type RuntimeSessionOutputChannel = LanguageRuntimeSessionChannel | 'lsp';
 
+export interface RuntimeSessionProvisioningOptions {
+    localSupervisor?: LocalSupervisorApi;
+    kernelSpec?: JupyterKernelSpec;
+    kernelExtra?: JupyterKernelExtra;
+    dynState?: LanguageRuntimeDynState;
+}
+
 /**
  * Represents an active runtime session.
  * Wraps a JupyterLanguageRuntimeSession from positron-supervisor.
@@ -170,6 +180,9 @@ export class RuntimeSession implements vscode.Disposable {
     private _pendingConsoleWidthInChars: number | undefined;
     private _applyingConsoleWidthPromise: Promise<void> | undefined;
     private readonly _created = Date.now();
+    private readonly _localSupervisor: LocalSupervisorApi | undefined;
+    private readonly _kernelSpec: JupyterKernelSpec | undefined;
+    private readonly _kernelExtra: JupyterKernelExtra | undefined;
 
     /** Event clock of the last processed runtime event. */
     private _eventClock = 0;
@@ -222,16 +235,22 @@ export class RuntimeSession implements vscode.Disposable {
         readonly sessionMetadata: RuntimeSessionMetadata,
         private readonly _logChannel: vscode.LogOutputChannel,
         sessionName?: string,
-        lspFactory?: ILanguageLspFactory
+        lspFactory?: ILanguageLspFactory,
+        provisioning?: RuntimeSessionProvisioningOptions,
     ) {
+        this._localSupervisor = provisioning?.localSupervisor;
+        this._kernelSpec = provisioning?.kernelSpec;
+        this._kernelExtra = provisioning?.kernelExtra;
+
         // Set the initial dynamic state
-        this.dynState = {
+        this.dynState = provisioning?.dynState ?? {
             sessionName: sessionName || runtimeMetadata.runtimeName,
             continuationPrompt: '+',
             inputPrompt: '>',
             busy: false,
             currentWorkingDirectory: undefined,
         };
+        this._workingDirectory = this.dynState.currentWorkingDirectory;
 
         // Initialize LSP and services queue
         this._supportsLsp = !!lspFactory;
@@ -706,13 +725,47 @@ export class RuntimeSession implements vscode.Disposable {
         }
     }
 
+    private async createKernel(): Promise<JupyterLanguageRuntimeSession> {
+        if (!this._localSupervisor) {
+            throw new Error('Local supervisor not configured for this runtime session');
+        }
+
+        const dynState: LanguageRuntimeDynState = {
+            ...this.dynState,
+            sessionName: this.dynState.sessionName || this.sessionMetadata.sessionName,
+            currentWorkingDirectory: this._workingDirectory ?? this.dynState.currentWorkingDirectory,
+        };
+
+        const kernel = this._kernelSpec
+            ? await this._localSupervisor.createSession(
+                this.runtimeMetadata,
+                this.sessionMetadata,
+                this._kernelSpec,
+                dynState,
+                this._kernelExtra,
+            )
+            : await this._localSupervisor.restoreSession(
+                this.runtimeMetadata,
+                this.sessionMetadata,
+                dynState,
+            );
+
+        this.attachKernel(kernel);
+
+        if (dynState.currentWorkingDirectory) {
+            this.updateWorkingDirectory(dynState.currentWorkingDirectory);
+        }
+
+        return kernel;
+    }
+
     /**
      * Starts the session and fires startup complete event.
      * Returns LanguageRuntimeInfo containing banner, version info, etc.
      */
     async start(): Promise<LanguageRuntimeInfo> {
         if (!this._kernel) {
-            throw new Error('Kernel not attached');
+            this._kernel = await this.createKernel();
         }
         let info: LanguageRuntimeInfo;
         try {
@@ -861,14 +914,42 @@ export class RuntimeSession implements vscode.Disposable {
         }
     }
 
+    private async _waitForLspStartupDuringRestart(timeoutMs: number): Promise<boolean> {
+        const lspStartupPromise = this._lspStartingPromise
+            .then(() => false)
+            .catch(() => false);
+        const timeoutPromise = new Promise<boolean>((resolve) => {
+            setTimeout(() => resolve(true), timeoutMs);
+        });
+        return Promise.race([lspStartupPromise, timeoutPromise]);
+    }
+
+    private async _deactivateServices(reason: string): Promise<void> {
+        this.log(`Stopping runtime services (${reason})`, vscode.LogLevel.Debug);
+        await Promise.all([
+            this._deactivateLsp(),
+            this.disconnectDap(),
+        ]);
+    }
+
     /**
      * Restarts the session
      */
-    async restart(): Promise<void> {
+    async restart(workingDirectory?: string): Promise<void> {
         if (!this._kernel) {
             throw new Error('Kernel not attached');
         }
-        await this._kernel.restart(this._workingDirectory);
+
+        const timedOut = await this._waitForLspStartupDuringRestart(400);
+        if (timedOut) {
+            this.log(
+                'LSP startup timed out during interpreter restart',
+                vscode.LogLevel.Warning,
+            );
+        }
+
+        await this._deactivateServices('restarting session');
+        await this._kernel.restart(workingDirectory ?? this._workingDirectory);
 
         // Match startup behavior so UI can show "restarted" completion feedback.
         const info = this._kernel.runtimeInfo;
@@ -910,10 +991,7 @@ export class RuntimeSession implements vscode.Disposable {
         if (!this._kernel) {
             return;
         }
-        await Promise.all([
-            this._deactivateLsp(),
-            this.disconnectDap(),
-        ]);
+        await this._deactivateServices('shutting down session');
         return this._kernel.shutdown(exitReason);
     }
 

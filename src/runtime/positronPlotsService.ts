@@ -27,7 +27,7 @@ import {
     type LanguageRuntimeUpdateOutputWithKind,
 } from './runtimeOutputKind';
 import { RuntimeSession } from './session';
-import { SessionManager } from './sessionManager';
+import { RuntimeSessionService } from './runtimeSession';
 import {
     type LanguageRuntimeInput,
     type LanguageRuntimeMessageCommOpen,
@@ -191,7 +191,7 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
     /**
      * Session manager for multi-session plot routing.
      */
-    private _sessionManager: SessionManager | undefined;
+    private _sessionManager: RuntimeSessionService | undefined;
 
     /**
      * Disposables for cleanup.
@@ -1606,7 +1606,7 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
     /**
      * Initializes the plots service and attaches to runtime sessions.
      */
-    initialize(sessionManager?: SessionManager): void {
+    initialize(sessionManager?: RuntimeSessionService): void {
         if (sessionManager) {
             this._sessionManager = sessionManager;
 
