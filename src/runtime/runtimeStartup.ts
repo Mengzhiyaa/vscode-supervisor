@@ -9,6 +9,7 @@ import {
 } from '../api';
 import { CoreConfigurationSections } from '../coreCommandIds';
 import { RuntimeState } from '../internal/runtimeTypes';
+import { type IPositronNewFolderService } from '../newFolder/positronNewFolder';
 import { RuntimeManager } from './manager';
 import { RuntimeSession } from './session';
 import { type SerializedSessionMetadata } from './runtimeSessionService';
@@ -22,13 +23,6 @@ interface IAffiliatedRuntimeMetadata {
     metadata: LanguageRuntimeMetadata;
     lastUsed: number;
     lastStarted: number;
-}
-
-interface INewFolderInitTaskRegistration {
-    readonly id: number;
-    readonly label: string;
-    readonly task: () => Promise<void>;
-    readonly affiliatedRuntimeMetadata?: LanguageRuntimeMetadata;
 }
 
 export interface ISessionRestoreFailedEvent {
@@ -71,8 +65,7 @@ export class RuntimeStartupService implements vscode.Disposable {
     private readonly _mostRecentlyStartedRuntimesByLanguageId = new Map<string, LanguageRuntimeMetadata>();
     private readonly _runtimeManagers: IRuntimeManager[] = [];
     private readonly _discoveryCompleteByExtHostId = new Map<number, boolean>();
-    private readonly _newFolderInitTaskRegistrations = new Map<number, INewFolderInitTaskRegistration>();
-    private readonly _newFolderInitTaskPromises = new Map<number, Promise<void>>();
+    private readonly _workspaceRecommendedLanguagesByLanguageId = new Set<string>();
 
     private readonly _onDidChangeRuntimeStartupPhase = new vscode.EventEmitter<RuntimeStartupPhase>();
     readonly onDidChangeRuntimeStartupPhase = this._onDidChangeRuntimeStartupPhase.event;
@@ -91,13 +84,14 @@ export class RuntimeStartupService implements vscode.Disposable {
     private _restoredSessions: SerializedSessionMetadata[] = [];
     private readonly _restoredSessionsLoadedPromise: Promise<void>;
     private _resolveRestoredSessionsLoaded!: () => void;
-    private _nextNewFolderInitTaskId = 1;
-    private _hasStartedNewFolderInitTasks = false;
+    private _refreshWorkspaceRecommendationSignalsPromise: Promise<void> | undefined;
+    private _workspaceRecommendationSignalsRefreshPending = false;
 
     constructor(
         private readonly _context: vscode.ExtensionContext,
         private readonly _runtimeManager: RuntimeManager,
         private readonly _sessionManager: RuntimeSessionService,
+        private readonly _newFolderService: IPositronNewFolderService,
         private readonly _outputChannel: vscode.LogOutputChannel,
     ) {
         this._restoredSessionsLoadedPromise = new Promise<void>((resolve) => {
@@ -141,6 +135,18 @@ export class RuntimeStartupService implements vscode.Disposable {
             }),
             this._sessionManager.onDidUpdateSessionName(() => {
                 void this.saveWorkspaceSessions();
+            }),
+            vscode.workspace.onDidCreateFiles(() => {
+                this._scheduleWorkspaceRecommendationSignalsRefresh();
+            }),
+            vscode.workspace.onDidDeleteFiles(() => {
+                this._scheduleWorkspaceRecommendationSignalsRefresh();
+            }),
+            vscode.workspace.onDidRenameFiles(() => {
+                this._scheduleWorkspaceRecommendationSignalsRefresh();
+            }),
+            vscode.workspace.onDidSaveTextDocument(() => {
+                this._scheduleWorkspaceRecommendationSignalsRefresh();
             }),
         );
 
@@ -241,24 +247,9 @@ export class RuntimeStartupService implements vscode.Disposable {
             affiliatedRuntimeMetadata?: LanguageRuntimeMetadata;
         },
     ): vscode.Disposable {
-        const id = this._nextNewFolderInitTaskId++;
-        const registration: INewFolderInitTaskRegistration = {
-            id,
-            label: options?.label ?? `task-${id}`,
-            task: typeof task === 'function'
-                ? task
-                : () => task,
-            affiliatedRuntimeMetadata: options?.affiliatedRuntimeMetadata,
-        };
-
-        this._newFolderInitTaskRegistrations.set(registration.id, registration);
-
-        if (this._hasStartedNewFolderInitTasks) {
-            this._startRegisteredNewFolderInitTask(registration);
-        }
-
-        return new vscode.Disposable(() => {
-            this._newFolderInitTaskRegistrations.delete(registration.id);
+        return this._newFolderService.registerInitTask(task, {
+            label: options?.label,
+            runtimeMetadata: options?.affiliatedRuntimeMetadata,
         });
     }
 
@@ -280,6 +271,7 @@ export class RuntimeStartupService implements vscode.Disposable {
             this._setStartupPhase(RuntimeStartupPhase.Complete);
             this._sessionManager.implicitStartupSuppressed = false;
             this._resetDiscoveryCompletionState();
+            void this._newFolderService.completeRuntimeStartup();
         }
     }
 
@@ -287,14 +279,6 @@ export class RuntimeStartupService implements vscode.Disposable {
         this._runtimeManagers.push(manager);
         this._discoveryCompleteByExtHostId.set(manager.id, false);
         const runtimeManagerDisposables: vscode.Disposable[] = [];
-
-        if (manager.onDidFinishDiscovery) {
-            runtimeManagerDisposables.push(
-                manager.onDidFinishDiscovery(() => {
-                    this.completeDiscovery(manager.id);
-                }),
-            );
-        }
 
         if (manager.onDidDiscoverRuntime) {
             runtimeManagerDisposables.push(
@@ -326,13 +310,17 @@ export class RuntimeStartupService implements vscode.Disposable {
     async rediscoverAllRuntimes(): Promise<void> {
         this._resetDiscoveryCompletionState();
         this._setStartupPhase(RuntimeStartupPhase.Discovering);
+        await this._refreshWorkspaceRecommendationSignals();
         await this._discoverAllRuntimes();
         await this._autoStartAfterDiscovery();
+        await this._waitForStartupCompletion();
     }
 
     private async _startupSequence(): Promise<void> {
         this._sessionManager.implicitStartupSuppressed = true;
         this._sessionManager.updateActiveLanguages();
+        void this._newFolderService.initNewFolder();
+        await this._refreshWorkspaceRecommendationSignals();
         await this._awaitWorkspaceTrust();
 
         await this._sessionManager.restorePersistedSessionsInBackground();
@@ -350,7 +338,7 @@ export class RuntimeStartupService implements vscode.Disposable {
             this._setStartupPhase(RuntimeStartupPhase.Starting);
         }
 
-        await this._runNewFolderTasks();
+        await this._waitForNewFolderTasks();
 
         try {
             if (!this._sessionManager.hasStartingOrRunningConsole()) {
@@ -368,6 +356,7 @@ export class RuntimeStartupService implements vscode.Disposable {
         this._setStartupPhase(RuntimeStartupPhase.Discovering);
         await this._discoverAllRuntimes();
         await this._autoStartAfterDiscovery();
+        await this._waitForStartupCompletion();
     }
 
     private async _awaitWorkspaceTrust(): Promise<void> {
@@ -403,57 +392,52 @@ export class RuntimeStartupService implements vscode.Disposable {
         await this._restoreSessions(this._restoredSessions);
     }
 
-    private async _runNewFolderTasks(): Promise<void> {
-        this._hasStartedNewFolderInitTasks = true;
-        if (this._newFolderInitTaskRegistrations.size === 0) {
+    private async _waitForNewFolderTasks(): Promise<void> {
+        if (this._newFolderService.initTasksComplete.isOpen()) {
             this._sessionManager.updateActiveLanguages();
             return;
         }
 
         this._setStartupPhase(RuntimeStartupPhase.NewFolderTasks);
-        for (const registration of this._newFolderInitTaskRegistrations.values()) {
-            this._startRegisteredNewFolderInitTask(registration);
+        await this._newFolderService.initTasksComplete.wait();
+        const newFolderRuntimeMetadata = this._newFolderService.newFolderRuntimeMetadata;
+        if (newFolderRuntimeMetadata) {
+            await this._saveRuntimeAffiliation(newFolderRuntimeMetadata);
         }
-        await this._waitForRegisteredNewFolderInitTasks();
         this._sessionManager.updateActiveLanguages();
     }
 
-    private _startRegisteredNewFolderInitTask(
-        registration: INewFolderInitTaskRegistration,
-    ): void {
-        if (this._newFolderInitTaskPromises.has(registration.id)) {
+    private async _waitForStartupCompletion(): Promise<void> {
+        if (this._startupPhase === RuntimeStartupPhase.Complete) {
             return;
         }
 
-        const taskPromise = this._runRegisteredNewFolderInitTask(registration)
-            .finally(() => {
-                this._newFolderInitTaskPromises.delete(registration.id);
+        await new Promise<void>((resolve) => {
+            const disposable = this.onDidChangeRuntimeStartupPhase((phase) => {
+                if (phase !== RuntimeStartupPhase.Complete) {
+                    return;
+                }
+
+                disposable.dispose();
+                resolve();
             });
-        this._newFolderInitTaskPromises.set(registration.id, taskPromise);
+        });
     }
 
-    private async _waitForRegisteredNewFolderInitTasks(): Promise<void> {
-        while (this._newFolderInitTaskPromises.size > 0) {
-            await Promise.allSettled(Array.from(this._newFolderInitTaskPromises.values()));
+    private _scheduleWorkspaceRecommendationSignalsRefresh(): void {
+        if (this._refreshWorkspaceRecommendationSignalsPromise) {
+            this._workspaceRecommendationSignalsRefreshPending = true;
+            return;
         }
-    }
 
-    private async _runRegisteredNewFolderInitTask(
-        registration: INewFolderInitTaskRegistration,
-    ): Promise<void> {
-        this._outputChannel.debug(`[RuntimeStartup] Running new-folder init task '${registration.label}'`);
-        try {
-            await registration.task();
-            if (registration.affiliatedRuntimeMetadata) {
-                await this._saveRuntimeAffiliation(registration.affiliatedRuntimeMetadata);
-            }
-        } catch (error) {
-            this._outputChannel.error(
-                `[RuntimeStartup] New-folder init task '${registration.label}' failed: ${error}`,
-            );
-        } finally {
-            this._newFolderInitTaskRegistrations.delete(registration.id);
-        }
+        this._refreshWorkspaceRecommendationSignalsPromise = this._refreshWorkspaceRecommendationSignals()
+            .finally(() => {
+                this._refreshWorkspaceRecommendationSignalsPromise = undefined;
+                if (this._workspaceRecommendationSignalsRefreshPending) {
+                    this._workspaceRecommendationSignalsRefreshPending = false;
+                    this._scheduleWorkspaceRecommendationSignalsRefresh();
+                }
+            });
     }
 
     private _architectureMismatchStorageKey(languageId: string): string {
@@ -532,18 +516,13 @@ export class RuntimeStartupService implements vscode.Disposable {
         if (this._runtimeManagers.length === 0) {
             this._sessionManager.implicitStartupSuppressed = false;
             this._setStartupPhase(RuntimeStartupPhase.Complete);
+            void this._newFolderService.completeRuntimeStartup();
             return;
         }
 
-        await Promise.all(this._runtimeManagers.map(async (manager) => {
-            try {
-                await manager.discoverAllRuntimes(this._getDisabledLanguageIds());
-            } finally {
-                if (!manager.onDidFinishDiscovery) {
-                    this.completeDiscovery(manager.id);
-                }
-            }
-        }));
+        await Promise.all(this._runtimeManagers.map((manager) =>
+            manager.discoverAllRuntimes(this._getDisabledLanguageIds()),
+        ));
     }
 
     private _setStartupPhase(phase: RuntimeStartupPhase): void {
@@ -675,24 +654,20 @@ export class RuntimeStartupService implements vscode.Disposable {
 
         this._outputChannel.info(`[RuntimeStartup] Found ${sessions.length} persisted session(s) to restore`);
 
-        for (let index = 0; index < sessions.length; index += 1) {
-            const persisted = sessions[index];
-            const activate = index === 0;
+        const validSessions = await Promise.all(sessions.map(async (persisted) => {
+            const provider = this._runtimeManager.getRuntimeProvider(persisted.runtimeMetadata.languageId);
+            if (!provider) {
+                this._outputChannel.debug(
+                    `[RuntimeStartup] Deferring restore for ${persisted.metadata.sessionId}: language support for ` +
+                    `${persisted.runtimeMetadata.languageId} is not registered yet`,
+                );
+                return undefined;
+            }
 
             try {
-                const provider = this._runtimeManager.getRuntimeProvider(persisted.runtimeMetadata.languageId);
-                if (!provider) {
-                    this._outputChannel.debug(
-                        `[RuntimeStartup] Deferring restore for ${persisted.metadata.sessionId}: language support for ` +
-                        `${persisted.runtimeMetadata.languageId} is not registered yet`,
-                    );
-                    continue;
-                }
-
-                let runtimeMetadata = persisted.runtimeMetadata;
-                if (provider.validateMetadata) {
-                    runtimeMetadata = await provider.validateMetadata(runtimeMetadata);
-                }
+                const runtimeMetadata = provider.validateMetadata
+                    ? await provider.validateMetadata(persisted.runtimeMetadata)
+                    : persisted.runtimeMetadata;
 
                 const isValid = await this._sessionManager.validateRuntimeSession(
                     runtimeMetadata,
@@ -702,9 +677,52 @@ export class RuntimeStartupService implements vscode.Disposable {
                     this._outputChannel.debug(
                         `[RuntimeStartup] Session ${persisted.metadata.sessionId} is no longer valid, skipping`,
                     );
-                    continue;
+                    this._onSessionRestoreFailure.fire({
+                        sessionId: persisted.metadata.sessionId,
+                        error: new Error('Session is no longer available'),
+                    });
+                    return undefined;
                 }
 
+                return {
+                    persisted,
+                    runtimeMetadata,
+                };
+            } catch (error) {
+                const normalizedError = error instanceof Error ? error : new Error(String(error));
+                this._outputChannel.error(
+                    `[RuntimeStartup] Error validating persisted session ` +
+                    `${persisted.sessionName} (${persisted.metadata.sessionId}): ${normalizedError}`,
+                );
+                this._onSessionRestoreFailure.fire({
+                    sessionId: persisted.metadata.sessionId,
+                    error: new Error(`Could not validate session: ${normalizedError.message}`),
+                });
+                return undefined;
+            }
+        }));
+
+        const reconnectableSessions = validSessions.filter((session): session is {
+            persisted: SerializedSessionMetadata;
+            runtimeMetadata: LanguageRuntimeMetadata;
+        } => !!session);
+
+        this._outputChannel.debug(
+            `[RuntimeStartup] Reconnecting to sessions: ` +
+            reconnectableSessions.map((session) => session.persisted.sessionName).join(', '),
+        );
+
+        let firstConsole = true;
+
+        await Promise.all(reconnectableSessions.map(async ({ persisted, runtimeMetadata }, index) => {
+            const marker = `[Reconnect ${persisted.metadata.sessionId} (${index + 1}/${reconnectableSessions.length})]`;
+            const activate = firstConsole;
+            if (!persisted.metadata.notebookUri) {
+                firstConsole = false;
+            }
+
+            try {
+                this._outputChannel.debug(`${marker}: Restoring session for ${persisted.sessionName}`);
                 this._fireRuntimeStartupEvent(this._createRuntimeStartupEventFromSerializedSession(persisted, false));
 
                 await this._sessionManager.restoreRuntimeSession(
@@ -722,60 +740,74 @@ export class RuntimeStartupService implements vscode.Disposable {
                 );
                 this._onSessionRestoreFailure.fire({
                     sessionId: persisted.metadata.sessionId,
-                    error: normalizedError,
+                    error: new Error(`Could not reconnect: ${normalizedError.message}`),
                 });
             }
-        }
+        }));
 
         await this.saveWorkspaceSessions();
     }
 
     private async saveWorkspaceSessions(removeSessionId?: string): Promise<boolean> {
-        const nextPersistedSessions = new Map<string, SerializedSessionMetadata>();
+        const activeSessions = this._sessionManager.sessions
+            .filter((session) => {
+                if (removeSessionId && session.sessionId === removeSessionId) {
+                    return false;
+                }
 
-        for (const persisted of await this._readStoredSessions()) {
-            if (removeSessionId && persisted.metadata.sessionId === removeSessionId) {
-                continue;
-            }
-
-            if (this._sessionManager.getSession(persisted.metadata.sessionId)) {
-                continue;
-            }
-
-            if (!this._runtimeManager.getRuntimeProvider(persisted.runtimeMetadata.languageId)) {
-                nextPersistedSessions.set(persisted.metadata.sessionId, persisted);
-            }
-        }
-
-        for (const session of this._sessionManager.sessions) {
-            if (removeSessionId && session.sessionId === removeSessionId) {
-                continue;
-            }
-
-            if (!this._isSessionRestorable(session)) {
-                continue;
-            }
-
-            const activeSession = this._sessionManager.getActiveSession(session.sessionId);
-            const metadata: SerializedSessionMetadata = {
-                sessionName: session.dynState.sessionName || session.sessionMetadata.sessionName,
-                runtimeMetadata: session.runtimeMetadata,
-                metadata: {
-                    ...session.sessionMetadata,
+                return this._isSessionRestorable(session);
+            })
+            .map((session) => {
+                const activeSession = this._sessionManager.getActiveSession(session.sessionId);
+                const metadata: SerializedSessionMetadata = {
                     sessionName: session.dynState.sessionName || session.sessionMetadata.sessionName,
-                    workingDirectory: session.workingDirectory,
-                },
-                sessionState: session.state,
-                workingDirectory: session.workingDirectory ?? '',
-                hasConsole: activeSession?.hasConsole ?? session.sessionMetadata.sessionMode === LanguageRuntimeSessionMode.Console,
-                lastUsed: session.sessionId === this._sessionManager.activeSessionId ? Date.now() : session.created,
-                localWindowId: this._localWindowId,
-            };
+                    runtimeMetadata: session.runtimeMetadata,
+                    metadata: {
+                        ...session.sessionMetadata,
+                        sessionName: session.dynState.sessionName || session.sessionMetadata.sessionName,
+                        workingDirectory: session.workingDirectory,
+                    },
+                    sessionState: session.state,
+                    workingDirectory: session.workingDirectory ?? '',
+                    hasConsole: activeSession?.hasConsole ?? session.sessionMetadata.sessionMode === LanguageRuntimeSessionMode.Console,
+                    lastUsed: session.sessionId === this._sessionManager.activeSessionId ? Date.now() : session.created,
+                    localWindowId: this._localWindowId,
+                };
 
-            nextPersistedSessions.set(session.sessionId, metadata);
-        }
+                return metadata;
+            });
+        const activeSessionIds = new Set(activeSessions.map((session) => session.metadata.sessionId));
+        const pendingRestoredSessionIds = this._sessionManager.isRestoringPersistedSessions
+            ? new Set(
+                this._restoredSessions
+                    .map((session) => session.metadata.sessionId)
+                    .filter((sessionId) =>
+                        !activeSessionIds.has(sessionId) &&
+                        !this._sessionManager.getSession(sessionId),
+                    ),
+            )
+            : new Set<string>();
+        const existingSessions = await this._readStoredSessions();
+        const preservedSessions = existingSessions.filter((session) => {
+            if (activeSessionIds.has(session.metadata.sessionId)) {
+                return false;
+            }
+            if (removeSessionId && session.metadata.sessionId === removeSessionId) {
+                return false;
+            }
+            if (!this._runtimeManager.getRuntimeProvider(session.runtimeMetadata.languageId)) {
+                return true;
+            }
+            if (session.localWindowId !== this._localWindowId) {
+                return true;
+            }
+            if (pendingRestoredSessionIds.has(session.metadata.sessionId)) {
+                return true;
+            }
+            return false;
+        });
 
-        const persistedSessions = Array.from(nextPersistedSessions.values())
+        const persistedSessions = preservedSessions.concat(activeSessions)
             .sort((a, b) => b.lastUsed - a.lastUsed);
 
         await this._context.workspaceState.update(PERSISTENT_WORKSPACE_SESSIONS, persistedSessions);
@@ -1087,10 +1119,17 @@ export class RuntimeStartupService implements vscode.Disposable {
     }
 
     private async _getRecommendedRuntimes(disabledLanguageIds: string[]): Promise<LanguageRuntimeMetadata[]> {
-        const metadata = await Promise.all(
+        const metadataGroups = await Promise.all(
             this._runtimeManagers.map((manager) => manager.recommendWorkspaceRuntimes(disabledLanguageIds)),
         );
-        return metadata.flat();
+        const deduped = new Map<string, LanguageRuntimeMetadata>();
+
+        for (const metadata of metadataGroups.flat()) {
+            deduped.set(`${metadata.languageId}:${metadata.runtimeId}`, metadata);
+        }
+
+        return Array.from(deduped.values())
+            .sort((left, right) => this._getRecommendationScore(right) - this._getRecommendationScore(left));
     }
 
     private async _startEncounteredLanguageRuntime(): Promise<void> {
@@ -1098,7 +1137,7 @@ export class RuntimeStartupService implements vscode.Disposable {
             return;
         }
 
-        for (const languageId of this._sessionManager.encounteredLanguages) {
+        for (const languageId of this._getEncounteredLanguageIds()) {
             if (this._sessionManager.hasStartingOrRunningConsole(languageId) ||
                 this.getAffiliatedRuntimeMetadata(languageId)) {
                 continue;
@@ -1115,7 +1154,7 @@ export class RuntimeStartupService implements vscode.Disposable {
             try {
                 await this._autoStartRuntime(
                     runtime,
-                    `A file with the language ID ${languageId} was open when runtime discovery completed.`,
+                    `A file or workspace signal with the language ID ${languageId} was detected when runtime discovery completed.`,
                     true,
                 );
             } catch (error) {
@@ -1139,16 +1178,84 @@ export class RuntimeStartupService implements vscode.Disposable {
         }
 
         if (metadata.startupBehavior === LanguageRuntimeStartupBehavior.Implicit &&
-            this._sessionManager.hasEncounteredLanguage(metadata.languageId) &&
+            this._hasEncounteredLanguage(metadata.languageId) &&
             !this._sessionManager.hasStartingOrRunningConsole(metadata.languageId) &&
             !this.getAffiliatedRuntimeMetadata(metadata.languageId) &&
             !this._sessionManager.implicitStartupSuppressed) {
             await this._autoStartRuntime(
                 metadata,
-                `A file with the language ID ${metadata.languageId} was already open when the runtime was discovered.`,
+                `A file or workspace signal with the language ID ${metadata.languageId} was already present when the runtime was discovered.`,
                 true,
             );
         }
+    }
+
+    private async _refreshWorkspaceRecommendationSignals(): Promise<void> {
+        const nextRecommendedLanguagesByLanguageId = new Set<string>();
+
+        for (const languageId of this._runtimeManager.getSupportedLanguageIds()) {
+            const provider = this._runtimeManager.getRuntimeProvider(languageId);
+            if (!provider?.shouldRecommendForWorkspace) {
+                continue;
+            }
+
+            try {
+                if (await provider.shouldRecommendForWorkspace()) {
+                    nextRecommendedLanguagesByLanguageId.add(languageId);
+                }
+            } catch (error) {
+                this._outputChannel.warn(
+                    `[RuntimeStartup] Failed to refresh workspace startup signals for '${languageId}': ${error}`,
+                );
+            }
+        }
+
+        const addedLanguageIds = Array.from(nextRecommendedLanguagesByLanguageId).filter(
+            (languageId) => !this._workspaceRecommendedLanguagesByLanguageId.has(languageId),
+        );
+        this._workspaceRecommendedLanguagesByLanguageId.clear();
+        for (const languageId of nextRecommendedLanguagesByLanguageId.values()) {
+            this._workspaceRecommendedLanguagesByLanguageId.add(languageId);
+        }
+
+        if (addedLanguageIds.length > 0 && this._startupPhase === RuntimeStartupPhase.Complete) {
+            await this._startEncounteredLanguageRuntime();
+        }
+    }
+
+    private _getEncounteredLanguageIds(): string[] {
+        const languageIds = new Set<string>(this._sessionManager.encounteredLanguages);
+        for (const languageId of this._workspaceRecommendedLanguagesByLanguageId.values()) {
+            languageIds.add(languageId);
+        }
+        return Array.from(languageIds.values());
+    }
+
+    private _hasEncounteredLanguage(languageId: string): boolean {
+        return this._sessionManager.hasEncounteredLanguage(languageId) ||
+            this._workspaceRecommendedLanguagesByLanguageId.has(languageId);
+    }
+
+    private _getRecommendationScore(metadata: LanguageRuntimeMetadata): number {
+        let score = 0;
+
+        if (this._workspaceRecommendedLanguagesByLanguageId.has(metadata.languageId)) {
+            score += 100;
+        }
+
+        if (this._hasEncounteredLanguage(metadata.languageId)) {
+            score += 50;
+        }
+
+        if (metadata.startupBehavior === LanguageRuntimeStartupBehavior.Immediate) {
+            score += 10;
+        }
+
+        if (this.getPreferredRuntime(metadata.languageId)?.runtimeId === metadata.runtimeId) {
+            score += 5;
+        }
+
+        return score;
     }
 
     dispose(): void {
