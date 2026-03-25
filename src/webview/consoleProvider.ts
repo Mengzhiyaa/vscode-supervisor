@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { MessageConnection } from 'vscode-jsonrpc';
-import { CoreConfigurationKeys, CoreConfigurationSections } from '../coreCommandIds';
+import { CoreConfigurationKeys, CoreConfigurationSections, ViewIds } from '../coreCommandIds';
 import { BaseWebviewProvider } from './baseProvider';
 import * as ConsoleProtocol from '../rpc/webview/console';
 import * as LspProtocol from '../rpc/webview/lsp';
@@ -111,6 +111,32 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
 
     protected get _providerName(): string {
         return 'ConsoleViewProvider';
+    }
+
+    async reveal(preserveFocus: boolean): Promise<void> {
+        const view = this.view;
+        if (view) {
+            view.show(preserveFocus);
+            return;
+        }
+
+        const editorToRestore = preserveFocus ? vscode.window.activeTextEditor : undefined;
+        const restoreFocus = async (): Promise<void> => {
+            if (!editorToRestore) {
+                return;
+            }
+
+            await vscode.window.showTextDocument(editorToRestore.document, {
+                viewColumn: editorToRestore.viewColumn,
+                preserveFocus: false,
+            });
+        };
+
+        try {
+            await vscode.commands.executeCommand('workbench.views.action.showView', ViewIds.console);
+        } finally {
+            await restoreFocus();
+        }
     }
 
     /**

@@ -172,6 +172,9 @@ export interface IPositronConsoleService extends vscode.Disposable {
     readonly activeCodeEditor: vscode.TextEditor | undefined;
 
     initialize(): void;
+    revealConsole(preserveFocus?: boolean): Promise<void>;
+    focusConsole(): Promise<void>;
+    showConsole(): Promise<void>;
     getConsoleWidth(): number;
     setActivePositronConsoleSession(sessionId: string): void;
     deletePositronConsoleSession(sessionId: string): void;

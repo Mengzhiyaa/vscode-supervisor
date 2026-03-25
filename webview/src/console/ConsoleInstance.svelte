@@ -57,7 +57,7 @@
         charWidth = 0,
         onSelectAll,
         onFocusInput,
-        onTypeToInput,
+        onInsertText,
         onPasteText,
         onRestart = undefined,
         onInputAnchorReady = undefined,
@@ -79,7 +79,7 @@
         charWidth: number;
         onSelectAll: () => void;
         onFocusInput: () => void;
-        onTypeToInput: (text: string) => void;
+        onInsertText: (text: string) => void;
         onPasteText: (text: string) => void;
         onRestart?: () => void;
         onInputAnchorReady?: (
@@ -121,6 +121,7 @@
     let contextMenuY = $state(0);
     let contextMenuClipboardText = $state("");
     let contextMenuCopyEnabled = $state(false);
+    let composingInput = $state(false);
 
     const contextMenuEntries = $derived.by(
         (): ContextMenuEntry[] => [
@@ -544,12 +545,29 @@
         if (
             (noOtherModifiers || onlyShiftKey) &&
             e.key.length === 1 &&
+            !composingInput &&
             !searchVisible
         ) {
             e.preventDefault();
             e.stopPropagation();
-            onTypeToInput(e.key);
+            onInsertText(e.key);
         }
+    }
+
+    function handleCompositionStart() {
+        composingInput = true;
+    }
+
+    function handleCompositionEnd(event: CompositionEvent) {
+        composingInput = false;
+
+        if (!event.data || searchVisible) {
+            return;
+        }
+
+        event.preventDefault();
+        event.stopPropagation();
+        onInsertText(event.data);
     }
 
     /**
@@ -737,6 +755,8 @@
     style:--console-char-width={charWidth > 0 ? `${charWidth}px` : undefined}
     onclick={handleClick}
     onkeydown={handleKeyDown}
+    oncompositionstart={handleCompositionStart}
+    oncompositionend={handleCompositionEnd}
     onscroll={handleScroll}
     onwheel={handleWheel}
     oncontextmenu={handleContextMenu}

@@ -32,18 +32,32 @@
     });
 
     onMount(() => {
-        // Auto-focus and scroll into view when mounted
+        // Keep prompts visible, but only take keyboard focus when the console
+        // already owns focus.
         readyInput();
     });
 
     /**
-     * Readies the input by scrolling it into view and focusing.
+     * Readies the input by scrolling it into view and optionally focusing.
      */
     function readyInput() {
         if (inputRef) {
             inputRef.scrollIntoView({ behavior: "auto" });
-            inputRef.focus();
+            if (shouldAutoFocusPrompt()) {
+                inputRef.focus();
+            }
         }
+    }
+
+    function shouldAutoFocusPrompt(): boolean {
+        const activeElement = document.activeElement;
+        if (!(activeElement instanceof HTMLElement)) {
+            return false;
+        }
+
+        return !!activeElement.closest(
+            ".console-instance, .console-input, .activity-prompt",
+        );
     }
 
     /**

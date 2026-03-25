@@ -12,7 +12,7 @@
     - Current code fragment preservation
 -->
 <script lang="ts">
-    import { onMount, onDestroy } from "svelte";
+    import { onMount, onDestroy, tick } from "svelte";
     import type { MessageConnection } from "vscode-jsonrpc/browser";
     import { monaco, ensureMonacoRuntime } from "$lib/monaco/setup";
     import {
@@ -137,6 +137,10 @@
     let languageMonacoSupportModuleLanguageId = "";
     let destroyed = false;
     let inputVisibilityAnimationFrame: number | undefined;
+    let activationEpoch = 0;
+    let activationState = $state<"idle" | "switching">("idle");
+    let activatingSessionId = $state<string | undefined>(undefined);
+    let committedSessionId = $state<string | undefined>(undefined);
 
     const handledCommandNonces = new Set<number>();
     const editorHost = createEditorHost();
@@ -365,7 +369,70 @@
     }
 
     function currentSessionId(): string {
-        return editorHost.getActiveSessionId() || sessionId;
+        return committedSessionId || editorHost.getActiveSessionId() || sessionId;
+    }
+
+    function waitForAnimationFrame(): Promise<void> {
+        return new Promise((resolve) => {
+            requestAnimationFrame(() => resolve());
+        });
+    }
+
+    function normalizeEditorSelectionToEnd(
+        model: monaco.editor.ITextModel | null | undefined,
+    ): void {
+        if (!codeEditorWidget || !model) {
+            return;
+        }
+
+        const lineNumber = model.getLineCount();
+        const column = model.getLineMaxColumn(lineNumber);
+        const selection = new monaco.Selection(
+            lineNumber,
+            column,
+            lineNumber,
+            column,
+        );
+
+        codeEditorWidget.setSelections([selection]);
+        codeEditorWidget.setPosition({ lineNumber, column });
+        codeEditorWidget.revealPosition(
+            { lineNumber, column },
+            monaco.editor.ScrollType.Immediate,
+        );
+    }
+
+    function resetEditorTransientState(): void {
+        if (!codeEditorWidget) {
+            return;
+        }
+
+        const contributionIds = [
+            "editor.contrib.suggestController",
+            "editor.contrib.parameterHintsController",
+            "editor.contrib.contentHover",
+            "snippetController2",
+        ];
+
+        for (const contributionId of contributionIds) {
+            const contribution = (codeEditorWidget as any).getContribution?.(
+                contributionId,
+            ) as
+                | {
+                      cancelSuggestWidget?: () => void;
+                      cancel?: () => void;
+                      hide?: () => void;
+                      reset?: () => void;
+                      cancelSession?: () => void;
+                  }
+                | undefined;
+
+            contribution?.cancelSuggestWidget?.();
+            contribution?.cancel?.();
+            contribution?.hide?.();
+            contribution?.reset?.();
+            contribution?.cancelSession?.();
+        }
     }
 
     // Sync refs when props change
@@ -654,6 +721,38 @@
         historyBrowserSelectedIndex = 0;
     }
 
+    function applyInsertText(text: string): void {
+        const selections = codeEditorWidget.getSelections();
+        if (!selections || !selections.length) {
+            const position = codeEditorWidget.getPosition();
+            if (!position) {
+                return;
+            }
+
+            codeEditorWidget.executeEdits("console", [
+                {
+                    range: new monaco.Range(
+                        position.lineNumber,
+                        position.column,
+                        position.lineNumber,
+                        position.column,
+                    ),
+                    text,
+                    forceMoveMarkers: true,
+                },
+            ]);
+            return;
+        }
+
+        const edits = selections.map((selection) => ({
+            range: selection,
+            text,
+            forceMoveMarkers: true,
+        }));
+
+        codeEditorWidget.executeEdits("console", edits);
+    }
+
     function applyPasteText(text: string) {
         const selections = codeEditorWidget.getSelections();
         if (!selections || !selections.length) {
@@ -734,12 +833,10 @@
             case "focus":
                 codeEditorWidget?.focus();
                 break;
-            case "type":
+            case "insertText":
                 if (codeEditorWidget) {
                     codeEditorWidget.focus();
-                    codeEditorWidget.trigger("keyboard", "type", {
-                        text: command.text,
-                    });
+                    applyInsertText(command.text);
                 }
                 break;
             case "paste":
@@ -774,7 +871,6 @@
                     currentSessionId(),
                     codeEditorWidget?.getValue() ?? "",
                 );
-                codeEditorWidget?.focus();
                 break;
             case "setPendingCode":
                 if (codeEditorWidget) {
@@ -797,7 +893,7 @@
     function needsActiveEditorContext(command: ConsoleInputCommand): boolean {
         return (
             command.kind === "focus" ||
-            command.kind === "type" ||
+            command.kind === "insertText" ||
             command.kind === "paste" ||
             command.kind === "historyUp" ||
             command.kind === "historyDown" ||
@@ -812,43 +908,74 @@
         }
     }
 
-    function activateSessionModel(
+    async function activateSessionModel(
         nextSessionId: string,
         nextLanguageId: string,
         force = false,
-    ): void {
+    ): Promise<void> {
         if (!codeEditorWidget) {
             return;
-        }
-
-        const previousSessionId = currentSessionId();
-        if (previousSessionId === nextSessionId) {
-            const nextState = sessionModelManager.ensureSession(
-                nextSessionId,
-                nextLanguageId,
-            );
-            if (!force && codeEditorWidget.getModel() === nextState.model) {
-                flushPendingCommands(nextSessionId);
-                return;
-            }
-        }
-
-        if (previousSessionId !== nextSessionId) {
-            saveSessionState(previousSessionId);
         }
 
         const nextState = sessionModelManager.ensureSession(
             nextSessionId,
             nextLanguageId,
         );
+        const previousSessionId = committedSessionId;
+        const epoch = ++activationEpoch;
+
+        if (
+            !force &&
+            previousSessionId === nextSessionId &&
+            codeEditorWidget.getModel() === nextState.model
+        ) {
+            flushPendingCommands(nextSessionId);
+            return;
+        }
+
+        if (previousSessionId && previousSessionId !== nextSessionId) {
+            saveSessionState(previousSessionId);
+        }
+
+        activationState = "switching";
+        activatingSessionId = nextSessionId;
+        resetEditorTransientState();
         editorHost.activateSession(
             nextSessionId,
             nextState.model,
             nextState.viewState,
         );
 
+        if (destroyed || epoch !== activationEpoch) {
+            return;
+        }
+
         applyHistoryState(sessionModelManager.getHistoryState(nextSessionId));
+
+        await tick();
+        await waitForAnimationFrame();
+
+        if (destroyed || epoch !== activationEpoch || !codeEditorWidget) {
+            return;
+        }
+
+        const currentWidth =
+            codeEditorWidgetContainerRef?.clientWidth || codeEditorWidth || width;
+        codeEditorWidth = currentWidth;
+        codeEditorWidget.layout({
+            width: currentWidth,
+            height: codeEditorWidget.getContentHeight(),
+        });
+
+        if (!nextState.viewState) {
+            normalizeEditorSelectionToEnd(nextState.model);
+        }
+
+        committedSessionId = nextSessionId;
+        activationState = "idle";
+        activatingSessionId = undefined;
         flushPendingCommands(nextSessionId);
+        scheduleEnsureInputBottomVisible();
     }
 
     function enqueuePendingCommand(
@@ -1064,26 +1191,11 @@
 
             editorHost.setEditor(codeEditorWidget);
 
-            const initialSessionState = sessionModelManager.ensureSession(
-                sessionId,
-                initialLanguageId,
-            );
-            editorHost.activateSession(
-                sessionId,
-                initialSessionState.model,
-                initialSessionState.viewState,
-            );
-            applyHistoryState(sessionModelManager.getHistoryState(sessionId));
+            await activateSessionModel(sessionId, initialLanguageId, true);
             syncKnownSessionModels();
-            flushPendingCommands(sessionId);
 
             // Set up keyboard shortcuts (Positron keyDownHandler pattern)
             setupKeyBindings();
-
-            // Ensure shared language providers are registered (singleton)
-            if (active && !hidden) {
-                codeEditorWidget.focus();
-            }
 
             // Auto-grow the editor as content size changes (Positron pattern)
             // Keep this handler layout-only to avoid fighting outer container scroll logic.
@@ -1176,7 +1288,9 @@
             disposables.push(
                 codeEditorWidget.onDidFocusEditorText(() => {
                     if (!activeRef.current) {
-                        onActivate(currentSessionId());
+                        onActivate(
+                            editorHost.getActiveSessionId() || currentSessionId(),
+                        );
                     }
                     scheduleEnsureInputBottomVisible();
                 }),
@@ -1248,6 +1362,9 @@
 
     onDestroy(() => {
         destroyed = true;
+        activationEpoch += 1;
+        activationState = "idle";
+        activatingSessionId = undefined;
 
         if (codeEditorWidget) {
             saveSessionState(currentSessionId());
@@ -1272,24 +1389,39 @@
             return;
         }
 
+        const targetSessionId = inputCommand.sessionId;
+        const activeCommittedSessionId = committedSessionId;
+        const isActivationPending = activationState === "switching";
         handledCommandNonces.add(inputCommand.nonce);
 
         if (!codeEditorWidget) {
-            enqueuePendingCommand(inputCommand.sessionId, inputCommand.command);
+            enqueuePendingCommand(targetSessionId, inputCommand.command);
+            return;
+        }
+
+        if (isActivationPending) {
+            if (
+                needsActiveEditorContext(inputCommand.command) &&
+                targetSessionId !== activeCommittedSessionId &&
+                targetSessionId !== activatingSessionId
+            ) {
+                onActivate(targetSessionId);
+            }
+            enqueuePendingCommand(targetSessionId, inputCommand.command);
             return;
         }
 
         if (
-            inputCommand.sessionId !== currentSessionId() &&
+            targetSessionId !== activeCommittedSessionId &&
             needsActiveEditorContext(inputCommand.command)
         ) {
-            onActivate(inputCommand.sessionId);
-            enqueuePendingCommand(inputCommand.sessionId, inputCommand.command);
+            onActivate(targetSessionId);
+            enqueuePendingCommand(targetSessionId, inputCommand.command);
             return;
         }
 
-        if (inputCommand.sessionId !== currentSessionId()) {
-            enqueuePendingCommand(inputCommand.sessionId, inputCommand.command);
+        if (targetSessionId !== activeCommittedSessionId) {
+            enqueuePendingCommand(targetSessionId, inputCommand.command);
             return;
         }
 
@@ -1303,7 +1435,7 @@
             return;
         }
 
-        activateSessionModel(sessionId, currentLanguageId());
+        void activateSessionModel(sessionId, currentLanguageId());
     });
 
     $effect(() => {
@@ -1316,7 +1448,7 @@
                 return;
             }
 
-            activateSessionModel(sessionId, currentLanguageId(), true);
+            void activateSessionModel(sessionId, currentLanguageId(), true);
 
             if (themeData) {
                 applyMonacoTheme(themeData);
@@ -1744,10 +1876,9 @@
         );
     }
 
-    // Focus management for multi-session support (Solution 1)
-    // When this session becomes active, focus the editor
-    // When inactive, disable the editor to prevent it from capturing keyboard events
-    // Also sync activeRef.current to solve closure capture issue
+    // Focus management for multi-session support.
+    // Active/inactive controls whether the editor can capture events, but
+    // activation alone must not move keyboard focus into the console.
     $effect(() => {
         // Sync activeRef.current with the latest active prop value
         activeRef.current = active;
@@ -1757,18 +1888,12 @@
             const isEnabled = active && !hidden;
 
             if (isEnabled) {
-                // Active session: enable and focus the editor
+                // Active session: enable the editor without stealing focus.
                 if (editorDomNode) {
                     // Restore pointer events and visibility
                     editorDomNode.style.pointerEvents = "";
                     editorDomNode.style.visibility = "";
                 }
-                // Ensure DOM/layout are ready before focusing
-                requestAnimationFrame(() => {
-                    if (activeRef.current) {
-                        codeEditorWidget.focus();
-                    }
-                });
             } else {
                 // Inactive session: completely disable the editor to prevent keyboard capture
                 if (editorDomNode) {

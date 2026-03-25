@@ -17,6 +17,7 @@ import {
     RuntimeStartMode,
 } from './api';
 import { WebviewManager } from './webview/manager';
+import { PositronNewFolderService } from './newFolder/positronNewFolderService';
 import { RuntimeManager } from './runtime/manager';
 import { RuntimeSession } from './runtime/session';
 import { RuntimeSessionService } from './runtime/runtimeSession';
@@ -113,6 +114,7 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
     private readonly _runtimeManager: RuntimeManager;
     private readonly _sessionManager: RuntimeSessionService;
     private readonly _runtimeStartupService: RuntimeStartupService;
+    private readonly _positronNewFolderService: PositronNewFolderService;
     private readonly _outputChannel: vscode.LogOutputChannel;
     private readonly _languageSupport = new Map<string, ILanguageSupportRegistration<any>>();
     private readonly _pendingBinaryProviders = new Map<string, IBinaryProvider>();
@@ -162,16 +164,23 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
         this._runtimeManager = new RuntimeManager(_context, this._sessionManager, this._outputChannel);
         this._disposables.push(this._runtimeManager);
 
+        this._positronNewFolderService = new PositronNewFolderService(_context, this._outputChannel);
+        this._disposables.push(this._positronNewFolderService);
+
         // Initialize runtime startup orchestration (Positron-style)
         this._runtimeStartupService = new RuntimeStartupService(
             _context,
             this._runtimeManager,
             this._sessionManager,
+            this._positronNewFolderService,
             this._outputChannel
         );
         this._disposables.push(this._runtimeStartupService);
         this._disposables.push(
             this._runtimeStartupService.registerRuntimeManager(this._runtimeManager),
+            this._runtimeManager.onDidFinishDiscovery(() => {
+                this._runtimeStartupService.completeDiscovery(this._runtimeManager.id);
+            }),
         );
 
         // Initialize service-class services (1:1 Positron pattern)
@@ -268,10 +277,15 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
         return this._runtimeStartupService;
     }
 
+    get positronNewFolderService(): ISupervisorFrameworkApi['positronNewFolderService'] {
+        return this._positronNewFolderService;
+    }
+
     getApi(): ISupervisorFrameworkApi {
         return {
             runtimeSessionService: this.runtimeSessionService,
             runtimeStartupService: this.runtimeStartupService,
+            positronNewFolderService: this.positronNewFolderService,
             version: this.version,
             startRuntime: (metadata, source, activate) =>
                 this.startRuntime(metadata, source, activate),
@@ -435,12 +449,14 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
             logChannel: this._outputChannel,
             runtimeSessionService: this._sessionManager,
             runtimeStartupService: this._runtimeStartupService,
+            positronNewFolderService: this._positronNewFolderService,
             runtimeManager: this._runtimeManager,
             positronConsoleService: {
                 onDidChangeConsoleWidth: this._consoleService.onDidChangeConsoleWidth,
-                showConsole: () => {
-                    this._webviewManager.showConsole();
-                },
+                revealConsole: (preserveFocus?: boolean) =>
+                    this._consoleService.revealConsole(preserveFocus),
+                focusConsole: () => this._consoleService.focusConsole(),
+                showConsole: () => this._consoleService.showConsole(),
                 getConsoleWidth: () => {
                     return this._consoleService.getConsoleWidth();
                 },
@@ -1086,13 +1102,13 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
                     documentUri: string,
                     position: { line: number; character: number }
                 ) => {
-                    const session = this._sessionManager.activeSession;
+                    const document = await vscode.workspace.openTextDocument(vscode.Uri.parse(documentUri));
+                    const session = this._sessionManager.getConsoleSessionForLanguage(document.languageId);
                     const provider = session?.lsp.statementRangeProvider;
                     if (!session || !provider) {
                         return undefined;
                     }
 
-                    const document = await vscode.workspace.openTextDocument(vscode.Uri.parse(documentUri));
                     if (document.languageId !== session.runtimeMetadata.languageId) {
                         return undefined;
                     }

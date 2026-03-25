@@ -1,9 +1,16 @@
 import * as vscode from 'vscode';
 import type { LanguageRuntimeExit } from './internal/runtimeTypes';
+import type { IPositronNewFolderService } from './newFolder/positronNewFolder';
 import { RuntimeExitReason, RuntimeStartMode, RuntimeState } from './internal/runtimeTypes';
 
 export type { LanguageRuntimeExit } from './internal/runtimeTypes';
 export { RuntimeExitReason, RuntimeStartMode, RuntimeState } from './internal/runtimeTypes';
+export { NewFolderStartupPhase } from './newFolder/positronNewFolder';
+export type {
+    NewFolderConfiguration,
+    IPositronNewFolderService,
+    IPositronNewFolderTaskOptions,
+} from './newFolder/positronNewFolder';
 
 export enum LanguageRuntimeSessionMode {
     Console = 'console',
@@ -344,7 +351,7 @@ export interface IRuntimeSessionService {
     getSession(sessionId: string): ILanguageRuntimeSession | undefined;
     getActiveSession(sessionId: string): ActiveRuntimeSession | undefined;
     getActiveSessions(): ActiveRuntimeSession[];
-    getConsoleSessionForRuntime(runtimeId: string): ILanguageRuntimeSession | undefined;
+    getConsoleSessionForRuntime(runtimeId: string, includeExited?: boolean): ILanguageRuntimeSession | undefined;
     getConsoleSessionForLanguage(languageId: string): ILanguageRuntimeSession | undefined;
     getNotebookSessionForNotebookUri(notebookUri: vscode.Uri): ILanguageRuntimeSession | undefined;
     startNewRuntimeSession(
@@ -386,7 +393,9 @@ export interface IRuntimeSessionService {
 
 export interface IPositronConsoleService {
     readonly onDidChangeConsoleWidth: vscode.Event<number>;
-    showConsole(): void;
+    revealConsole(preserveFocus?: boolean): Promise<void>;
+    focusConsole(): Promise<void>;
+    showConsole(): Promise<void>;
     getConsoleWidth(): number;
     executeCode(
         languageId: string,
@@ -465,6 +474,7 @@ export interface ILanguageContributionServices {
     readonly logChannel: vscode.LogOutputChannel;
     readonly runtimeSessionService: IRuntimeSessionService;
     readonly runtimeStartupService: IRuntimeStartupService;
+    readonly positronNewFolderService: IPositronNewFolderService;
     readonly runtimeManager: IRuntimeManager;
     readonly positronConsoleService: IPositronConsoleService;
     readonly positronHelpService: IPositronHelpService;
@@ -506,6 +516,7 @@ export interface ILanguageRuntimeRegistration<TInstallation = unknown> {
 export interface ISupervisorFrameworkApi {
     readonly runtimeSessionService: IRuntimeSessionService;
     readonly runtimeStartupService: IRuntimeStartupService;
+    readonly positronNewFolderService: IPositronNewFolderService;
     readonly version: string;
     startRuntime(
         metadata: LanguageRuntimeMetadata,

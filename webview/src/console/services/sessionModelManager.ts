@@ -5,7 +5,7 @@ import type { IInputHistoryEntry } from "../history";
 
 export type ConsoleInputCommand =
     | { kind: "focus" }
-    | { kind: "type"; text: string }
+    | { kind: "insertText"; text: string }
     | { kind: "paste"; text: string }
     | { kind: "historyUp"; usingPrefixMatch: boolean }
     | { kind: "historyDown" }
@@ -272,7 +272,15 @@ export function createSessionModelManager(
 
         enqueuePending(sessionId, command) {
             const queue = pendingCommandsBySession.get(sessionId) ?? [];
-            queue.push(command);
+            const previousCommand = queue[queue.length - 1];
+            if (
+                previousCommand?.kind === "insertText" &&
+                command.kind === "insertText"
+            ) {
+                previousCommand.text += command.text;
+            } else {
+                queue.push(command);
+            }
             pendingCommandsBySession.set(sessionId, queue);
         },
 

@@ -4,7 +4,7 @@ import { VariablesViewProvider } from './variablesProvider';
 import { PlotsViewProvider } from './plotsProvider';
 import { ViewerViewProvider } from './viewerProvider';
 import { HelpViewProvider } from './helpProvider';
-import { ViewCommands, ViewIds } from '../coreCommandIds';
+import { ViewIds } from '../coreCommandIds';
 import { RuntimeSessionService } from '../runtime/runtimeSession';
 import { RuntimeSession } from '../runtime/session';
 import { PositronConsoleService } from '../services/console';
@@ -239,10 +239,24 @@ export class WebviewManager implements vscode.Disposable {
     }
 
     /**
-     * Shows the console webview
+     * Reveals the console webview.
      */
-    showConsole(): void {
-        vscode.commands.executeCommand(ViewCommands.consoleFocus);
+    async revealConsole(preserveFocus: boolean = false): Promise<void> {
+        await this._consoleService.revealConsole(preserveFocus);
+    }
+
+    /**
+     * Focuses the console input.
+     */
+    async focusConsole(): Promise<void> {
+        await this._consoleService.focusConsole();
+    }
+
+    /**
+     * Shows the console webview.
+     */
+    async showConsole(): Promise<void> {
+        await this.focusConsole();
     }
 
     /**

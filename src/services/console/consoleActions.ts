@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
-import { CoreCommandIds, InternalCommandIds, ViewCommands } from '../../coreCommandIds';
+import { CoreCommandIds, InternalCommandIds } from '../../coreCommandIds';
 import { PositronConsoleService } from './consoleService';
 import { IConsoleCodeAttribution } from './interfaces/consoleService';
 
@@ -69,14 +69,9 @@ export function registerConsoleActions(
 
     // Focus Console
     disposables.push(
-        vscode.commands.registerCommand(CoreCommandIds.consoleFocusConsole, () => {
-            const activeInstance = consoleService.activePositronConsoleInstance;
-            if (activeInstance) {
-                outputChannel.info('[ConsoleActions] Focusing console input');
-                activeInstance.focusInput();
-            }
-            // Also show the console panel
-            vscode.commands.executeCommand(ViewCommands.consoleFocus);
+        vscode.commands.registerCommand(CoreCommandIds.consoleFocusConsole, async () => {
+            outputChannel.info('[ConsoleActions] Focusing console input');
+            await consoleService.focusConsole();
         })
     );
 
@@ -244,16 +239,10 @@ async function executeCodeWithAdvancement(
     const position = selection.active;
 
     let code: string | undefined;
-    let executedLineNumber = position.line;
-
-    // Track whether we used a statement range provider
-    let usedStatementRange = false;
-    let statementRange: StatementRange | undefined;
 
     // If we have a selection and it isn't empty, use its contents (Positron pattern)
     if (!selection.isEmpty) {
         code = document.getText(selection);
-        executedLineNumber = selection.end.line; // Use selection end line for cursor advancement
 
         // HACK: Python multiline indented code fix (Positron pattern)
         if (document.languageId === 'python') {
@@ -262,22 +251,27 @@ async function executeCodeWithAdvancement(
                 code += '\n';
             }
         }
+
+        if (advance) {
+            await advanceSelection(editor, selection);
+        }
     }
 
-
     // If no selection, try to get statement range from LSP (Positron pattern)
-    if (!code) {
-        statementRange = await getStatementRangeAtPosition(document, position, outputChannel);
+    if (code === undefined) {
+        const statementRange = await getStatementRangeAtPosition(document, position, outputChannel);
 
         if (statementRange) {
-            usedStatementRange = true;
             code = statementRange.code ?? document.getText(statementRange.range);
-            executedLineNumber = statementRange.range.end.line;
+
+            if (advance) {
+                await advanceStatement(editor, statementRange, outputChannel);
+            }
         }
     }
 
     // If still no code, fall back to current line (Positron pattern)
-    if (!code) {
+    if (code === undefined) {
         let lineNumber = position.line;
 
         // Find the first non-empty line at or after cursor position
@@ -286,29 +280,38 @@ async function executeCodeWithAdvancement(
             if (lineText.length > 0) {
                 code = lineText;
                 lineNumber = number;
-                executedLineNumber = number;
                 break;
             }
         }
 
+        if (advance && code !== undefined) {
+            await advanceLine(editor, position, lineNumber);
+        }
+
         // If we're at the end and still no code, handle empty document end (Positron pattern)
-        if (!code && lineNumber >= document.lineCount - 1) {
+        if (code === undefined && lineNumber >= document.lineCount - 1) {
             await amendNewlineToEnd(editor);
-            return;
+
+            const newPosition = new vscode.Position(lineNumber, 0);
+            editor.selection = new vscode.Selection(newPosition, newPosition);
+            editor.revealRange(
+                new vscode.Range(newPosition, newPosition),
+                vscode.TextEditorRevealType.InCenterIfOutsideViewport,
+            );
         }
 
         // If still no code, execute empty string (Positron pattern)
-        if (!code) {
+        if (code === undefined) {
             code = '';
         }
     }
 
     // Execute the code
-    if (code) {
+    if (code !== undefined) {
         const attribution: IConsoleCodeAttribution = {
             source: 'editor',
             fileUri: document.uri,
-            lineNumber: executedLineNumber + 1
+            lineNumber: position.line + 1
         };
 
         outputChannel.info(`[ConsoleActions] Executing code: ${code.substring(0, 50)}...`);
@@ -320,17 +323,31 @@ async function executeCodeWithAdvancement(
             attribution,
             false // Don't focus console to keep cursor in editor (Positron pattern)
         );
-
-        // Advance cursor if requested
-        if (advance) {
-            outputChannel.info(`[ConsoleActions] Advancing cursor. usedStatementRange=${usedStatementRange}, executedLineNumber=${executedLineNumber}`);
-            if (usedStatementRange && statementRange) {
-                await advanceStatement(editor, statementRange, outputChannel);
-            } else {
-                await advanceLine(editor, executedLineNumber, outputChannel);
-            }
-        }
     }
+}
+
+async function advanceSelection(
+    editor: vscode.TextEditor,
+    selection: vscode.Selection,
+): Promise<void> {
+    const document = editor.document;
+    const lastSelectedLine =
+        selection.end.character === 0 && selection.end.line > selection.start.line
+            ? selection.end.line - 1
+            : selection.end.line;
+
+    let nextLine = lastSelectedLine + 1;
+    if (nextLine >= document.lineCount) {
+        await amendNewlineToEnd(editor);
+        nextLine = editor.document.lineCount - 1;
+    }
+
+    const newPosition = new vscode.Position(nextLine, 0);
+    editor.selection = new vscode.Selection(newPosition, newPosition);
+    editor.revealRange(
+        new vscode.Range(newPosition, newPosition),
+        vscode.TextEditorRevealType.InCenterIfOutsideViewport,
+    );
 }
 
 /**
@@ -423,12 +440,6 @@ async function advanceStatement(
     const newPosition = new vscode.Position(newLineNumber, newColumn);
     editor.selection = new vscode.Selection(newPosition, newPosition);
     editor.revealRange(new vscode.Range(newPosition, newPosition), vscode.TextEditorRevealType.InCenterIfOutsideViewport);
-
-    // Ensure editor retains focus after execution (fix for webview stealing focus)
-    await vscode.window.showTextDocument(editor.document, {
-        viewColumn: editor.viewColumn,
-        preserveFocus: false
-    });
 }
 
 /**
@@ -437,45 +448,35 @@ async function advanceStatement(
  */
 async function advanceLine(
     editor: vscode.TextEditor,
-    executedLineNumber: number,
-    outputChannel: vscode.LogOutputChannel
+    position: vscode.Position,
+    lineNumber: number,
 ): Promise<void> {
     const document = editor.document;
-    let nextLineNumber = executedLineNumber + 1;
     let onlyEmptyLines = true;
 
     // Find the next non-empty line (Positron pattern)
-    for (let number = nextLineNumber; number < document.lineCount; ++number) {
+    for (let number = lineNumber + 1; number < document.lineCount; ++number) {
         if (trimNewlines(document.lineAt(number).text).length !== 0) {
             onlyEmptyLines = false;
-            nextLineNumber = number;
+            lineNumber = number;
             break;
         }
     }
 
     if (onlyEmptyLines) {
         // At minimum, move 1 line past executed code (Positron pattern)
-        nextLineNumber = executedLineNumber + 1;
+        lineNumber += 1;
 
-        if (nextLineNumber >= document.lineCount) {
+        if (lineNumber >= document.lineCount) {
             // Past end of document, add newline and move to it (Positron pattern)
-            const success = await amendNewlineToEnd(editor);
-            // After adding newline, document.lineCount has increased by 1
-            // Move to the new last line (which is now empty)
-            nextLineNumber = editor.document.lineCount - 1;
+            await amendNewlineToEnd(editor);
         }
     }
 
     // Move cursor (Positron pattern)
-    const newPosition = new vscode.Position(nextLineNumber, 0);
+    const newPosition = position.with(lineNumber, 0);
     editor.selection = new vscode.Selection(newPosition, newPosition);
     editor.revealRange(new vscode.Range(newPosition, newPosition), vscode.TextEditorRevealType.InCenterIfOutsideViewport);
-
-    // Ensure editor retains focus after execution (fix for webview stealing focus)
-    await vscode.window.showTextDocument(editor.document, {
-        viewColumn: editor.viewColumn,
-        preserveFocus: false
-    });
 }
 
 /**

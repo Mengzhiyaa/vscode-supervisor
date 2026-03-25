@@ -724,9 +724,6 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
             this.addOrUpdateRuntimeItemActivity(executionId, inputItem);
         }
 
-        setTimeout(() => {
-            this.focusInput();
-        }, 0);
     }
 
     /**

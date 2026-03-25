@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
-import { ViewCommands } from '../../coreCommandIds';
+import { ViewCommands, ViewIds } from '../../coreCommandIds';
 import {
     IPositronConsoleService,
     IPositronConsoleInstance,
@@ -39,7 +39,12 @@ export class PositronConsoleService implements IPositronConsoleService {
     private readonly _consoleInstancesBySessionId = new Map<string, PositronConsoleInstance>();
     private _activeConsoleInstance: PositronConsoleInstance | undefined;
     private _consoleWidth = 80;
-    private _consoleViewProvider: { view?: vscode.WebviewView } | undefined;
+    private _consoleViewProvider:
+        | {
+            view?: vscode.WebviewView;
+            reveal?(preserveFocus: boolean): Promise<void>;
+        }
+        | undefined;
     private readonly _disposables: vscode.Disposable[] = [];
     private readonly _consoleStateStore?: ConsoleStateStore;
 
@@ -179,8 +184,28 @@ export class PositronConsoleService implements IPositronConsoleService {
     /**
      * Sets the console webview provider so we can reveal the console without stealing focus.
      */
-    setConsoleViewProvider(provider: { view?: vscode.WebviewView } | undefined): void {
+    setConsoleViewProvider(
+        provider:
+            | {
+                view?: vscode.WebviewView;
+                reveal?(preserveFocus: boolean): Promise<void>;
+            }
+            | undefined,
+    ): void {
         this._consoleViewProvider = provider;
+    }
+
+    async revealConsole(preserveFocus: boolean = false): Promise<void> {
+        await this._revealConsole(preserveFocus);
+    }
+
+    async focusConsole(): Promise<void> {
+        await this._revealConsole(false);
+        this._activeConsoleInstance?.focusInput();
+    }
+
+    async showConsole(): Promise<void> {
+        await this.focusConsole();
     }
 
     getConsoleWidth(): number {
@@ -192,16 +217,7 @@ export class PositronConsoleService implements IPositronConsoleService {
         if (!instance) {
             return;
         }
-
-        // Dedup: skip if already the active instance to prevent
-        // oscillation feedback loops between backend and webview.
-        if (instance === this._activeConsoleInstance) {
-            return;
-        }
-
-        this._outputChannel.debug(`[PositronConsoleService] Setting active console: ${sessionId}`);
-        this._activeConsoleInstance = instance;
-        this._onDidChangeActivePositronConsoleInstanceEmitter.fire(instance);
+        this._setActivePositronConsoleInstance(instance);
     }
 
     deletePositronConsoleSession(sessionId: string): void {
@@ -235,27 +251,25 @@ export class PositronConsoleService implements IPositronConsoleService {
         errorBehavior: RuntimeErrorBehavior = RuntimeErrorBehavior.Continue,
         executionId?: string,
     ): Promise<string> {
-        // Always reveal the console panel so the user sees output.
-        // When focus is false (e.g. Ctrl+Enter from editor), reveal
-        // without stealing keyboard focus from the editor.
-        await this._revealConsoleIfHidden(!focus);
+        await this.revealConsole(!focus);
 
-        // Find or create appropriate console instance
-        let instance = sessionId
-            ? this._consoleInstancesBySessionId.get(sessionId)
-            : this._activeConsoleInstance;
-
+        const instance = await this._resolveConsoleInstance(languageId, sessionId, code);
         if (!instance) {
-            // Create new session if needed
-            this._outputChannel.debug('[PositronConsoleService] No active console, creating new session');
-            const session = await this._sessionManager.startConsoleSession();
-            instance = this._consoleInstancesBySessionId.get(session.sessionId);
-            if (!instance) {
-                throw new Error(`Console instance was not created for session ${session.sessionId}`);
+            throw new Error(`Could not find or create console for language ID ${languageId} (attempting to execute ${code})`);
+        }
+
+        if (instance !== this._activeConsoleInstance) {
+            this._setActivePositronConsoleInstance(instance);
+
+            if (instance.attachedRuntimeSession) {
+                this._sessionManager.foregroundSession = instance.attachedRuntimeSession;
             }
         }
 
-        // Execute code
+        if (focus) {
+            instance.focusInput();
+        }
+
         await instance.enqueueCode(
             code,
             attribution,
@@ -264,11 +278,6 @@ export class PositronConsoleService implements IPositronConsoleService {
             errorBehavior,
             executionId,
         );
-
-        // Focus if requested
-        if (focus) {
-            instance.focusInput();
-        }
 
         return instance.sessionId;
     }
@@ -300,7 +309,7 @@ export class PositronConsoleService implements IPositronConsoleService {
             );
         }
 
-        void this._revealConsoleIfHidden(false);
+        void this.revealConsole(true);
         this.setActivePositronConsoleSession(sessionId);
 
         if (!instance.revealExecution(executionId)) {
@@ -345,19 +354,127 @@ export class PositronConsoleService implements IPositronConsoleService {
     //#endregion
 
     //#region Private Methods
-    private async _revealConsoleIfHidden(preserveFocus: boolean = false): Promise<void> {
+    private async _revealConsole(preserveFocus: boolean = false): Promise<void> {
+        if (this._consoleViewProvider?.reveal) {
+            await this._consoleViewProvider.reveal(preserveFocus);
+            return;
+        }
+
+        const editorToRestore = preserveFocus ? vscode.window.activeTextEditor : undefined;
+        const restoreFocus = async (): Promise<void> => {
+            if (!editorToRestore) {
+                return;
+            }
+
+            await vscode.window.showTextDocument(editorToRestore.document, {
+                viewColumn: editorToRestore.viewColumn,
+                preserveFocus: false
+            });
+        };
+
         const view = this._consoleViewProvider?.view;
 
         if (view) {
-            if (!view.visible) {
-                view.show(preserveFocus);
-            }
+            view.show(preserveFocus);
+            await restoreFocus();
             return;
         }
 
         if (!preserveFocus) {
             await vscode.commands.executeCommand(ViewCommands.consoleFocus);
+            return;
         }
+
+        try {
+            await vscode.commands.executeCommand('workbench.views.action.showView', ViewIds.console);
+        } finally {
+            await restoreFocus();
+        }
+    }
+
+    private _setActivePositronConsoleInstance(instance: PositronConsoleInstance): void {
+        if (instance === this._activeConsoleInstance) {
+            return;
+        }
+
+        this._outputChannel.debug(`[PositronConsoleService] Setting active console: ${instance.sessionId}`);
+        this._activeConsoleInstance = instance;
+        this._onDidChangeActivePositronConsoleInstanceEmitter.fire(instance);
+    }
+
+    private async _resolveConsoleInstance(
+        languageId: string,
+        sessionId: string | undefined,
+        code: string,
+    ): Promise<PositronConsoleInstance | undefined> {
+        if (sessionId) {
+            const existingInstance = this._consoleInstancesBySessionId.get(sessionId);
+            if (!existingInstance) {
+                throw new Error(
+                    `Cannot execute code because the requested session ID ${sessionId} does not have a Positron console instance.`,
+                );
+            }
+
+            if (existingInstance.runtimeMetadata.languageId !== languageId) {
+                this._outputChannel.warn(
+                    `Code is being executed in a console instance for language ` +
+                    `${existingInstance.runtimeMetadata.languageId} (session ${sessionId}), not for requested language ${languageId}.`,
+                );
+            }
+
+            return existingInstance;
+        }
+
+        if (this._activeConsoleInstance?.runtimeMetadata.languageId === languageId) {
+            return this._activeConsoleInstance;
+        }
+
+        const existingLanguageInstance = this._findConsoleInstanceForLanguage(languageId);
+        if (existingLanguageInstance) {
+            return existingLanguageInstance;
+        }
+
+        return this._startConsoleInstanceForLanguage(languageId, code);
+    }
+
+    private _findConsoleInstanceForLanguage(languageId: string): PositronConsoleInstance | undefined {
+        return Array.from(this._consoleInstancesBySessionId.values())
+            .sort((a, b) => b.sessionMetadata.createdTimestamp - a.sessionMetadata.createdTimestamp)
+            .find((instance) => instance.runtimeMetadata.languageId === languageId);
+    }
+
+    private async _startConsoleInstanceForLanguage(
+        languageId: string,
+        code: string,
+    ): Promise<PositronConsoleInstance | undefined> {
+        const preferredRuntime = this._runtimeStartupService?.getPreferredRuntime(languageId);
+        if (preferredRuntime) {
+            const sessionId = await this._sessionManager.startNewRuntimeSession(
+                preferredRuntime.runtimeId,
+                preferredRuntime.runtimeName,
+                LanguageRuntimeSessionMode.Console,
+                undefined,
+                `User executed code in language ${languageId}, and no running runtime session was found for the language.`,
+                RuntimeStartMode.Starting,
+                true,
+            );
+            return sessionId ? this._consoleInstancesBySessionId.get(sessionId) : undefined;
+        }
+
+        this._outputChannel.debug(`[PositronConsoleService] No preferred runtime for ${languageId}; falling back to startConsoleSession`);
+        const session = await this._sessionManager.startConsoleSession();
+        const instance = this._consoleInstancesBySessionId.get(session.sessionId);
+        if (!instance) {
+            throw new Error(`Console instance was not created for session ${session.sessionId}`);
+        }
+
+        if (instance.runtimeMetadata.languageId !== languageId) {
+            this._outputChannel.warn(
+                `Started fallback console session ${session.sessionId} for language ${instance.runtimeMetadata.languageId} while executing ${languageId} code (${code}).`,
+            );
+        }
+
+        return instance;
     }
 
     private startPositronConsoleInstance(

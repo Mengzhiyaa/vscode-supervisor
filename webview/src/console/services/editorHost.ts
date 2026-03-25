@@ -60,6 +60,21 @@ export function createEditorHost(): EditorHost {
 
             if (viewState) {
                 editor.restoreViewState(viewState);
+            } else {
+                const lineNumber = model.getLineCount();
+                const column = model.getLineMaxColumn(lineNumber);
+
+                editor.setSelection({
+                    startLineNumber: lineNumber,
+                    startColumn: column,
+                    endLineNumber: lineNumber,
+                    endColumn: column,
+                });
+                editor.setPosition({ lineNumber, column });
+                editor.revealPositionInCenterIfOutsideViewport({
+                    lineNumber,
+                    column,
+                });
             }
 
             activeSessionId = sessionId;

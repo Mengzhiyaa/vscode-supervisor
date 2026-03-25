@@ -17,6 +17,7 @@
         ConsoleSettings,
         RuntimeStartupPhase,
     } from "../types/console";
+    import type { ConsoleInputCommand } from "./services/sessionModelManager";
     import type { MessageConnection } from "vscode-jsonrpc/browser";
     import {
         RuntimeItem,
@@ -124,18 +125,6 @@
         | ActivityItemOutputMessage
         | ActivityItemOutputPlot
         | ActivityItemPrompt;
-
-    type ConsoleInputCommand =
-        | { kind: "focus" }
-        | { kind: "type"; text: string }
-        | { kind: "paste"; text: string }
-        | { kind: "historyUp"; usingPrefixMatch: boolean }
-        | { kind: "historyDown" }
-        | { kind: "historyClear" }
-        | { kind: "openInEditor" }
-        | { kind: "setPendingCode"; code?: string }
-        | { kind: "historyAdd"; input: string; when?: number }
-        | { kind: "historySet"; entries: { input: string; when?: number }[] };
 
     interface ConsoleInputCommandEnvelope {
         sessionId: string;
@@ -782,7 +771,7 @@
         focusPreferredInput();
     }
 
-    function queueTypedInput(sessionId: string, text: string): void {
+    function queueInsertText(sessionId: string, text: string): void {
         if (!text.length) {
             return;
         }
@@ -794,7 +783,7 @@
         if (sessionId !== activeSessionId) {
             handleActivateSession(sessionId);
         }
-        emitInputCommand(sessionId, { kind: "type", text });
+        emitInputCommand(sessionId, { kind: "insertText", text });
     }
 
     function queuePastedInput(sessionId: string, text: string): void {
@@ -2038,7 +2027,7 @@
                 interruptible={activeSession?.state === "busy"}
                 interrupting={activeSession?.state === "interrupting"}
                 restarting={activeSession?.state === "restarting"}
-                showDeleteButton={consoleSessionListCollapsed}
+                showDeleteButton={Boolean(activeSession)}
                 canShutdown={canShutdownSession(activeSession)}
                 canStart={canStartSession(activeSession)}
                 traceEnabled={getTraceEnabled(activeSessionId)}
@@ -2099,7 +2088,7 @@
                             {openSearchRequest}
                             onSelectAll={() => selectAllRuntimeItems(session.id)}
                             onFocusInput={() => requestInputFocus(session.id)}
-                            onTypeToInput={(text) => queueTypedInput(session.id, text)}
+                            onInsertText={(text) => queueInsertText(session.id, text)}
                             onPasteText={(text) => queuePastedInput(session.id, text)}
                             onRestart={() => restartSession(session.id)}
                             onInputAnchorReady={handleInputAnchorReady}
