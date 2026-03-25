@@ -16,11 +16,19 @@ import { RuntimeSessionService } from './runtimeSession';
 
 const AFFILIATED_RUNTIME_KEY_PREFIX = 'vscode-supervisor.affiliatedRuntimeMetadata.v1';
 const PERSISTENT_WORKSPACE_SESSIONS = 'vscode-supervisor.workspaceSessionList.v1';
+const DISMISSED_ARCHITECTURE_MISMATCH_KEY_PREFIX = 'vscode-supervisor.dismissedArchMismatch.v1';
 
 interface IAffiliatedRuntimeMetadata {
     metadata: LanguageRuntimeMetadata;
     lastUsed: number;
     lastStarted: number;
+}
+
+interface INewFolderInitTaskRegistration {
+    readonly id: number;
+    readonly label: string;
+    readonly task: () => Promise<void>;
+    readonly affiliatedRuntimeMetadata?: LanguageRuntimeMetadata;
 }
 
 export interface ISessionRestoreFailedEvent {
@@ -59,9 +67,12 @@ export interface IRuntimeAutoStartEvent {
 export class RuntimeStartupService implements vscode.Disposable {
     private readonly _disposables: vscode.Disposable[] = [];
     private readonly _sessionLifecycleDisposables = new Map<string, vscode.Disposable[]>();
+    private readonly _runtimeManagerDisposablesById = new Map<number, vscode.Disposable[]>();
     private readonly _mostRecentlyStartedRuntimesByLanguageId = new Map<string, LanguageRuntimeMetadata>();
     private readonly _runtimeManagers: IRuntimeManager[] = [];
     private readonly _discoveryCompleteByExtHostId = new Map<number, boolean>();
+    private readonly _newFolderInitTaskRegistrations = new Map<number, INewFolderInitTaskRegistration>();
+    private readonly _newFolderInitTaskPromises = new Map<number, Promise<void>>();
 
     private readonly _onDidChangeRuntimeStartupPhase = new vscode.EventEmitter<RuntimeStartupPhase>();
     readonly onDidChangeRuntimeStartupPhase = this._onDidChangeRuntimeStartupPhase.event;
@@ -73,12 +84,15 @@ export class RuntimeStartupService implements vscode.Disposable {
     readonly onSessionRestoreFailure = this._onSessionRestoreFailure.event;
 
     private readonly _localWindowId = `window-${Math.random().toString(16).slice(2, 10)}`;
+    private readonly _shownArchitectureMismatchWarnings = new Set<string>();
 
     private _startupPhase = RuntimeStartupPhase.Initializing;
     private _startupPromise: Promise<void> | undefined;
     private _restoredSessions: SerializedSessionMetadata[] = [];
     private readonly _restoredSessionsLoadedPromise: Promise<void>;
     private _resolveRestoredSessionsLoaded!: () => void;
+    private _nextNewFolderInitTaskId = 1;
+    private _hasStartedNewFolderInitTasks = false;
 
     constructor(
         private readonly _context: vscode.ExtensionContext,
@@ -102,6 +116,7 @@ export class RuntimeStartupService implements vscode.Disposable {
                     session.runtimeMetadata.languageId,
                     session.runtimeMetadata,
                 );
+                void this._warnAboutArchitectureMismatch(session);
                 void this._saveRuntimeAffiliation(session.runtimeMetadata);
                 void this.saveWorkspaceSessions();
             }),
@@ -133,6 +148,9 @@ export class RuntimeStartupService implements vscode.Disposable {
             this._attachSessionLifecycleListeners(session);
         }
 
+        this._sessionManager.registerPersistedSessionRestoreHandler(() => {
+            return this._restorePersistedSessionsInBackground();
+        });
         void this._loadRestoredSessions();
     }
 
@@ -153,8 +171,22 @@ export class RuntimeStartupService implements vscode.Disposable {
         return this._startupPromise;
     }
 
-    resetArchitectureMismatchWarning(_languageId?: string): void {
-        return;
+    resetArchitectureMismatchWarning(languageId?: string): void {
+        if (languageId) {
+            this._shownArchitectureMismatchWarnings.delete(languageId);
+            void this._context.globalState.update(
+                this._architectureMismatchStorageKey(languageId),
+                undefined,
+            );
+            return;
+        }
+
+        this._shownArchitectureMismatchWarnings.clear();
+        for (const key of this._context.globalState.keys()) {
+            if (key.startsWith(`${DISMISSED_ARCHITECTURE_MISMATCH_KEY_PREFIX}.`)) {
+                void this._context.globalState.update(key, undefined);
+            }
+        }
     }
 
     hasAffiliatedRuntime(): boolean {
@@ -202,6 +234,34 @@ export class RuntimeStartupService implements vscode.Disposable {
         return this._runtimeManager.runtimes.find((runtime) => runtime.languageId === languageId);
     }
 
+    registerNewFolderInitTask(
+        task: Promise<void> | (() => Promise<void>),
+        options?: {
+            label?: string;
+            affiliatedRuntimeMetadata?: LanguageRuntimeMetadata;
+        },
+    ): vscode.Disposable {
+        const id = this._nextNewFolderInitTaskId++;
+        const registration: INewFolderInitTaskRegistration = {
+            id,
+            label: options?.label ?? `task-${id}`,
+            task: typeof task === 'function'
+                ? task
+                : () => task,
+            affiliatedRuntimeMetadata: options?.affiliatedRuntimeMetadata,
+        };
+
+        this._newFolderInitTaskRegistrations.set(registration.id, registration);
+
+        if (this._hasStartedNewFolderInitTasks) {
+            this._startRegisteredNewFolderInitTask(registration);
+        }
+
+        return new vscode.Disposable(() => {
+            this._newFolderInitTaskRegistrations.delete(registration.id);
+        });
+    }
+
     async getRestoredSessions(): Promise<SerializedSessionMetadata[]> {
         await this._restoredSessionsLoadedPromise;
         return [...this._restoredSessions];
@@ -218,18 +278,47 @@ export class RuntimeStartupService implements vscode.Disposable {
 
         if (discoveryComplete) {
             this._setStartupPhase(RuntimeStartupPhase.Complete);
+            this._sessionManager.implicitStartupSuppressed = false;
+            this._resetDiscoveryCompletionState();
         }
     }
 
     registerRuntimeManager(manager: IRuntimeManager): vscode.Disposable {
         this._runtimeManagers.push(manager);
         this._discoveryCompleteByExtHostId.set(manager.id, false);
+        const runtimeManagerDisposables: vscode.Disposable[] = [];
+
+        if (manager.onDidFinishDiscovery) {
+            runtimeManagerDisposables.push(
+                manager.onDidFinishDiscovery(() => {
+                    this.completeDiscovery(manager.id);
+                }),
+            );
+        }
+
+        if (manager.onDidDiscoverRuntime) {
+            runtimeManagerDisposables.push(
+                manager.onDidDiscoverRuntime(({ metadata }) => {
+                    if (this._startupPhase !== RuntimeStartupPhase.Complete) {
+                        return;
+                    }
+
+                    void this._autoStartDiscoveredRuntime(metadata);
+                }),
+            );
+        }
+
+        this._runtimeManagerDisposablesById.set(manager.id, runtimeManagerDisposables);
 
         return new vscode.Disposable(() => {
             const index = this._runtimeManagers.indexOf(manager);
             if (index >= 0) {
                 this._runtimeManagers.splice(index, 1);
             }
+            for (const disposable of this._runtimeManagerDisposablesById.get(manager.id) ?? []) {
+                disposable.dispose();
+            }
+            this._runtimeManagerDisposablesById.delete(manager.id);
             this._discoveryCompleteByExtHostId.delete(manager.id);
         });
     }
@@ -242,13 +331,11 @@ export class RuntimeStartupService implements vscode.Disposable {
     }
 
     private async _startupSequence(): Promise<void> {
+        this._sessionManager.implicitStartupSuppressed = true;
+        this._sessionManager.updateActiveLanguages();
         await this._awaitWorkspaceTrust();
 
-        this._restoredSessions = await this.getRestoredSessions();
-        if (this._restoredSessions.length > 0) {
-            this._setStartupPhase(RuntimeStartupPhase.Reconnecting);
-            await this._restoreSessions(this._restoredSessions);
-        }
+        await this._sessionManager.restorePersistedSessionsInBackground();
 
         if (this._sessionManager.sessions.length > 0) {
             this._setStartupPhase(RuntimeStartupPhase.Reconnecting);
@@ -306,8 +393,133 @@ export class RuntimeStartupService implements vscode.Disposable {
         }
     }
 
+    private async _restorePersistedSessionsInBackground(): Promise<void> {
+        this._restoredSessions = await this.getRestoredSessions();
+        if (this._restoredSessions.length === 0) {
+            return;
+        }
+
+        this._setStartupPhase(RuntimeStartupPhase.Reconnecting);
+        await this._restoreSessions(this._restoredSessions);
+    }
+
     private async _runNewFolderTasks(): Promise<void> {
-        return;
+        this._hasStartedNewFolderInitTasks = true;
+        if (this._newFolderInitTaskRegistrations.size === 0) {
+            this._sessionManager.updateActiveLanguages();
+            return;
+        }
+
+        this._setStartupPhase(RuntimeStartupPhase.NewFolderTasks);
+        for (const registration of this._newFolderInitTaskRegistrations.values()) {
+            this._startRegisteredNewFolderInitTask(registration);
+        }
+        await this._waitForRegisteredNewFolderInitTasks();
+        this._sessionManager.updateActiveLanguages();
+    }
+
+    private _startRegisteredNewFolderInitTask(
+        registration: INewFolderInitTaskRegistration,
+    ): void {
+        if (this._newFolderInitTaskPromises.has(registration.id)) {
+            return;
+        }
+
+        const taskPromise = this._runRegisteredNewFolderInitTask(registration)
+            .finally(() => {
+                this._newFolderInitTaskPromises.delete(registration.id);
+            });
+        this._newFolderInitTaskPromises.set(registration.id, taskPromise);
+    }
+
+    private async _waitForRegisteredNewFolderInitTasks(): Promise<void> {
+        while (this._newFolderInitTaskPromises.size > 0) {
+            await Promise.allSettled(Array.from(this._newFolderInitTaskPromises.values()));
+        }
+    }
+
+    private async _runRegisteredNewFolderInitTask(
+        registration: INewFolderInitTaskRegistration,
+    ): Promise<void> {
+        this._outputChannel.debug(`[RuntimeStartup] Running new-folder init task '${registration.label}'`);
+        try {
+            await registration.task();
+            if (registration.affiliatedRuntimeMetadata) {
+                await this._saveRuntimeAffiliation(registration.affiliatedRuntimeMetadata);
+            }
+        } catch (error) {
+            this._outputChannel.error(
+                `[RuntimeStartup] New-folder init task '${registration.label}' failed: ${error}`,
+            );
+        } finally {
+            this._newFolderInitTaskRegistrations.delete(registration.id);
+        }
+    }
+
+    private _architectureMismatchStorageKey(languageId: string): string {
+        return `${DISMISSED_ARCHITECTURE_MISMATCH_KEY_PREFIX}.${languageId}`;
+    }
+
+    private _normalizeArchitecture(value: unknown): string | undefined {
+        if (typeof value !== 'string') {
+            return undefined;
+        }
+
+        switch (value.toLowerCase()) {
+            case 'x64':
+            case 'amd64':
+            case 'x86_64':
+                return 'x64';
+            case 'arm64':
+            case 'aarch64':
+                return 'arm64';
+            case 'ia32':
+            case 'x86':
+                return 'ia32';
+            default:
+                return value.toLowerCase();
+        }
+    }
+
+    private async _warnAboutArchitectureMismatch(session: RuntimeSession): Promise<void> {
+        const languageId = session.runtimeMetadata.languageId;
+        if (this._shownArchitectureMismatchWarnings.has(languageId)) {
+            return;
+        }
+
+        const dismissed = this._context.globalState.get<boolean>(
+            this._architectureMismatchStorageKey(languageId),
+            false,
+        );
+        if (dismissed) {
+            return;
+        }
+
+        const interpreterArch = this._normalizeArchitecture(
+            (session.runtimeMetadata.extraRuntimeData as { arch?: unknown } | undefined)?.arch,
+        );
+        const systemArch = this._normalizeArchitecture(process.arch);
+        if (!interpreterArch || !systemArch || interpreterArch === systemArch) {
+            return;
+        }
+
+        this._shownArchitectureMismatchWarnings.add(languageId);
+        const languageDisplayName = languageId === 'r'
+            ? 'R'
+            : languageId.charAt(0).toUpperCase() + languageId.slice(1);
+        const dismissAction = `Don't show again for ${languageDisplayName}`;
+        const selection = await vscode.window.showWarningMessage(
+            `The interpreter "${session.runtimeMetadata.runtimeName}" has architecture ` +
+            `"${interpreterArch}" but this system is "${systemArch}". This can cause performance ` +
+            `or package compatibility problems.`,
+            dismissAction,
+        );
+        if (selection === dismissAction) {
+            await this._context.globalState.update(
+                this._architectureMismatchStorageKey(languageId),
+                true,
+            );
+        }
     }
 
     private _resetDiscoveryCompletionState(): void {
@@ -318,6 +530,7 @@ export class RuntimeStartupService implements vscode.Disposable {
 
     private async _discoverAllRuntimes(): Promise<void> {
         if (this._runtimeManagers.length === 0) {
+            this._sessionManager.implicitStartupSuppressed = false;
             this._setStartupPhase(RuntimeStartupPhase.Complete);
             return;
         }
@@ -326,7 +539,9 @@ export class RuntimeStartupService implements vscode.Disposable {
             try {
                 await manager.discoverAllRuntimes(this._getDisabledLanguageIds());
             } finally {
-                this.completeDiscovery(manager.id);
+                if (!manager.onDidFinishDiscovery) {
+                    this.completeDiscovery(manager.id);
+                }
             }
         }));
     }
@@ -690,44 +905,24 @@ export class RuntimeStartupService implements vscode.Disposable {
     }
 
     private async _startRecommendedLanguageRuntime(): Promise<void> {
-        for (const languageId of this._runtimeManager.getSupportedLanguageIds()) {
-            const startupBehavior = this._getStartupBehavior(languageId);
+        const recommendedRuntimes = await this._getRecommendedRuntimes(this._getDisabledLanguageIds());
+        for (const recommendedRuntime of recommendedRuntimes) {
+            const startupBehavior = this._getStartupBehavior(recommendedRuntime.languageId);
             if (startupBehavior === LanguageStartupBehavior.Disabled ||
                 startupBehavior === LanguageStartupBehavior.Manual) {
                 continue;
             }
 
-            const provider = this._runtimeManager.getRuntimeProvider(languageId);
-            if (!provider?.shouldRecommendForWorkspace) {
-                continue;
-            }
-
-            if (!(await provider.shouldRecommendForWorkspace())) {
-                continue;
-            }
-
-            const installation = this._sessionManager.getDefaultInstallation(languageId)
-                ?? this._runtimeManager.getBestInstallation(languageId);
-            if (!installation) {
-                continue;
-            }
-
-            await this._autoStartInstallation(
-                languageId,
-                installation,
+            await this._autoStartRuntime(
+                recommendedRuntime,
                 'Recommended runtime for workspace',
                 true,
-                provider.formatRuntimeName(installation),
             );
             return;
         }
     }
 
     private async _autoStartAfterDiscovery(): Promise<void> {
-        if (this._sessionManager.hasStartingOrRunningConsole()) {
-            return;
-        }
-
         if (this._runtimeManager.runtimes.length === 0) {
             void vscode.window.showWarningMessage(
                 'No interpreters found. Configure a runtime path or install a supported runtime.',
@@ -735,52 +930,56 @@ export class RuntimeStartupService implements vscode.Disposable {
             return;
         }
 
-        for (const languageId of this._runtimeManager.getSupportedLanguageIds()) {
-            const startupBehavior = this._getStartupBehavior(languageId);
-            if (startupBehavior === LanguageStartupBehavior.Disabled ||
-                startupBehavior === LanguageStartupBehavior.Manual) {
-                continue;
-            }
-
-            const runtimes = this._runtimeManager.runtimes
-                .filter((metadata) => metadata.languageId === languageId);
-            if (runtimes.length === 0) {
-                continue;
-            }
-
-            const immediateRuntime = runtimes.find(
-                (runtime) => runtime.startupBehavior === LanguageRuntimeStartupBehavior.Immediate,
-            );
-            if (immediateRuntime) {
-                try {
-                    await this._autoStartRuntime(
-                        immediateRuntime,
-                        'The runtime metadata requested immediate startup.',
-                        true,
-                    );
-                } catch (error) {
-                    this._outputChannel.warn(
-                        `[RuntimeStartup] Failed to auto-start immediate runtime ${immediateRuntime.runtimeName}: ${error}`,
-                    );
+        if (!this._sessionManager.hasStartingOrRunningConsole()) {
+            for (const languageId of this._runtimeManager.getSupportedLanguageIds()) {
+                const startupBehavior = this._getStartupBehavior(languageId);
+                if (startupBehavior === LanguageStartupBehavior.Disabled ||
+                    startupBehavior === LanguageStartupBehavior.Manual) {
+                    continue;
                 }
-                return;
-            }
 
-            if (startupBehavior === LanguageStartupBehavior.Always) {
-                try {
-                    await this._autoStartRuntime(
-                        runtimes[0],
-                        `The configuration specifies that a runtime should always start for '${languageId}'.`,
-                        true,
-                    );
-                } catch (error) {
-                    this._outputChannel.warn(
-                        `[RuntimeStartup] Failed to auto-start runtime ${runtimes[0].runtimeName}: ${error}`,
-                    );
+                const runtimes = this._runtimeManager.runtimes
+                    .filter((metadata) => metadata.languageId === languageId);
+                if (runtimes.length === 0) {
+                    continue;
                 }
-                return;
+
+                const immediateRuntime = runtimes.find(
+                    (runtime) => runtime.startupBehavior === LanguageRuntimeStartupBehavior.Immediate,
+                );
+                if (immediateRuntime) {
+                    try {
+                        await this._autoStartRuntime(
+                            immediateRuntime,
+                            'The runtime metadata requested immediate startup.',
+                            true,
+                        );
+                    } catch (error) {
+                        this._outputChannel.warn(
+                            `[RuntimeStartup] Failed to auto-start immediate runtime ${immediateRuntime.runtimeName}: ${error}`,
+                        );
+                    }
+                    return;
+                }
+
+                if (startupBehavior === LanguageStartupBehavior.Always) {
+                    try {
+                        await this._autoStartRuntime(
+                            runtimes[0],
+                            `The configuration specifies that a runtime should always start for '${languageId}'.`,
+                            true,
+                        );
+                    } catch (error) {
+                        this._outputChannel.warn(
+                            `[RuntimeStartup] Failed to auto-start runtime ${runtimes[0].runtimeName}: ${error}`,
+                        );
+                    }
+                    return;
+                }
             }
         }
+
+        await this._startEncounteredLanguageRuntime();
     }
 
     private async _autoStartRuntime(
@@ -793,23 +992,18 @@ export class RuntimeStartupService implements vscode.Disposable {
         }
 
         const provider = this._runtimeManager.getRuntimeProvider(metadata.languageId);
-        if (!provider) {
-            return;
-        }
-
-        const installation = provider.restoreInstallationFromMetadata?.(metadata);
-        if (!installation) {
-            this._outputChannel.warn(`[RuntimeStartup] Cannot auto-start ${metadata.runtimeName}: missing installation metadata`);
-            return;
-        }
-
-        const runtimePath = provider.getRuntimePath(installation);
-        if (!fs.existsSync(runtimePath)) {
-            this._outputChannel.warn(
-                `[RuntimeStartup] Affiliated runtime binary does not exist: ${runtimePath}. Clearing stale affiliation.`,
-            );
-            this.clearAffiliatedRuntime(metadata.languageId);
-            return;
+        if (provider) {
+            const installation = provider.restoreInstallationFromMetadata?.(metadata);
+            if (installation) {
+                const runtimePath = provider.getRuntimePath(installation);
+                if (!fs.existsSync(runtimePath)) {
+                    this._outputChannel.warn(
+                        `[RuntimeStartup] Affiliated runtime binary does not exist: ${runtimePath}. Clearing stale affiliation.`,
+                    );
+                    this.clearAffiliatedRuntime(metadata.languageId);
+                    return;
+                }
+            }
         }
 
         this._outputChannel.info(
@@ -892,7 +1086,79 @@ export class RuntimeStartupService implements vscode.Disposable {
         this._onWillAutoStartRuntime.fire(event);
     }
 
+    private async _getRecommendedRuntimes(disabledLanguageIds: string[]): Promise<LanguageRuntimeMetadata[]> {
+        const metadata = await Promise.all(
+            this._runtimeManagers.map((manager) => manager.recommendWorkspaceRuntimes(disabledLanguageIds)),
+        );
+        return metadata.flat();
+    }
+
+    private async _startEncounteredLanguageRuntime(): Promise<void> {
+        if (this._sessionManager.implicitStartupSuppressed) {
+            return;
+        }
+
+        for (const languageId of this._sessionManager.encounteredLanguages) {
+            if (this._sessionManager.hasStartingOrRunningConsole(languageId) ||
+                this.getAffiliatedRuntimeMetadata(languageId)) {
+                continue;
+            }
+
+            const runtime = this._runtimeManager.runtimes.find((metadata) =>
+                metadata.languageId === languageId &&
+                metadata.startupBehavior === LanguageRuntimeStartupBehavior.Implicit,
+            );
+            if (!runtime) {
+                continue;
+            }
+
+            try {
+                await this._autoStartRuntime(
+                    runtime,
+                    `A file with the language ID ${languageId} was open when runtime discovery completed.`,
+                    true,
+                );
+            } catch (error) {
+                this._outputChannel.warn(
+                    `[RuntimeStartup] Failed to auto-start implicit runtime ${runtime.runtimeName}: ${error}`,
+                );
+            }
+            return;
+        }
+    }
+
+    private async _autoStartDiscoveredRuntime(metadata: LanguageRuntimeMetadata): Promise<void> {
+        if (metadata.startupBehavior === LanguageRuntimeStartupBehavior.Immediate &&
+            !this._sessionManager.hasStartingOrRunningConsole()) {
+            await this._autoStartRuntime(
+                metadata,
+                'A runtime requested immediate startup after being discovered.',
+                true,
+            );
+            return;
+        }
+
+        if (metadata.startupBehavior === LanguageRuntimeStartupBehavior.Implicit &&
+            this._sessionManager.hasEncounteredLanguage(metadata.languageId) &&
+            !this._sessionManager.hasStartingOrRunningConsole(metadata.languageId) &&
+            !this.getAffiliatedRuntimeMetadata(metadata.languageId) &&
+            !this._sessionManager.implicitStartupSuppressed) {
+            await this._autoStartRuntime(
+                metadata,
+                `A file with the language ID ${metadata.languageId} was already open when the runtime was discovered.`,
+                true,
+            );
+        }
+    }
+
     dispose(): void {
+        for (const disposables of this._runtimeManagerDisposablesById.values()) {
+            for (const disposable of disposables) {
+                disposable.dispose();
+            }
+        }
+        this._runtimeManagerDisposablesById.clear();
+
         for (const disposables of this._sessionLifecycleDisposables.values()) {
             for (const disposable of disposables) {
                 disposable.dispose();

@@ -63,7 +63,7 @@ suite('[Unit] variables provider active-session sync', () => {
                 onDidDeleteRuntimeSession: createEventStub(),
                 onDidChangeSessionState: createEventStub(),
                 getSession: (sessionId: string) => sessionId === 'session-1' ? session : undefined,
-                setActiveSession: async (sessionId: string) => {
+                focusSession: (sessionId: string) => {
                     calls.push(`manager:${sessionId}`);
                 },
             } as any,
@@ -109,7 +109,7 @@ suite('[Unit] variables provider active-session sync', () => {
                 onDidDeleteRuntimeSession: createEventStub(),
                 onDidChangeSessionState: createEventStub(),
                 getSession: () => undefined,
-                setActiveSession: async (sessionId: string) => {
+                focusSession: (sessionId: string) => {
                     calls.push(`manager:${sessionId}`);
                 },
             } as any,

@@ -20,11 +20,14 @@ import { ConsoleStateStore } from './consoleStateStore';
 import { RuntimeSessionService } from '../../runtime/runtimeSession';
 import { RuntimeSession } from '../../runtime/session';
 import { RuntimeStartMode } from '../../internal/runtimeTypes';
+import { RuntimeStartupService } from '../../runtime/runtimeStartup';
+import { SerializedSessionMetadata } from '../../runtime/runtimeSessionService';
 import {
     PromptStateEvent,
     UiFrontendEvent,
     WorkingDirectoryEvent,
 } from '../../runtime/comms/positronUiComm';
+import { LanguageRuntimeSessionMode } from '../../api';
 
 
 /**
@@ -54,7 +57,8 @@ export class PositronConsoleService implements IPositronConsoleService {
     constructor(
         private readonly _sessionManager: RuntimeSessionService,
         private readonly _outputChannel: vscode.LogOutputChannel,
-        context?: vscode.ExtensionContext
+        context?: vscode.ExtensionContext,
+        private readonly _runtimeStartupService?: RuntimeStartupService,
     ) {
         this._outputChannel.debug('[PositronConsoleService] Created');
         if (context) {
@@ -93,6 +97,7 @@ export class PositronConsoleService implements IPositronConsoleService {
         this._outputChannel.debug('[PositronConsoleService] Initializing...');
 
         this._subscribeToRuntimeEvents();
+        void this._restorePositronConsoleInstances();
 
         // Listen for session starts BEFORE kernel starts (Positron pattern: onWillStartSession)
         this._disposables.push(
@@ -146,7 +151,15 @@ export class PositronConsoleService implements IPositronConsoleService {
             this._sessionManager.onDidDeleteRuntimeSession((sessionId: string) => {
                 this._outputChannel.debug(`[PositronConsoleService] Session deleted: ${sessionId}`);
                 this.deletePositronConsoleSession(sessionId);
-            })
+            }),
+            this._runtimeStartupService?.onSessionRestoreFailure((event) => {
+                const instance = this._consoleInstancesBySessionId.get(event.sessionId);
+                if (!instance) {
+                    return;
+                }
+
+                instance.showRestoreFailure(event.error);
+            }) ?? new vscode.Disposable(() => undefined),
         );
 
         // Create console instances for existing sessions
@@ -235,11 +248,7 @@ export class PositronConsoleService implements IPositronConsoleService {
         if (!instance) {
             // Create new session if needed
             this._outputChannel.debug('[PositronConsoleService] No active console, creating new session');
-            const session = await this._sessionManager.createSession();
-            await this._sessionManager.startSession(session.sessionId, {
-                activate: true,
-                hasConsole: true,
-            });
+            const session = await this._sessionManager.startConsoleSession();
             instance = this._consoleInstancesBySessionId.get(session.sessionId);
             if (!instance) {
                 throw new Error(`Console instance was not created for session ${session.sessionId}`);
@@ -358,49 +367,10 @@ export class PositronConsoleService implements IPositronConsoleService {
     ): PositronConsoleInstance {
         this._outputChannel.debug(`[PositronConsoleService] Starting console instance for: ${session.sessionId}`);
 
-        const instance = new PositronConsoleInstance(
+        const instance = this._createPositronConsoleInstance(
             session.sessionMetadata,
             session.runtimeMetadata,
-            this._outputChannel
-        );
-
-        // Listen for execute events from instance
-        this._disposables.push(
-            instance.onDidExecuteCode(event => {
-                this._onDidExecuteCodeEmitter.fire(event);
-            })
-        );
-
-        // Listen for input state changes from instance
-        this._disposables.push(
-            instance.onDidChangeInputState(event => {
-                this._onDidChangeInputStateEmitter.fire({
-                    sessionId: instance.sessionId,
-                    executionId: event.executionId,
-                    state: event.state
-                });
-            })
-        );
-
-        // Listen for reveal execution requests from instance
-        this._disposables.push(
-            instance.onDidRevealExecution(executionId => {
-                this._onDidRevealExecutionEmitter.fire({
-                    sessionId: instance.sessionId,
-                    executionId
-                });
-            })
-        );
-
-        // Listen for pending input changes from instance
-        this._disposables.push(
-            instance.onDidChangePendingInput(event => {
-                this._onDidChangePendingInputEmitter.fire({
-                    sessionId: instance.sessionId,
-                    code: event.code,
-                    inputPrompt: event.inputPrompt
-                });
-            })
+            activate,
         );
 
         // Restore persisted state (if any) before attaching the runtime
@@ -412,13 +382,102 @@ export class PositronConsoleService implements IPositronConsoleService {
         // Attach session - RuntimeSession itself is the runtime session
         instance.attachRuntimeSession(session, mode);
 
-        // Track instance
-        this._consoleInstancesBySessionId.set(session.sessionId, instance);
+        return instance;
+    }
 
-        // Fire event
+    private async _restorePositronConsoleInstances(): Promise<void> {
+        if (!this._runtimeStartupService) {
+            return;
+        }
+
+        try {
+            const restoredSessions = await this._runtimeStartupService.getRestoredSessions();
+            let first = !this._activeConsoleInstance;
+
+            for (const session of restoredSessions) {
+                if (!this._shouldRestorePositronConsole(session)) {
+                    continue;
+                }
+
+                if (this._consoleInstancesBySessionId.has(session.metadata.sessionId)) {
+                    continue;
+                }
+
+                this._restorePositronConsole(session, first);
+                first = false;
+            }
+        } catch (error) {
+            this._outputChannel.error(`[PositronConsoleService] Failed to restore console instances: ${error}`);
+        }
+    }
+
+    private _shouldRestorePositronConsole(session: SerializedSessionMetadata): boolean {
+        return session.metadata.sessionMode === LanguageRuntimeSessionMode.Console ||
+            session.hasConsole === true;
+    }
+
+    private _restorePositronConsole(
+        session: SerializedSessionMetadata,
+        activate: boolean,
+    ): PositronConsoleInstance {
+        const sessionMetadata = {
+            ...session.metadata,
+            sessionName: session.sessionName || session.metadata.sessionName || session.runtimeMetadata.runtimeName,
+            workingDirectory: session.workingDirectory ?? session.metadata.workingDirectory,
+        };
+        const instance = this._createPositronConsoleInstance(
+            sessionMetadata,
+            session.runtimeMetadata,
+            activate,
+        );
+
+        this._consoleStateStore?.restore(instance, SessionAttachMode.Reconnecting);
+        this._consoleStateStore?.bind(instance);
+        return instance;
+    }
+
+    private _createPositronConsoleInstance(
+        sessionMetadata: RuntimeSession['sessionMetadata'],
+        runtimeMetadata: RuntimeSession['runtimeMetadata'],
+        activate: boolean,
+    ): PositronConsoleInstance {
+        const instance = new PositronConsoleInstance(
+            sessionMetadata,
+            runtimeMetadata,
+            this._outputChannel
+        );
+
+        instance.setWidthInChars(this._consoleWidth);
+
+        this._disposables.push(
+            instance.onDidExecuteCode(event => {
+                this._onDidExecuteCodeEmitter.fire(event);
+            }),
+            instance.onDidChangeInputState(event => {
+                this._onDidChangeInputStateEmitter.fire({
+                    sessionId: instance.sessionId,
+                    executionId: event.executionId,
+                    state: event.state
+                });
+            }),
+            instance.onDidRevealExecution(executionId => {
+                this._onDidRevealExecutionEmitter.fire({
+                    sessionId: instance.sessionId,
+                    executionId
+                });
+            }),
+            instance.onDidChangePendingInput(event => {
+                this._onDidChangePendingInputEmitter.fire({
+                    sessionId: instance.sessionId,
+                    code: event.code,
+                    inputPrompt: event.inputPrompt
+                });
+            }),
+        );
+
+        this._consoleInstancesBySessionId.set(sessionMetadata.sessionId, instance);
         this._onDidStartPositronConsoleInstanceEmitter.fire(instance);
 
-        // Set as active if requested (Positron pattern)
         if (activate) {
             this._activeConsoleInstance = instance;
             this._onDidChangeActivePositronConsoleInstanceEmitter.fire(instance);

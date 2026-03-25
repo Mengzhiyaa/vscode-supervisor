@@ -32,6 +32,11 @@ function createConsoleInstance(
         sessionId,
         state,
         sessionName: options?.sessionName ?? `console-${sessionId}`,
+        sessionMetadata: {
+            sessionId,
+            sessionName: options?.sessionName ?? `console-${sessionId}`,
+            sessionMode: 'console',
+        },
         promptActive: options?.promptActive ?? false,
         runtimeAttached: options?.runtimeAttached ?? false,
         runtimeMetadata: {
@@ -40,6 +45,7 @@ function createConsoleInstance(
             languageVersion: '4.4.1',
             runtimeSource: 'configured',
             base64EncodedIconSvg: 'console-icon',
+            languageId: 'r',
         },
     };
 }
@@ -125,11 +131,51 @@ suite('[Unit] session snapshot builder', () => {
             base64EncodedIconSvg: 'console-icon',
             promptActive: true,
             runtimeAttached: true,
+            languageId: 'r',
         }]);
 
         assert.strictEqual(
             builder.resolveActiveSessionId(sessions, ['missing', 'session-1']),
             'session-1',
+        );
+    });
+
+    test('buildSessionsWithConsoleOverlay includes provisional console-only sessions', () => {
+        const provisional = createConsoleInstance('session-restore-1', PositronConsoleState.Uninitialized, {
+            runtimeAttached: false,
+            sessionName: 'restored-r-session',
+        });
+
+        const builder = new SessionSnapshotBuilder(
+            {
+                sessions: [],
+            } as any,
+            {
+                positronConsoleInstances: [provisional],
+                getConsoleInstance: (sessionId: string) => {
+                    return sessionId === provisional.sessionId ? provisional : undefined;
+                },
+            } as any,
+        );
+
+        const sessions = builder.buildSessionsWithConsoleOverlay();
+        assert.deepStrictEqual(sessions, [{
+            id: 'session-restore-1',
+            name: 'restored-r-session',
+            runtimeName: 'R',
+            state: 'uninitialized',
+            runtimePath: '/console/session-restore-1',
+            runtimeVersion: '4.4.1',
+            runtimeSource: 'configured',
+            base64EncodedIconSvg: 'console-icon',
+            promptActive: false,
+            runtimeAttached: false,
+            languageId: 'r',
+        }]);
+
+        assert.strictEqual(
+            builder.resolveActiveSessionId(sessions, ['session-restore-1']),
+            'session-restore-1',
         );
     });
 });

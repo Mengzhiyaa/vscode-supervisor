@@ -674,6 +674,11 @@
           "default": true,
           "description": "Show CPU and memory usage in session tabs."
         },
+        "supervisor.console.showNotebookConsoles": {
+          "type": "boolean",
+          "default": false,
+          "description": "Create console clients for notebook runtime sessions."
+        },
         "supervisor.console.enableTrace": {
           "type": "boolean",
           "default": false,

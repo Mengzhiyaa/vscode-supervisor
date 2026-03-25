@@ -7,8 +7,14 @@ import {
     type ILanguageRuntimeRegistration,
     type ILanguageSupportRegistration,
     type ILanguageWebviewAssets,
+    type IRuntimeSessionMetadata,
     type ISupervisorFrameworkApi,
+    type JupyterKernelSpec,
+    type LanguageRuntimeDynState,
+    type LanguageRuntimeMetadata,
     type LanguageContributionRegistrationResult,
+    LanguageRuntimeSessionMode,
+    RuntimeStartMode,
 } from './api';
 import { WebviewManager } from './webview/manager';
 import { RuntimeManager } from './runtime/manager';
@@ -44,11 +50,6 @@ interface SessionQuickLaunchPickItem extends vscode.QuickPickItem {
     installation?: unknown;
     action?: 'startAnother' | 'switchSession';
     sessionId?: string;
-}
-
-interface SessionCreationResult {
-    session: RuntimeSession;
-    newlyCreated: boolean;
 }
 
 
@@ -174,7 +175,12 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
         );
 
         // Initialize service-class services (1:1 Positron pattern)
-        this._consoleService = new PositronConsoleService(this._sessionManager, this._outputChannel, this._context);
+        this._consoleService = new PositronConsoleService(
+            this._sessionManager,
+            this._outputChannel,
+            this._context,
+            this._runtimeStartupService,
+        );
         this._disposables.push(this._consoleService);
 
         this._variablesService = new PositronVariablesService(this._sessionManager, this._outputChannel);
@@ -267,6 +273,13 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
             runtimeSessionService: this.runtimeSessionService,
             runtimeStartupService: this.runtimeStartupService,
             version: this.version,
+            startRuntime: (metadata, source, activate) =>
+                this.startRuntime(metadata, source, activate),
+            createSession: (runtimeMetadata, sessionMetadata, kernelSpec, dynState) =>
+                this.createSession(runtimeMetadata, sessionMetadata, kernelSpec, dynState),
+            restoreSession: (runtimeMetadata, sessionMetadata, dynState) =>
+                this.restoreSession(runtimeMetadata, sessionMetadata, dynState),
+            validateSession: (sessionId) => this.validateSession(sessionId),
             registerLanguageSupport: <TInstallation = unknown>(
                 registration: ILanguageSupportRegistration<TInstallation>
             ) => this.registerLanguageSupport(registration),
@@ -279,6 +292,44 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
             registerLspFactory: (factory: ILanguageLspFactory) => this.registerLspFactory(factory),
             registerBinaryProvider: (provider: IBinaryProvider) => this.registerBinaryProvider(provider),
         };
+    }
+
+    async startRuntime(
+        metadata: LanguageRuntimeMetadata,
+        source: string,
+        activate: boolean,
+    ): Promise<string> {
+        return this._sessionManager.startRuntime(metadata, source, activate);
+    }
+
+    async createSession(
+        runtimeMetadata: LanguageRuntimeMetadata,
+        sessionMetadata: IRuntimeSessionMetadata,
+        kernelSpec: JupyterKernelSpec,
+        dynState: LanguageRuntimeDynState,
+    ): Promise<RuntimeSession> {
+        return this._sessionManager.createSession(
+            runtimeMetadata,
+            sessionMetadata,
+            kernelSpec,
+            dynState,
+        );
+    }
+
+    async restoreSession(
+        runtimeMetadata: LanguageRuntimeMetadata,
+        sessionMetadata: IRuntimeSessionMetadata,
+        dynState: LanguageRuntimeDynState,
+    ): Promise<RuntimeSession> {
+        return this._sessionManager.restoreSession(
+            runtimeMetadata,
+            sessionMetadata,
+            dynState,
+        );
+    }
+
+    async validateSession(sessionId: string): Promise<boolean> {
+        return this._sessionManager.validateSession(sessionId);
     }
 
     async registerLanguageSupport<TInstallation = unknown>(
@@ -384,6 +435,7 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
             logChannel: this._outputChannel,
             runtimeSessionService: this._sessionManager,
             runtimeStartupService: this._runtimeStartupService,
+            runtimeManager: this._runtimeManager,
             positronConsoleService: {
                 onDidChangeConsoleWidth: this._consoleService.onDidChangeConsoleWidth,
                 showConsole: () => {
@@ -756,40 +808,40 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
         });
     }
 
-    private async _createSessionForInstallation(
+    private async _startSessionForInstallation(
         languageId: string,
         installation: unknown,
         sessionName: string
-    ): Promise<SessionCreationResult> {
+    ): Promise<RuntimeSession> {
         const provider = this._requireRuntimeProvider(languageId);
         this._outputChannel.info(
             `[Ark] Creating new ${provider.languageName} session (${provider.getRuntimePath(installation)})...`
         );
 
-        const knownSessionIds = new Set(this._sessionManager.sessions.map(s => s.sessionId));
-        const session = await this._sessionManager.createSessionForLanguageInstallation(
-            languageId,
+        const runtimeMetadata = provider.createRuntimeMetadata(
+            this._context,
             installation,
-            sessionName
+            this._outputChannel,
         );
+        this._sessionManager.registerDiscoveredRuntime(languageId, installation, runtimeMetadata);
 
-        return {
-            session,
-            newlyCreated: !knownSessionIds.has(session.sessionId),
-        };
-    }
-
-    private async _startPreparedSession(result: SessionCreationResult): Promise<void> {
-        if (result.newlyCreated) {
-            this._wireSessionLifecycle(result.session);
+        const sessionId = await this._sessionManager.startNewRuntimeSession(
+            runtimeMetadata.runtimeId,
+            sessionName || runtimeMetadata.runtimeName,
+            LanguageRuntimeSessionMode.Console,
+            undefined,
+            'SupervisorApplication.startSessionForInstallation',
+            RuntimeStartMode.Starting,
+            true,
+        );
+        const session = this._sessionManager.getSession(sessionId);
+        if (!session) {
+            throw new Error(`Session ${sessionId} was not created`);
         }
 
-        await this._sessionManager.startSession(result.session.sessionId, {
-            activate: true,
-            hasConsole: true,
-        });
         this._updateConsoleSessionsExistContext();
         this._outputChannel.info('[Ark] New session created successfully');
+        return session;
     }
 
     private async _startNewSessionFromDiscoveredRuntimes(): Promise<void> {
@@ -804,12 +856,11 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
                 return;
             }
 
-            const result = await this._createSessionForInstallation(
+            await this._startSessionForInstallation(
                 provider.languageId,
                 installation,
                 provider.formatRuntimeName(installation)
             );
-            await this._startPreparedSession(result);
         } catch (error) {
             this._outputChannel.error(`[Ark] Failed to create session: ${error}`);
             vscode.window.showErrorMessage(`Failed to create session: ${error}`);
@@ -843,12 +894,11 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
                 return;
             }
 
-            const result = await this._createSessionForInstallation(
+            await this._startSessionForInstallation(
                 this._getPreferredLanguageId(),
                 selected.installation,
                 this._requireRuntimeProvider(this._getPreferredLanguageId()).formatRuntimeName(selected.installation)
             );
-            await this._startPreparedSession(result);
         } catch (error) {
             this._outputChannel.error(`[Ark] Failed to quick launch session: ${error}`);
             vscode.window.showErrorMessage(`Failed to quick launch session: ${error}`);
@@ -874,12 +924,11 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
         }
 
         try {
-            const result = await this._createSessionForInstallation(
+            await this._startSessionForInstallation(
                 currentSession.runtimeMetadata.languageId,
                 installation,
                 currentSession.dynState.sessionName || currentSession.sessionMetadata.sessionName || currentSession.runtimeMetadata.runtimeName
             );
-            await this._startPreparedSession(result);
         } catch (error) {
             this._outputChannel.error(`[Ark] Failed to duplicate session: ${error}`);
             vscode.window.showErrorMessage(`Failed to duplicate session: ${error}`);

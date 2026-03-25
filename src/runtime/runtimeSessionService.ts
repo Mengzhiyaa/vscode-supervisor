@@ -1,9 +1,12 @@
 import * as vscode from 'vscode';
 import { RuntimeState } from '../internal/runtimeTypes';
 import type {
+    ILanguageRuntimeSessionManager,
     ILanguageRuntimeSessionStateEvent as PublicLanguageRuntimeSessionStateEvent,
+    IUiClientInstance,
     IRuntimeSessionWillStartEvent as PublicRuntimeSessionWillStartEvent,
     INotebookSessionUriChangedEvent,
+    IRuntimeUiClientStartedEvent as PublicRuntimeUiClientStartedEvent,
     IRuntimeSessionMetadata,
     IRuntimeSessionService as PublicRuntimeSessionService,
     LanguageRuntimeMetadata,
@@ -19,8 +22,7 @@ export interface IRuntimeSessionWillStartEvent extends Omit<PublicRuntimeSession
 
 export type ILanguageRuntimeSessionStateEvent = PublicLanguageRuntimeSessionStateEvent;
 
-export interface IRuntimeUiClientStartedEvent {
-    sessionId: string;
+export interface IRuntimeUiClientStartedEvent extends Omit<PublicRuntimeUiClientStartedEvent, 'uiClient'> {
     uiClient: UiClientInstance;
 }
 
@@ -53,9 +55,12 @@ export interface IRuntimeSessionService extends PublicRuntimeSessionService, vsc
     readonly onDidChangeForegroundSession: vscode.Event<RuntimeSession | undefined>;
     readonly onDidUpdateNotebookSessionUri: vscode.Event<INotebookSessionUriChangedEvent>;
     readonly onDidStartUiClient: vscode.Event<IRuntimeUiClientStartedEvent>;
+    implicitStartupSuppressed: boolean;
+    registerSessionManager(manager: ILanguageRuntimeSessionManager): vscode.Disposable;
     getActiveSession(sessionId: string): ActiveRuntimeSession | undefined;
     getActiveSessions(): ActiveRuntimeSession[];
     hasStartingOrRunningConsole(languageId?: string): boolean;
+    updateActiveLanguages(): void;
     validateRuntimeSession(
         runtimeMetadata: LanguageRuntimeMetadata,
         sessionId: string
@@ -70,6 +75,8 @@ export interface IRuntimeSessionService extends PublicRuntimeSessionService, vsc
     ): Promise<RuntimeSession>;
     watchUiClient(
         sessionId: string,
-        handler: (uiClient: UiClientInstance) => vscode.Disposable | void
+        handler: (uiClient: IUiClientInstance) => vscode.Disposable | void
     ): vscode.Disposable;
+    hasEncounteredLanguage(languageId: string): boolean;
+    readonly encounteredLanguages: readonly string[];
 }

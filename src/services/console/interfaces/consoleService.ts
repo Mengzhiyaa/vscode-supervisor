@@ -278,6 +278,7 @@ export interface IPositronConsoleInstance extends vscode.Disposable {
     ): void;
     replyToPrompt(value: string): void;
     attachRuntimeSession(session: RuntimeSession | undefined, mode: SessionAttachMode): void;
+    showRestoreFailure(error: Error): void;
     handleStream(message: LanguageRuntimeStream): void;
     handleInput(message: LanguageRuntimeInput): void;
     handleError(message: LanguageRuntimeErrorMessage): void;

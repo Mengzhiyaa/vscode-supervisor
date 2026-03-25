@@ -27,17 +27,30 @@ export class SessionSnapshotBuilder {
 
     buildSessionsWithConsoleOverlay(): SessionProtocol.SessionInfo[] {
         const sessions = this.buildBaseSessions();
+        const sessionsById = new Map(sessions.map(session => [session.id, session]));
 
         if (!this._consoleService) {
             return sessions;
         }
 
-        return sessions.map(session => {
+        const overlaidSessions = sessions.map(session => {
             const instance = this._consoleService?.getConsoleInstance(session.id);
-            return instance
+            const overlaid = instance
                 ? this._applyConsoleOverlay(session, instance)
                 : session;
+            sessionsById.set(overlaid.id, overlaid);
+            return overlaid;
         });
+
+        for (const instance of this._consoleService.positronConsoleInstances) {
+            if (sessionsById.has(instance.sessionId)) {
+                continue;
+            }
+
+            overlaidSessions.push(this._buildConsoleOnlySessionInfo(instance));
+        }
+
+        return overlaidSessions;
     }
 
     resolveActiveSessionId(
@@ -91,6 +104,28 @@ export class SessionSnapshotBuilder {
             runtimeVersion: instance.runtimeMetadata.languageVersion || session.runtimeVersion,
             runtimeSource: instance.runtimeMetadata.runtimeSource || session.runtimeSource,
             base64EncodedIconSvg: instance.runtimeMetadata.base64EncodedIconSvg || session.base64EncodedIconSvg,
+            promptActive: instance.promptActive,
+            runtimeAttached: instance.runtimeAttached,
+            ...(languageId ? { languageId } : {}),
+        };
+    }
+
+    private _buildConsoleOnlySessionInfo(
+        instance: IPositronConsoleInstance,
+    ): SessionProtocol.SessionInfo {
+        const languageId = instance.runtimeMetadata.languageId;
+        return {
+            id: instance.sessionId,
+            name:
+                instance.sessionMetadata.sessionName ||
+                instance.sessionName ||
+                instance.runtimeMetadata.runtimeName,
+            runtimeName: instance.runtimeMetadata.runtimeName,
+            state: mapConsoleStateToSessionState(instance.state),
+            runtimePath: instance.runtimeMetadata.runtimePath,
+            runtimeVersion: instance.runtimeMetadata.languageVersion,
+            runtimeSource: instance.runtimeMetadata.runtimeSource,
+            base64EncodedIconSvg: instance.runtimeMetadata.base64EncodedIconSvg,
             promptActive: instance.promptActive,
             runtimeAttached: instance.runtimeAttached,
             ...(languageId ? { languageId } : {}),

@@ -1342,6 +1342,32 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
         this._onDidAttachSessionEmitter.fire(session);
     }
 
+    showRestoreFailure(error: Error): void {
+        if (this._trace) {
+            this.addRuntimeItemTrace(`Restore failure: ${error.toString()}`);
+        }
+
+        this._startupFailureHandled = true;
+        this._clearStartupFailureFallback();
+        this.clearStartingItem();
+        this.addRuntimeItem(new RuntimeItemStartupFailure(
+            this.generateId(),
+            new Date(),
+            error.toString(),
+            '',
+        ));
+
+        if (
+            (this._session?.state === RuntimeState.Exited ||
+                this._session?.state === RuntimeState.Uninitialized) &&
+            this._runtimeAttached
+        ) {
+            this.detachRuntimeSession();
+        }
+
+        this.setState(PositronConsoleState.Exited);
+    }
+
     get attachedRuntimeSession(): RuntimeSession | undefined { return this._session; }
 
     //#region Input History Methods (1:1 Positron)

@@ -442,7 +442,7 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
                 const requestedName = params.name?.trim();
                 const session = params.showRuntimePicker
                     ? await this._sessionManager.createSessionFromPicker(requestedName || undefined)
-                    : await this._sessionManager.createSession(requestedName || undefined);
+                    : await this._sessionManager.startConsoleSession(requestedName || undefined);
 
                 if (!session) {
                     return {};
@@ -452,10 +452,6 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
                 // lifecycle wiring, so subscribe here to keep follow-up startup
                 // and session-info updates flowing.
                 this.subscribeToSession(session);
-                await this._sessionManager.startSession(session.sessionId, {
-                    activate: true,
-                    hasConsole: true,
-                });
                 this._sendSessionInfoUpdate();
                 const sessions = this._sessionSnapshotBuilder.buildSessionsWithConsoleOverlay();
                 return {
