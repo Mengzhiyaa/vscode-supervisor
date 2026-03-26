@@ -542,7 +542,18 @@
             }
         }
 
+        // Only proxy printable characters when the event originates from
+        // the console output area. If the event originated from the input
+        // area (Monaco editor), let Monaco handle it natively so that
+        // language features like autoClosingPairs work correctly.
+        const isFromInputArea =
+            inputAnchorRef &&
+            e.target instanceof Node &&
+            inputAnchorRef.contains(e.target);
+
         if (
+            !isFromInputArea &&
+            !isCmdOrCtrl &&
             (noOtherModifiers || onlyShiftKey) &&
             e.key.length === 1 &&
             !composingInput &&

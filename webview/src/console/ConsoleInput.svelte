@@ -131,9 +131,7 @@
 
     // Disposables for cleanup
     let disposables: monaco.IDisposable[] = [];
-    let languageMonacoSupportModule:
-        | LanguageMonacoSupportModule
-        | undefined;
+    let languageMonacoSupportModule: LanguageMonacoSupportModule | undefined;
     let languageMonacoSupportModuleLanguageId = "";
     let destroyed = false;
     let inputVisibilityAnimationFrame: number | undefined;
@@ -172,9 +170,7 @@
 
     async function ensureLanguageMonacoSupportModule(
         targetLanguageId: string,
-    ): Promise<
-        LanguageMonacoSupportModule | undefined
-    > {
+    ): Promise<LanguageMonacoSupportModule | undefined> {
         const normalizedLanguageId = normalizeLanguageId(targetLanguageId);
         if (
             languageMonacoSupportModule &&
@@ -186,10 +182,9 @@
         try {
             languageMonacoSupportModule =
                 await loadLanguageMonacoSupportModule(normalizedLanguageId);
-            languageMonacoSupportModuleLanguageId =
-                languageMonacoSupportModule
-                    ? normalizedLanguageId
-                    : "";
+            languageMonacoSupportModuleLanguageId = languageMonacoSupportModule
+                ? normalizedLanguageId
+                : "";
         } catch (error) {
             console.warn(
                 `[ConsoleInput] Failed to load language support for '${normalizedLanguageId}'`,
@@ -369,7 +364,9 @@
     }
 
     function currentSessionId(): string {
-        return committedSessionId || editorHost.getActiveSessionId() || sessionId;
+        return (
+            committedSessionId || editorHost.getActiveSessionId() || sessionId
+        );
     }
 
     function waitForAnimationFrame(): Promise<void> {
@@ -495,9 +492,8 @@
     }
 
     function resolveConsoleInstance(): HTMLElement | undefined {
-        const candidate = codeEditorWidgetContainerRef?.closest(
-            ".console-instance",
-        );
+        const candidate =
+            codeEditorWidgetContainerRef?.closest(".console-instance");
         return candidate instanceof HTMLElement ? candidate : undefined;
     }
 
@@ -520,7 +516,8 @@
 
             const bottomMarginPx = 8;
             const consoleRect = consoleInstance.getBoundingClientRect();
-            const editorRect = codeEditorWidgetContainerRef.getBoundingClientRect();
+            const editorRect =
+                codeEditorWidgetContainerRef.getBoundingClientRect();
             const overflowBottom =
                 editorRect.bottom - (consoleRect.bottom - bottomMarginPx);
 
@@ -721,38 +718,6 @@
         historyBrowserSelectedIndex = 0;
     }
 
-    function applyInsertText(text: string): void {
-        const selections = codeEditorWidget.getSelections();
-        if (!selections || !selections.length) {
-            const position = codeEditorWidget.getPosition();
-            if (!position) {
-                return;
-            }
-
-            codeEditorWidget.executeEdits("console", [
-                {
-                    range: new monaco.Range(
-                        position.lineNumber,
-                        position.column,
-                        position.lineNumber,
-                        position.column,
-                    ),
-                    text,
-                    forceMoveMarkers: true,
-                },
-            ]);
-            return;
-        }
-
-        const edits = selections.map((selection) => ({
-            range: selection,
-            text,
-            forceMoveMarkers: true,
-        }));
-
-        codeEditorWidget.executeEdits("console", edits);
-    }
-
     function applyPasteText(text: string) {
         const selections = codeEditorWidget.getSelections();
         if (!selections || !selections.length) {
@@ -836,7 +801,9 @@
             case "insertText":
                 if (codeEditorWidget) {
                     codeEditorWidget.focus();
-                    applyInsertText(command.text);
+                    codeEditorWidget.trigger("keyboard", "type", {
+                        text: command.text,
+                    });
                 }
                 break;
             case "paste":
@@ -960,7 +927,9 @@
         }
 
         const currentWidth =
-            codeEditorWidgetContainerRef?.clientWidth || codeEditorWidth || width;
+            codeEditorWidgetContainerRef?.clientWidth ||
+            codeEditorWidth ||
+            width;
         codeEditorWidth = currentWidth;
         codeEditorWidget.layout({
             width: currentWidth,
@@ -1142,52 +1111,57 @@
             const lineHeight = getConsoleLineHeightPx(consoleSettings);
 
             // Create Monaco editor (Positron CodeEditorWidget pattern)
-            codeEditorWidget = monaco.editor.create(codeEditorWidgetContainerRef, {
-                value: "",
-                language: initialLanguageId,
-                theme: themeData ? applyMonacoTheme(themeData) : getVSCodeTheme(),
-                minimap: { enabled: false },
-                scrollBeyondLastLine: false,
-                automaticLayout: false, // We handle layout manually
-                wordWrap: "bounded",
-                wordWrapColumn: 2048,
-                glyphMargin: false,
-                folding: false,
-                fixedOverflowWidgets: true,
-                lineDecorationsWidth: "1.0ch",
-                renderLineHighlight: "none",
-                renderFinalNewline: "on",
-                overviewRulerLanes: 0,
-                rulers: [],
-                renderValidationDecorations: "off",
-                scrollbar: {
-                    vertical: "hidden",
-                    useShadows: false,
-                    handleMouseWheel: false,
-                    alwaysConsumeMouseWheel: false,
+            codeEditorWidget = monaco.editor.create(
+                codeEditorWidgetContainerRef,
+                {
+                    value: "",
+                    language: initialLanguageId,
+                    theme: themeData
+                        ? applyMonacoTheme(themeData)
+                        : getVSCodeTheme(),
+                    minimap: { enabled: false },
+                    scrollBeyondLastLine: false,
+                    automaticLayout: false, // We handle layout manually
+                    wordWrap: "bounded",
+                    wordWrapColumn: 2048,
+                    glyphMargin: false,
+                    folding: false,
+                    fixedOverflowWidgets: true,
+                    lineDecorationsWidth: "1.0ch",
+                    renderLineHighlight: "none",
+                    renderFinalNewline: "on",
+                    overviewRulerLanes: 0,
+                    rulers: [],
+                    renderValidationDecorations: "off",
+                    scrollbar: {
+                        vertical: "hidden",
+                        useShadows: false,
+                        handleMouseWheel: false,
+                        alwaysConsumeMouseWheel: false,
+                    },
+                    fontFamily,
+                    fontSize,
+                    lineHeight,
+                    padding: { top: 4, bottom: 4 },
+                    // Enable suggestions/completions
+                    quickSuggestions: true,
+                    suggestOnTriggerCharacters: true,
+                    acceptSuggestionOnEnter: "off", // Don't auto-accept on Enter (keep for execute)
+                    tabCompletion: "on",
+                    // Hover support
+                    hover: {
+                        enabled: true,
+                        delay: 300,
+                    },
+                    // Parameter hints (signature help)
+                    parameterHints: {
+                        enabled: true,
+                        cycle: true,
+                    },
+                    // Line numbers options
+                    ...createLineNumbersOptions(),
                 },
-                fontFamily,
-                fontSize,
-                lineHeight,
-                padding: { top: 4, bottom: 4 },
-                // Enable suggestions/completions
-                quickSuggestions: true,
-                suggestOnTriggerCharacters: true,
-                acceptSuggestionOnEnter: "off", // Don't auto-accept on Enter (keep for execute)
-                tabCompletion: "on",
-                // Hover support
-                hover: {
-                    enabled: true,
-                    delay: 300,
-                },
-                // Parameter hints (signature help)
-                parameterHints: {
-                    enabled: true,
-                    cycle: true,
-                },
-                // Line numbers options
-                ...createLineNumbersOptions(),
-            });
+            );
 
             editorHost.setEditor(codeEditorWidget);
 
@@ -1289,7 +1263,8 @@
                 codeEditorWidget.onDidFocusEditorText(() => {
                     if (!activeRef.current) {
                         onActivate(
-                            editorHost.getActiveSessionId() || currentSessionId(),
+                            editorHost.getActiveSessionId() ||
+                                currentSessionId(),
                         );
                     }
                     scheduleEnsureInputBottomVisible();
@@ -1315,7 +1290,8 @@
             });
 
             // Initial layout using container width
-            const initialWidth = codeEditorWidgetContainerRef.clientWidth || width;
+            const initialWidth =
+                codeEditorWidgetContainerRef.clientWidth || width;
             codeEditorWidth = initialWidth;
             codeEditorWidget.layout({
                 width: initialWidth,
@@ -1327,8 +1303,7 @@
             const fontInfo = codeEditorWidget.getOption(
                 monaco.editor.EditorOption.fontInfo,
             );
-            const charWidth =
-                fontInfo.typicalHalfwidthCharacterWidth || fontInfo.spaceWidth;
+            const charWidth = fontInfo.spaceWidth;
             if (charWidth > 0) {
                 updateLineDecorationsWidthPx(charWidth);
                 if (onCharWidthChanged) {
