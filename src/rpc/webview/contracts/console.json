@@ -650,6 +650,33 @@
     },
     {
       "kind": "notification",
+      "name": "PendingInputChangedNotification",
+      "method": "console/pendingInputChanged",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "sessionId",
+              "type": "string"
+            },
+            {
+              "name": "code",
+              "optional": true,
+              "type": "string"
+            },
+            {
+              "name": "inputPrompt",
+              "type": "string"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
       "name": "ConsoleSettingsChangedNotification",
       "method": "console/settingsChanged",
       "paramsType": "ConsoleSettings",

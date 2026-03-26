@@ -884,11 +884,18 @@
             return;
         }
 
+        const previousSessionId = committedSessionId;
+        if (previousSessionId && (previousSessionId !== nextSessionId || force)) {
+            // Force re-activation of the same session is used for language/support
+            // refreshes. Persist local history/view state first so we do not
+            // restore stale cached state back over the current input history.
+            saveSessionState(previousSessionId);
+        }
+
         const nextState = sessionModelManager.ensureSession(
             nextSessionId,
             nextLanguageId,
         );
-        const previousSessionId = committedSessionId;
         const epoch = ++activationEpoch;
 
         if (
@@ -899,11 +906,6 @@
             flushPendingCommands(nextSessionId);
             return;
         }
-
-        if (previousSessionId && previousSessionId !== nextSessionId) {
-            saveSessionState(previousSessionId);
-        }
-
         activationState = "switching";
         activatingSessionId = nextSessionId;
         resetEditorTransientState();
@@ -1414,25 +1416,22 @@
     });
 
     $effect(() => {
-        void languageAssetsVersion;
         syncKnownSessionModels();
         sessionModelManager.updateConnection(connection);
+    });
 
-        void ensureLanguageSupportRegistered(currentLanguageId()).then(() => {
+    $effect(() => {
+        const targetSessionId = sessionId;
+        const targetLanguageId = currentLanguageId();
+        void languageAssetsVersion;
+
+        void ensureLanguageSupportRegistered(targetLanguageId).then(() => {
             if (destroyed || !codeEditorWidget) {
                 return;
             }
 
-            void activateSessionModel(sessionId, currentLanguageId(), true);
-
-            if (themeData) {
-                applyMonacoTheme(themeData);
-            }
+            void activateSessionModel(targetSessionId, targetLanguageId, true);
         });
-    });
-
-    $effect(() => {
-        sessionModelManager.updateConnection(connection);
     });
 
     function getVSCodeTheme(): string {

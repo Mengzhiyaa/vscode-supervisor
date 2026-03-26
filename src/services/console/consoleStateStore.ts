@@ -50,6 +50,7 @@ export class ConsoleStateStore implements vscode.Disposable {
 
         const disposables: vscode.Disposable[] = [
             instance.onDidChangeRuntimeItems(markDirty),
+            instance.onDidChangePendingInput(markDirty),
             instance.onDidChangeTrace(markDirty),
             instance.onDidChangeWordWrap(markDirty),
             instance.onDidClearInputHistory(markDirty),

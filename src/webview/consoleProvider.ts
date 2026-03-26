@@ -1076,6 +1076,14 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
         this._connection?.sendNotification(ConsoleProtocol.SetPendingCodeNotification.type, { sessionId, code });
     }
 
+    private _sendPendingInputChanged(sessionId: string, code: string | undefined, inputPrompt: string): void {
+        this._connection?.sendNotification(ConsoleProtocol.PendingInputChangedNotification.type, {
+            sessionId,
+            code,
+            inputPrompt,
+        });
+    }
+
     private _sendHistoryAdd(sessionId: string, code: string): void {
         const trimmed = code.trim();
         if (!trimmed) {
@@ -1220,6 +1228,16 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
         this._consoleServiceDisposables.push(
             this._consoleService.onDidRevealExecution(event => {
                 this.sendRevealExecution(event.executionId, event.sessionId);
+            })
+        );
+
+        this._consoleServiceDisposables.push(
+            this._consoleService.onDidChangePendingInput(event => {
+                this._sendPendingInputChanged(
+                    event.sessionId,
+                    event.code,
+                    event.inputPrompt,
+                );
             })
         );
 

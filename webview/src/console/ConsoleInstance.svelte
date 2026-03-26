@@ -123,27 +123,25 @@
     let contextMenuCopyEnabled = $state(false);
     let composingInput = $state(false);
 
-    const contextMenuEntries = $derived.by(
-        (): ContextMenuEntry[] => [
-            {
-                label: "Copy",
-                disabled: !contextMenuCopyEnabled,
-                onSelected: copySelection,
+    const contextMenuEntries = $derived.by((): ContextMenuEntry[] => [
+        {
+            label: "Copy",
+            disabled: !contextMenuCopyEnabled,
+            onSelected: copySelection,
+        },
+        {
+            label: "Paste",
+            disabled: contextMenuClipboardText === "",
+            onSelected: () => {
+                pasteText(contextMenuClipboardText);
             },
-            {
-                label: "Paste",
-                disabled: contextMenuClipboardText === "",
-                onSelected: () => {
-                    pasteText(contextMenuClipboardText);
-                },
-            },
-            { separator: true },
-            {
-                label: "Select All",
-                onSelected: () => onSelectAll(),
-            },
-        ],
-    );
+        },
+        { separator: true },
+        {
+            label: "Select All",
+            onSelected: () => onSelectAll(),
+        },
+    ]);
 
     /**
      * Saves the current scroll position to VS Code state.
@@ -291,9 +289,8 @@
 
     function getSearchContainer(): HTMLElement | null {
         return (
-            consoleInstanceRef?.querySelector(
-                ".console-instance-container",
-            ) ?? null
+            consoleInstanceRef?.querySelector(".console-instance-container") ??
+            null
         );
     }
 
@@ -315,10 +312,13 @@
             clearTimeout(searchContentRefreshTimer);
         }
 
-        searchContentRefreshTimer = setTimeout(() => {
-            searchContentRefreshTimer = undefined;
-            performSearch(searchQuery, searchOptions, preserveCurrentIndex);
-        }, immediate ? 0 : 60);
+        searchContentRefreshTimer = setTimeout(
+            () => {
+                searchContentRefreshTimer = undefined;
+                performSearch(searchQuery, searchOptions, preserveCurrentIndex);
+            },
+            immediate ? 0 : 60,
+        );
     }
 
     function observeSearchContent() {
@@ -423,10 +423,7 @@
             matches.length === 0
                 ? -1
                 : preserveCurrentIndex
-                  ? Math.min(
-                        Math.max(currentMatchIndex, 0),
-                        matches.length - 1,
-                    )
+                  ? Math.min(Math.max(currentMatchIndex, 0), matches.length - 1)
                   : 0;
 
         applyHighlights(searchMatches, currentMatchIndex);
@@ -460,7 +457,8 @@
 
         const isCmdOrCtrl = e.ctrlKey || e.metaKey;
         const noOtherModifiers = !e.shiftKey && !e.altKey;
-        const onlyShiftKey = e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey;
+        const onlyShiftKey =
+            e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey;
 
         if (isCmdOrCtrl && noOtherModifiers) {
             switch (e.key.toLowerCase()) {
@@ -621,10 +619,9 @@
             return;
         }
 
-        let consoleInputWidth = adjustedWidth;
-        if (consoleInstanceRef?.scrollHeight >= consoleInstanceRef?.clientHeight) {
-            consoleInputWidth -= 14;
-        }
+        // Measure the actual rendered viewport width so flex shrink, splitter width,
+        // and native scrollbar width are reflected in the reported console width.
+        const consoleInputWidth = (consoleInstanceRef?.clientWidth ?? 0) - 10;
 
         if (consoleInputWidth <= 0) {
             return;
@@ -848,9 +845,7 @@
 
     .console-instance::-webkit-scrollbar-thumb {
         min-height: 20px;
-        background-color: var(
-            --vscode-scrollbarSlider-background
-        ) !important;
+        background-color: var(--vscode-scrollbarSlider-background) !important;
     }
 
     .console-instance::-webkit-scrollbar-thumb:hover {

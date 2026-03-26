@@ -888,6 +888,45 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
         this._onDidSetPendingCodeEmitter.fire(pendingCode);
     }
 
+    private _getInteractivePendingCode(): string | undefined {
+        const interactiveCode = this._pendingCodeQueue
+            .filter((item) => item.mode === RuntimeCodeExecutionMode.Interactive)
+            .map((item) => item.code.trimEnd())
+            .join('\n');
+
+        return interactiveCode || undefined;
+    }
+
+    private _syncPendingInputRuntimeItem(): void {
+        const existingPendingInput = this._runtimeItemPendingInput;
+        if (existingPendingInput) {
+            const index = this._runtimeItems.indexOf(existingPendingInput);
+            if (index > -1) {
+                this._runtimeItems.splice(index, 1);
+            }
+            this._runtimeItemPendingInput = undefined;
+        }
+
+        const interactiveCode = this._getInteractivePendingCode();
+        if (interactiveCode) {
+            this._runtimeItemPendingInput = new RuntimeItemPendingInput(
+                this.generateId(),
+                new Date(),
+                this._inputPrompt,
+                { source: 'console' },
+                undefined,
+                interactiveCode,
+                RuntimeCodeExecutionMode.Interactive,
+            );
+            this._runtimeItems.push(this._runtimeItemPendingInput);
+        }
+
+        this._onDidChangePendingInputEmitter.fire({
+            code: interactiveCode,
+            inputPrompt: this._inputPrompt,
+        });
+    }
+
     private addPendingInput(
         code: string,
         attribution: IConsoleCodeAttribution,
@@ -903,45 +942,12 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
             errorBehavior,
         });
 
-        if (mode === RuntimeCodeExecutionMode.Silent) {
-            return;
-        }
-
-        this.removePendingInputRuntimeItem();
-
-        const interactiveCode = this._pendingCodeQueue
-            .filter((item) => item.mode === RuntimeCodeExecutionMode.Interactive)
-            .map((item) => item.code.trimEnd())
-            .join('\n');
-
-        if (!interactiveCode) {
-            this._emitRuntimeItemsRestoreRequired();
-            return;
-        }
-
-        const inputPrompt = this._inputPrompt;
-        this._runtimeItemPendingInput = new RuntimeItemPendingInput(
-            this.generateId(),
-            new Date(),
-            inputPrompt,
-            attribution,
-            executionId,
-            interactiveCode,
-            mode,
-        );
-        this._runtimeItems.push(this._runtimeItemPendingInput);
-        this._emitRuntimeItemsRestoreRequired();
-        this._onDidChangePendingInputEmitter.fire({ code: interactiveCode, inputPrompt });
+        this._syncPendingInputRuntimeItem();
     }
 
     private clearPendingInput(): void {
         this._pendingCodeQueue = [];
-
-        const removed = this.removePendingInputRuntimeItem();
-        if (removed) {
-            this._emitRuntimeItemsRestoreRequired();
-            this._onDidChangePendingInputEmitter.fire({ code: undefined, inputPrompt: this._inputPrompt });
-        }
+        this._syncPendingInputRuntimeItem();
 
         if (this._pendingInputState === 'Processing') {
             this._pendingInputState = 'Interrupted';
@@ -976,12 +982,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
 
         if (codeFragmentStatus !== RuntimeCodeFragmentStatus.Complete) {
             this._pendingCodeQueue.shift();
-
-            const removed = this.removePendingInputRuntimeItem();
-            if (removed) {
-                this._emitRuntimeItemsRestoreRequired();
-            }
-
+            this._syncPendingInputRuntimeItem();
             this.setPendingCode(pendingItem.code, pendingItem.executionId);
             return;
         }
@@ -1007,48 +1008,16 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
             );
             this._runtimeItems.push(runtimeItemActivity);
             this._runtimeItemActivities.set(id, runtimeItemActivity);
+            this._emitAppendRuntimeItem(runtimeItemActivity);
         }
 
         this._pendingCodeQueue.shift();
+        this._syncPendingInputRuntimeItem();
 
-        // Remove the pending input visual item
-        if (this._runtimeItemPendingInput) {
-            const index = this._runtimeItems.indexOf(this._runtimeItemPendingInput);
-            if (index > -1) {
-                this._runtimeItems.splice(index, 1);
-            }
-        }
-
-        if (this._pendingCodeQueue.length > 0) {
-            const nextItem = this._pendingCodeQueue[0];
-            if (nextItem.mode !== RuntimeCodeExecutionMode.Silent) {
-                this._runtimeItemPendingInput = new RuntimeItemPendingInput(
-                    this.generateId(),
-                    new Date(),
-                    this._inputPrompt,
-                    nextItem.attribution,
-                    nextItem.executionId,
-                    nextItem.code,
-                    nextItem.mode,
-                );
-                this._runtimeItems.push(this._runtimeItemPendingInput);
-            } else {
-                this._runtimeItemPendingInput = undefined;
-            }
-        } else {
-            this._runtimeItemPendingInput = undefined;
-        }
-
-        // Fire events
-        const pendingInputPrompt = this._inputPrompt;
-        this._emitRuntimeItemsRestoreRequired();
-        this._onDidChangePendingInputEmitter.fire({
-            code: this._runtimeItemPendingInput?.code,
-            inputPrompt: pendingInputPrompt,
-        });
-
-        // Execute directly (Positron pattern - don't use doExecuteCode)
-        this.setPendingCode();
+        // Execute directly (Positron pattern - don't use doExecuteCode).
+        // Do not clear pending code here: the webview input was already cleared
+        // when the user submitted, and a second clear would wipe any new draft
+        // typed while this queued item was waiting to run.
         this._session.execute(pendingItem.code, id, pendingItem.mode, pendingItem.errorBehavior);
 
         if (pendingItem.mode !== RuntimeCodeExecutionMode.Silent) {
@@ -1065,22 +1034,6 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
             languageId: this._runtimeMetadata.languageId,
             runtimeName: this._runtimeMetadata.runtimeName,
         });
-    }
-
-    private removePendingInputRuntimeItem(): boolean {
-        if (!this._runtimeItemPendingInput) {
-            return false;
-        }
-
-        const index = this._runtimeItems.indexOf(this._runtimeItemPendingInput);
-        this._runtimeItemPendingInput = undefined;
-
-        if (index > -1) {
-            this._runtimeItems.splice(index, 1);
-            return true;
-        }
-
-        return false;
     }
 
     replyToPrompt(value: string): void {

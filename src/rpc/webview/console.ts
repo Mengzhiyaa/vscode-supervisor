@@ -258,6 +258,17 @@ export namespace SetPendingCodeNotification {
     export const type = new NotificationType<Params>('console/setPendingCode');
 }
 
+export namespace PendingInputChangedNotification {
+
+    export interface Params {
+        sessionId: string;
+        code?: string;
+        inputPrompt: string;
+    }
+
+    export const type = new NotificationType<Params>('console/pendingInputChanged');
+}
+
 export namespace ConsoleSettingsChangedNotification {
 
     export const type = new NotificationType<ConsoleSettings>('console/settingsChanged');

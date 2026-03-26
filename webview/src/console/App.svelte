@@ -176,6 +176,12 @@
             ? (workingDirectoryBySession.get(activeSessionId) ?? "")
             : "",
     );
+    const knownSessions = $derived(
+        sessions.map((session) => ({
+            sessionId: session.id,
+            languageId: session.languageId ?? "plaintext",
+        })),
+    );
     let promptBySession = $state(
         new Map<string, { inputPrompt: string; continuationPrompt: string }>(),
     );
@@ -1152,6 +1158,35 @@
         return true;
     }
 
+    function updatePendingRuntimeItem(
+        sessionId: string,
+        code?: string,
+        inputPrompt: string = ">",
+    ): void {
+        ensureSessionData(sessionId);
+        const data = getSessionData(sessionId);
+        const existingPendingItems = data.runtimeItems.filter(
+            (item): item is RuntimeItemPendingInput =>
+                item instanceof RuntimeItemPendingInput,
+        );
+        if (!code && existingPendingItems.length === 0) {
+            return;
+        }
+        const pendingId = existingPendingItems[0]?.id ?? generateId();
+
+        data.runtimeItems = data.runtimeItems.filter(
+            (item) => !(item instanceof RuntimeItemPendingInput),
+        );
+
+        if (code) {
+            data.runtimeItems.push(
+                new RuntimeItemPendingInput(pendingId, inputPrompt, code),
+            );
+        }
+
+        syncSessionRuntimeItems(sessionId);
+    }
+
     function appendActivityItem(
         sessionId: string,
         parentId: string,
@@ -1577,6 +1612,20 @@
                     kind: "setPendingCode",
                     code: params.code,
                 });
+            },
+        );
+
+        connection.onNotification(
+            "console/pendingInputChanged",
+            (params: { sessionId: string; code?: string; inputPrompt: string }) => {
+                if (!params.sessionId) {
+                    return;
+                }
+                updatePendingRuntimeItem(
+                    params.sessionId,
+                    params.code,
+                    params.inputPrompt,
+                );
             },
         );
 
@@ -2119,10 +2168,7 @@
                         onOpenInEditor={handleOpenInEditor}
                         onClearConsole={handleClearConsole}
                         onCharWidthChanged={handleCharWidthChanged}
-                        knownSessions={sessions.map((session) => ({
-                            sessionId: session.id,
-                            languageId: session.languageId ?? "plaintext",
-                        }))}
+                        {knownSessions}
                         getAnchor={getInputAnchor}
                         anchorVersion={inputAnchorVersion}
                     />
