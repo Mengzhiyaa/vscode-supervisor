@@ -990,7 +990,7 @@
         addHistoryEntry(code);
 
         // Execute the code (explicitly target this session)
-        onExecute(currentSessionId(), trimmedCode);
+        onExecute(currentSessionId(), code);
 
         // Render the code editor widget
         codeEditorWidget.render(true);
@@ -1025,7 +1025,7 @@
                     const result = (await connection.sendRequest(
                         "console/isComplete",
                         {
-                            code: code.trim(),
+                            code,
                             sessionId: currentSessionId(),
                         },
                     )) as { status: string };

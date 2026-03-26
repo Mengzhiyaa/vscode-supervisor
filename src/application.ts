@@ -83,6 +83,18 @@ interface TestSimulateCommOpenParams {
     data?: Record<string, unknown>;
 }
 
+function isStatementRangeSyntaxError(error: unknown): error is { name: 'StatementRangeSyntaxError'; line?: number } {
+    if (!error || typeof error !== 'object') {
+        return false;
+    }
+
+    const candidate = error as { name?: unknown; line?: unknown };
+    return (
+        candidate.name === 'StatementRangeSyntaxError' &&
+        (typeof candidate.line === 'number' || typeof candidate.line === 'undefined')
+    );
+}
+
 interface TestSimulateCommDataParams {
     sessionId?: string;
     commId: string;
@@ -1125,6 +1137,7 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
                         }
 
                         return {
+                            kind: 'success' as const,
                             range: {
                                 start: {
                                     line: statementRange.range.start.line,
@@ -1138,6 +1151,13 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
                             code: statementRange.code,
                         };
                     } catch (error) {
+                        if (isStatementRangeSyntaxError(error)) {
+                            return {
+                                kind: 'rejection' as const,
+                                rejectionKind: 'syntax' as const,
+                                line: error.line,
+                            };
+                        }
                         this._outputChannel.debug(`[LspBridge] Failed to resolve statement range: ${error}`);
                         return undefined;
                     } finally {

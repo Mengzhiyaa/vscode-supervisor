@@ -311,6 +311,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
     private _pendingInputState: 'Idle' | 'Processing' | 'Interrupted' = 'Idle';
     private _pendingCode: string | undefined;
     private _runtimeItemPendingInput: RuntimeItemPendingInput | undefined;
+    private _lastPastedText = '';
 
     // Input history (1:1 Positron)
     private _inputHistory: string[] = [];
@@ -638,7 +639,11 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
         this._onDidChangeWordWrapEmitter.fire(this._wordWrap);
     }
 
-    pasteText(text: string): void { this._onDidPasteTextEmitter.fire(text); }
+    pasteText(text: string): void {
+        this.focusInput();
+        this._lastPastedText = text;
+        this._onDidPasteTextEmitter.fire(text);
+    }
     selectAll(): void { this._onDidSelectAllEmitter.fire(); }
 
     clearConsole(): boolean {
@@ -841,6 +846,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
         }
 
         const execId = executionId || this.generateExecutionId(code);
+        const executionAttribution = this._normalizeSubmittedAttribution(code, attribution);
 
         if (mode !== RuntimeCodeExecutionMode.Silent) {
             const inputPrompt = this._inputPrompt;
@@ -869,7 +875,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
             sessionId: this.sessionId,
             code,
             mode,
-            attribution,
+            attribution: executionAttribution,
             errorBehavior,
             languageId: this._runtimeMetadata.languageId,
             runtimeName: this._runtimeMetadata.runtimeName,
@@ -1018,6 +1024,10 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
         // Do not clear pending code here: the webview input was already cleared
         // when the user submitted, and a second clear would wipe any new draft
         // typed while this queued item was waiting to run.
+        const executionAttribution = this._normalizeSubmittedAttribution(
+            pendingItem.code,
+            pendingItem.attribution,
+        );
         this._session.execute(pendingItem.code, id, pendingItem.mode, pendingItem.errorBehavior);
 
         if (pendingItem.mode !== RuntimeCodeExecutionMode.Silent) {
@@ -1029,11 +1039,32 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
             sessionId: this.sessionId,
             code: pendingItem.code,
             mode: pendingItem.mode as RuntimeCodeExecutionMode,
-            attribution: pendingItem.attribution,
+            attribution: executionAttribution,
             errorBehavior: pendingItem.errorBehavior as RuntimeErrorBehavior,
             languageId: this._runtimeMetadata.languageId,
             runtimeName: this._runtimeMetadata.runtimeName,
         });
+    }
+
+    private _normalizeSubmittedAttribution(
+        code: string,
+        attribution: IConsoleCodeAttribution,
+    ): IConsoleCodeAttribution {
+        if (attribution.source !== 'console') {
+            return attribution;
+        }
+
+        const lastPastedText = this._lastPastedText.trim();
+        this._lastPastedText = '';
+
+        if (lastPastedText && code.trim() === lastPastedText) {
+            return {
+                ...attribution,
+                source: 'paste',
+            };
+        }
+
+        return attribution;
     }
 
     replyToPrompt(value: string): void {

@@ -425,7 +425,10 @@ export class PositronConsoleService implements IPositronConsoleService {
             return existingInstance;
         }
 
-        if (this._activeConsoleInstance?.runtimeMetadata.languageId === languageId) {
+        if (
+            this._activeConsoleInstance?.runtimeMetadata.languageId === languageId &&
+            this._activeConsoleInstance.sessionMetadata.sessionMode === LanguageRuntimeSessionMode.Console
+        ) {
             return this._activeConsoleInstance;
         }
 
@@ -440,7 +443,11 @@ export class PositronConsoleService implements IPositronConsoleService {
     private _findConsoleInstanceForLanguage(languageId: string): PositronConsoleInstance | undefined {
         return Array.from(this._consoleInstancesBySessionId.values())
             .sort((a, b) => b.sessionMetadata.createdTimestamp - a.sessionMetadata.createdTimestamp)
-            .find((instance) => instance.runtimeMetadata.languageId === languageId);
+            .find(
+                (instance) =>
+                    instance.runtimeMetadata.languageId === languageId &&
+                    instance.sessionMetadata.sessionMode === LanguageRuntimeSessionMode.Console,
+            );
     }
 
     private async _startConsoleInstanceForLanguage(
@@ -459,6 +466,12 @@ export class PositronConsoleService implements IPositronConsoleService {
                 true,
             );
             return sessionId ? this._consoleInstancesBySessionId.get(sessionId) : undefined;
+        }
+
+        if (!this._sessionManager.getRuntimeProvider(languageId)) {
+            throw new Error(
+                `Cannot execute code because there is no registered runtime for the '${languageId}' language.`,
+            );
         }
 
         this._outputChannel.debug(`[PositronConsoleService] No preferred runtime for ${languageId}; falling back to startConsoleSession`);

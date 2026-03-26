@@ -1,5 +1,6 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
+import { LanguageRuntimeSessionMode } from '../../api';
 import { ViewIds } from '../../coreCommandIds';
 import { PositronConsoleService } from '../../services/console';
 
@@ -167,7 +168,7 @@ suite('[Unit] console service focus preservation', () => {
         const pythonInstance = {
             sessionId: 'python-session',
             runtimeMetadata: { languageId: 'python' },
-            sessionMetadata: { createdTimestamp: 1 },
+            sessionMetadata: { createdTimestamp: 1, sessionMode: LanguageRuntimeSessionMode.Console },
             attachedRuntimeSession: pythonSession,
             enqueueCode: async () => undefined,
             focusInput: () => undefined,
@@ -176,7 +177,7 @@ suite('[Unit] console service focus preservation', () => {
         const rInstance = {
             sessionId: 'r-session',
             runtimeMetadata: { languageId: 'r' },
-            sessionMetadata: { createdTimestamp: 2 },
+            sessionMetadata: { createdTimestamp: 2, sessionMode: LanguageRuntimeSessionMode.Console },
             attachedRuntimeSession: rSession,
             enqueueCode: async (code: string) => {
                 executionCalls.push(code);
@@ -206,6 +207,95 @@ suite('[Unit] console service focus preservation', () => {
         service.dispose();
     });
 
+    test('executeCode ignores a non-console active instance when selecting a language target', async () => {
+        const sessionManager = {
+            foregroundSession: undefined,
+            startNewRuntimeSession: async () => {
+                throw new Error('Expected existing console instance to be reused');
+            },
+            startConsoleSession: async () => {
+                throw new Error('Expected existing console instance to be reused');
+            },
+            getRuntimeProvider: () => ({ languageId: 'r' }),
+        } as any;
+        const service = new PositronConsoleService(sessionManager, makeNoopLogChannel());
+        const executionCalls: string[] = [];
+
+        service.setConsoleViewProvider({
+            reveal: async () => undefined,
+        });
+
+        const notebookBackedSession = { sessionId: 'r-notebook-session' };
+        const consoleSession = { sessionId: 'r-console-session' };
+        const notebookInstance = {
+            sessionId: 'r-notebook-session',
+            runtimeMetadata: { languageId: 'r' },
+            sessionMetadata: { createdTimestamp: 3, sessionMode: LanguageRuntimeSessionMode.Notebook },
+            attachedRuntimeSession: notebookBackedSession,
+            enqueueCode: async () => undefined,
+            focusInput: () => undefined,
+            dispose: () => undefined,
+        } as any;
+        const consoleInstance = {
+            sessionId: 'r-console-session',
+            runtimeMetadata: { languageId: 'r' },
+            sessionMetadata: { createdTimestamp: 2, sessionMode: LanguageRuntimeSessionMode.Console },
+            attachedRuntimeSession: consoleSession,
+            enqueueCode: async (code: string) => {
+                executionCalls.push(code);
+            },
+            focusInput: () => undefined,
+            dispose: () => undefined,
+        } as any;
+
+        (service as any)._consoleInstancesBySessionId.set(notebookInstance.sessionId, notebookInstance);
+        (service as any)._consoleInstancesBySessionId.set(consoleInstance.sessionId, consoleInstance);
+        (service as any)._activeConsoleInstance = notebookInstance;
+
+        const sessionId = await service.executeCode(
+            'r',
+            undefined,
+            'mean(y)',
+            { source: 'editor' },
+            false,
+        );
+
+        assert.strictEqual(sessionId, 'r-console-session');
+        assert.deepStrictEqual(executionCalls, ['mean(y)']);
+        assert.strictEqual(service.activePositronConsoleInstance, consoleInstance);
+        assert.strictEqual(sessionManager.foregroundSession, consoleSession);
+
+        service.dispose();
+    });
+
+    test('executeCode rejects languages without a registered runtime provider before fallback startup', async () => {
+        let startConsoleSessionCalls = 0;
+        const sessionManager = {
+            foregroundSession: undefined,
+            startNewRuntimeSession: async () => {
+                throw new Error('Expected no runtime startup for unsupported language');
+            },
+            startConsoleSession: async () => {
+                startConsoleSessionCalls += 1;
+                throw new Error('Expected no fallback console startup for unsupported language');
+            },
+            getRuntimeProvider: () => undefined,
+        } as any;
+        const service = new PositronConsoleService(sessionManager, makeNoopLogChannel());
+
+        service.setConsoleViewProvider({
+            reveal: async () => undefined,
+        });
+
+        await assert.rejects(
+            () => service.executeCode('python', undefined, 'print(1)', { source: 'editor' }, false),
+            /no registered runtime/i,
+        );
+        assert.strictEqual(startConsoleSessionCalls, 0);
+
+        service.dispose();
+    });
+
     test('revealExecution reveals the console without requesting focus', () => {
         const service = new PositronConsoleService({} as any, makeNoopLogChannel());
         const revealCalls: boolean[] = [];
@@ -219,7 +309,7 @@ suite('[Unit] console service focus preservation', () => {
         const instance = {
             sessionId: 'r-session',
             runtimeMetadata: { languageId: 'r' },
-            sessionMetadata: { createdTimestamp: 1 },
+            sessionMetadata: { createdTimestamp: 1, sessionMode: LanguageRuntimeSessionMode.Console },
             revealExecution: () => true,
             dispose: () => undefined,
         } as any;

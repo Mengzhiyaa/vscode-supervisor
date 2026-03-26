@@ -22,6 +22,60 @@ interface StatementRange {
     code?: string;
 }
 
+interface StatementRangeRejection {
+    kind: 'rejection';
+    rejectionKind: 'syntax';
+    line?: number;
+}
+
+type StatementRangeCommandResult =
+    | {
+          kind: 'success';
+          range: {
+              start: { line: number; character: number };
+              end: { line: number; character: number };
+          };
+          code?: string;
+      }
+    | StatementRangeRejection
+    | {
+          range: {
+              start: { line: number; character: number };
+              end: { line: number; character: number };
+          };
+          code?: string;
+      };
+
+function isStatementRangeRejection(
+    result: StatementRange | StatementRangeRejection,
+): result is StatementRangeRejection {
+    return (result as StatementRangeRejection).kind === 'rejection';
+}
+
+async function notifyStatementRangeSyntaxRejection(
+    editor: vscode.TextEditor,
+    line: number | undefined,
+): Promise<void> {
+    const jumpToLineAction = 'Jump to line';
+    const message =
+        line === undefined
+            ? "Can't execute code due to a syntax error."
+            : `Can't execute code due to a syntax error near line ${line + 1}.`;
+
+    const selection = line === undefined
+        ? await vscode.window.showInformationMessage(message)
+        : await vscode.window.showInformationMessage(message, jumpToLineAction);
+
+    if (selection === jumpToLineAction && line !== undefined) {
+        const position = new vscode.Position(line, 0);
+        editor.selection = new vscode.Selection(position, position);
+        editor.revealRange(
+            new vscode.Range(position, position),
+            vscode.TextEditorRevealType.InCenterIfOutsideViewport,
+        );
+    }
+}
+
 /**
  * Registers console-related commands for editor integration.
  * @returns Array of disposables for command registrations
@@ -103,9 +157,9 @@ export function registerConsoleActions(
                 new vscode.Position(0, 0),
                 new vscode.Position(position.line, document.lineAt(position.line).text.length)
             );
-            const code = document.getText(range).trim();
+            const code = document.getText(range);
 
-            if (!code) {
+            if (!code.trim()) {
                 vscode.window.showInformationMessage('No code found before cursor position.');
                 return;
             }
@@ -123,7 +177,7 @@ export function registerConsoleActions(
                 undefined,
                 code,
                 attribution,
-                true
+                false
             );
         })
     );
@@ -144,9 +198,9 @@ export function registerConsoleActions(
                 new vscode.Position(position.line, 0),
                 new vscode.Position(document.lineCount - 1, document.lineAt(document.lineCount - 1).text.length)
             );
-            const code = document.getText(range).trim();
+            const code = document.getText(range);
 
-            if (!code) {
+            if (!code.trim()) {
                 vscode.window.showInformationMessage('No code found after cursor position.');
                 return;
             }
@@ -164,7 +218,7 @@ export function registerConsoleActions(
                 undefined,
                 code,
                 attribution,
-                true
+                false
             );
         })
     );
@@ -262,6 +316,11 @@ async function executeCodeWithAdvancement(
         const statementRange = await getStatementRangeAtPosition(document, position, outputChannel);
 
         if (statementRange) {
+            if (isStatementRangeRejection(statementRange)) {
+                await notifyStatementRangeSyntaxRejection(editor, statementRange.line);
+                return;
+            }
+
             code = statementRange.code ?? document.getText(statementRange.range);
 
             if (advance) {
@@ -358,20 +417,25 @@ async function getStatementRangeAtPosition(
     document: vscode.TextDocument,
     position: vscode.Position,
     outputChannel: vscode.LogOutputChannel
-): Promise<StatementRange | undefined> {
+): Promise<StatementRange | StatementRangeRejection | undefined> {
     try {
         // Try to get statement range from language server via custom LSP request
         // This mirrors Positron's statementRangeProvider.provideStatementRange
-        const result = await vscode.commands.executeCommand<{
-            range: { start: { line: number; character: number }; end: { line: number; character: number } };
-            code?: string;
-        } | undefined>(
+        const result = await vscode.commands.executeCommand<StatementRangeCommandResult | undefined>(
             InternalCommandIds.lspGetStatementRange,
             document.uri.toString(),
             { line: position.line, character: position.character }
         );
 
-        if (result && result.range) {
+        if (!result) {
+            return undefined;
+        }
+
+        if ('kind' in result && result.kind === 'rejection') {
+            return result;
+        }
+
+        if (result.range) {
             return {
                 range: new vscode.Range(
                     new vscode.Position(result.range.start.line, result.range.start.character),
@@ -423,15 +487,23 @@ async function advanceStatement(
         );
 
         if (nextStatementRange) {
-            const nextStatement = nextStatementRange.range;
-            // Maintain invariant: always step further down, never up (Positron pattern)
-            if (nextStatement.start.line > executedRange.range.end.line) {
-                newLineNumber = nextStatement.start.line;
-                newColumn = nextStatement.start.character;
-            } else if (nextStatement.end.line > executedRange.range.end.line) {
-                // Exiting nested scope case (Positron pattern)
-                newLineNumber = nextStatement.end.line;
-                newColumn = nextStatement.end.character;
+            if (isStatementRangeRejection(nextStatementRange)) {
+                outputChannel.warn(
+                    nextStatementRange.line === undefined
+                        ? "Can't compute advancement due to a syntax error."
+                        : `Can't compute advancement due to a syntax error on line ${nextStatementRange.line + 1}.`,
+                );
+            } else {
+                const nextStatement = nextStatementRange.range;
+                // Maintain invariant: always step further down, never up (Positron pattern)
+                if (nextStatement.start.line > executedRange.range.end.line) {
+                    newLineNumber = nextStatement.start.line;
+                    newColumn = nextStatement.start.character;
+                } else if (nextStatement.end.line > executedRange.range.end.line) {
+                    // Exiting nested scope case (Positron pattern)
+                    newLineNumber = nextStatement.end.line;
+                    newColumn = nextStatement.end.character;
+                }
             }
         }
     }
