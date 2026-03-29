@@ -158,12 +158,11 @@ export class PositronConsoleService implements IPositronConsoleService {
                 this.deletePositronConsoleSession(sessionId);
             }),
             this._runtimeStartupService?.onSessionRestoreFailure((event) => {
-                const instance = this._consoleInstancesBySessionId.get(event.sessionId);
-                if (!instance) {
+                if (this._sessionManager.getSession(event.sessionId)) {
                     return;
                 }
 
-                instance.showRestoreFailure(event.error);
+                this.deletePositronConsoleSession(event.sessionId);
             }) ?? new vscode.Disposable(() => undefined),
         );
 

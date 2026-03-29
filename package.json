@@ -584,7 +584,7 @@
         },
         "kernelSupervisor.startupTimeout": {
           "type": "number",
-          "default": 10,
+          "default": 30,
           "minimum": 1,
           "description": "Timeout in seconds while starting a kernel session."
         },

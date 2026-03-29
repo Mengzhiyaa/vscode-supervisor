@@ -140,7 +140,7 @@ suite('[Unit] session snapshot builder', () => {
         );
     });
 
-    test('buildSessionsWithConsoleOverlay includes provisional console-only sessions', () => {
+    test('buildSessionsWithConsoleOverlay excludes provisional console-only sessions until attached', () => {
         const provisional = createConsoleInstance('session-restore-1', PositronConsoleState.Uninitialized, {
             runtimeAttached: false,
             sessionName: 'restored-r-session',
@@ -159,23 +159,11 @@ suite('[Unit] session snapshot builder', () => {
         );
 
         const sessions = builder.buildSessionsWithConsoleOverlay();
-        assert.deepStrictEqual(sessions, [{
-            id: 'session-restore-1',
-            name: 'restored-r-session',
-            runtimeName: 'R',
-            state: 'uninitialized',
-            runtimePath: '/console/session-restore-1',
-            runtimeVersion: '4.4.1',
-            runtimeSource: 'configured',
-            base64EncodedIconSvg: 'console-icon',
-            promptActive: false,
-            runtimeAttached: false,
-            languageId: 'r',
-        }]);
+        assert.deepStrictEqual(sessions, []);
 
         assert.strictEqual(
             builder.resolveActiveSessionId(sessions, ['session-restore-1']),
-            'session-restore-1',
+            undefined,
         );
     });
 });

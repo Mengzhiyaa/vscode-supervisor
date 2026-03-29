@@ -226,6 +226,7 @@ function makeSessionManager() {
         },
         getSession: () => undefined,
         getActiveSession: () => undefined,
+        deleteSession: async () => true,
         validateRuntimeSession: async () => true,
         restoreRuntimeSession: async () => undefined,
     } as any;
@@ -461,6 +462,69 @@ suite('[Unit] runtime startup', () => {
         assert.deepStrictEqual(restoreFailures, [
             { sessionId: 'session-3', message: 'Session is no longer available' },
         ]);
+        assert.deepStrictEqual(
+            context.workspaceState.get<SerializedSessionMetadata[]>(
+                WORKSPACE_SESSION_LIST_KEY,
+                [],
+            )!.map((session) => session.metadata.sessionId),
+            ['session-2', 'session-1'],
+        );
+
+        startupService.dispose();
+    });
+
+    test('drops failed restored sessions from persistence and deletes partially restored runtime sessions', async () => {
+        const context = makeContext({}, {
+            [WORKSPACE_SESSION_LIST_KEY]: [
+                makeStoredSession('session-failed', { lastUsed: 2 }),
+                makeStoredSession('session-ok', { lastUsed: 1 }),
+            ],
+        });
+        const logChannel = makeNoopLogChannel();
+        const localSessionManager = makeSessionManager();
+        const runtimeProvider = makeRuntimeProvider();
+        const deletedSessionIds: string[] = [];
+
+        localSessionManager.value.getSession = (sessionId: string) => {
+            return sessionId === 'session-failed'
+                ? ({ sessionId } as any)
+                : undefined;
+        };
+        localSessionManager.value.deleteSession = async (sessionId: string) => {
+            deletedSessionIds.push(sessionId);
+            return true;
+        };
+        localSessionManager.value.restoreRuntimeSession = async (
+            _runtimeMetadata: unknown,
+            metadata: { sessionId: string },
+        ) => {
+            if (metadata.sessionId === 'session-failed') {
+                throw new Error('reconnect exploded');
+            }
+        };
+
+        const startupService = new RuntimeStartupService(
+            context,
+            {
+                ...makeRuntimeManager(),
+                getRuntimeProvider: () => runtimeProvider,
+            } as any,
+            localSessionManager.value,
+            makeNewFolderService(context, logChannel),
+            logChannel,
+        );
+
+        await startupService.getRestoredSessions();
+        await localSessionManager.value.restorePersistedSessionsInBackground();
+
+        assert.deepStrictEqual(deletedSessionIds, ['session-failed']);
+        assert.deepStrictEqual(
+            context.workspaceState.get<SerializedSessionMetadata[]>(
+                WORKSPACE_SESSION_LIST_KEY,
+                [],
+            )!.map((session) => session.metadata.sessionId),
+            ['session-ok'],
+        );
 
         startupService.dispose();
     });

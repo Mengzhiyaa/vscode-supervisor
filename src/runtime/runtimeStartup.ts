@@ -78,6 +78,7 @@ export class RuntimeStartupService implements vscode.Disposable {
 
     private readonly _localWindowId = `window-${Math.random().toString(16).slice(2, 10)}`;
     private readonly _shownArchitectureMismatchWarnings = new Set<string>();
+    private readonly _failedRestoredSessionIds = new Set<string>();
 
     private _startupPhase = RuntimeStartupPhase.Initializing;
     private _startupPromise: Promise<void> | undefined;
@@ -674,6 +675,7 @@ export class RuntimeStartupService implements vscode.Disposable {
                     persisted.metadata.sessionId,
                 );
                 if (!isValid) {
+                    await this._discardFailedRestoredSession(persisted.metadata.sessionId);
                     this._outputChannel.debug(
                         `[RuntimeStartup] Session ${persisted.metadata.sessionId} is no longer valid, skipping`,
                     );
@@ -689,6 +691,7 @@ export class RuntimeStartupService implements vscode.Disposable {
                     runtimeMetadata,
                 };
             } catch (error) {
+                await this._discardFailedRestoredSession(persisted.metadata.sessionId);
                 const normalizedError = error instanceof Error ? error : new Error(String(error));
                 this._outputChannel.error(
                     `[RuntimeStartup] Error validating persisted session ` +
@@ -734,6 +737,7 @@ export class RuntimeStartupService implements vscode.Disposable {
                     persisted.workingDirectory,
                 );
             } catch (error) {
+                await this._discardFailedRestoredSession(persisted.metadata.sessionId);
                 const normalizedError = error instanceof Error ? error : new Error(String(error));
                 this._outputChannel.error(
                     `[RuntimeStartup] Failed to restore session ${persisted.metadata.sessionId}: ${normalizedError}`,
@@ -746,6 +750,25 @@ export class RuntimeStartupService implements vscode.Disposable {
         }));
 
         await this.saveWorkspaceSessions();
+    }
+
+    private async _discardFailedRestoredSession(sessionId: string): Promise<void> {
+        this._failedRestoredSessionIds.add(sessionId);
+        this._restoredSessions = this._restoredSessions.filter(
+            (session) => session.metadata.sessionId !== sessionId,
+        );
+
+        if (!this._sessionManager.getSession(sessionId)) {
+            return;
+        }
+
+        try {
+            await this._sessionManager.deleteSession(sessionId);
+        } catch (error) {
+            this._outputChannel.warn(
+                `[RuntimeStartup] Failed to discard restored session ${sessionId}: ${error}`,
+            );
+        }
     }
 
     private async saveWorkspaceSessions(removeSessionId?: string): Promise<boolean> {
@@ -793,6 +816,9 @@ export class RuntimeStartupService implements vscode.Disposable {
                 return false;
             }
             if (removeSessionId && session.metadata.sessionId === removeSessionId) {
+                return false;
+            }
+            if (this._failedRestoredSessionIds.has(session.metadata.sessionId)) {
                 return false;
             }
             if (!this._runtimeManager.getRuntimeProvider(session.runtimeMetadata.languageId)) {

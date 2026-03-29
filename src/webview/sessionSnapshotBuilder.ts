@@ -43,7 +43,7 @@ export class SessionSnapshotBuilder {
         });
 
         for (const instance of this._consoleService.positronConsoleInstances) {
-            if (sessionsById.has(instance.sessionId)) {
+            if (sessionsById.has(instance.sessionId) || !instance.runtimeAttached) {
                 continue;
             }
 

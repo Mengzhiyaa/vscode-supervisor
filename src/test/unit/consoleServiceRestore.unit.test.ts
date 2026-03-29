@@ -1,7 +1,7 @@
 import * as assert from 'assert';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { PositronConsoleService, PositronConsoleState } from '../../services/console';
+import { PositronConsoleService } from '../../services/console';
 
 function createMemento(initialEntries: Record<string, unknown> = {}): vscode.Memento {
     const store = new Map<string, unknown>(Object.entries(initialEntries));
@@ -60,9 +60,21 @@ function createEventStub<T>(): vscode.Event<T> {
 }
 
 suite('[Unit] console service restored session placeholders', () => {
-    test('creates provisional console instances for restored sessions and surfaces restore failures', async () => {
+    test('creates provisional console instances for restored sessions and deletes failed placeholders', async () => {
         const sessionId = 'restored-r-session';
         const onSessionRestoreFailure = new vscode.EventEmitter<{ sessionId: string; error: Error }>();
+        const context = makeContext({
+            [`vscode-supervisor.console.state.${sessionId}`]: {
+                version: 2,
+                items: [],
+                inputHistory: ['1 + 1'],
+                trace: false,
+                wordWrap: true,
+                inputPrompt: '>',
+                continuationPrompt: '+',
+                workingDirectory: '/tmp/restored',
+            },
+        });
         const service = new PositronConsoleService(
             {
                 sessions: [],
@@ -71,20 +83,10 @@ suite('[Unit] console service restored session placeholders', () => {
                 onDidChangeForegroundSession: createEventStub(),
                 onDidDeleteRuntimeSession: createEventStub(),
                 onDidReceiveRuntimeEvent: createEventStub(),
+                getSession: () => undefined,
             } as any,
             makeNoopLogChannel(),
-            makeContext({
-                [`vscode-supervisor.console.state.${sessionId}`]: {
-                    version: 2,
-                    items: [],
-                    inputHistory: ['1 + 1'],
-                    trace: false,
-                    wordWrap: true,
-                    inputPrompt: '>',
-                    continuationPrompt: '+',
-                    workingDirectory: '/tmp/restored',
-                },
-            }),
+            context,
             {
                 getRestoredSessions: async () => [{
                     sessionName: 'Restored R',
@@ -129,7 +131,12 @@ suite('[Unit] console service restored session placeholders', () => {
             error: new Error('Session is no longer available'),
         });
 
-        assert.strictEqual(instance?.state, PositronConsoleState.Exited);
+        assert.strictEqual(service.getConsoleInstance(sessionId), undefined);
+        assert.strictEqual(service.activePositronConsoleInstance, undefined);
+        assert.strictEqual(
+            context.workspaceState.get(`vscode-supervisor.console.state.${sessionId}`),
+            undefined,
+        );
         service.dispose();
         onSessionRestoreFailure.dispose();
     });
