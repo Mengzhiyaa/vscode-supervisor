@@ -41,7 +41,7 @@ suite('[Unit] Supervisor package manifest', () => {
         const packageJson = readPackageJson();
 
         assert.strictEqual(packageJson.name, 'vscode-supervisor');
-        assert.strictEqual(packageJson.publisher, 'ark');
+        assert.strictEqual(packageJson.publisher, 'mengzhiya');
         assert.strictEqual(packageJson.icon, 'images/logo.png');
         assert.strictEqual(packageJson.main, './dist/extension.js');
         assert.strictEqual(packageJson.repository?.type, 'git');
@@ -97,6 +97,7 @@ suite('[Unit] Supervisor package manifest', () => {
         assert.match(vscodeIgnore, /src\/\*\*/);
         assert.match(vscodeIgnore, /out\/\*\*/);
         assert.match(vscodeIgnore, /node_modules\/\*\*/);
+        assert.match(vscodeIgnore, /webview\/node_modules\/\*\*/);
         assert.ok(fs.existsSync(path.join(path.resolve(__dirname, '../../..'), 'webview/package.json')));
         assert.ok(fs.existsSync(path.join(path.resolve(__dirname, '../../..'), 'webview/src/console/main.ts')));
         assert.ok(fs.existsSync(path.join(path.resolve(__dirname, '../../..'), 'scripts/install-binaries.mjs')));

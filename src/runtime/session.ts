@@ -785,10 +785,12 @@ export class RuntimeSession implements vscode.Disposable {
             throw error;
         }
 
-        if (typeof info.input_prompt === 'string') {
+        // Update prompts in case user has customised them. Trim trailing
+        // whitespace as the rendering code adds its own whitespace.
+        if (info.input_prompt) {
             this.dynState.inputPrompt = info.input_prompt.trimEnd();
         }
-        if (typeof info.continuation_prompt === 'string') {
+        if (info.continuation_prompt) {
             this.dynState.continuationPrompt = info.continuation_prompt.trimEnd();
         }
 
@@ -962,10 +964,10 @@ export class RuntimeSession implements vscode.Disposable {
         // Match startup behavior so UI can show "restarted" completion feedback.
         const info = this._kernel.runtimeInfo;
 
-        if (typeof info?.input_prompt === 'string') {
+        if (info?.input_prompt) {
             this.dynState.inputPrompt = info.input_prompt.trimEnd();
         }
-        if (typeof info?.continuation_prompt === 'string') {
+        if (info?.continuation_prompt) {
             this.dynState.continuationPrompt = info.continuation_prompt.trimEnd();
         }
 

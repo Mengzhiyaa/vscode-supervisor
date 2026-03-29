@@ -875,11 +875,13 @@
             const previousPrompt = getPrompt(sessionId);
             promptBySession.set(sessionId, {
                 inputPrompt:
-                    typeof metadata.inputPrompt === "string"
+                    typeof metadata.inputPrompt === "string" &&
+                    metadata.inputPrompt.trimEnd().length > 0
                         ? metadata.inputPrompt
                         : previousPrompt.inputPrompt,
                 continuationPrompt:
-                    typeof metadata.continuationPrompt === "string"
+                    typeof metadata.continuationPrompt === "string" &&
+                    metadata.continuationPrompt.trimEnd().length > 0
                         ? metadata.continuationPrompt
                         : previousPrompt.continuationPrompt,
             });

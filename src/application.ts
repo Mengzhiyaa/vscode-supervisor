@@ -677,7 +677,8 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
         const installations = this._runtimeManager.getInstallations(provider.languageId);
 
         return installations.map(installation => ({
-            label: `$(symbol-misc) ${provider.formatRuntimeName(installation)}`,
+            label: provider.formatRuntimeName(installation),
+            iconPath: provider.getRuntimeIconPath?.(installation),
             description: this._toRuntimeSourceLabel(provider.getRuntimeSource(installation)),
             detail: provider.getRuntimePath(installation),
             picked: provider.getRuntimePath(installation) === this._sessionManager.activeSession?.runtimeMetadata.runtimePath,
@@ -765,7 +766,8 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
 
             seenRuntimePaths.add(runtimePath);
             runtimeItems.push({
-                label: `$(symbol-misc) ${provider.formatRuntimeName(installation)}`,
+                label: provider.formatRuntimeName(installation),
+                iconPath: provider.getRuntimeIconPath?.(installation),
                 description: this._toRuntimeSourceLabel(provider.getRuntimeSource(installation)),
                 detail: runtimePath,
                 installation,
@@ -788,13 +790,17 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
                 label: 'Running Sessions',
             });
             for (const session of allSessions) {
+                const installation = this._resolveInstallationForSession(session);
                 const sessionName = session.dynState.sessionName
                     || session.sessionMetadata.sessionName
                     || session.runtimeMetadata.runtimeName
                     || 'R';
                 const isActive = activeSession && session.sessionId === activeSession.sessionId;
                 items.push({
-                    label: `$(debug-start) ${sessionName}`,
+                    label: sessionName,
+                    iconPath: installation
+                        ? (provider.getRuntimeIconPath?.(installation) ?? new vscode.ThemeIcon('debug-start'))
+                        : new vscode.ThemeIcon('debug-start'),
                     description: isActive ? '(active)' : '',
                     action: 'switchSession',
                     sessionId: session.sessionId,
@@ -807,8 +813,10 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
             label: 'More',
         });
         items.push({
-            label: '$(add) Start Another...',
+            label: 'Start Another...',
+            iconPath: new vscode.ThemeIcon('add'),
             detail: `Choose from discovered ${provider.languageName} installations`,
+            alwaysShow: true,
             action: 'startAnother',
         });
 

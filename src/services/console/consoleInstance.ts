@@ -74,6 +74,21 @@ import {
 
 const ON_DID_CHANGE_RUNTIME_ITEMS_THROTTLE_THRESHOLD = 20;
 const ON_DID_CHANGE_RUNTIME_ITEMS_THROTTLE_INTERVAL = 50;
+const DEFAULT_INPUT_PROMPT = '>';
+const DEFAULT_CONTINUATION_PROMPT = '+';
+
+function normalizePromptValue(prompt: string | undefined): string | undefined {
+    if (typeof prompt !== 'string') {
+        return undefined;
+    }
+
+    const trimmed = prompt.trimEnd();
+    return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function resolvePromptValue(prompt: string | undefined, fallback: string): string {
+    return normalizePromptValue(prompt) ?? fallback;
+}
 
 function mergeRuntimeItemsChanges(
     pending: ConsoleRuntimeItemsChangeEvent[] | undefined,
@@ -292,8 +307,8 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
     private _trace = false;
     private _wordWrap = true;
     private _promptActive = false;
-    private _inputPrompt = '>';
-    private _continuationPrompt = '+';
+    private _inputPrompt = DEFAULT_INPUT_PROMPT;
+    private _continuationPrompt = DEFAULT_CONTINUATION_PROMPT;
     private _workingDirectory: string | undefined;
     private _activeActivityItemPrompt: ActivityItemPrompt | undefined;
     private _runtimeAttached = false;
@@ -610,8 +625,8 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
         this._savedCurrentInput = '';
         this._trace = state.trace;
         this._wordWrap = state.wordWrap;
-        this._inputPrompt = state.inputPrompt ?? '>';
-        this._continuationPrompt = state.continuationPrompt ?? '+';
+        this._inputPrompt = resolvePromptValue(state.inputPrompt, DEFAULT_INPUT_PROMPT);
+        this._continuationPrompt = resolvePromptValue(state.continuationPrompt, DEFAULT_CONTINUATION_PROMPT);
         this._workingDirectory = state.workingDirectory;
 
         this._emitRuntimeItemsRestoreRequired();
@@ -1235,20 +1250,16 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
     handlePromptStateChange(data: Partial<PromptStateEvent>): void {
         let changed = false;
 
-        if (typeof data.input_prompt === 'string') {
-            const inputPrompt = data.input_prompt.trimEnd();
-            if (inputPrompt !== this._inputPrompt) {
-                this._inputPrompt = inputPrompt;
-                changed = true;
-            }
+        const inputPrompt = normalizePromptValue(data.input_prompt);
+        if (inputPrompt && inputPrompt !== this._inputPrompt) {
+            this._inputPrompt = inputPrompt;
+            changed = true;
         }
 
-        if (typeof data.continuation_prompt === 'string') {
-            const continuationPrompt = data.continuation_prompt.trimEnd();
-            if (continuationPrompt !== this._continuationPrompt) {
-                this._continuationPrompt = continuationPrompt;
-                changed = true;
-            }
+        const continuationPrompt = normalizePromptValue(data.continuation_prompt);
+        if (continuationPrompt && continuationPrompt !== this._continuationPrompt) {
+            this._continuationPrompt = continuationPrompt;
+            changed = true;
         }
 
         if (changed) {
@@ -1279,17 +1290,17 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
         this._clearStartupFailureFallback();
 
         if (session) {
-            const inputPrompt = session.dynState.inputPrompt?.trimEnd();
-            const continuationPrompt = session.dynState.continuationPrompt?.trimEnd();
+            const inputPrompt = normalizePromptValue(session.dynState.inputPrompt);
+            const continuationPrompt = normalizePromptValue(session.dynState.continuationPrompt);
             const workingDirectory = session.workingDirectory;
             let promptChanged = false;
 
-            if (typeof inputPrompt === 'string' && inputPrompt !== this._inputPrompt) {
+            if (inputPrompt && inputPrompt !== this._inputPrompt) {
                 this._inputPrompt = inputPrompt;
                 promptChanged = true;
             }
 
-            if (typeof continuationPrompt === 'string' && continuationPrompt !== this._continuationPrompt) {
+            if (continuationPrompt && continuationPrompt !== this._continuationPrompt) {
                 this._continuationPrompt = continuationPrompt;
                 promptChanged = true;
             }

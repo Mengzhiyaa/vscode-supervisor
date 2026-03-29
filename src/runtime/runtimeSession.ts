@@ -1954,21 +1954,23 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
 
     private _applyPromptState(
         session: RuntimeSession,
-        event: Partial<PromptStateEvent>,
+        state: Partial<PromptStateEvent>,
     ): PromptStateEvent {
-        const inputPrompt = typeof event.input_prompt === 'string'
-            ? event.input_prompt.trimEnd()
-            : session.dynState.inputPrompt;
-        const continuationPrompt = typeof event.continuation_prompt === 'string'
-            ? event.continuation_prompt.trimEnd()
-            : session.dynState.continuationPrompt;
+        // Runtimes might supply prompts with trailing whitespace (e.g. R,
+        // Python) that we trim here because we add our own whitespace later on.
+        const inputPrompt = state.input_prompt?.trimEnd();
+        const continuationPrompt = state.continuation_prompt?.trimEnd();
 
-        session.dynState.inputPrompt = inputPrompt;
-        session.dynState.continuationPrompt = continuationPrompt;
+        if (inputPrompt) {
+            session.dynState.inputPrompt = inputPrompt;
+        }
+        if (continuationPrompt) {
+            session.dynState.continuationPrompt = continuationPrompt;
+        }
 
         return {
-            input_prompt: inputPrompt,
-            continuation_prompt: continuationPrompt,
+            input_prompt: session.dynState.inputPrompt,
+            continuation_prompt: session.dynState.continuationPrompt,
         };
     }
 

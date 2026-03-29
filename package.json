@@ -1,6 +1,6 @@
 {
-  "publisher": "ark",
-  "version": "0.0.14",
+  "publisher": "mengzhiya",
+  "version": "0.0.1",
   "license": "SEE LICENSE IN LICENSE.txt",
   "repository": {
     "type": "git",
@@ -22,7 +22,7 @@
   ],
   "icon": "images/logo.png",
   "name": "vscode-supervisor",
-  "displayName": "Kernel Supervisor",
+  "displayName": "Supervisor",
   "description": "Multi-language kernel management framework for VS Code",
   "activationEvents": [
     "onStartupFinished"

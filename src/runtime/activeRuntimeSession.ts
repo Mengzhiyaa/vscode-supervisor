@@ -181,20 +181,7 @@ export class ActiveRuntimeSession implements vscode.Disposable {
                 emitRuntimeEvent(UiFrontendEvent.ShowMessage, event);
             }),
             uiClient.onDidPromptState((event: PromptStateEvent) => {
-                const inputPrompt = typeof event.input_prompt === 'string'
-                    ? event.input_prompt.trimEnd()
-                    : this.session.dynState.inputPrompt;
-                const continuationPrompt = typeof event.continuation_prompt === 'string'
-                    ? event.continuation_prompt.trimEnd()
-                    : this.session.dynState.continuationPrompt;
-
-                this.session.dynState.inputPrompt = inputPrompt;
-                this.session.dynState.continuationPrompt = continuationPrompt;
-
-                emitRuntimeEvent(UiFrontendEvent.PromptState, {
-                    input_prompt: inputPrompt,
-                    continuation_prompt: continuationPrompt,
-                });
+                emitRuntimeEvent(UiFrontendEvent.PromptState, event);
             }),
             uiClient.onDidWorkingDirectory((event: WorkingDirectoryEvent) => {
                 const directory = typeof event.directory === 'string' ? event.directory : '';

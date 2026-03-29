@@ -174,6 +174,7 @@ export interface ILanguageRuntimeProvider<TInstallation = unknown> {
         options?: ILanguageInstallationPickerOptions
     ): Promise<TInstallation | undefined>;
     formatRuntimeName(installation: TInstallation): string;
+    getRuntimeIconPath?(installation: TInstallation): vscode.IconPath | undefined;
     getRuntimePath(installation: TInstallation): string;
     getRuntimeSource(installation: TInstallation): string;
     createRuntimeMetadata(

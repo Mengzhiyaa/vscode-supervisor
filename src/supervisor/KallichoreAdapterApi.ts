@@ -1224,7 +1224,7 @@ export class KCApi implements PositronSupervisorApi {
 				const session = new KallichoreSession(sessionMetadata, runtimeMetadata, {
 					sessionName: dynState.sessionName,
 					continuationPrompt: kcSession.continuation_prompt,
-					inputPrompt: kcSession.input_prompt
+					inputPrompt: kcSession.input_prompt,
 				}, this._api.api, this._api.transport, async () => { await this.testServerExited() }, false);
 
 				// Restore the session from the server
