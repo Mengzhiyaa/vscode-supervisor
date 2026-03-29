@@ -257,7 +257,7 @@ export class VariablesViewProvider extends BaseWebviewProvider {
             }
 
             if (this._sessionManager?.getSession(sessionId)) {
-                this._sessionManager.focusSession(sessionId);
+                await this._sessionManager.focusSession(sessionId);
             }
 
             // Keep the variables service aligned even when the requested session

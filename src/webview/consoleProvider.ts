@@ -539,7 +539,7 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
                 this._warnMissingSession('switchSession');
                 return;
             }
-            this._sessionManager.focusSession(params.sessionId);
+            await this._sessionManager.focusSession(params.sessionId);
             this._sendSessionInfoUpdate();
         });
 

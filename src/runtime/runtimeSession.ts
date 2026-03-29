@@ -705,7 +705,7 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
         } else {
             const existingConsoleSession = this.getConsoleSessionForRuntime(runtimeId);
             if (existingConsoleSession) {
-                this.focusSession(existingConsoleSession.sessionId);
+                await this.focusSession(existingConsoleSession.sessionId);
                 return;
             }
         }
@@ -721,7 +721,7 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
         );
     }
 
-    focusSession(sessionId: string): void {
+    async focusSession(sessionId: string): Promise<void> {
         const session = this._sessions.get(sessionId);
         if (!session) {
             throw new Error(`Session ${sessionId} not found`);
@@ -731,7 +731,7 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
             throw new Error('Cannot focus a notebook or background session');
         }
 
-        this.foregroundSession = session;
+        await this._setForegroundSession(session.sessionId);
     }
 
     async selectInstallation<TInstallation>(
