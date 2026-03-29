@@ -78,6 +78,7 @@ import {
     RuntimeExitReason,
     RuntimeState,
 } from '../../internal/runtimeTypes';
+import { runtimeStateToPositronConsoleState } from '../../runtime/runtimeStateMapping';
 export type {
     SerializedActivityItem,
     SerializedConsoleState,
@@ -2036,7 +2037,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
             this.completeStartup();
         }
 
-        const mappedState = this.mapRuntimeState(state);
+        const mappedState = runtimeStateToPositronConsoleState(state);
         if (mappedState === PositronConsoleState.Disconnected) {
             return;
         }
@@ -2053,24 +2054,6 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
 
         this.setState(mappedState);
     }
-
-    private mapRuntimeState(state: RuntimeState): PositronConsoleState {
-        switch (state) {
-            case RuntimeState.Uninitialized: return PositronConsoleState.Uninitialized;
-            case RuntimeState.Initializing: return PositronConsoleState.Starting;
-            case RuntimeState.Starting: return PositronConsoleState.Starting;
-            case RuntimeState.Restarting: return PositronConsoleState.Restarting;
-            case RuntimeState.Busy: return PositronConsoleState.Busy;
-            case RuntimeState.Interrupting: return PositronConsoleState.Interrupting;
-            case RuntimeState.Ready:
-            case RuntimeState.Idle: return PositronConsoleState.Ready;
-            case RuntimeState.Offline: return PositronConsoleState.Offline;
-            case RuntimeState.Exiting: return PositronConsoleState.Exiting;
-            case RuntimeState.Exited: return PositronConsoleState.Exited;
-            default: return PositronConsoleState.Disconnected;
-        }
-    }
-
     private addOrUpdateRuntimeItemActivity(parentId: string, activityItem: ActivityItem): void {
         const existing = this._runtimeItemActivities.get(parentId);
         if (existing) {

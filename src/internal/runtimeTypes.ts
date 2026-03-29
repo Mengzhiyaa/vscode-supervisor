@@ -76,6 +76,12 @@ export enum RuntimeClientState {
     Closed = 'closed',
 }
 
+export enum RuntimeClientStatus {
+    Idle = 'idle',
+    Busy = 'busy',
+    Disconnected = 'disconnected',
+}
+
 export type RuntimeClientHandlerCallback = (
     client: RuntimeClientInstance,
     params: Object
@@ -89,23 +95,6 @@ export interface RuntimeClientHandler {
 export enum LanguageRuntimeSessionChannel {
     Console = 'console',
     Kernel = 'kernel',
-}
-
-export enum PlotRenderFormat {
-    Png = 'png',
-    Jpeg = 'jpeg',
-    Svg = 'svg',
-    Pdf = 'pdf',
-    Tiff = 'tiff',
-}
-
-export interface PlotRenderSettings {
-    size: {
-        width: number;
-        height: number;
-    };
-    pixel_ratio: number;
-    format: PlotRenderFormat;
 }
 
 export enum RuntimeMethodErrorCode {

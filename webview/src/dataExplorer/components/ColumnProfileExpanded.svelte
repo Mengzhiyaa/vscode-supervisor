@@ -15,7 +15,7 @@
         isStringDisplayType,
     } from "../columnDisplayTypeUtils";
     import type {
-        ColumnProfileResult,
+        ColumnProfileViewResult,
         ColumnSummaryStats,
         NumericSummaryStats,
     } from "../columnProfileTypes";
@@ -28,7 +28,7 @@
         columnType: string;
         typeDisplay: string;
         resolvedTypeDisplay?: string;
-        profile?: ColumnProfileResult;
+        profile?: ColumnProfileViewResult;
         hoverManager?: DataGridHoverManager;
     }
 

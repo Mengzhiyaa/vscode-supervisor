@@ -29,6 +29,35 @@ export function runtimeStateToConsoleState(state: RuntimeState): ConsoleState {
     }
 }
 
+export function runtimeStateToPositronConsoleState(
+    state: RuntimeState,
+): PositronConsoleState {
+    switch (state) {
+        case RuntimeState.Uninitialized:
+            return PositronConsoleState.Uninitialized;
+        case RuntimeState.Initializing:
+        case RuntimeState.Starting:
+            return PositronConsoleState.Starting;
+        case RuntimeState.Restarting:
+            return PositronConsoleState.Restarting;
+        case RuntimeState.Busy:
+            return PositronConsoleState.Busy;
+        case RuntimeState.Interrupting:
+            return PositronConsoleState.Interrupting;
+        case RuntimeState.Ready:
+        case RuntimeState.Idle:
+            return PositronConsoleState.Ready;
+        case RuntimeState.Offline:
+            return PositronConsoleState.Offline;
+        case RuntimeState.Exiting:
+            return PositronConsoleState.Exiting;
+        case RuntimeState.Exited:
+            return PositronConsoleState.Exited;
+        default:
+            return PositronConsoleState.Disconnected;
+    }
+}
+
 export function positronConsoleStateToConsoleState(
     state: PositronConsoleState,
 ): ConsoleState {

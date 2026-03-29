@@ -5,7 +5,7 @@
 import { writable, derived } from 'svelte/store';
 import { PositronDataExplorerLayout, type DataExplorerState, type SearchSchemaSortOrder } from './types';
 import type { SchemaColumn } from '../dataGrid/types';
-import type { ColumnProfileResult } from './columnProfileTypes';
+import type { ColumnProfileViewResult } from './columnProfileTypes';
 
 /**
  * Create Data Explorer stores
@@ -26,7 +26,7 @@ export function createDataExplorerStores() {
 
     // Summary panel state
     const summaryColumns = writable<SchemaColumn[]>([]);
-    const columnProfiles = writable(new Map<number, ColumnProfileResult>());
+    const columnProfiles = writable(new Map<number, ColumnProfileViewResult>());
     const summarySearchText = writable('');
     const summarySortOrder = writable<SearchSchemaSortOrder>('original');
     const summaryExpandedColumns = writable(new Set<number>());

@@ -1,6 +1,6 @@
 /*---------------------------------------------------------------------------------------------
- *  Data Grid Types - Port from Positron's dataGridInstance
- *  Core interfaces for virtual scrolling data grid
+ *  Data Grid Types - Compatibility bridge for consumers that should not
+ *  depend directly on every internal data-grid module.
  *--------------------------------------------------------------------------------------------*/
 
 import type {
@@ -20,101 +20,18 @@ import type {
     SupportedFeatures as SharedSupportedFeatures,
 } from '@shared/dataExplorer';
 
-/**
- * Column descriptor for layout calculations
- */
-export interface ColumnDescriptor {
-    readonly columnIndex: number;
-    readonly left: number;
-    readonly width: number;
-}
+export type {
+    ColumnDescriptor,
+    DataGridOptions,
+    RowDescriptor,
+    ViewportState,
+} from './dataGridInstance';
+export { CellSelectionState } from './dataGridInstance';
+export type { IColumnSortKey } from './interfaces/columnSortKey';
+export type { IDataColumn } from './interfaces/dataColumn';
 
 /**
- * Row descriptor for layout calculations
- */
-export interface RowDescriptor {
-    readonly rowIndex: number;
-    readonly top: number;
-    readonly height: number;
-}
-
-/**
- * Cell selection state flags
- */
-export enum CellSelectionState {
-    None = 0,
-    Selected = 1,
-    SelectedLeft = 2,
-    SelectedRight = 4,
-    SelectedTop = 8,
-    SelectedBottom = 16
-}
-
-/**
- * Column sort key interface
- */
-export interface IColumnSortKey {
-    readonly sortIndex: number;
-    readonly columnIndex: number;
-    readonly ascending: boolean;
-}
-
-/**
- * Data column interface
- */
-export interface IDataColumn {
-    readonly name: string;
-    readonly type: string;
-    readonly description?: string;
-}
-
-/**
- * Data grid configuration options
- */
-export interface DataGridOptions {
-    // Column headers
-    columnHeaders: boolean;
-    columnHeadersHeight: number;
-
-    // Row headers (row numbers)
-    rowHeaders: boolean;
-    rowHeadersWidth: number;
-
-    // Default sizes
-    defaultColumnWidth: number;
-    defaultRowHeight: number;
-
-    // Column resize
-    columnResize: boolean;
-    minimumColumnWidth: number;
-    maximumColumnWidth: number;
-
-    // Scrollbar
-    horizontalScrollbar: boolean;
-    verticalScrollbar: boolean;
-    scrollbarThickness: number;
-
-    // Display options
-    cellBorders: boolean;
-    horizontalCellPadding: number;
-}
-
-/**
- * Viewport state for virtual scrolling
- */
-export interface ViewportState {
-    width: number;
-    height: number;
-    scrollTop: number;
-    scrollLeft: number;
-    firstRowIndex: number;
-    visibleRowCount: number;
-    firstColumnIndex: number;
-    visibleColumnCount: number;
-}
-
-/**
- * Cell data for rendering
+ * Cell data for rendering.
  */
 export interface CellData {
     value: string;

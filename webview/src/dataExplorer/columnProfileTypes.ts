@@ -2,7 +2,19 @@
  *  Column Profile Types - Types for column statistics and profiles
  *--------------------------------------------------------------------------------------------*/
 
-export type { ColumnProfileType } from '@shared/dataExplorer';
+export type {
+    BooleanSummaryStats,
+    ColumnProfileType,
+    ColumnSummaryStats,
+    DateSummaryStats,
+    DatetimeSummaryStats,
+    FrequencyTableData,
+    HistogramData,
+    NumericSummaryStats,
+    OtherSummaryStats,
+    StringSummaryStats,
+} from '@shared/dataExplorer';
+import type { ColumnProfileResult as SharedColumnProfileResult } from '@shared/dataExplorer';
 import {
     getEffectiveColumnDisplayType,
     isBooleanDisplayType,
@@ -12,94 +24,12 @@ import {
 } from './columnDisplayTypeUtils';
 
 /**
- * Summary statistics for numeric columns
- */
-export interface NumericSummaryStats {
-    min_value?: string;
-    max_value?: string;
-    mean?: string;
-    median?: string;
-    stdev?: string;
-}
-
-/**
- * Summary statistics for string columns
- */
-export interface StringSummaryStats {
-    num_empty: number;
-    num_unique: number;
-}
-
-/**
- * Summary statistics for boolean columns
- */
-export interface BooleanSummaryStats {
-    true_count: number;
-    false_count: number;
-}
-
-/**
- * Summary statistics for object columns
- */
-export interface OtherSummaryStats {
-    num_unique?: number;
-}
-
-/**
- * Summary statistics for date columns
- */
-export interface DateSummaryStats {
-    num_unique?: number;
-    min_date?: string;
-    mean_date?: string;
-    median_date?: string;
-    max_date?: string;
-}
-
-/**
- * Summary statistics for datetime columns
- */
-export interface DatetimeSummaryStats extends DateSummaryStats {
-    timezone?: string;
-}
-
-/**
- * Summary statistics payload returned by the backend.
- */
-export interface ColumnSummaryStats {
-    type_display?: string;
-    number_stats?: NumericSummaryStats;
-    string_stats?: StringSummaryStats;
-    boolean_stats?: BooleanSummaryStats;
-    date_stats?: DateSummaryStats;
-    datetime_stats?: DatetimeSummaryStats;
-    other_stats?: OtherSummaryStats;
-}
-
-/**
  * Frequency table entry
  */
 export interface FrequencyTableEntry {
     value: string;
     count: number;
     percentage?: number;
-}
-
-/**
- * Frequency table payload as returned by the backend.
- */
-export interface FrequencyTableData {
-    values: string[];
-    counts: number[];
-    other_count?: number;
-}
-
-/**
- * Histogram payload as returned by the backend.
- */
-export interface HistogramData {
-    bin_edges: string[];
-    bin_counts: number[];
 }
 
 /**
@@ -112,16 +42,7 @@ export interface HistogramBin {
     percentage?: number;
 }
 
-/**
- * Column profile result
- */
-export interface ColumnProfileResult {
-    null_count?: number;
-    summary_stats?: ColumnSummaryStats;
-    small_frequency_table?: FrequencyTableData;
-    large_frequency_table?: FrequencyTableData;
-    small_histogram?: HistogramData;
-    large_histogram?: HistogramData;
+export interface ColumnProfileViewResult extends SharedColumnProfileResult {
     frequency_table?: FrequencyTableEntry[];
     histogram?: HistogramBin[];
 }
@@ -133,7 +54,7 @@ export interface ColumnProfile {
     columnIndex: number;
     columnName: string;
     columnType: string;
-    profile: ColumnProfileResult;
+    profile: ColumnProfileViewResult;
     isLoading?: boolean;
     error?: string;
 }

@@ -4,18 +4,18 @@
 
 import type {
     BooleanSummaryStats,
-    ColumnProfileResult,
+    ColumnProfileViewResult,
     ColumnSummaryStats,
     DateSummaryStats,
     DatetimeSummaryStats,
+    FrequencyTableData,
+    HistogramData,
     NumericSummaryStats,
     OtherSummaryStats,
     StringSummaryStats,
 } from './columnProfileTypes';
 
-function normalizeHistogram(histogram: any):
-    | { bin_edges: string[]; bin_counts: number[] }
-    | undefined {
+function normalizeHistogram(histogram: any): HistogramData | undefined {
     if (
         !histogram?.bin_counts ||
         !histogram?.bin_edges ||
@@ -32,9 +32,7 @@ function normalizeHistogram(histogram: any):
     };
 }
 
-function normalizeFrequencyTable(frequencyTable: any):
-    | { values: string[]; counts: number[]; other_count?: number }
-    | undefined {
+function normalizeFrequencyTable(frequencyTable: any): FrequencyTableData | undefined {
     if (frequencyTable?.values && frequencyTable?.counts) {
         return {
             values: frequencyTable.values.map((value: unknown) => String(value)),
@@ -215,7 +213,7 @@ function normalizeSummaryStats(summaryStats: unknown): ColumnSummaryStats | unde
             summaryStats.type_display === undefined ||
             summaryStats.type_display === null
                 ? undefined
-                : String(summaryStats.type_display),
+                : String(summaryStats.type_display) as ColumnSummaryStats['type_display'],
         number_stats: normalizeNumericSummaryStats(summaryStats.number_stats),
         string_stats: normalizeStringSummaryStats(summaryStats.string_stats),
         boolean_stats: normalizeBooleanSummaryStats(summaryStats.boolean_stats),
@@ -249,7 +247,7 @@ function normalizeSummaryStats(summaryStats: unknown): ColumnSummaryStats | unde
     };
 }
 
-export function simplifyColumnProfile(profile: any): ColumnProfileResult | undefined {
+export function simplifyColumnProfile(profile: any): ColumnProfileViewResult | undefined {
     if (!profile) {
         return undefined;
     }
@@ -314,9 +312,9 @@ export function simplifyColumnProfile(profile: any): ColumnProfileResult | undef
 }
 
 export function mergeColumnProfiles(
-    existing: ColumnProfileResult | undefined,
-    incoming: ColumnProfileResult | undefined,
-): ColumnProfileResult | undefined {
+    existing: ColumnProfileViewResult | undefined,
+    incoming: ColumnProfileViewResult | undefined,
+): ColumnProfileViewResult | undefined {
     if (!existing) {
         return incoming;
     }

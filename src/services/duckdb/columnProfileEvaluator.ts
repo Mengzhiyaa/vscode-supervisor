@@ -546,7 +546,7 @@ export class ColumnProfileEvaluator {
              LIMIT ${limit + 1}`
         );
 
-        const values: (string | number)[] = [];
+        const values: string[] = [];
         const counts: number[] = [];
         let otherCount: number | undefined;
 

@@ -5,30 +5,30 @@
 
 import * as vscode from 'vscode';
 import { RuntimeSession } from '../../../runtime/session';
+import {
+    RuntimeClientState,
+    RuntimeClientStatus,
+} from '../../../internal/runtimeTypes';
+import type {
+    InspectedVariable,
+    Variable,
+    VariableList,
+} from '../../../runtime/comms/positronVariablesComm';
+import type {
+    IVariableGroup as SharedVariableGroup,
+    IVariableItem as SharedVariableItem,
+    IVariableOverflow as SharedVariableOverflow,
+} from '../../../shared/variables';
+export {
+    RuntimeClientState,
+    RuntimeClientStatus,
+} from '../../../internal/runtimeTypes';
+export type {
+    InspectedVariable,
+    Variable,
+    VariableList,
+} from '../../../runtime/comms/positronVariablesComm';
 
-/**
- * RuntimeClientState enumeration (1:1 Positron).
- */
-export const enum RuntimeClientState {
-    Uninitialized = 'uninitialized',
-    Opening = 'opening',
-    Connected = 'connected',
-    Closing = 'closing',
-    Closed = 'closed'
-}
-
-/**
- * RuntimeClientStatus enumeration (1:1 Positron).
- */
-export const enum RuntimeClientStatus {
-    Idle = 'idle',
-    Busy = 'busy',
-    Disconnected = 'disconnected'
-}
-
-/**
- * PositronVariablesGrouping enumeration (1:1 Positron).
- */
 export const enum PositronVariablesGrouping {
     None = 0,
     Kind = 1,
@@ -45,92 +45,49 @@ export const enum PositronVariablesSorting {
 }
 
 /**
- * Variable data structure.
+ * Variable tree group interface used by the service layer.
  */
-export interface Variable {
-    access_key: string;
-    display_name: string;
-    display_value: string;
-    display_type: string;
-    type_info: string;
+export interface VariablesTreeGroup extends Omit<SharedVariableGroup, 'type'> {
+    variableItems: VariablesTreeItem[];
+}
+
+/**
+ * Variable tree item interface used by the service layer.
+ */
+export interface VariablesTreeItem extends Omit<
+    SharedVariableItem,
+    'type' | 'size' | 'kind' | 'hasViewer' | 'isExpanded' | 'isRecent'
+> {
     size: number;
     kind: string;
-    length: number;
-    has_children: boolean;
-    has_viewer: boolean;
-    is_truncated: boolean;
-    updated_time: number;
-}
-
-/**
- * A view containing a list of variables in the session.
- */
-export interface VariableList {
-    variables: Variable[];
-    length: number;
-    version?: number;
-}
-
-/**
- * An inspected variable response.
- */
-export interface InspectedVariable {
-    children: Variable[];
-    length: number;
-}
-
-/**
- * Variable group interface.
- */
-export interface IVariableGroup {
-    id: string;
-    title: string;
-    isExpanded: boolean;
-    variableItems: IVariableItem[];
-}
-
-/**
- * Variable item interface.
- */
-export interface IVariableItem {
-    id: string;
-    path: string[];
-    indentLevel: number;
-    displayName: string;
-    displayValue: string;
-    displayType: string;
-    size: number;
-    kind: string;
-    hasChildren: boolean;
     hasViewer: boolean;
     isExpanded: boolean;
-    childItems?: IVariableItem[];
+    childItems?: VariablesTreeItem[];
     isRecent: boolean;
 }
 
 /**
- * Variable overflow marker interface.
+ * Variable tree overflow marker interface used by the service layer.
  */
-export interface IVariableOverflow {
-    id: string;
-    indentLevel: number;
-    overflowValues: number;
-}
+export interface VariablesTreeOverflow extends Omit<SharedVariableOverflow, 'type'> { }
 
 /**
- * VariableEntry type alias (1:1 Positron).
+ * Service-layer variable tree entry.
  */
-export type VariableEntry = IVariableGroup | IVariableItem | IVariableOverflow;
+export type VariablesTreeEntry =
+    | VariablesTreeGroup
+    | VariablesTreeItem
+    | VariablesTreeOverflow;
 
-export function isVariableGroup(entry: VariableEntry): entry is IVariableGroup {
+export function isVariablesTreeGroup(entry: VariablesTreeEntry): entry is VariablesTreeGroup {
     return 'title' in entry;
 }
 
-export function isVariableItem(entry: VariableEntry): entry is IVariableItem {
+export function isVariablesTreeItem(entry: VariablesTreeEntry): entry is VariablesTreeItem {
     return 'path' in entry;
 }
 
-export function isVariableOverflow(entry: VariableEntry): entry is IVariableOverflow {
+export function isVariablesTreeOverflow(entry: VariablesTreeEntry): entry is VariablesTreeOverflow {
     return 'overflowValues' in entry;
 }
 
@@ -158,7 +115,7 @@ export interface IPositronVariablesInstance extends vscode.Disposable {
     sorting: PositronVariablesSorting;
     highlightRecent: boolean;
 
-    readonly onDidChangeEntries: vscode.Event<VariableEntry[]>;
+    readonly onDidChangeEntries: vscode.Event<VariablesTreeEntry[]>;
     readonly onDidChangeState: vscode.Event<RuntimeClientState>;
     readonly onDidChangeStatus: vscode.Event<RuntimeClientStatus>;
     readonly onFocusElement: vscode.Event<void>;

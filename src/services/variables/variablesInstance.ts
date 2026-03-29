@@ -10,10 +10,10 @@ import {
     PositronVariablesSorting,
     RuntimeClientState,
     RuntimeClientStatus,
-    VariableEntry,
-    IVariableItem,
-    IVariableGroup,
-    IVariableOverflow,
+    VariablesTreeEntry,
+    VariablesTreeItem,
+    VariablesTreeGroup,
+    VariablesTreeOverflow,
     Variable,
     type VariablesClientInstance
 } from './interfaces/variablesService';
@@ -27,7 +27,6 @@ import {
     createVariablesClient
 } from '../../runtime/VariablesClientInstance';
 import {
-    RuntimeClientState as SupervisorClientState,
     RuntimeClientType,
     RuntimeState,
 } from '../../internal/runtimeTypes';
@@ -35,7 +34,7 @@ import {
 /**
  * VariableItem class for internal state management.
  */
-class VariableItem implements IVariableItem {
+class VariableItem implements VariablesTreeItem {
     readonly id: string;
     path: string[];
     indentLevel: number;
@@ -106,7 +105,7 @@ class VariableItem implements IVariableItem {
     }
 }
 
-class VariableOverflow implements IVariableOverflow {
+class VariableOverflow implements VariablesTreeOverflow {
     constructor(
         public readonly id: string,
         public readonly indentLevel: number,
@@ -117,12 +116,12 @@ class VariableOverflow implements IVariableOverflow {
 /**
  * VariableGroup class for grouping variables.
  */
-class VariableGroup implements IVariableGroup {
+class VariableGroup implements VariablesTreeGroup {
     constructor(
         public readonly id: string,
         public readonly title: string,
         public isExpanded: boolean,
-        public variableItems: IVariableItem[]
+        public variableItems: VariablesTreeItem[]
     ) { }
 }
 
@@ -140,7 +139,7 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
     private _highlightRecent = true;
     private readonly _collapsedGroupIds = new Set<string>();
     private readonly _expandedPaths = new Set<string>();
-    private _entries: VariableEntry[] = [];
+    private _entries: VariablesTreeEntry[] = [];
     private _variablesClient: RuntimeVariablesClientInstance | undefined;
     private _variablesClientId: string | undefined;
     private _pendingClientRequests = 0;
@@ -150,7 +149,7 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
     private _runtimeDisposables: vscode.Disposable[] = [];
     private _clientDisposables: vscode.Disposable[] = [];
 
-    private readonly _onDidChangeEntriesEmitter = new vscode.EventEmitter<VariableEntry[]>();
+    private readonly _onDidChangeEntriesEmitter = new vscode.EventEmitter<VariablesTreeEntry[]>();
     private readonly _onDidChangeStateEmitter = new vscode.EventEmitter<RuntimeClientState>();
     private readonly _onDidChangeStatusEmitter = new vscode.EventEmitter<RuntimeClientStatus>();
     private readonly _onFocusElementEmitter = new vscode.EventEmitter<void>();
@@ -472,27 +471,27 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
         this.requestRefresh();
     }
 
-    private _syncClientState(state: SupervisorClientState): void {
+    private _syncClientState(state: RuntimeClientState): void {
         switch (state) {
-            case SupervisorClientState.Uninitialized:
+            case RuntimeClientState.Uninitialized:
                 this._pendingClientRequests = 0;
                 this.setState(RuntimeClientState.Uninitialized);
                 this.setStatus(RuntimeClientStatus.Disconnected);
                 break;
-            case SupervisorClientState.Opening:
+            case RuntimeClientState.Opening:
                 this.setState(RuntimeClientState.Opening);
                 this.setStatus(RuntimeClientStatus.Disconnected);
                 break;
-            case SupervisorClientState.Connected:
+            case RuntimeClientState.Connected:
                 this.setState(RuntimeClientState.Connected);
                 this._updateClientRequestStatus();
                 break;
-            case SupervisorClientState.Closing:
+            case RuntimeClientState.Closing:
                 this._pendingClientRequests = 0;
                 this.setState(RuntimeClientState.Closing);
                 this.setStatus(RuntimeClientStatus.Disconnected);
                 break;
-            case SupervisorClientState.Closed:
+            case RuntimeClientState.Closed:
                 this._pendingClientRequests = 0;
                 this.setState(RuntimeClientState.Closed);
                 this.setStatus(RuntimeClientStatus.Disconnected);
@@ -737,7 +736,7 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
         }
     }
 
-    private groupByKind(items: VariableItem[]): VariableEntry[] {
+    private groupByKind(items: VariableItem[]): VariablesTreeEntry[] {
         const groups: Record<string, VariableItem[]> = { data: [], values: [], functions: [], classes: [] };
         for (const item of items) {
             if (item.kind === 'table') groups.data.push(item);
@@ -746,7 +745,7 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
             else groups.values.push(item);
         }
 
-        const entries: VariableEntry[] = [];
+        const entries: VariablesTreeEntry[] = [];
         if (groups.data.length > 0) entries.push(new VariableGroup('group/data', 'Data', !this._collapsedGroupIds.has('group/data'), this.sortItems(groups.data)));
         if (groups.values.length > 0) entries.push(new VariableGroup('group/values', 'Values', !this._collapsedGroupIds.has('group/values'), this.sortItems(groups.values)));
         if (groups.functions.length > 0) entries.push(new VariableGroup('group/functions', 'Functions', !this._collapsedGroupIds.has('group/functions'), this.sortItems(groups.functions)));
@@ -754,7 +753,7 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
         return entries;
     }
 
-    private groupBySize(items: VariableItem[]): VariableEntry[] {
+    private groupBySize(items: VariableItem[]): VariablesTreeEntry[] {
         const groups: Record<string, VariableItem[]> = { small: [], medium: [], large: [], veryLarge: [] };
         for (const item of items) {
             if (item.size < 1024) groups.small.push(item);
@@ -763,7 +762,7 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
             else groups.veryLarge.push(item);
         }
 
-        const entries: VariableEntry[] = [];
+        const entries: VariablesTreeEntry[] = [];
         if (groups.veryLarge.length > 0) entries.push(new VariableGroup('group/very-large', 'Very Large (>100MB)', !this._collapsedGroupIds.has('group/very-large'), this.sortItems(groups.veryLarge)));
         if (groups.large.length > 0) entries.push(new VariableGroup('group/large', 'Large (1MB-100MB)', !this._collapsedGroupIds.has('group/large'), this.sortItems(groups.large)));
         if (groups.medium.length > 0) entries.push(new VariableGroup('group/medium', 'Medium (1KB-1MB)', !this._collapsedGroupIds.has('group/medium'), this.sortItems(groups.medium)));

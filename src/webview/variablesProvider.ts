@@ -10,19 +10,19 @@ import {
     IPositronVariablesInstance,
     PositronVariablesGrouping,
     PositronVariablesSorting,
-    RuntimeClientState,
-    RuntimeClientStatus,
     Variable,
-    VariableEntry,
-    isVariableGroup,
-    isVariableItem,
-    isVariableOverflow,
-    IVariableItem
+    VariablesTreeEntry,
+    VariablesTreeItem,
+    isVariablesTreeGroup,
+    isVariablesTreeItem,
+    isVariablesTreeOverflow,
 } from '../services/variables';
 import { SessionSnapshotBuilder } from './sessionSnapshotBuilder';
 import {
     decodeGrouping,
     decodeSorting,
+    encodeInstanceState,
+    encodeInstanceStatus,
     encodeGrouping,
     encodeSorting,
 } from '../shared/variables';
@@ -182,7 +182,7 @@ export class VariablesViewProvider extends BaseWebviewProvider {
 
     private _handleEntriesChanged(
         instance: IPositronVariablesInstance,
-        entries: VariableEntry[],
+        entries: VariablesTreeEntry[],
     ): void {
         const sessionId = instance.session.sessionId;
         const currentEntries = this._convertVariableEntriesToProtocol(entries);
@@ -514,8 +514,8 @@ export class VariablesViewProvider extends BaseWebviewProvider {
 
         const payload: VariablesProtocol.VariablesInstanceInfo = {
             sessionId: instance.session.sessionId,
-            state: this._mapVariablesClientState(instance.state),
-            status: this._mapVariablesClientStatus(instance.status),
+            state: encodeInstanceState(instance.state),
+            status: encodeInstanceStatus(instance.status),
             grouping: encodeGrouping(instance.grouping),
             sorting: encodeSorting(instance.sorting),
             filterText: instance.getFilterText(),
@@ -559,39 +559,6 @@ export class VariablesViewProvider extends BaseWebviewProvider {
         );
     }
 
-    private _mapVariablesClientState(
-        state: RuntimeClientState
-    ): VariablesProtocol.VariablesInstanceInfo['state'] {
-        switch (state) {
-            case RuntimeClientState.Uninitialized:
-                return 'uninitialized';
-            case RuntimeClientState.Opening:
-                return 'opening';
-            case RuntimeClientState.Connected:
-                return 'connected';
-            case RuntimeClientState.Closing:
-                return 'closing';
-            case RuntimeClientState.Closed:
-                return 'closed';
-            default:
-                return 'uninitialized';
-        }
-    }
-
-    private _mapVariablesClientStatus(
-        status: RuntimeClientStatus
-    ): VariablesProtocol.VariablesInstanceInfo['status'] {
-        switch (status) {
-            case RuntimeClientStatus.Idle:
-                return 'idle';
-            case RuntimeClientStatus.Busy:
-                return 'busy';
-            case RuntimeClientStatus.Disconnected:
-            default:
-                return 'disconnected';
-        }
-    }
-
     private _resolveSessionId(sessionId?: string): string | undefined {
         if (!sessionId) {
             this.log('Request missing sessionId; dropping', vscode.LogLevel.Debug);
@@ -613,11 +580,11 @@ export class VariablesViewProvider extends BaseWebviewProvider {
         }));
     }
 
-    private _convertEntriesToProtocol(entries: VariableEntry[]): VariablesProtocol.Variable[] {
+    private _convertEntriesToProtocol(entries: VariablesTreeEntry[]): VariablesProtocol.Variable[] {
         const results: VariablesProtocol.Variable[] = [];
         const seen = new Set<string>();
 
-        const pushItem = (item: IVariableItem) => {
+        const pushItem = (item: VariablesTreeItem) => {
             const accessKey = item.path[item.path.length - 1];
             const name = item.displayName || accessKey;
             const key = this._getVariableKey(item.path);
@@ -638,9 +605,9 @@ export class VariablesViewProvider extends BaseWebviewProvider {
         };
 
         for (const entry of entries) {
-            if (isVariableItem(entry)) {
+            if (isVariablesTreeItem(entry)) {
                 pushItem(entry);
-            } else if (isVariableGroup(entry)) {
+            } else if (isVariablesTreeGroup(entry)) {
                 for (const item of entry.variableItems) {
                     pushItem(item);
                 }
@@ -650,11 +617,11 @@ export class VariablesViewProvider extends BaseWebviewProvider {
         return results;
     }
 
-    private _convertVariableEntriesToProtocol(entries: VariableEntry[]): VariablesProtocol.VariableEntry[] {
+    private _convertVariableEntriesToProtocol(entries: VariablesTreeEntry[]): VariablesProtocol.VariableEntry[] {
         const results: VariablesProtocol.VariableEntry[] = [];
 
         for (const entry of entries) {
-            if (isVariableGroup(entry)) {
+            if (isVariablesTreeGroup(entry)) {
                 results.push({
                     type: 'group' as const,
                     id: entry.id,
@@ -664,7 +631,7 @@ export class VariablesViewProvider extends BaseWebviewProvider {
                 continue;
             }
 
-            if (isVariableItem(entry)) {
+            if (isVariablesTreeItem(entry)) {
                 results.push({
                     type: 'item' as const,
                     id: entry.id,
@@ -683,7 +650,7 @@ export class VariablesViewProvider extends BaseWebviewProvider {
                 continue;
             }
 
-            if (isVariableOverflow(entry)) {
+            if (isVariablesTreeOverflow(entry)) {
                 results.push({
                     type: 'overflow' as const,
                     id: entry.id,

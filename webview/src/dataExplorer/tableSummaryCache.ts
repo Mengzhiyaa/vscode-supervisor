@@ -4,7 +4,7 @@
 
 import { get } from 'svelte/store';
 import type { SchemaColumn } from '../dataGrid/types';
-import type { ColumnProfileResult } from './columnProfileTypes';
+import type { ColumnProfileViewResult } from './columnProfileTypes';
 import type { DataExplorerStores } from './stores';
 import type { WebviewMessage } from './types';
 import {
@@ -24,7 +24,7 @@ type ProfileCoverage =
  * cache while keeping Svelte stores as the view-model surface.
  */
 export class TableSummaryCache {
-    private readonly _profiles = new Map<number, ColumnProfileResult>();
+    private readonly _profiles = new Map<number, ColumnProfileViewResult>();
     private readonly _profileCoverage = new Map<number, ProfileCoverage>();
     private readonly _pendingCoverage = new Map<number, ProfileCoverage>();
     private readonly _pendingRequests = new Map<
@@ -38,7 +38,7 @@ export class TableSummaryCache {
         private readonly _postMessage: (message: WebviewMessage) => void,
     ) {}
 
-    getColumnProfile(columnIndex: number): ColumnProfileResult | undefined {
+    getColumnProfile(columnIndex: number): ColumnProfileViewResult | undefined {
         return this._profiles.get(columnIndex);
     }
 

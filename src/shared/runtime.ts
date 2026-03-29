@@ -22,6 +22,13 @@ export type ConsoleState =
     | 'exited'
     | 'disconnected';
 
+export interface ConsoleSettings {
+    scrollbackSize: number;
+    fontFamily: string;
+    fontSize: number;
+    lineHeight: number;
+}
+
 export enum RuntimeCodeExecutionMode {
     Interactive = 'interactive',
     NonInteractive = 'non-interactive',

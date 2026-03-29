@@ -4,101 +4,115 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
+import {
+    ColumnDisplayType,
+    ColumnFilterType,
+    ColumnProfileType,
+    ExportFormat,
+    FilterComparisonOp,
+    RowFilterCondition,
+    RowFilterType,
+    SearchSchemaSortOrder,
+    SupportStatus,
+    TextSearchType,
+} from '../../shared/dataExplorer';
+import type {
+    BackendState,
+    CodeSyntaxName,
+    ColumnFilter,
+    ColumnFilterParams,
+    ColumnFilterTypeSupportStatus,
+    ColumnProfileTypeSupportStatus,
+    ColumnSchema,
+    ColumnFrequencyTable,
+    ColumnHistogram,
+    ColumnProfileResult,
+    ColumnSortKey,
+    ColumnSummaryStats,
+    ColumnQuantileValue,
+    ConvertToCodeFeatures,
+    SummaryStatsBoolean,
+    SummaryStatsDate,
+    SummaryStatsDatetime,
+    SummaryStatsNumber,
+    SummaryStatsOther,
+    SummaryStatsString,
+    ExportDataSelectionFeatures,
+    FilterBetween,
+    FilterComparison,
+    FilterMatchDataTypes,
+    FilterSetMembership,
+    FilterTextSearch,
+    GetColumnProfilesFeatures,
+    RowFilter,
+    RowFilterParams,
+    RowFilterTypeSupportStatus,
+    SearchSchemaFeatures,
+    SetColumnFiltersFeatures,
+    SetRowFiltersFeatures,
+    SetSortColumnsFeatures,
+    SupportedFeatures,
+    TableShape,
+} from '../../shared/dataExplorer';
 import { RuntimeClientInstance } from '../RuntimeClientInstance';
 import { PositronBaseComm, PositronCommOptions } from './positronBaseComm';
+
+export {
+    ColumnDisplayType,
+    ColumnFilterType,
+    ColumnProfileType,
+    ExportFormat,
+    FilterComparisonOp,
+    RowFilterCondition,
+    RowFilterType,
+    SearchSchemaSortOrder,
+    SupportStatus,
+    TextSearchType,
+} from '../../shared/dataExplorer';
+export type {
+    BackendState,
+    CodeSyntaxName,
+    ColumnFilter,
+    ColumnFilterParams,
+    ColumnFilterTypeSupportStatus,
+    ColumnProfileTypeSupportStatus,
+    ColumnSchema,
+    ColumnFrequencyTable,
+    ColumnHistogram,
+    ColumnProfileResult,
+    ColumnSortKey,
+    ColumnSummaryStats,
+    ColumnQuantileValue,
+    ConvertToCodeFeatures,
+    SummaryStatsBoolean,
+    SummaryStatsDate,
+    SummaryStatsDatetime,
+    SummaryStatsNumber,
+    SummaryStatsOther,
+    SummaryStatsString,
+    ExportDataSelectionFeatures,
+    FilterBetween,
+    FilterComparison,
+    FilterMatchDataTypes,
+    FilterSetMembership,
+    FilterTextSearch,
+    GetColumnProfilesFeatures,
+    RowFilter,
+    RowFilterParams,
+    RowFilterTypeSupportStatus,
+    SearchSchemaFeatures,
+    SetColumnFiltersFeatures,
+    SetRowFiltersFeatures,
+    SetSortColumnsFeatures,
+    SupportedFeatures,
+    TableShape,
+} from '../../shared/dataExplorer';
 
 // Event types are defined inline
 
 // ============================================================================
 // Enums
 // ============================================================================
-
-/**
- * Possible values for ColumnDisplayType
- */
-export enum ColumnDisplayType {
-    Boolean = 'boolean',
-    String = 'string',
-    Date = 'date',
-    Datetime = 'datetime',
-    Time = 'time',
-    Interval = 'interval',
-    Object = 'object',
-    Array = 'array',
-    Struct = 'struct',
-    Unknown = 'unknown',
-    Floating = 'floating',
-    Integer = 'integer',
-    Decimal = 'decimal'
-}
-
-/**
- * Possible values for RowFilterCondition
- */
-export enum RowFilterCondition {
-    And = 'and',
-    Or = 'or'
-}
-
-/**
- * Possible values for RowFilterType
- */
-export enum RowFilterType {
-    Between = 'between',
-    Compare = 'compare',
-    IsEmpty = 'is_empty',
-    IsFalse = 'is_false',
-    IsNull = 'is_null',
-    IsTrue = 'is_true',
-    NotBetween = 'not_between',
-    NotEmpty = 'not_empty',
-    NotNull = 'not_null',
-    Search = 'search',
-    SetMembership = 'set_membership'
-}
-
-/**
- * Possible values for FilterComparisonOp
- */
-export enum FilterComparisonOp {
-    Eq = '=',
-    NotEq = '!=',
-    Lt = '<',
-    LtEq = '<=',
-    Gt = '>',
-    GtEq = '>='
-}
-
-/**
- * Possible values for TextSearchType
- */
-export enum TextSearchType {
-    Contains = 'contains',
-    NotContains = 'not_contains',
-    StartsWith = 'starts_with',
-    EndsWith = 'ends_with',
-    RegexMatch = 'regex_match'
-}
-
-/**
- * Possible values for ColumnFilterType
- */
-export enum ColumnFilterType {
-    TextSearch = 'text_search',
-    MatchDataTypes = 'match_data_types'
-}
-
-/**
- * Possible values for ColumnProfileType
- */
-export enum ColumnProfileType {
-    NullCount = 'null_count',
-    SummaryStats = 'summary_stats',
-    SmallFrequencyTable = 'small_frequency_table',
-    LargeFrequencyTable = 'large_frequency_table',
-    SmallHistogram = 'small_histogram',
-    LargeHistogram = 'large_histogram'
-}
 
 /**
  * Possible values for ColumnHistogramParamsMethod
@@ -121,34 +135,6 @@ export enum TableSelectionKind {
     ColumnIndices = 'column_indices',
     RowIndices = 'row_indices',
     CellIndices = 'cell_indices'
-}
-
-/**
- * Possible values for ExportFormat
- */
-export enum ExportFormat {
-    Csv = 'csv',
-    Tsv = 'tsv',
-    Html = 'html'
-}
-
-/**
- * Possible values for SupportStatus
- */
-export enum SupportStatus {
-    Unsupported = 'unsupported',
-    Supported = 'supported'
-}
-
-/**
- * Possible values for SearchSchemaSortOrder
- */
-export enum SearchSchemaSortOrder {
-    Original = 'original',
-    AscendingName = 'ascending_name',
-    DescendingName = 'descending_name',
-    AscendingType = 'ascending_type',
-    DescendingType = 'descending_type'
 }
 
 export enum DataExplorerFrontendEvent {
@@ -178,31 +164,6 @@ export enum DataExplorerBackendRequest {
 // ============================================================================
 // Interfaces
 // ============================================================================
-
-/**
- * Schema for a column in a table
- */
-export interface ColumnSchema {
-    column_name: string;
-    column_label?: string;
-    column_index: number;
-    type_name: string;
-    type_display: ColumnDisplayType;
-    description?: string;
-    children?: Array<ColumnSchema>;
-    precision?: number;
-    scale?: number;
-    timezone?: string;
-    type_size?: number;
-}
-
-/**
- * Provides number of rows and columns in a table
- */
-export interface TableShape {
-    num_rows: number;
-    num_columns: number;
-}
 
 /**
  * The schema for a table-like object
@@ -237,99 +198,6 @@ export interface FormatOptions {
 }
 
 /**
- * Specifies a column to sort by
- */
-export interface ColumnSortKey {
-    column_index: number;
-    ascending: boolean;
-}
-
-/**
- * Specifies a table row filter based on a single column's values
- */
-export interface RowFilter {
-    filter_id: string;
-    filter_type: RowFilterType;
-    column_schema: ColumnSchema;
-    condition: RowFilterCondition;
-    is_valid?: boolean;
-    error_message?: string;
-    params?: RowFilterParams;
-}
-
-/**
- * Parameters for the 'between' and 'not_between' filter types
- */
-export interface FilterBetween {
-    left_value: string;
-    right_value: string;
-}
-
-/**
- * Parameters for the 'compare' filter type
- */
-export interface FilterComparison {
-    op: FilterComparisonOp;
-    value: string;
-}
-
-/**
- * Parameters for the 'set_membership' filter type
- */
-export interface FilterSetMembership {
-    values: Array<string>;
-    inclusive: boolean;
-}
-
-/**
- * Parameters for the 'search' filter type
- */
-export interface FilterTextSearch {
-    search_type: TextSearchType;
-    term: string;
-    case_sensitive: boolean;
-}
-
-/**
- * Parameters for the 'match_data_types' filter type
- */
-export interface FilterMatchDataTypes {
-    display_types: Array<ColumnDisplayType>;
-}
-
-/**
- * A filter that selects a subset of columns
- */
-export interface ColumnFilter {
-    filter_type: ColumnFilterType;
-    params: ColumnFilterParams;
-}
-
-/**
- * Support status for a row filter type
- */
-export interface RowFilterTypeSupportStatus {
-    row_filter_type: RowFilterType;
-    support_status: SupportStatus;
-}
-
-/**
- * Support status for a column filter type
- */
-export interface ColumnFilterTypeSupportStatus {
-    column_filter_type: ColumnFilterType;
-    support_status: SupportStatus;
-}
-
-/**
- * Support status for a column profile type
- */
-export interface ColumnProfileTypeSupportStatus {
-    profile_type: ColumnProfileType;
-    support_status: SupportStatus;
-}
-
-/**
  * A single column profile request
  */
 export interface ColumnProfileRequest {
@@ -346,94 +214,12 @@ export interface ColumnProfileSpec {
 }
 
 /**
- * Result of computing column profile
- */
-export interface ColumnProfileResult {
-    null_count?: number;
-    summary_stats?: ColumnSummaryStats;
-    small_histogram?: ColumnHistogram;
-    large_histogram?: ColumnHistogram;
-    small_frequency_table?: ColumnFrequencyTable;
-    large_frequency_table?: ColumnFrequencyTable;
-}
-
-/**
- * Profile result containing summary stats for a column
- */
-export interface ColumnSummaryStats {
-    type_display: ColumnDisplayType;
-    number_stats?: SummaryStatsNumber;
-    string_stats?: SummaryStatsString;
-    boolean_stats?: SummaryStatsBoolean;
-    date_stats?: SummaryStatsDate;
-    datetime_stats?: SummaryStatsDatetime;
-    other_stats?: SummaryStatsOther;
-}
-
-export interface SummaryStatsNumber {
-    min_value?: string;
-    max_value?: string;
-    mean?: string;
-    median?: string;
-    stdev?: string;
-}
-
-export interface SummaryStatsBoolean {
-    true_count: number;
-    false_count: number;
-}
-
-export interface SummaryStatsOther {
-    num_unique?: number;
-}
-
-export interface SummaryStatsString {
-    num_empty: number;
-    num_unique: number;
-}
-
-export interface SummaryStatsDate {
-    num_unique?: number;
-    min_date?: string;
-    mean_date?: string;
-    median_date?: string;
-    max_date?: string;
-}
-
-export interface SummaryStatsDatetime {
-    num_unique?: number;
-    min_date?: string;
-    mean_date?: string;
-    median_date?: string;
-    max_date?: string;
-    timezone?: string;
-}
-
-/**
  * Parameters for a column histogram profile request
  */
 export interface ColumnHistogramParams {
     method: ColumnHistogramParamsMethod;
     num_bins: number;
     quantiles?: Array<number>;
-}
-
-/**
- * Result from a histogram profile request
- */
-export interface ColumnHistogram {
-    bin_edges: Array<string>;
-    bin_counts: Array<number>;
-    quantiles: Array<ColumnQuantileValue>;
-}
-
-/**
- * Result from a frequency_table profile request
- */
-export interface ColumnFrequencyTable {
-    values: Array<ColumnValue>;
-    counts: Array<number>;
-    other_count?: number;
 }
 
 /**
@@ -444,83 +230,10 @@ export interface ColumnFrequencyTableParams {
 }
 
 /**
- * An exact or approximate quantile value from a column
- */
-export interface ColumnQuantileValue {
-    q: number;
-    value: string;
-    exact: boolean;
-}
-
-/**
  * Search schema result
  */
 export interface SearchSchemaResult {
     matches: Array<number>;
-}
-
-/**
- * For each field, returns flags indicating supported features
- */
-export interface SupportedFeatures {
-    search_schema: SearchSchemaFeatures;
-    set_column_filters: SetColumnFiltersFeatures;
-    set_row_filters: SetRowFiltersFeatures;
-    get_column_profiles: GetColumnProfilesFeatures;
-    set_sort_columns: SetSortColumnsFeatures;
-    export_data_selection: ExportDataSelectionFeatures;
-    convert_to_code: ConvertToCodeFeatures;
-}
-
-export interface SearchSchemaFeatures {
-    support_status: SupportStatus;
-    supported_types: Array<ColumnFilterTypeSupportStatus>;
-}
-
-export interface SetColumnFiltersFeatures {
-    support_status: SupportStatus;
-    supported_types: Array<ColumnFilterTypeSupportStatus>;
-}
-
-export interface SetRowFiltersFeatures {
-    support_status: SupportStatus;
-    supports_conditions: SupportStatus;
-    supported_types: Array<RowFilterTypeSupportStatus>;
-}
-
-export interface GetColumnProfilesFeatures {
-    support_status: SupportStatus;
-    supported_types: Array<ColumnProfileTypeSupportStatus>;
-}
-
-export interface SetSortColumnsFeatures {
-    support_status: SupportStatus;
-}
-
-export interface ExportDataSelectionFeatures {
-    support_status: SupportStatus;
-    supported_formats: Array<ExportFormat>;
-}
-
-export interface ConvertToCodeFeatures {
-    support_status: SupportStatus;
-    code_syntaxes?: Array<CodeSyntaxName>;
-}
-
-/**
- * The current backend state for the data explorer
- */
-export interface BackendState {
-    display_name: string;
-    table_shape: TableShape;
-    table_unfiltered_shape: TableShape;
-    has_row_labels: boolean;
-    column_filters: Array<ColumnFilter>;
-    row_filters: Array<RowFilter>;
-    sort_keys: Array<ColumnSortKey>;
-    supported_features: SupportedFeatures;
-    connected?: boolean;
-    error_message?: string;
 }
 
 /**
@@ -544,13 +257,6 @@ export interface ExportedData {
  */
 export interface ConvertedCode {
     converted_code: Array<string>;
-}
-
-/**
- * Syntax name used for code conversion.
- */
-export interface CodeSyntaxName {
-    code_syntax_name: string;
 }
 
 /**
@@ -614,8 +320,6 @@ export interface ColumnSelection {
 // ============================================================================
 
 export type ColumnValue = number | string;
-export type RowFilterParams = FilterBetween | FilterComparison | FilterTextSearch | FilterSetMembership;
-export type ColumnFilterParams = FilterTextSearch | FilterMatchDataTypes;
 export type ColumnProfileParams = ColumnHistogramParams | ColumnFrequencyTableParams;
 export type Selection = DataSelectionSingleCell | DataSelectionCellRange | DataSelectionCellIndices | DataSelectionRange | DataSelectionIndices;
 export type ArraySelection = DataSelectionRange | DataSelectionIndices;

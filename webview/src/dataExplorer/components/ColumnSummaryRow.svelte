@@ -13,7 +13,7 @@
         isNumericDisplayType,
         isStringDisplayType,
     } from "../columnDisplayTypeUtils";
-    import type { ColumnProfileResult } from "../columnProfileTypes";
+    import type { ColumnProfileViewResult } from "../columnProfileTypes";
     import type { DataGridHoverManager } from "../../dataGrid/dataGridInstance";
     import NullPercentIndicator from "./NullPercentIndicator.svelte";
     import VectorFrequencyTable from "./VectorFrequencyTable.svelte";
@@ -27,7 +27,7 @@
         columnType: string;
         typeDisplay: string;
         columnLabel?: string;
-        profile?: ColumnProfileResult;
+        profile?: ColumnProfileViewResult;
         nullPercent?: number;
         expanded?: boolean;
         summaryStatsSupported?: boolean;

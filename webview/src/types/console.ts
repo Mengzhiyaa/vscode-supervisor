@@ -6,30 +6,22 @@
  * Licensed under the Elastic License 2.0. See LICENSE.txt for license information.
  */
 
-import type {
+import type { ConsoleState } from "@shared/runtime";
+export type {
+    ConsoleSettings,
     ConsoleState,
-    RuntimeStartupPhaseValue,
+    RuntimeStartupPhaseValue as RuntimeStartupPhase,
 } from "@shared/runtime";
-export type { ConsoleState } from "@shared/runtime";
 
 /**
  * Runtime status type for displaying runtime state icons.
  */
 export type RuntimeStatusType = 'Active' | 'Disconnected' | 'Idle';
 
-export type RuntimeStartupPhase = RuntimeStartupPhaseValue;
-
 /**
  * Session mode for runtime icon display.
  */
 export type SessionMode = 'console' | 'notebook' | 'background';
-
-export interface ConsoleSettings {
-    scrollbackSize: number;
-    fontFamily: string;
-    fontSize: number;
-    lineHeight: number;
-}
 
 /**
  * Mapping from ConsoleState to RuntimeStatusType.

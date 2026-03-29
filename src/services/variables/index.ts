@@ -10,17 +10,17 @@ export {
     PositronVariablesSorting,
     RuntimeClientState,
     RuntimeClientStatus,
-    VariableEntry,
     Variable,
     VariableList,
     InspectedVariable,
-    IVariableItem,
-    IVariableGroup,
-    IVariableOverflow,
+    VariablesTreeEntry,
+    VariablesTreeItem,
+    VariablesTreeGroup,
+    VariablesTreeOverflow,
     VariablesClientInstance,
-    isVariableGroup,
-    isVariableItem,
-    isVariableOverflow
+    isVariablesTreeGroup,
+    isVariablesTreeItem,
+    isVariablesTreeOverflow
 } from './interfaces/variablesService';
 
 // Classes

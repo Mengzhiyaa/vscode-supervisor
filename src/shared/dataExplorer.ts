@@ -75,12 +75,16 @@ export enum SupportStatus {
     Supported = 'supported',
 }
 
+export const SearchSchemaSortOrder = {
+    Original: 'original',
+    AscendingName: 'ascending_name',
+    DescendingName: 'descending_name',
+    AscendingType: 'ascending_type',
+    DescendingType: 'descending_type',
+} as const;
+
 export type SearchSchemaSortOrder =
-    | 'original'
-    | 'ascending_name'
-    | 'descending_name'
-    | 'ascending_type'
-    | 'descending_type';
+    typeof SearchSchemaSortOrder[keyof typeof SearchSchemaSortOrder];
 
 export interface ColumnSchema {
     column_name: string;
@@ -205,6 +209,93 @@ export interface CodeSyntaxName {
     code_syntax_name: string;
 }
 
+export interface SummaryStatsNumber {
+    min_value?: string;
+    max_value?: string;
+    mean?: string;
+    median?: string;
+    stdev?: string;
+}
+
+export type NumericSummaryStats = SummaryStatsNumber;
+
+export interface SummaryStatsBoolean {
+    true_count: number;
+    false_count: number;
+}
+
+export type BooleanSummaryStats = SummaryStatsBoolean;
+
+export interface SummaryStatsOther {
+    num_unique?: number;
+}
+
+export type OtherSummaryStats = SummaryStatsOther;
+
+export interface SummaryStatsString {
+    num_empty: number;
+    num_unique: number;
+}
+
+export type StringSummaryStats = SummaryStatsString;
+
+export interface SummaryStatsDate {
+    num_unique?: number;
+    min_date?: string;
+    mean_date?: string;
+    median_date?: string;
+    max_date?: string;
+}
+
+export type DateSummaryStats = SummaryStatsDate;
+
+export interface SummaryStatsDatetime extends SummaryStatsDate {
+    timezone?: string;
+}
+
+export type DatetimeSummaryStats = SummaryStatsDatetime;
+
+export interface ColumnSummaryStats {
+    type_display?: ColumnDisplayType;
+    number_stats?: SummaryStatsNumber;
+    string_stats?: SummaryStatsString;
+    boolean_stats?: SummaryStatsBoolean;
+    date_stats?: SummaryStatsDate;
+    datetime_stats?: SummaryStatsDatetime;
+    other_stats?: SummaryStatsOther;
+}
+
+export interface ColumnQuantileValue {
+    q: number;
+    value: string;
+    exact: boolean;
+}
+
+export interface ColumnHistogram {
+    bin_edges: Array<string>;
+    bin_counts: Array<number>;
+    quantiles?: Array<ColumnQuantileValue>;
+}
+
+export type HistogramData = ColumnHistogram;
+
+export interface ColumnFrequencyTable {
+    values: Array<string>;
+    counts: Array<number>;
+    other_count?: number;
+}
+
+export type FrequencyTableData = ColumnFrequencyTable;
+
+export interface ColumnProfileResult {
+    null_count?: number;
+    summary_stats?: ColumnSummaryStats;
+    small_histogram?: ColumnHistogram;
+    large_histogram?: ColumnHistogram;
+    small_frequency_table?: ColumnFrequencyTable;
+    large_frequency_table?: ColumnFrequencyTable;
+}
+
 export interface ConvertToCodeFeatures {
     support_status: SupportStatus;
     code_syntaxes?: CodeSyntaxName[];
@@ -217,7 +308,7 @@ export interface SupportedFeatures {
     get_column_profiles: GetColumnProfilesFeatures;
     set_sort_columns: SetSortColumnsFeatures;
     export_data_selection: ExportDataSelectionFeatures;
-    convert_to_code?: ConvertToCodeFeatures;
+    convert_to_code: ConvertToCodeFeatures;
 }
 
 export interface BackendState {
