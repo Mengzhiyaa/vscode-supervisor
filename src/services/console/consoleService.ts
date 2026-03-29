@@ -8,6 +8,7 @@ import { ViewCommands, ViewIds } from '../../coreCommandIds';
 import {
     IPositronConsoleService,
     IPositronConsoleInstance,
+    PositronConsoleState,
     SessionAttachMode,
     IConsoleCodeAttribution,
     ILanguageRuntimeCodeExecutedEvent,
@@ -230,11 +231,13 @@ export class PositronConsoleService implements IPositronConsoleService {
 
             // Update active if needed
             if (this._activeConsoleInstance === instance) {
-                const remaining = this.positronConsoleInstances;
-                this._activeConsoleInstance = remaining.length > 0
-                    ? remaining[0] as PositronConsoleInstance
-                    : undefined;
-                this._onDidChangeActivePositronConsoleInstanceEmitter.fire(this._activeConsoleInstance);
+                const replacement = this._findReplacementActiveConsoleInstance();
+                if (replacement) {
+                    this._activeConsoleInstance = undefined;
+                    this._setActivePositronConsoleInstance(replacement);
+                } else {
+                    this._clearActivePositronConsoleInstance();
+                }
             }
         }
     }
@@ -401,6 +404,103 @@ export class PositronConsoleService implements IPositronConsoleService {
         this._onDidChangeActivePositronConsoleInstanceEmitter.fire(instance);
     }
 
+    private _clearActivePositronConsoleInstance(): void {
+        if (!this._activeConsoleInstance) {
+            return;
+        }
+
+        this._outputChannel.debug('[PositronConsoleService] Clearing active console');
+        this._activeConsoleInstance = undefined;
+        this._onDidChangeActivePositronConsoleInstanceEmitter.fire(undefined);
+    }
+
+    private _canRouteToConsoleInstance(
+        instance: IPositronConsoleInstance | undefined,
+    ): instance is PositronConsoleInstance {
+        if (!instance) {
+            return false;
+        }
+
+        if (instance.sessionMetadata.sessionMode !== LanguageRuntimeSessionMode.Console) {
+            return false;
+        }
+
+        if (instance.runtimeAttached === false) {
+            return false;
+        }
+
+        switch (instance.state) {
+            case PositronConsoleState.Uninitialized:
+            case PositronConsoleState.Disconnected:
+            case PositronConsoleState.Exiting:
+            case PositronConsoleState.Exited:
+                return false;
+            default:
+                return true;
+        }
+    }
+
+    private _isTerminalConsoleState(state: PositronConsoleState): boolean {
+        switch (state) {
+            case PositronConsoleState.Disconnected:
+            case PositronConsoleState.Exiting:
+            case PositronConsoleState.Exited:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private _describeConsoleInstance(instance: IPositronConsoleInstance): string {
+        const state = instance.state ? String(instance.state).toLowerCase() : 'unknown';
+        const attachment = instance.runtimeAttached === false ? 'detached' : 'attached';
+        return `${state}, ${attachment}`;
+    }
+
+    private _findReplacementActiveConsoleInstance(): PositronConsoleInstance | undefined {
+        const foregroundSessionId = this._sessionManager.foregroundSession?.sessionId;
+        if (foregroundSessionId) {
+            const foregroundInstance = this._consoleInstancesBySessionId.get(foregroundSessionId);
+            if (this._canRouteToConsoleInstance(foregroundInstance)) {
+                return foregroundInstance;
+            }
+        }
+
+        return Array.from(this._consoleInstancesBySessionId.values())
+            .filter(instance => this._canRouteToConsoleInstance(instance))
+            .sort((a, b) => b.sessionMetadata.createdTimestamp - a.sessionMetadata.createdTimestamp)[0];
+    }
+
+    private _ensureActiveConsoleInstanceIsRoutable(): void {
+        if (!this._activeConsoleInstance) {
+            return;
+        }
+
+        if (this._canRouteToConsoleInstance(this._activeConsoleInstance)) {
+            return;
+        }
+
+        const replacement = this._findReplacementActiveConsoleInstance();
+        if (replacement) {
+            this._setActivePositronConsoleInstance(replacement);
+            return;
+        }
+
+        this._clearActivePositronConsoleInstance();
+    }
+
+    private _handleConsoleInstanceStateChange(instance: PositronConsoleInstance): void {
+        if (instance !== this._activeConsoleInstance) {
+            return;
+        }
+
+        if (!this._isTerminalConsoleState(instance.state)) {
+            return;
+        }
+
+        this._ensureActiveConsoleInstanceIsRoutable();
+    }
+
     private async _resolveConsoleInstance(
         languageId: string,
         sessionId: string | undefined,
@@ -421,12 +521,18 @@ export class PositronConsoleService implements IPositronConsoleService {
                 );
             }
 
+            if (!this._canRouteToConsoleInstance(existingInstance)) {
+                throw new Error(
+                    `Cannot execute code because the requested session ID ${sessionId} cannot accept code execution (${this._describeConsoleInstance(existingInstance)}).`,
+                );
+            }
+
             return existingInstance;
         }
 
         if (
             this._activeConsoleInstance?.runtimeMetadata.languageId === languageId &&
-            this._activeConsoleInstance.sessionMetadata.sessionMode === LanguageRuntimeSessionMode.Console
+            this._canRouteToConsoleInstance(this._activeConsoleInstance)
         ) {
             return this._activeConsoleInstance;
         }
@@ -445,7 +551,7 @@ export class PositronConsoleService implements IPositronConsoleService {
             .find(
                 (instance) =>
                     instance.runtimeMetadata.languageId === languageId &&
-                    instance.sessionMetadata.sessionMode === LanguageRuntimeSessionMode.Console,
+                    this._canRouteToConsoleInstance(instance),
             );
     }
 
@@ -581,6 +687,9 @@ export class PositronConsoleService implements IPositronConsoleService {
         this._disposables.push(
             instance.onDidExecuteCode(event => {
                 this._onDidExecuteCodeEmitter.fire(event);
+            }),
+            instance.onDidChangeState(() => {
+                this._handleConsoleInstanceStateChange(instance);
             }),
             instance.onDidChangeInputState(event => {
                 this._onDidChangeInputStateEmitter.fire({

@@ -54,21 +54,30 @@ export class SessionSnapshotBuilder {
     }
 
     resolveActiveSessionId(
-        sessions: Array<{ id: string }>,
+        sessions: SessionProtocol.SessionInfo[],
         candidateIds: Array<string | undefined>
     ): string | undefined {
         if (sessions.length === 0) {
             return undefined;
         }
 
-        const sessionIds = new Set(sessions.map(session => session.id));
+        const sessionsById = new Map(sessions.map(session => [session.id, session]));
         for (const candidateId of candidateIds) {
-            if (candidateId && sessionIds.has(candidateId)) {
+            const candidate = candidateId ? sessionsById.get(candidateId) : undefined;
+            if (candidate && isPreferredActiveSessionCandidate(candidate)) {
                 return candidateId;
             }
         }
 
-        return sessions[0]?.id;
+        for (const candidateId of candidateIds) {
+            const candidate = candidateId ? sessionsById.get(candidateId) : undefined;
+            if (candidate && isActiveSessionCandidate(candidate)) {
+                return candidateId;
+            }
+        }
+
+        return sessions.find(isPreferredActiveSessionCandidate)?.id ??
+            sessions.find(isActiveSessionCandidate)?.id;
     }
 
     private _buildBaseSessionInfo(session: RuntimeSession): SessionProtocol.SessionInfo {
@@ -131,6 +140,23 @@ export class SessionSnapshotBuilder {
             ...(languageId ? { languageId } : {}),
         };
     }
+}
+
+export function isActiveSessionCandidate(session: SessionProtocol.SessionInfo): boolean {
+    switch (session.state) {
+        case 'uninitialized':
+        case 'exited':
+        case 'disconnected':
+            return false;
+        default:
+            return true;
+    }
+}
+
+export function isPreferredActiveSessionCandidate(
+    session: SessionProtocol.SessionInfo,
+): boolean {
+    return isActiveSessionCandidate(session) && session.runtimeAttached;
 }
 
 export function mapConsoleStateToSessionState(

@@ -166,4 +166,43 @@ suite('[Unit] session snapshot builder', () => {
             undefined,
         );
     });
+
+    test('resolveActiveSessionId skips exited sessions and prefers attached healthy sessions', () => {
+        const builder = new SessionSnapshotBuilder();
+        const sessions = [
+            {
+                id: 'session-failed',
+                name: 'failed',
+                runtimeName: 'R',
+                state: 'exited' as const,
+                promptActive: false,
+                runtimeAttached: false,
+            },
+            {
+                id: 'session-detached',
+                name: 'detached',
+                runtimeName: 'R',
+                state: 'ready' as const,
+                promptActive: false,
+                runtimeAttached: false,
+            },
+            {
+                id: 'session-healthy',
+                name: 'healthy',
+                runtimeName: 'R',
+                state: 'ready' as const,
+                promptActive: false,
+                runtimeAttached: true,
+            },
+        ];
+
+        assert.strictEqual(
+            builder.resolveActiveSessionId(sessions, [
+                'session-failed',
+                'session-detached',
+                'session-healthy',
+            ]),
+            'session-healthy',
+        );
+    });
 });

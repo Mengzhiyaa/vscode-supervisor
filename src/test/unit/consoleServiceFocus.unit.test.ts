@@ -2,7 +2,7 @@ import * as assert from 'assert';
 import * as vscode from 'vscode';
 import { LanguageRuntimeSessionMode } from '../../api';
 import { ViewIds } from '../../coreCommandIds';
-import { PositronConsoleService } from '../../services/console';
+import { PositronConsoleService, PositronConsoleState } from '../../services/console';
 
 function makeNoopLogChannel(): vscode.LogOutputChannel {
     const noop = () => undefined;
@@ -264,6 +264,143 @@ suite('[Unit] console service focus preservation', () => {
         assert.deepStrictEqual(executionCalls, ['mean(y)']);
         assert.strictEqual(service.activePositronConsoleInstance, consoleInstance);
         assert.strictEqual(sessionManager.foregroundSession, consoleSession);
+
+        service.dispose();
+    });
+
+    test('executeCode skips a failed active console instance and reuses a healthy console for the same language', async () => {
+        const sessionManager = {
+            foregroundSession: undefined,
+            startNewRuntimeSession: async () => {
+                throw new Error('Expected existing console instance to be reused');
+            },
+            startConsoleSession: async () => {
+                throw new Error('Expected existing console instance to be reused');
+            },
+            getRuntimeProvider: () => ({ languageId: 'r' }),
+        } as any;
+        const service = new PositronConsoleService(sessionManager, makeNoopLogChannel());
+        const executionCalls: string[] = [];
+
+        service.setConsoleViewProvider({
+            reveal: async () => undefined,
+        });
+
+        const failedSession = { sessionId: 'r-failed-session' };
+        const healthySession = { sessionId: 'r-healthy-session' };
+        const failedInstance = {
+            sessionId: 'r-failed-session',
+            runtimeMetadata: { languageId: 'r' },
+            sessionMetadata: { createdTimestamp: 3, sessionMode: LanguageRuntimeSessionMode.Console },
+            attachedRuntimeSession: failedSession,
+            runtimeAttached: false,
+            state: PositronConsoleState.Exited,
+            enqueueCode: async () => {
+                throw new Error('Expected failed console instance to be skipped');
+            },
+            focusInput: () => undefined,
+            dispose: () => undefined,
+        } as any;
+        const healthyInstance = {
+            sessionId: 'r-healthy-session',
+            runtimeMetadata: { languageId: 'r' },
+            sessionMetadata: { createdTimestamp: 2, sessionMode: LanguageRuntimeSessionMode.Console },
+            attachedRuntimeSession: healthySession,
+            runtimeAttached: true,
+            state: PositronConsoleState.Ready,
+            enqueueCode: async (code: string) => {
+                executionCalls.push(code);
+            },
+            focusInput: () => undefined,
+            dispose: () => undefined,
+        } as any;
+
+        (service as any)._consoleInstancesBySessionId.set(failedInstance.sessionId, failedInstance);
+        (service as any)._consoleInstancesBySessionId.set(healthyInstance.sessionId, healthyInstance);
+        (service as any)._activeConsoleInstance = failedInstance;
+
+        const sessionId = await service.executeCode(
+            'r',
+            undefined,
+            'mean(z)',
+            { source: 'editor' },
+            false,
+        );
+
+        assert.strictEqual(sessionId, 'r-healthy-session');
+        assert.deepStrictEqual(executionCalls, ['mean(z)']);
+        assert.strictEqual(service.activePositronConsoleInstance, healthyInstance);
+        assert.strictEqual(sessionManager.foregroundSession, healthySession);
+
+        service.dispose();
+    });
+
+    test('executeCode rejects explicit session ids for failed console instances', async () => {
+        const service = new PositronConsoleService({} as any, makeNoopLogChannel());
+
+        service.setConsoleViewProvider({
+            reveal: async () => undefined,
+        });
+
+        const failedInstance = {
+            sessionId: 'r-failed-session',
+            runtimeMetadata: { languageId: 'r' },
+            sessionMetadata: { createdTimestamp: 1, sessionMode: LanguageRuntimeSessionMode.Console },
+            runtimeAttached: false,
+            state: PositronConsoleState.Exited,
+            enqueueCode: async () => undefined,
+            focusInput: () => undefined,
+            dispose: () => undefined,
+        } as any;
+
+        (service as any)._consoleInstancesBySessionId.set(failedInstance.sessionId, failedInstance);
+
+        await assert.rejects(
+            () => service.executeCode('r', failedInstance.sessionId, 'mean(z)', { source: 'editor' }, false),
+            /cannot accept code execution/i,
+        );
+
+        service.dispose();
+    });
+
+    test('promotes a healthy console when the active console exits', () => {
+        const sessionManager = {
+            foregroundSession: { sessionId: 'r-healthy-session' },
+        } as any;
+        const service = new PositronConsoleService(sessionManager, makeNoopLogChannel());
+
+        const createInstance = (sessionId: string, activate: boolean) => {
+            return (service as any)._createPositronConsoleInstance(
+                {
+                    sessionId,
+                    sessionName: sessionId,
+                    sessionMode: LanguageRuntimeSessionMode.Console,
+                    createdTimestamp: sessionId === 'r-active-session' ? 2 : 1,
+                },
+                {
+                    runtimeId: `${sessionId}-runtime`,
+                    runtimeName: 'R 4.4.1',
+                    runtimePath: `/runtime/${sessionId}`,
+                    runtimeVersion: '0.0.1',
+                    runtimeShortName: '4.4.1',
+                    runtimeSource: 'system',
+                    languageId: 'r',
+                    languageName: 'R',
+                    languageVersion: '4.4.1',
+                },
+                activate,
+            );
+        };
+
+        const activeInstance = createInstance('r-active-session', true);
+        const healthyInstance = createInstance('r-healthy-session', false);
+
+        (activeInstance as any)._runtimeAttached = false;
+        (healthyInstance as any)._runtimeAttached = true;
+        (healthyInstance as any).setState(PositronConsoleState.Ready);
+        (activeInstance as any).setState(PositronConsoleState.Exited);
+
+        assert.strictEqual(service.activePositronConsoleInstance?.sessionId, 'r-healthy-session');
 
         service.dispose();
     });
