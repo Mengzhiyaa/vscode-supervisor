@@ -4,6 +4,18 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { SessionAttachMode } from '../interfaces/consoleService';
+import {
+    ActivityItemInputState,
+    ActivityItemPromptState,
+    ActivityItemStreamType,
+    type ILanguageRuntimeMessageOutputData,
+} from '../../../shared/console';
+export {
+    ActivityItemInputState,
+    ActivityItemPromptState,
+    ActivityItemStreamType,
+    type ILanguageRuntimeMessageOutputData,
+} from '../../../shared/console';
 
 const htmlOutputPlaceholder = '[HTML output]';
 const ansiOscPattern = /\x1B\][^\x07]*(?:\x07|\x1B\\)|\x9D[^\x07\x9C]*(?:\x07|\x9C)/g;
@@ -418,16 +430,6 @@ export abstract class ActivityItem {
 }
 
 /**
- * ActivityItemInputState enum (1:1 Positron).
- */
-export const enum ActivityItemInputState {
-    Provisional = 'provisional',
-    Executing = 'executing',
-    Completed = 'completed',
-    Cancelled = 'cancelled'
-}
-
-/**
  * ActivityItemInput class (1:1 Positron).
  * Represents code input.
  */
@@ -447,14 +449,6 @@ export class ActivityItemInput extends ActivityItem {
     override getClipboardRepresentation(_commentPrefix: string): string[] {
         return formatConsoleTextForClipboard(this.code);
     }
-}
-
-/**
- * ActivityItemStreamType enum (1:1 Positron).
- */
-export const enum ActivityItemStreamType {
-    OUTPUT = 'output',
-    ERROR = 'error'
 }
 
 /**
@@ -529,13 +523,6 @@ export class ActivityItemErrorMessage extends ActivityItem {
         this._isHidden = outputLines > 0;
         return 0;
     }
-}
-
-/**
- * Output data type for display_data messages.
- */
-export interface ILanguageRuntimeMessageOutputData {
-    [mimeType: string]: string;
 }
 
 /**
@@ -624,15 +611,6 @@ export class ActivityItemOutputPlot extends ActivityItem {
         this._isHidden = lineCount > 0;
         return 0;
     }
-}
-
-/**
- * ActivityItemPromptState enum (1:1 Positron).
- */
-export const enum ActivityItemPromptState {
-    Unanswered = 'unanswered',
-    Answered = 'answered',
-    Interrupted = 'interrupted'
 }
 
 /**

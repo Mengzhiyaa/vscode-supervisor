@@ -17,39 +17,8 @@ import { DeferredRender, IRenderedPlot, RenderRequest } from './positronPlotRend
 import { PlotSizingPolicyAuto } from './sizingPolicyAuto';
 import { PlotSizingPolicyCustom } from './sizingPolicyCustom';
 import { PositronPlotCommProxy } from './comms/positronPlotCommProxy';
-
-/**
- * The possible states for the plot client instance.
- * Matches Positron's PlotClientState enum.
- */
-export enum PlotClientState {
-    /** The plot client has never rendered a plot */
-    Unrendered = 'unrendered',
-
-    /** The plot client has been requested to render a plot, but hasn't done it yet. */
-    RenderPending = 'render_pending',
-
-    /** The plot client is currently rendering a plot */
-    Rendering = 'rendering',
-
-    /** The plot client has rendered a plot */
-    Rendered = 'rendered',
-
-    /** The plot client is closed (disconnected); it cannot render any further plots */
-    Closed = 'closed',
-}
-
-/**
- * Zoom levels for displaying plots.
- * Matches Positron's ZoomLevel enum.
- */
-export enum ZoomLevel {
-    Fit = 0,
-    Fifty = 0.5,
-    SeventyFive = 0.75,
-    OneHundred = 1,
-    TwoHundred = 2,
-}
+import { PlotClientState, ZoomLevel } from '../shared/plots';
+export { PlotClientState, ZoomLevel } from '../shared/plots';
 
 /**
  * The result of rendering a plot.

@@ -7,14 +7,8 @@
 import { ActivityItem } from './activityItem';
 import { ANSIOutput, type ANSIOutputLine } from '$lib/ansi/ansiOutput';
 import { writable, type Readable } from 'svelte/store';
-
-/**
- * ActivityItemStreamType enum.
- */
-export enum ActivityItemStreamType {
-	OUTPUT = 'output',
-	ERROR = 'error'
-}
+import { ActivityItemStreamType } from '@shared/console';
+export { ActivityItemStreamType } from '@shared/console';
 
 /**
  * ActivityItemStream class - Represents stdout/stderr stream output.

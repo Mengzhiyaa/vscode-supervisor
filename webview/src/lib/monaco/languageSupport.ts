@@ -6,19 +6,9 @@ import {
     getLanguageTextMateGrammarDefinition,
     getTextMateThemeRules,
 } from "./textMateTokenization";
+import type { ConsoleThemeData } from "@shared/console";
+export type { ConsoleThemeData, ConsoleThemeRule } from "@shared/console";
 type MonacoApi = typeof import("monaco-editor");
-
-export interface ConsoleThemeRule {
-    token: string;
-    foreground?: string;
-    background?: string;
-    fontStyle?: string;
-}
-
-export interface ConsoleThemeData {
-    base: "vs" | "vs-dark" | "hc-black" | "hc-light";
-    rules: ConsoleThemeRule[];
-}
 
 export interface LanguageMonacoSupportModule {
     registerLanguage(monaco: MonacoApi): void;

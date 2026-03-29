@@ -141,6 +141,7 @@ export interface IntrinsicSize {
     width: number;
     height: number;
     unit: 'inches' | 'pixels';
+    source: string;
 }
 
 export namespace GetSizingPoliciesRequest {
@@ -207,7 +208,7 @@ export namespace GetPlotStateRequest {
 export namespace GetHistoryStateRequest {
 
     export interface Result {
-        policy: 'always' | 'never' | 'automatic';
+        policy: 'always' | 'never' | 'auto';
         position: 'auto' | 'bottom' | 'right';
     }
 
@@ -217,7 +218,7 @@ export namespace GetHistoryStateRequest {
 export namespace SelectHistoryPolicyRequest {
 
     export interface Params {
-        policy: 'always' | 'never' | 'automatic';
+        policy: 'always' | 'never' | 'auto';
     }
 
     export const type = new RequestType<Params, void, void>('plots/selectHistoryPolicy');
@@ -235,7 +236,7 @@ export namespace SelectHistoryPositionRequest {
 export namespace HistoryPolicyChangedNotification {
 
     export interface Params {
-        policy: 'always' | 'never' | 'automatic';
+        policy: 'always' | 'never' | 'auto';
     }
 
     export const type = new NotificationType<Params>('plots/historyPolicyChanged');

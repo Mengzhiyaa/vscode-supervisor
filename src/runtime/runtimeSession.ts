@@ -20,6 +20,7 @@ import {
     RuntimeExitReason,
     RuntimeState,
 } from '../internal/runtimeTypes';
+import { runtimeStateToConsoleState } from './runtimeStateMapping';
 import { ActiveRuntimeSession } from './activeRuntimeSession';
 import { UiClientInstance } from './UiClientInstance';
 import {
@@ -2290,29 +2291,6 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
     }
 
     private _mapStateToString(state: RuntimeState): string {
-        switch (state) {
-            case RuntimeState.Uninitialized:
-                return 'uninitialized';
-            case RuntimeState.Offline:
-                return 'offline';
-            case RuntimeState.Initializing:
-            case RuntimeState.Starting:
-                return 'starting';
-            case RuntimeState.Ready:
-            case RuntimeState.Idle:
-                return 'ready';
-            case RuntimeState.Busy:
-                return 'busy';
-            case RuntimeState.Interrupting:
-                return 'interrupting';
-            case RuntimeState.Restarting:
-                return 'restarting';
-            case RuntimeState.Exiting:
-                return 'exiting';
-            case RuntimeState.Exited:
-                return 'exited';
-            default:
-                return 'uninitialized';
-        }
+        return runtimeStateToConsoleState(state);
     }
 }

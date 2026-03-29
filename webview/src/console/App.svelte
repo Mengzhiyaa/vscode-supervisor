@@ -12,6 +12,13 @@
     import VerticalSplitter from "./VerticalSplitter.svelte";
     import StartupStatus from "./StartupStatus.svelte";
     import EmptyConsole from "./EmptyConsole.svelte";
+    import { deserializePromptState } from "@shared/console";
+    import type {
+        SerializedActivityItem,
+        SerializedConsoleState,
+        SerializedRuntimeItem,
+    } from "@shared/consoleState";
+    import type { RuntimeResourceUsage as ResourceUsage } from "@shared/runtime";
     import type {
         ConsoleState,
         ConsoleSettings,
@@ -45,14 +52,6 @@
     } from "./classes";
     import type { ConsoleThemeData } from "$lib/monaco/languageSupport";
 
-    interface ResourceUsage {
-        cpu_percent: number;
-        memory_bytes: number;
-        thread_count?: number;
-        sampling_period_ms?: number;
-        timestamp?: number;
-    }
-
     interface SessionInfo {
         id: string;
         name: string;
@@ -80,27 +79,6 @@
         languageName: string;
         base64EncodedIconSvg?: string;
         newSession: boolean;
-    }
-
-    interface SerializedConsoleState {
-        version: number;
-        items: SerializedRuntimeItem[];
-        inputHistory?: string[];
-        trace?: boolean;
-        wordWrap?: boolean;
-        inputPrompt?: string;
-        continuationPrompt?: string;
-        workingDirectory?: string | null;
-    }
-
-    interface SerializedRuntimeItem {
-        type: string;
-        [key: string]: any;
-    }
-
-    interface SerializedActivityItem {
-        type: string;
-        [key: string]: any;
     }
 
     interface RuntimeChange {
@@ -833,21 +811,6 @@
         void connection.sendRequest("plots/select", {
             plotId: outputId,
         });
-    }
-
-    function deserializePromptState(
-        state?: string,
-    ): ActivityItemPromptState | undefined {
-        switch (state) {
-            case "unanswered":
-                return ActivityItemPromptState.Unanswered;
-            case "answered":
-                return ActivityItemPromptState.Answered;
-            case "interrupted":
-                return ActivityItemPromptState.Interrupted;
-            default:
-                return undefined;
-        }
     }
 
     function applySessionMetadataUpdate(

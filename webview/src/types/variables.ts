@@ -6,15 +6,10 @@
  * Licensed under the Elastic License 2.0. See LICENSE.txt for license information.
  */
 
-/**
- * Variable grouping options matching Positron's PositronVariablesGrouping.
- */
-export type VariablesGrouping = 'none' | 'kind' | 'size';
-
-/**
- * Variable sorting options matching Positron's PositronVariablesSorting.
- */
-export type VariablesSorting = 'name' | 'size' | 'recent';
+export type {
+    VariablesGrouping,
+    VariablesSorting,
+} from '@shared/variables';
 
 export type VariablesInstanceState =
     | "uninitialized"

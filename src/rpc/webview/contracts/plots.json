@@ -396,6 +396,10 @@
         {
           "name": "unit",
           "type": "'inches' | 'pixels'"
+        },
+        {
+          "name": "source",
+          "type": "string"
         }
       ]
     },
@@ -554,7 +558,7 @@
           "fields": [
             {
               "name": "policy",
-              "type": "'always' | 'never' | 'automatic'"
+              "type": "'always' | 'never' | 'auto'"
             },
             {
               "name": "position",
@@ -578,7 +582,7 @@
           "fields": [
             {
               "name": "policy",
-              "type": "'always' | 'never' | 'automatic'"
+              "type": "'always' | 'never' | 'auto'"
             }
           ]
         }
@@ -616,7 +620,7 @@
           "fields": [
             {
               "name": "policy",
-              "type": "'always' | 'never' | 'automatic'"
+              "type": "'always' | 'never' | 'auto'"
             }
           ]
         }

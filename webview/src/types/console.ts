@@ -6,36 +6,18 @@
  * Licensed under the Elastic License 2.0. See LICENSE.txt for license information.
  */
 
-/**
- * Console state enum matching Positron's PositronConsoleState.
- */
-export type ConsoleState =
-    | 'uninitialized'
-    | 'starting'
-    | 'busy'
-    | 'ready'
-    | 'offline'
-    | 'interrupting'
-    | 'restarting'
-    | 'exiting'
-    | 'exited'
-    | 'disconnected';
+import type {
+    ConsoleState,
+    RuntimeStartupPhaseValue,
+} from "@shared/runtime";
+export type { ConsoleState } from "@shared/runtime";
 
 /**
  * Runtime status type for displaying runtime state icons.
  */
 export type RuntimeStatusType = 'Active' | 'Disconnected' | 'Idle';
 
-/**
- * Runtime startup phase enum matching Positron.
- */
-export type RuntimeStartupPhase =
-    | 'initializing'
-    | 'awaitingTrust'
-    | 'discovering'
-    | 'reconnecting'
-    | 'starting'
-    | 'complete';
+export type RuntimeStartupPhase = RuntimeStartupPhaseValue;
 
 /**
  * Session mode for runtime icon display.

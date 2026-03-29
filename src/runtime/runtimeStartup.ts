@@ -10,6 +10,7 @@ import {
 import { CoreConfigurationSections } from '../coreCommandIds';
 import { RuntimeState } from '../internal/runtimeTypes';
 import { type IPositronNewFolderService } from '../newFolder/positronNewFolder';
+import { RuntimeStartupPhase } from '../shared/runtime';
 import { RuntimeManager } from './manager';
 import { RuntimeSession } from './session';
 import { type SerializedSessionMetadata } from './runtimeSessionService';
@@ -37,16 +38,7 @@ export enum LanguageStartupBehavior {
     Manual = 'manual',
     Disabled = 'disabled',
 }
-
-export enum RuntimeStartupPhase {
-    Initializing = 'initializing',
-    AwaitingTrust = 'awaitingTrust',
-    Reconnecting = 'reconnecting',
-    Starting = 'starting',
-    NewFolderTasks = 'newFolderTasks',
-    Discovering = 'discovering',
-    Complete = 'complete',
-}
+export { RuntimeStartupPhase };
 
 export interface IRuntimeAutoStartEvent {
     runtime: LanguageRuntimeMetadata;

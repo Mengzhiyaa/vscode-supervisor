@@ -26,6 +26,7 @@
     const messages = {
         initializing: "Starting up",
         awaitingTrust: "Consoles cannot start until the workspace is trusted",
+        newFolderTasks: "Setting up workspace",
         reconnecting: "Reconnecting",
         starting: "Starting",
         discovering: "Discovering interpreters",
@@ -51,6 +52,10 @@
 
     {#if startupPhase === "awaitingTrust"}
         <div class="awaiting">{messages.awaitingTrust}...</div>
+    {/if}
+
+    {#if startupPhase === "newFolderTasks"}
+        <div class="new-folder-tasks">{messages.newFolderTasks}...</div>
     {/if}
 
     {#if startupPhase === "starting" && !runtimeStartupEvent}
@@ -113,6 +118,7 @@
     .initializing,
     .reconnecting,
     .awaiting,
+    .new-folder-tasks,
     .starting,
     .discovery {
         text-align: center;

@@ -813,7 +813,7 @@
           "fields": [
             {
               "name": "phase",
-              "type": "'initializing' | 'awaitingTrust' | 'reconnecting' | 'starting' | 'discovering' | 'complete'"
+              "type": "'initializing' | 'awaitingTrust' | 'reconnecting' | 'newFolderTasks' | 'starting' | 'discovering' | 'complete'"
             },
             {
               "name": "discoveredCount",

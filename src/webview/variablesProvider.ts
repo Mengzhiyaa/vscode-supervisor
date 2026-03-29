@@ -20,6 +20,12 @@ import {
     IVariableItem
 } from '../services/variables';
 import { SessionSnapshotBuilder } from './sessionSnapshotBuilder';
+import {
+    decodeGrouping,
+    decodeSorting,
+    encodeGrouping,
+    encodeSorting,
+} from '../shared/variables';
 
 /**
  * Webview provider for the Variables sidebar view.
@@ -282,18 +288,7 @@ export class VariablesViewProvider extends BaseWebviewProvider {
             if (!instance) {
                 return;
             }
-
-            switch (params.grouping) {
-                case 'none':
-                    instance.grouping = PositronVariablesGrouping.None;
-                    break;
-                case 'kind':
-                    instance.grouping = PositronVariablesGrouping.Kind;
-                    break;
-                case 'size':
-                    instance.grouping = PositronVariablesGrouping.Size;
-                    break;
-            }
+            instance.grouping = decodeGrouping(params.grouping) as PositronVariablesGrouping;
         });
 
         connection.onRequest(VariablesProtocol.SetVariablesSortingRequest.type, async (params) => {
@@ -301,18 +296,7 @@ export class VariablesViewProvider extends BaseWebviewProvider {
             if (!instance) {
                 return;
             }
-
-            switch (params.sorting) {
-                case 'name':
-                    instance.sorting = PositronVariablesSorting.Name;
-                    break;
-                case 'size':
-                    instance.sorting = PositronVariablesSorting.Size;
-                    break;
-                case 'recent':
-                    instance.sorting = PositronVariablesSorting.Recent;
-                    break;
-            }
+            instance.sorting = decodeSorting(params.sorting) as PositronVariablesSorting;
         });
 
         connection.onRequest(VariablesProtocol.SetVariablesFilterRequest.type, async (params) => {
@@ -532,8 +516,8 @@ export class VariablesViewProvider extends BaseWebviewProvider {
             sessionId: instance.session.sessionId,
             state: this._mapVariablesClientState(instance.state),
             status: this._mapVariablesClientStatus(instance.status),
-            grouping: this._mapVariablesGrouping(instance.grouping),
-            sorting: this._mapVariablesSorting(instance.sorting),
+            grouping: encodeGrouping(instance.grouping),
+            sorting: encodeSorting(instance.sorting),
             filterText: instance.getFilterText(),
             highlightRecent: instance.highlightRecent,
         };
@@ -605,34 +589,6 @@ export class VariablesViewProvider extends BaseWebviewProvider {
             case RuntimeClientStatus.Disconnected:
             default:
                 return 'disconnected';
-        }
-    }
-
-    private _mapVariablesGrouping(
-        grouping: PositronVariablesGrouping,
-    ): VariablesProtocol.VariablesInstanceInfo['grouping'] {
-        switch (grouping) {
-            case PositronVariablesGrouping.None:
-                return 'none';
-            case PositronVariablesGrouping.Size:
-                return 'size';
-            case PositronVariablesGrouping.Kind:
-            default:
-                return 'kind';
-        }
-    }
-
-    private _mapVariablesSorting(
-        sorting: PositronVariablesSorting,
-    ): VariablesProtocol.VariablesInstanceInfo['sorting'] {
-        switch (sorting) {
-            case PositronVariablesSorting.Size:
-                return 'size';
-            case PositronVariablesSorting.Recent:
-                return 'recent';
-            case PositronVariablesSorting.Name:
-            default:
-                return 'name';
         }
     }
 

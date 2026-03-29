@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import type { ConsoleThemeData, ConsoleThemeRule } from '../rpc/webview/console';
+import type { ConsoleThemeData, ConsoleThemeRule } from '../shared/console';
 
 type RawTokenColor = {
     scope?: string | string[];

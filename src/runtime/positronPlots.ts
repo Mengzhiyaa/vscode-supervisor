@@ -8,58 +8,14 @@ import type { IPlotSize, IPositronPlotSizingPolicy } from './sizingPolicy';
 import type { PlotClientInstance, PlotMetadata as PlotClientMetadata } from './PlotClientInstance';
 import { ZoomLevel } from './PlotClientInstance';
 import type { PlotRenderSettings } from './comms/positronPlotComm';
+import { DarkFilter, HistoryPolicy, HistoryPosition } from '../shared/plots';
+export { DarkFilter, HistoryPolicy, HistoryPosition } from '../shared/plots';
 
 /**
  * Plot render settings and formats (re-exported to avoid type duplication).
  * Matches Positron's PlotRenderSettings/PlotRenderFormat.
  */
 export { PlotRenderFormat, type PlotRenderSettings } from './comms/positronPlotComm';
-
-/**
- * The set of policies governing when we show the plot history (filmstrip
- * thumbnail list) in the Plots pane.
- *
- * Matches Positron's HistoryPolicy enum.
- */
-export enum HistoryPolicy {
-    /** The plot history is always shown */
-    AlwaysVisible = 'always',
-
-    /** The plot history is never shown */
-    NeverVisible = 'never',
-
-    /** The plot history is shown only when there is more than one plot (default) */
-    Automatic = 'automatic'
-}
-
-/**
- * The position policy for the plot history filmstrip.
- */
-export enum HistoryPosition {
-    /** Choose bottom or right automatically based on aspect ratio */
-    Auto = 'auto',
-
-    /** Always show history at the bottom */
-    Bottom = 'bottom',
-
-    /** Always show history on the right */
-    Right = 'right'
-}
-
-/**
- * Settings for the dark filter mode.
- * Matches Positron's DarkFilter enum.
- */
-export enum DarkFilter {
-    /** The dark filter is always on (i.e., plots always have their colors inverted in dark themes) */
-    On = 'on',
-
-    /** The dark filter is always off (i.e., plots are always shown in their given colors */
-    Off = 'off',
-
-    /** The dark filter follows the current theme (i.e., it's on in dark themes and off in light themes) */
-    Auto = 'auto'
-}
 
 /**
  * The location where the plots pane is currently being displayed.

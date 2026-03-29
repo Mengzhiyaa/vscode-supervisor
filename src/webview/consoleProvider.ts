@@ -7,7 +7,7 @@ import * as LspProtocol from '../rpc/webview/lsp';
 import * as SessionProtocol from '../rpc/webview/session';
 import { RuntimeSession } from '../runtime/session';
 import { RuntimeSessionService } from '../runtime/runtimeSession';
-import { RuntimeStartupService, RuntimeStartupPhase } from '../runtime/runtimeStartup';
+import { RuntimeStartupService } from '../runtime/runtimeStartup';
 import {
     LanguageRuntimeSessionChannel,
     RuntimeCodeFragmentStatus,
@@ -862,7 +862,7 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
             return;
         }
 
-        const phase = this._mapRuntimeStartupPhase(this._runtimeStartupService.startupPhase);
+        const phase = this._runtimeStartupService.startupPhase;
         if (phase === 'complete' || phase === 'discovering' || phase === 'awaitingTrust') {
             this._runtimeStartupEvent = undefined;
         }
@@ -872,26 +872,6 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
             discoveredCount: this._runtimeStartupService.discoveredRuntimeCount,
             runtimeStartupEvent: this._runtimeStartupEvent,
         });
-    }
-
-    private _mapRuntimeStartupPhase(phase: RuntimeStartupPhase): ConsoleProtocol.RuntimeStartupPhaseNotification.Params['phase'] {
-        switch (phase) {
-            case RuntimeStartupPhase.Initializing:
-                return 'initializing';
-            case RuntimeStartupPhase.AwaitingTrust:
-                return 'awaitingTrust';
-            case RuntimeStartupPhase.Reconnecting:
-                return 'reconnecting';
-            case RuntimeStartupPhase.Starting:
-                return 'starting';
-            case RuntimeStartupPhase.NewFolderTasks:
-                return 'starting';
-            case RuntimeStartupPhase.Discovering:
-                return 'discovering';
-            case RuntimeStartupPhase.Complete:
-            default:
-                return 'complete';
-        }
     }
 
     private _warnMissingSession(action: string): void {

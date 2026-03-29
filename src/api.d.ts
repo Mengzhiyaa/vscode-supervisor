@@ -2,8 +2,10 @@ import * as vscode from 'vscode';
 import type { LanguageRuntimeExit } from './internal/runtimeTypes';
 import type { IPositronNewFolderService } from './newFolder/positronNewFolder';
 import { RuntimeExitReason, RuntimeStartMode, RuntimeState } from './internal/runtimeTypes';
+import { RuntimeStartupPhase } from './shared/runtime';
 export type { LanguageRuntimeExit } from './internal/runtimeTypes';
 export { RuntimeExitReason, RuntimeStartMode, RuntimeState } from './internal/runtimeTypes';
+export { RuntimeStartupPhase } from './shared/runtime';
 export { NewFolderStartupPhase } from './newFolder/positronNewFolder';
 export type { NewFolderConfiguration, IPositronNewFolderService, IPositronNewFolderTaskOptions, } from './newFolder/positronNewFolder';
 export declare enum LanguageRuntimeSessionMode {
@@ -309,15 +311,6 @@ export interface IPositronHelpService {
 export interface ISessionRestoreFailedEvent {
     sessionId: string;
     error: Error;
-}
-export declare enum RuntimeStartupPhase {
-    Initializing = "initializing",
-    AwaitingTrust = "awaitingTrust",
-    Reconnecting = "reconnecting",
-    Starting = "starting",
-    NewFolderTasks = "newFolderTasks",
-    Discovering = "discovering",
-    Complete = "complete"
 }
 export interface IRuntimeAutoStartEvent {
     runtime: LanguageRuntimeMetadata;

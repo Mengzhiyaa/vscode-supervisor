@@ -335,7 +335,7 @@ export namespace RuntimeStartupPhaseNotification {
     }
 
     export interface Params {
-        phase: 'initializing' | 'awaitingTrust' | 'reconnecting' | 'starting' | 'discovering' | 'complete';
+        phase: 'initializing' | 'awaitingTrust' | 'reconnecting' | 'newFolderTasks' | 'starting' | 'discovering' | 'complete';
         discoveredCount?: number;
         runtimeStartupEvent?: RuntimeStartupEvent;
     }

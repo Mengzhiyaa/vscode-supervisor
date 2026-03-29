@@ -34,6 +34,11 @@ import {
     RuntimeClientType,
 } from '../internal/runtimeTypes';
 import {
+    parseDarkFilter,
+    parseHistoryPolicy,
+    parseHistoryPosition,
+} from '../shared/plots';
+import {
     type IPositronPlotsService,
     type IPositronPlotClient,
     type PlotRenderSettings,
@@ -319,30 +324,12 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
         const config = vscode.workspace.getConfiguration();
 
         // Load history policy
-        const historyPolicySetting = config.get<string>(HistoryPolicyConfigKey, 'automatic');
-        switch (historyPolicySetting) {
-            case 'always':
-                this._historyPolicy = HistoryPolicy.AlwaysVisible;
-                break;
-            case 'never':
-                this._historyPolicy = HistoryPolicy.NeverVisible;
-                break;
-            default:
-                this._historyPolicy = HistoryPolicy.Automatic;
-        }
+        const historyPolicySetting = config.get<string>(HistoryPolicyConfigKey, HistoryPolicy.Automatic);
+        this._historyPolicy = parseHistoryPolicy(historyPolicySetting);
 
         // Load dark filter mode
         const darkFilterSetting = config.get<string>(DarkFilterModeConfigKey, 'auto');
-        switch (darkFilterSetting) {
-            case 'on':
-                this._darkFilterMode = DarkFilter.On;
-                break;
-            case 'off':
-                this._darkFilterMode = DarkFilter.Off;
-                break;
-            default:
-                this._darkFilterMode = DarkFilter.Auto;
-        }
+        this._darkFilterMode = parseDarkFilter(darkFilterSetting);
 
         // Load default sizing policy
         const sizingPolicySetting = config.get<string>(DefaultSizingPolicyConfigKey, 'auto');
@@ -373,22 +360,14 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
                 }
             }
 
-            const selectedHistoryPolicy = this._getWorkspaceState<HistoryPolicy>(SelectedHistoryPolicyStorageKey);
-            switch (selectedHistoryPolicy) {
-                case HistoryPolicy.AlwaysVisible:
-                case HistoryPolicy.NeverVisible:
-                case HistoryPolicy.Automatic:
-                    this._historyPolicy = selectedHistoryPolicy;
-                    break;
+            const selectedHistoryPolicy = this._getWorkspaceState<string>(SelectedHistoryPolicyStorageKey);
+            if (typeof selectedHistoryPolicy === 'string') {
+                this._historyPolicy = parseHistoryPolicy(selectedHistoryPolicy);
             }
 
-            const selectedHistoryPosition = this._getWorkspaceState<HistoryPosition>(SelectedHistoryPositionStorageKey);
-            switch (selectedHistoryPosition) {
-                case HistoryPosition.Auto:
-                case HistoryPosition.Bottom:
-                case HistoryPosition.Right:
-                    this._historyPosition = selectedHistoryPosition;
-                    break;
+            const selectedHistoryPosition = this._getWorkspaceState<string>(SelectedHistoryPositionStorageKey);
+            if (typeof selectedHistoryPosition === 'string') {
+                this._historyPosition = parseHistoryPosition(selectedHistoryPosition);
             }
 
             const preferredEditorTarget = this._getWorkspaceState<PreferredEditorTarget>(PreferredEditorTargetStorageKey);

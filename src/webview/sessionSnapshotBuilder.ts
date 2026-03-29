@@ -7,6 +7,10 @@ import {
     PositronConsoleState,
 } from '../services/console/interfaces/consoleService';
 import { RuntimeState } from '../internal/runtimeTypes';
+import {
+    positronConsoleStateToConsoleState,
+    runtimeStateToConsoleState,
+} from '../runtime/runtimeStateMapping';
 
 /**
  * Shared helper for building the `session/info` snapshot sent to webviews.
@@ -162,57 +166,11 @@ export function isPreferredActiveSessionCandidate(
 export function mapConsoleStateToSessionState(
     state: PositronConsoleState
 ): SessionProtocol.SessionInfo['state'] {
-    switch (state) {
-        case PositronConsoleState.Uninitialized:
-            return 'uninitialized';
-        case PositronConsoleState.Starting:
-            return 'starting';
-        case PositronConsoleState.Busy:
-            return 'busy';
-        case PositronConsoleState.Ready:
-            return 'ready';
-        case PositronConsoleState.Offline:
-            return 'offline';
-        case PositronConsoleState.Interrupting:
-            return 'interrupting';
-        case PositronConsoleState.Restarting:
-            return 'restarting';
-        case PositronConsoleState.Exiting:
-            return 'exiting';
-        case PositronConsoleState.Exited:
-            return 'exited';
-        case PositronConsoleState.Disconnected:
-            return 'disconnected';
-        default:
-            return 'uninitialized';
-    }
+    return positronConsoleStateToConsoleState(state);
 }
 
 export function mapRuntimeStateToSessionState(
     state: RuntimeState
 ): SessionProtocol.SessionInfo['state'] {
-    switch (state) {
-        case RuntimeState.Uninitialized:
-            return 'uninitialized';
-        case RuntimeState.Initializing:
-        case RuntimeState.Starting:
-            return 'starting';
-        case RuntimeState.Ready:
-        case RuntimeState.Idle:
-            return 'ready';
-        case RuntimeState.Busy:
-            return 'busy';
-        case RuntimeState.Offline:
-            return 'offline';
-        case RuntimeState.Interrupting:
-            return 'interrupting';
-        case RuntimeState.Restarting:
-            return 'restarting';
-        case RuntimeState.Exiting:
-            return 'exiting';
-        case RuntimeState.Exited:
-            return 'exited';
-        default:
-            return 'uninitialized';
-    }
+    return runtimeStateToConsoleState(state);
 }

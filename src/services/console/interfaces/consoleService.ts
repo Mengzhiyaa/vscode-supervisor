@@ -6,6 +6,10 @@
 import * as vscode from 'vscode';
 import { RuntimeItem } from '../classes/runtimeItem';
 import { RuntimeSession } from '../../../runtime/session';
+import {
+    RuntimeCodeExecutionMode,
+    RuntimeErrorBehavior,
+} from '../../../shared/runtime';
 import type {
     LanguageRuntimeOutputWithKind,
     LanguageRuntimeResultWithKind,
@@ -28,6 +32,10 @@ import type {
     PromptStateEvent,
     WorkingDirectoryEvent,
 } from '../../../runtime/comms/positronUiComm';
+export {
+    RuntimeCodeExecutionMode,
+    RuntimeErrorBehavior,
+} from '../../../shared/runtime';
 
 /**
  * PositronConsoleState enumeration (1:1 Positron).
@@ -59,32 +67,6 @@ export enum SessionAttachMode {
     Reconnecting = 'reconnecting',
     /** The console is reattaching to a connected session */
     Connected = 'connected',
-}
-
-/**
- * RuntimeCodeExecutionMode enumeration (1:1 Positron).
- * Determines how code execution should be handled.
- */
-export enum RuntimeCodeExecutionMode {
-    /** Interactive execution - shows input in console */
-    Interactive = 'interactive',
-    /** Non-interactive execution - tracked but not treated as REPL input */
-    NonInteractive = 'non-interactive',
-    /** Silent execution - doesn't show input in console */
-    Silent = 'silent',
-    /** Transient execution - runtime-defined ephemeral evaluation */
-    Transient = 'transient',
-}
-
-/**
- * RuntimeErrorBehavior enumeration (1:1 Positron).
- * Determines behavior when code execution encounters an error.
- */
-export enum RuntimeErrorBehavior {
-    /** Continue executing remaining code after an error */
-    Continue = 'continue',
-    /** Stop executing remaining code when error is encountered */
-    Stop = 'stop',
 }
 
 /**

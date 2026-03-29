@@ -2,6 +2,7 @@
  *  Column Profile Types - Types for column statistics and profiles
  *--------------------------------------------------------------------------------------------*/
 
+export type { ColumnProfileType } from '@shared/dataExplorer';
 import {
     getEffectiveColumnDisplayType,
     isBooleanDisplayType,
@@ -9,17 +10,6 @@ import {
     isNumericDisplayType,
     isStringDisplayType,
 } from './columnDisplayTypeUtils';
-
-/**
- * Column profile type
- */
-export type ColumnProfileType =
-    | 'null_count'
-    | 'summary_stats'
-    | 'small_frequency_table'
-    | 'large_frequency_table'
-    | 'small_histogram'
-    | 'large_histogram';
 
 /**
  * Summary statistics for numeric columns

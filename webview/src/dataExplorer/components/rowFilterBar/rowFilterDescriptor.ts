@@ -3,7 +3,19 @@
  *  Provides typed filter descriptor classes for the row filter modal
  *--------------------------------------------------------------------------------------------*/
 
+import {
+    FilterComparisonOp,
+    RowFilterCondition,
+    RowFilterType,
+    TextSearchType,
+} from '@shared/dataExplorer';
 import type { RowFilter, SchemaColumn } from '../../../dataGrid/types';
+export {
+    FilterComparisonOp,
+    RowFilterCondition,
+    RowFilterType,
+    TextSearchType,
+} from '@shared/dataExplorer';
 
 /**
  * Generate a UUID for filter identification
@@ -44,54 +56,6 @@ export enum RowFilterDescrType {
     // Filters with two parameters.
     IS_BETWEEN = 'is-between',
     IS_NOT_BETWEEN = 'is-not-between'
-}
-
-/**
- * Row filter type enumeration (matches backend).
- */
-export enum RowFilterType {
-    Between = 'between',
-    Compare = 'compare',
-    IsEmpty = 'is_empty',
-    IsFalse = 'is_false',
-    IsNull = 'is_null',
-    IsTrue = 'is_true',
-    NotBetween = 'not_between',
-    NotEmpty = 'not_empty',
-    NotNull = 'not_null',
-    Search = 'search',
-    SetMembership = 'set_membership'
-}
-
-/**
- * Row filter condition enumeration.
- */
-export enum RowFilterCondition {
-    And = 'and',
-    Or = 'or'
-}
-
-/**
- * Filter comparison operator enumeration.
- */
-export enum FilterComparisonOp {
-    Eq = '=',
-    NotEq = '!=',
-    Lt = '<',
-    LtEq = '<=',
-    Gt = '>',
-    GtEq = '>='
-}
-
-/**
- * Text search type enumeration.
- */
-export enum TextSearchType {
-    Contains = 'contains',
-    NotContains = 'not_contains',
-    StartsWith = 'starts_with',
-    EndsWith = 'ends_with',
-    RegexMatch = 'regex_match'
 }
 
 /**

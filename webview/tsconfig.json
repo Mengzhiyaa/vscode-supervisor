@@ -17,6 +17,9 @@
         "paths": {
             "$lib/*": [
                 "./src/lib/*"
+            ],
+            "@shared/*": [
+                "../src/shared/*"
             ]
         },
         "types": [
@@ -28,7 +31,8 @@
         "src/**/*.ts",
         "src/**/*.d.ts",
         "src/vite-env.d.ts",
-        "src/**/*.svelte"
+        "src/**/*.svelte",
+        "../src/shared/**/*.ts"
     ],
     "references": [
         {

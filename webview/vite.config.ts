@@ -43,7 +43,8 @@ export default defineConfig(({ mode }) => ({
     // Resolve aliases
     resolve: {
         alias: {
-            '$lib': resolve(__dirname, 'src/lib')
+            '$lib': resolve(__dirname, 'src/lib'),
+            '@shared': resolve(__dirname, '..', 'src', 'shared')
             // Use full Monaco bundle (includes suggest, hover, etc.)
             // Previously used minimal ESM which excluded suggest widget
         }

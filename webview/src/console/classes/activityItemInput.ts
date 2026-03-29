@@ -6,16 +6,8 @@
 
 import { ActivityItem } from './activityItem';
 import { ANSIOutput, type ANSIOutputLine } from '$lib/ansi/ansiOutput';
-
-/**
- * ActivityItemInputState enumeration.
- */
-export const enum ActivityItemInputState {
-    Provisional = 'provisional',
-    Executing = 'executing',
-    Completed = 'completed',
-    Cancelled = 'cancelled'
-}
+import { ActivityItemInputState } from '@shared/console';
+export { ActivityItemInputState } from '@shared/console';
 
 /**
  * ActivityItemInput class - Represents user input code in a console activity.

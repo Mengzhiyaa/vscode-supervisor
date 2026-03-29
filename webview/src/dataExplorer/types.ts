@@ -2,6 +2,7 @@
  *  Data Explorer Types - Port from Positron's data explorer interfaces
  *--------------------------------------------------------------------------------------------*/
 
+import type { SearchSchemaSortOrder } from '@shared/dataExplorer';
 import type { BackendState, RowFilter, SchemaColumn } from '../dataGrid/types';
 
 /**
@@ -31,13 +32,6 @@ export interface DataRequest {
     endRow: number;
     columns: number[];
 }
-
-export type SearchSchemaSortOrder =
-    | 'original'
-    | 'ascending_name'
-    | 'descending_name'
-    | 'ascending_type'
-    | 'descending_type';
 
 /**
  * PositronDataExplorerLayout enumeration.

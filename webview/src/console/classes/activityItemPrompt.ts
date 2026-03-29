@@ -7,16 +7,8 @@
 import { ActivityItem } from './activityItem';
 import { ANSIOutput, type ANSIOutputLine } from '$lib/ansi/ansiOutput';
 import { formatOutputLinesForClipboard } from '../utils/clipboardUtils';
-
-/**
- * ActivityItemPromptState enumeration.
- * Mirrors: positron/.../classes/activityItemPrompt.ts
- */
-export const enum ActivityItemPromptState {
-    Unanswered = 'Unanswered',
-    Answered = 'Answered',
-    Interrupted = 'Interrupted'
-}
+import { ActivityItemPromptState } from '@shared/console';
+export { ActivityItemPromptState } from '@shared/console';
 
 /**
  * ActivityItemPrompt class.

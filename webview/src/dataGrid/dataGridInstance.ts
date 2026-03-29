@@ -5,6 +5,7 @@
 
 import { writable, type Writable, type Readable } from 'svelte/store';
 import type { Component } from 'svelte';
+import type { ColumnSchema as SchemaColumn } from '@shared/dataExplorer';
 import { LayoutManager, type ILayoutEntry } from './classes/layoutManager';
 import { type IColumnSortKey, type IDataColumn, DataColumnAlignment } from './interfaces';
 
@@ -448,22 +449,6 @@ export interface ViewportState {
 //#endregion ViewportState
 
 //#region SchemaColumn
-
-/**
- * SchemaColumn interface.
- */
-export interface SchemaColumn {
-    column_name: string;
-    column_index: number;
-    type_name: string;
-    type_display?: string;
-    description?: string;
-    children?: SchemaColumn[];
-    precision?: number;
-    scale?: number;
-    timezone?: string;
-    type_size?: number;
-}
 
 /**
  * Hover manager interface used by grid cells/headers.

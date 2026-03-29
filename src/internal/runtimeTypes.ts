@@ -4,7 +4,17 @@ import type {
     LanguageRuntimeMetadata,
     IRuntimeSessionMetadata,
 } from '../api';
+import {
+    RuntimeCodeExecutionMode,
+    RuntimeErrorBehavior,
+    type RuntimeResourceUsage,
+} from '../shared/runtime';
 import type { RuntimeClientInstance } from '../runtime/RuntimeClientInstance';
+export {
+    RuntimeCodeExecutionMode,
+    RuntimeErrorBehavior,
+    type RuntimeResourceUsage,
+} from '../shared/runtime';
 
 export enum RuntimeState {
     Uninitialized = 'uninitialized',
@@ -43,18 +53,6 @@ export enum RuntimeCodeFragmentStatus {
     Incomplete = 'incomplete',
     Invalid = 'invalid',
     Unknown = 'unknown',
-}
-
-export enum RuntimeCodeExecutionMode {
-    Interactive = 'interactive',
-    NonInteractive = 'non-interactive',
-    Silent = 'silent',
-    Transient = 'transient',
-}
-
-export enum RuntimeErrorBehavior {
-    Stop = 'stop',
-    Continue = 'continue',
 }
 
 export enum RuntimeClientType {
@@ -236,14 +234,6 @@ export interface LanguageRuntimeExit {
     exit_code: number;
     reason: RuntimeExitReason;
     message: string;
-}
-
-export interface RuntimeResourceUsage {
-    cpu_percent: number;
-    memory_bytes: number;
-    thread_count: number;
-    sampling_period_ms: number;
-    timestamp: number;
 }
 
 export interface RuntimeMethodError {

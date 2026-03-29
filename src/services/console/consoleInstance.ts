@@ -4,6 +4,13 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
+import { deserializePromptState } from '../../shared/console';
+import type {
+    SerializedActivityItem,
+    SerializedConsoleState,
+    SerializedRuntimePendingInput,
+    SerializedRuntimeItem,
+} from '../../shared/consoleState';
 import {
     IPositronConsoleInstance,
     PositronConsoleState,
@@ -71,6 +78,12 @@ import {
     RuntimeExitReason,
     RuntimeState,
 } from '../../internal/runtimeTypes';
+export type {
+    SerializedActivityItem,
+    SerializedConsoleState,
+    SerializedRuntimePendingInput,
+    SerializedRuntimeItem,
+} from '../../shared/consoleState';
 
 const ON_DID_CHANGE_RUNTIME_ITEMS_THROTTLE_THRESHOLD = 20;
 const ON_DID_CHANGE_RUNTIME_ITEMS_THROTTLE_INTERVAL = 50;
@@ -98,192 +111,6 @@ function mergeRuntimeItemsChanges(
     return merged.some((change) => change.kind === 'restore')
         ? [{ kind: 'restore' }]
         : merged;
-}
-
-export interface SerializedConsoleState {
-    version: 1 | 2;
-    items: SerializedRuntimeItem[];
-    inputHistory: string[];
-    trace: boolean;
-    wordWrap: boolean;
-    inputPrompt?: string;
-    continuationPrompt?: string;
-    workingDirectory?: string;
-}
-
-export type SerializedRuntimeItem =
-    | SerializedRuntimeActivity
-    | SerializedRuntimeStarted
-    | SerializedRuntimeRestarted
-    | SerializedRuntimeStartup
-    | SerializedRuntimeStartupFailure
-    | SerializedRuntimeExited
-    | SerializedRuntimeOffline
-    | SerializedRuntimePendingInput
-    | SerializedRuntimeTrace
-    | SerializedRuntimeStarting
-    | SerializedRuntimeReconnected;
-
-export interface SerializedRuntimeActivity {
-    type: 'activity';
-    parentId: string;
-    items: SerializedActivityItem[];
-}
-
-export interface SerializedRuntimeStarted {
-    type: 'started';
-    id: string;
-    when: number;
-    sessionName: string;
-}
-
-export interface SerializedRuntimeRestarted {
-    type: 'restarted';
-    id: string;
-    when: number;
-    sessionName: string;
-}
-
-export interface SerializedRuntimeStartup {
-    type: 'startup';
-    id: string;
-    when: number;
-    banner: string;
-    version: string;
-}
-
-export interface SerializedRuntimeStartupFailure {
-    type: 'startupFailure';
-    id: string;
-    when: number;
-    message: string;
-    details: string;
-}
-
-export interface SerializedRuntimeExited {
-    type: 'exited';
-    id: string;
-    when: number;
-    sessionName: string;
-    exitCode: number;
-    reason: string;
-}
-
-export interface SerializedRuntimeOffline {
-    type: 'offline';
-    id: string;
-    when: number;
-    sessionName: string;
-    reason: string;
-}
-
-export interface SerializedRuntimePendingInput {
-    type: 'pendingInput';
-    id: string;
-    when: number;
-    inputPrompt: string;
-    code: string;
-}
-
-export interface SerializedRuntimeTrace {
-    type: 'trace';
-    id: string;
-    when: number;
-    trace: string;
-}
-
-export interface SerializedRuntimeStarting {
-    type: 'starting';
-    id: string;
-    when: number;
-    message: string;
-    attachMode: string;
-    sessionName?: string; // Legacy compat
-}
-
-export interface SerializedRuntimeReconnected {
-    type: 'reconnected';
-    id: string;
-    when: number;
-    sessionName: string;
-}
-
-export type SerializedActivityItem =
-    | SerializedActivityInput
-    | SerializedActivityStream
-    | SerializedActivityError
-    | SerializedActivityOutput
-    | SerializedActivityOutputHtml
-    | SerializedActivityOutputPlot
-    | SerializedActivityPrompt;
-
-export interface SerializedActivityInput {
-    type: 'input';
-    id: string;
-    parentId: string;
-    when: number;
-    state: ActivityItemInputState;
-    inputPrompt: string;
-    continuationPrompt: string;
-    code: string;
-}
-
-export interface SerializedActivityStream {
-    type: 'stream';
-    id: string;
-    parentId: string;
-    when: number;
-    streamType: ActivityItemStreamType;
-    text: string;
-}
-
-export interface SerializedActivityError {
-    type: 'error';
-    id: string;
-    parentId: string;
-    when: number;
-    name: string;
-    message: string;
-    traceback: string[];
-}
-
-export interface SerializedActivityOutput {
-    type: 'output';
-    id: string;
-    parentId: string;
-    when: number;
-    data: ILanguageRuntimeMessageOutputData;
-    outputId?: string;
-}
-
-export interface SerializedActivityOutputHtml {
-    type: 'outputHtml';
-    id: string;
-    parentId: string;
-    when: number;
-    html: string;
-    resource?: string;
-    outputId?: string;
-}
-
-export interface SerializedActivityOutputPlot {
-    type: 'outputPlot';
-    id: string;
-    parentId: string;
-    when: number;
-    data: ILanguageRuntimeMessageOutputData;
-    outputId?: string;
-}
-
-export interface SerializedActivityPrompt {
-    type: 'prompt';
-    id: string;
-    parentId: string;
-    when: number;
-    prompt: string;
-    password: boolean;
-    state?: ActivityItemPromptState;
-    answer?: string;
 }
 
 interface IPendingCodeFragment {
@@ -1777,8 +1604,9 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
                         item.prompt,
                         item.password
                     );
-                    if (typeof item.state === 'string') {
-                        promptItem.state = item.state as ActivityItemPromptState;
+                    const promptState = deserializePromptState(item.state as string | undefined);
+                    if (promptState) {
+                        promptItem.state = promptState;
                     }
                     if (typeof item.answer === 'string') {
                         promptItem.answer = item.answer;

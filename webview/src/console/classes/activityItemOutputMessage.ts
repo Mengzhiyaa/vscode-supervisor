@@ -7,14 +7,8 @@
 import { ActivityItem } from './activityItem';
 import { ANSIOutput, type ANSIOutputLine } from '$lib/ansi/ansiOutput';
 import { formatOutputLinesForClipboard } from '../utils/clipboardUtils';
-
-/**
- * ILanguageRuntimeMessageOutputData interface.
- * Mirrors: positron's ILanguageRuntimeMessageOutputData
- */
-export interface ILanguageRuntimeMessageOutputData {
-    [mimeType: string]: string | undefined;
-}
+import type { ILanguageRuntimeMessageOutputData } from '@shared/console';
+export type { ILanguageRuntimeMessageOutputData } from '@shared/console';
 
 /**
  * ActivityItemOutputMessage class.
