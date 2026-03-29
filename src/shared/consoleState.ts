@@ -86,8 +86,10 @@ export interface SerializedRuntimePendingInput {
     type: 'pendingInput';
     id: string;
     when: number;
-    inputPrompt: string;
-    code: string;
+    inputPrompt?: string;
+    code?: string;
+    // Legacy restore-state key used by older snapshots.
+    prompt?: string;
 }
 
 export interface SerializedRuntimeTrace {

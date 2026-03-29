@@ -89,6 +89,38 @@ function quoteIdentifier(fieldName: string): string {
     return '"' + fieldName.replace(/"/g, '""') + '"';
 }
 
+function escapeDelimitedValue(value: string, delimiter: string): string {
+    if (
+        !value.includes(delimiter) &&
+        !value.includes('"') &&
+        !value.includes('\n') &&
+        !value.includes('\r')
+    ) {
+        return value;
+    }
+
+    return `"${value.replace(/"/g, '""')}"`;
+}
+
+function escapeHtmlCell(value: string): string {
+    return value.replace(/[&<>"']/g, (char) => {
+        switch (char) {
+            case '&':
+                return '&amp;';
+            case '<':
+                return '&lt;';
+            case '>':
+                return '&gt;';
+            case '"':
+                return '&quot;';
+            case '\'':
+                return '&#39;';
+            default:
+                return char;
+        }
+    });
+}
+
 function getFirstRowValue(result: any, preferredKeys: string[] = []): unknown {
     const row = result?.get?.(0);
     if (!row) {
@@ -832,16 +864,24 @@ END`;
             let data: string;
             switch (format) {
                 case ExportFormat.Csv:
-                    data = unboxed.map(row => row.join(',')).join('\n');
+                    data = unboxed
+                        .map((row) => row.map((value) => escapeDelimitedValue(value, ',')).join(','))
+                        .join('\n');
                     break;
                 case ExportFormat.Tsv:
-                    data = unboxed.map(row => row.join('\t')).join('\n');
+                    data = unboxed
+                        .map((row) => row.map((value) => escapeDelimitedValue(value, '\t')).join('\t'))
+                        .join('\n');
                     break;
                 case ExportFormat.Html:
-                    data = unboxed.map(row => `<tr><td>${row.join('</td><td>')}</td></tr>`).join('\n');
+                    data = unboxed
+                        .map((row) => `<tr>${row.map((value) => `<td>${escapeHtmlCell(value)}</td>`).join('')}</tr>`)
+                        .join('\n');
                     break;
                 default:
-                    data = unboxed.map(row => row.join(',')).join('\n');
+                    data = unboxed
+                        .map((row) => row.map((value) => escapeDelimitedValue(value, ',')).join(','))
+                        .join('\n');
                     break;
             }
 

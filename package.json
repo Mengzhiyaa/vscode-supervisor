@@ -40,7 +40,7 @@
     "watch:webview": "npm --prefix webview run dev",
     "check:webview": "npm --prefix webview run check",
     "copy:duckdb": "node scripts/copy-duckdb-assets.mjs",
-    "build": "npm run build:webview && npm run copy:duckdb && npm run compile",
+    "build": "npm run check:webview && npm run build:webview && npm run copy:duckdb && npm run compile",
     "test:prepare": "npm run compile-tests && npm run build",
     "test": "npm run test:prepare && node scripts/run-vscode-tests.mjs --label all",
     "test:unit:ext": "npm run test:prepare && node scripts/run-vscode-tests.mjs --label unit",

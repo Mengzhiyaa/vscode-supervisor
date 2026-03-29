@@ -408,8 +408,8 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
                     ));
                     break;
                 case 'pendingInput': {
-                    const inputPrompt = (item as SerializedRuntimePendingInput).inputPrompt ?? (item as any).prompt ?? '';
-                    const code = (item as SerializedRuntimePendingInput).code ?? '';
+                    const inputPrompt = item.inputPrompt ?? item.prompt ?? '';
+                    const code = item.code ?? '';
                     const pendingInput = new RuntimeItemPendingInput(
                         item.id,
                         new Date(item.when),

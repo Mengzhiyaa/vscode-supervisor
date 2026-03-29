@@ -5,6 +5,8 @@
 import type { SearchSchemaSortOrder } from '@shared/dataExplorer';
 import type { BackendState, RowFilter, SchemaColumn } from '../dataGrid/types';
 
+export type { SearchSchemaSortOrder };
+
 /**
  * Data Explorer instance state
  */

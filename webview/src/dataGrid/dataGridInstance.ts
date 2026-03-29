@@ -5,7 +5,6 @@
 
 import { writable, type Writable, type Readable } from 'svelte/store';
 import type { Component } from 'svelte';
-import type { ColumnSchema as SchemaColumn } from '@shared/dataExplorer';
 import { LayoutManager, type ILayoutEntry } from './classes/layoutManager';
 import { type IColumnSortKey, type IDataColumn, DataColumnAlignment } from './interfaces';
 
@@ -1761,7 +1760,7 @@ export abstract class DataGridInstance {
         if (this._cellSelectionIndexes) {
             if (this._cursorColumnIndex === this._cellSelectionIndexes.lastColumnIndex) {
                 const firstColumnPosition = this._columnLayoutManager.mapIndexToPosition(this._cellSelectionIndexes.firstColumnIndex);
-                if (!firstColumnPosition) {
+                if (firstColumnPosition === undefined) {
                     return;
                 }
 
@@ -1883,7 +1882,7 @@ export abstract class DataGridInstance {
         if (this._cellSelectionIndexes) {
             if (this._cursorColumnIndex === this._cellSelectionIndexes.firstColumnIndex) {
                 const lastColumnPosition = this._columnLayoutManager.mapIndexToPosition(this._cellSelectionIndexes.lastColumnIndex);
-                if (!lastColumnPosition) {
+                if (lastColumnPosition === undefined) {
                     return;
                 }
 
@@ -2005,7 +2004,7 @@ export abstract class DataGridInstance {
         if (this._cellSelectionIndexes) {
             if (this._cursorRowIndex === this._cellSelectionIndexes.lastRowIndex) {
                 const firstRowPosition = this._rowLayoutManager.mapIndexToPosition(this._cellSelectionIndexes.firstRowIndex);
-                if (!firstRowPosition) {
+                if (firstRowPosition === undefined) {
                     return;
                 }
 
@@ -2062,7 +2061,7 @@ export abstract class DataGridInstance {
         }
 
         const cursorRowPosition = this._rowLayoutManager.mapIndexToPosition(this._cursorRowIndex);
-        if (!cursorRowPosition) {
+        if (cursorRowPosition === undefined) {
             return;
         }
 
@@ -2127,7 +2126,7 @@ export abstract class DataGridInstance {
         if (this._cellSelectionIndexes) {
             if (this._cursorRowIndex === this._cellSelectionIndexes.firstRowIndex) {
                 const lastRowPosition = this._rowLayoutManager.mapIndexToPosition(this._cellSelectionIndexes.lastRowIndex);
-                if (!lastRowPosition) {
+                if (lastRowPosition === undefined) {
                     return;
                 }
 

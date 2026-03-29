@@ -1057,10 +1057,8 @@
                 return {
                     runtimeItem: new RuntimeItemPendingInput(
                         item.id,
-                        (item.inputPrompt as string | undefined) ??
-                            (item.prompt as string | undefined) ??
-                            ">",
-                        (item.code as string | undefined) ?? "",
+                        item.inputPrompt ?? item.prompt ?? ">",
+                        item.code ?? "",
                     ),
                 };
             case "trace":
