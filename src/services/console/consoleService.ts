@@ -362,23 +362,10 @@ export class PositronConsoleService implements IPositronConsoleService {
             return;
         }
 
-        const editorToRestore = preserveFocus ? vscode.window.activeTextEditor : undefined;
-        const restoreFocus = async (): Promise<void> => {
-            if (!editorToRestore) {
-                return;
-            }
-
-            await vscode.window.showTextDocument(editorToRestore.document, {
-                viewColumn: editorToRestore.viewColumn,
-                preserveFocus: false
-            });
-        };
-
         const view = this._consoleViewProvider?.view;
 
         if (view) {
             view.show(preserveFocus);
-            await restoreFocus();
             return;
         }
 
@@ -387,11 +374,7 @@ export class PositronConsoleService implements IPositronConsoleService {
             return;
         }
 
-        try {
-            await vscode.commands.executeCommand('workbench.views.action.showView', ViewIds.console);
-        } finally {
-            await restoreFocus();
-        }
+        await vscode.commands.executeCommand('workbench.views.action.showView', ViewIds.console);
     }
 
     private _setActivePositronConsoleInstance(instance: PositronConsoleInstance): void {

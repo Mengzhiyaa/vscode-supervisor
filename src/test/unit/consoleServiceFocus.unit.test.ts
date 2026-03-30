@@ -39,12 +39,6 @@ suite('[Unit] console service focus preservation', () => {
         });
     }
 
-    function getShowOptions(
-        value: vscode.ViewColumn | vscode.TextDocumentShowOptions | undefined,
-    ): vscode.TextDocumentShowOptions | undefined {
-        return typeof value === 'object' && value !== null ? value : undefined;
-    }
-
     teardown(() => {
         (vscode.window as { showTextDocument: typeof vscode.window.showTextDocument }).showTextDocument = originalShowTextDocument;
         (vscode.commands as { executeCommand: typeof vscode.commands.executeCommand }).executeCommand = originalExecuteCommand;
@@ -56,13 +50,10 @@ suite('[Unit] console service focus preservation', () => {
         }
     });
 
-    test('restores editor focus after revealing a hidden console view with preserveFocus', async () => {
+    test('shows an existing console view without restoring editor focus when preserveFocus is enabled', async () => {
         const service = new PositronConsoleService({} as any, makeNoopLogChannel());
         const showCalls: boolean[] = [];
-        const restoreCalls: Array<{
-            document: vscode.TextDocument;
-            viewColumnOrOptions?: vscode.ViewColumn | vscode.TextDocumentShowOptions;
-        }> = [];
+        const restoreCalls: vscode.TextDocument[] = [];
 
         const document = vscode.Uri.parse('file:///workspace/focus-test.R');
         const editor = {
@@ -73,10 +64,8 @@ suite('[Unit] console service focus preservation', () => {
         setActiveTextEditor(editor);
         (vscode.window as { showTextDocument: typeof vscode.window.showTextDocument }).showTextDocument =
             (async (target, options) => {
-                restoreCalls.push({
-                    document: target as vscode.TextDocument,
-                    viewColumnOrOptions: options,
-                });
+                void options;
+                restoreCalls.push(target as vscode.TextDocument);
                 return editor;
             }) as typeof vscode.window.showTextDocument;
 
@@ -92,21 +81,15 @@ suite('[Unit] console service focus preservation', () => {
         await service.revealConsole(true);
 
         assert.deepStrictEqual(showCalls, [true]);
-        assert.strictEqual(restoreCalls.length, 1);
-        assert.strictEqual(restoreCalls[0].document, editor.document);
-        assert.strictEqual(getShowOptions(restoreCalls[0].viewColumnOrOptions)?.viewColumn, vscode.ViewColumn.One);
-        assert.strictEqual(getShowOptions(restoreCalls[0].viewColumnOrOptions)?.preserveFocus, false);
+        assert.strictEqual(restoreCalls.length, 0);
 
         service.dispose();
     });
 
-    test('reveals console view without stealing focus when provider is unavailable', async () => {
+    test('reveals console view without restoring editor focus when provider is unavailable', async () => {
         const service = new PositronConsoleService({} as any, makeNoopLogChannel());
         const executedCommands: Array<{ command: string; args: unknown[] }> = [];
-        const restoreCalls: Array<{
-            document: vscode.TextDocument;
-            viewColumnOrOptions?: vscode.ViewColumn | vscode.TextDocumentShowOptions;
-        }> = [];
+        const restoreCalls: Array<vscode.TextDocument> = [];
 
         const document = vscode.Uri.parse('file:///workspace/fallback-focus-test.R');
         const editor = {
@@ -122,10 +105,8 @@ suite('[Unit] console service focus preservation', () => {
             }) as typeof vscode.commands.executeCommand;
         (vscode.window as { showTextDocument: typeof vscode.window.showTextDocument }).showTextDocument =
             (async (target, options) => {
-                restoreCalls.push({
-                    document: target as vscode.TextDocument,
-                    viewColumnOrOptions: options,
-                });
+                void options;
+                restoreCalls.push(target as vscode.TextDocument);
                 return editor;
             }) as typeof vscode.window.showTextDocument;
 
@@ -135,10 +116,7 @@ suite('[Unit] console service focus preservation', () => {
             command: 'workbench.views.action.showView',
             args: [ViewIds.console],
         }]);
-        assert.strictEqual(restoreCalls.length, 1);
-        assert.strictEqual(restoreCalls[0].document, editor.document);
-        assert.strictEqual(getShowOptions(restoreCalls[0].viewColumnOrOptions)?.viewColumn, vscode.ViewColumn.Two);
-        assert.strictEqual(getShowOptions(restoreCalls[0].viewColumnOrOptions)?.preserveFocus, false);
+        assert.deepStrictEqual(restoreCalls, []);
 
         service.dispose();
     });

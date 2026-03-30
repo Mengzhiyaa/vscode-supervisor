@@ -1,5 +1,6 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
+import { ViewIds } from '../../coreCommandIds';
 import * as SessionProtocol from '../../rpc/webview/session';
 import { ConsoleViewProvider } from '../../webview/consoleProvider';
 
@@ -63,6 +64,28 @@ class FakeConnection {
 }
 
 suite('[Unit] console provider session switching', () => {
+    const originalActiveTextEditor = Object.getOwnPropertyDescriptor(vscode.window, 'activeTextEditor');
+    const originalShowTextDocument = vscode.window.showTextDocument.bind(vscode.window);
+    const originalExecuteCommand = vscode.commands.executeCommand.bind(vscode.commands);
+
+    function setActiveTextEditor(editor: vscode.TextEditor | undefined): void {
+        Object.defineProperty(vscode.window, 'activeTextEditor', {
+            configurable: true,
+            get: () => editor,
+        });
+    }
+
+    teardown(() => {
+        (vscode.window as { showTextDocument: typeof vscode.window.showTextDocument }).showTextDocument = originalShowTextDocument;
+        (vscode.commands as { executeCommand: typeof vscode.commands.executeCommand }).executeCommand = originalExecuteCommand;
+
+        if (originalActiveTextEditor) {
+            Object.defineProperty(vscode.window, 'activeTextEditor', originalActiveTextEditor);
+        } else {
+            setActiveTextEditor(undefined);
+        }
+    });
+
     test('awaits foreground-session switching before sending a session snapshot', async () => {
         const calls: string[] = [];
         const deferred = createDeferred<void>();
@@ -107,5 +130,68 @@ suite('[Unit] console provider session switching', () => {
             'focus:end:session-2',
             'snapshot',
         ]);
+    });
+
+    test('reveals the console view without restoring the active editor when preserveFocus is enabled', async () => {
+        const provider = new ConsoleViewProvider(
+            vscode.Uri.file('/tmp'),
+            makeNoopLogChannel(),
+        );
+        const executedCommands: Array<{ command: string; args: unknown[] }> = [];
+        const restoredEditors: vscode.TextDocument[] = [];
+        const editor = {
+            document: { uri: vscode.Uri.parse('untitled:focus-test.R') } as vscode.TextDocument,
+            viewColumn: vscode.ViewColumn.One,
+        } as vscode.TextEditor;
+
+        setActiveTextEditor(editor);
+        (vscode.commands as { executeCommand: typeof vscode.commands.executeCommand }).executeCommand =
+            (async (command: string, ...args: unknown[]) => {
+                executedCommands.push({ command, args });
+                return undefined;
+            }) as typeof vscode.commands.executeCommand;
+        (vscode.window as { showTextDocument: typeof vscode.window.showTextDocument }).showTextDocument =
+            (async (document) => {
+                restoredEditors.push(document as vscode.TextDocument);
+                return editor;
+            }) as typeof vscode.window.showTextDocument;
+
+        await provider.reveal(true);
+
+        assert.deepStrictEqual(executedCommands, [{
+            command: 'workbench.views.action.showView',
+            args: [ViewIds.console],
+        }]);
+        assert.deepStrictEqual(restoredEditors, []);
+    });
+
+    test('shows an existing console view without restoring the active editor when preserveFocus is enabled', async () => {
+        const provider = new ConsoleViewProvider(
+            vscode.Uri.file('/tmp'),
+            makeNoopLogChannel(),
+        );
+        const showCalls: boolean[] = [];
+        const restoredEditors: vscode.TextDocument[] = [];
+        const editor = {
+            document: { uri: vscode.Uri.parse('untitled:focus-test.R') } as vscode.TextDocument,
+            viewColumn: vscode.ViewColumn.One,
+        } as vscode.TextEditor;
+
+        setActiveTextEditor(editor);
+        (provider as any)._view = {
+            show: (preserveFocus?: boolean) => {
+                showCalls.push(Boolean(preserveFocus));
+            },
+        } as vscode.WebviewView;
+        (vscode.window as { showTextDocument: typeof vscode.window.showTextDocument }).showTextDocument =
+            (async (document) => {
+                restoredEditors.push(document as vscode.TextDocument);
+                return editor;
+            }) as typeof vscode.window.showTextDocument;
+
+        await provider.reveal(true);
+
+        assert.deepStrictEqual(showCalls, [true]);
+        assert.deepStrictEqual(restoredEditors, []);
     });
 });

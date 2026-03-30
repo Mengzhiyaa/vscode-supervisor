@@ -120,23 +120,7 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
             return;
         }
 
-        const editorToRestore = preserveFocus ? vscode.window.activeTextEditor : undefined;
-        const restoreFocus = async (): Promise<void> => {
-            if (!editorToRestore) {
-                return;
-            }
-
-            await vscode.window.showTextDocument(editorToRestore.document, {
-                viewColumn: editorToRestore.viewColumn,
-                preserveFocus: false,
-            });
-        };
-
-        try {
-            await vscode.commands.executeCommand('workbench.views.action.showView', ViewIds.console);
-        } finally {
-            await restoreFocus();
-        }
+        await vscode.commands.executeCommand('workbench.views.action.showView', ViewIds.console);
     }
 
     /**
