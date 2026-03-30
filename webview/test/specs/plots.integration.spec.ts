@@ -531,3 +531,145 @@ test('plots falls back to extension copy and supports closing gallery auxiliary 
     await page.keyboard.press('Control+w');
     await closeAuxPanel;
 });
+
+test('plots correctly associates plots with sessions and updates on session removal', async ({ page }) => {
+    const backend = await openWebviewPage(page, 'plots', {
+        configure: (mockBackend) => {
+            registerPlotsDefaults(mockBackend, {
+                plots: [
+                    {
+                        id: 'plot-s1',
+                        sessionId: 'session-1',
+                        kind: 'static',
+                        initialData: SMALL_PNG_DATA_URI,
+                        name: 'S1 Plot',
+                    },
+                    {
+                        id: 'plot-s2',
+                        sessionId: 'session-2',
+                        kind: 'static',
+                        initialData: SMALL_PNG_DATA_URI,
+                        name: 'S2 Plot',
+                    },
+                ],
+                selectedPlotId: 'plot-s2',
+            });
+        },
+    });
+
+    await expect.poll(() => backend.notificationCount(PlotsMethods.ready)).toBeGreaterThan(0);
+    await backend.notify(SessionMethods.info, {
+        sessions: [
+            createSession({ id: 'session-1', name: 'Primary' }),
+            createSession({ id: 'session-2', name: 'Analytics' }),
+        ],
+        activeSessionId: 'session-1',
+    });
+
+    await expect(page.locator('.plot-thumbnail')).toHaveCount(2);
+
+    // Add a new plot from session-1 dynamically
+    await backend.notify(PlotsMethods.added, {
+        plotId: 'plot-s1b',
+        sessionId: 'session-1',
+        kind: 'static',
+        name: 'S1 Plot B',
+        thumbnail: SMALL_PNG_DATA_URI,
+        renderVersion: 1,
+    });
+    await expect(page.locator('.plot-thumbnail')).toHaveCount(3);
+
+    // Remove the dynamically-added session-1 plot
+    await backend.notify(PlotsMethods.removed, {
+        plotIds: ['plot-s1b'],
+        sessionId: 'session-1',
+    });
+
+    // Should go back to 2 thumbnails
+    await expect(page.locator('.plot-thumbnail')).toHaveCount(2);
+
+    // Remove the other session-1 plot
+    await backend.notify(PlotsMethods.removed, {
+        plotIds: ['plot-s1'],
+        sessionId: 'session-1',
+    });
+
+    // Only 1 plot remains — the history panel auto-hides with a single plot
+    await expect(page.locator('.plot-thumbnail')).toHaveCount(0);
+    // But the selected plot (from session-2) should still render
+    await expect(page.locator('img.plot')).toBeVisible();
+});
+
+test('plots routes code actions to the correct session for cross-session plots', async ({ page }) => {
+    const backend = await openWebviewPage(page, 'plots', {
+        configure: (mockBackend) => {
+            registerPlotsDefaults(mockBackend, {
+                plots: [
+                    {
+                        id: 'plot-s1',
+                        sessionId: 'session-1',
+                        kind: 'dynamic',
+                        thumbnail: SMALL_PNG_DATA_URI,
+                        name: 'Primary Plot',
+                        code: 'plot(iris)',
+                        languageId: 'r',
+                        parentId: 'exec-r1',
+                    },
+                    {
+                        id: 'plot-s2',
+                        sessionId: 'session-2',
+                        kind: 'dynamic',
+                        thumbnail: SMALL_PNG_DATA_URI,
+                        name: 'Analytics Plot',
+                        code: 'plot(mtcars)',
+                        languageId: 'r',
+                        parentId: 'exec-r2',
+                    },
+                ],
+                selectedPlotId: 'plot-s1',
+            });
+        },
+    });
+
+    await expect.poll(() => backend.notificationCount(PlotsMethods.ready)).toBeGreaterThan(0);
+    await backend.notify(SessionMethods.info, {
+        sessions: [
+            createSession({ id: 'session-1', name: 'Primary' }),
+            createSession({ id: 'session-2', name: 'Analytics' }),
+        ],
+        activeSessionId: 'session-1',
+    });
+
+    // Select session-2's plot
+    const selectRequest = backend.waitForNextRequest(PlotsMethods.select);
+    await page.locator('[data-plot-id="plot-s2"]').click();
+    expect((await selectRequest).params).toEqual({ plotId: 'plot-s2' });
+
+    await backend.notify(PlotsMethods.selectedChanged, {
+        plotId: 'plot-s2',
+        zoomLevel: 1,
+        selectedSizingPolicyId: 'auto',
+        sizingPolicies: [{ id: 'auto', name: 'Auto' }],
+        hasIntrinsicSize: true,
+    });
+
+    // Run Code Again should route to session-2
+    const runCodeAgain = backend.waitForNextRequest(PlotsMethods.runCodeAgain);
+    await page.getByLabel('Plot code actions').click();
+    await page.getByText('Run Code Again').click();
+    expect((await runCodeAgain).params).toEqual({
+        code: 'plot(mtcars)',
+        sessionId: 'session-2',
+        languageId: 'r',
+    });
+
+    // Reveal in Console should also route to session-2's execution
+    const revealRequest = backend.waitForNextRequest(PlotsMethods.revealInConsole);
+    await page.getByLabel('Plot code actions').click();
+    await page.getByText('Reveal Code in Console').click();
+    expect((await revealRequest).params).toEqual({
+        sessionId: 'session-2',
+        executionId: 'exec-r2',
+    });
+});
+

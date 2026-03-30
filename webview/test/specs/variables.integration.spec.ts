@@ -469,3 +469,158 @@ test('variables supports keyboard selection, toggling, and viewing', async ({ pa
         sessionId: 'session-1',
     });
 });
+
+test('variables ignores entriesChanged for inactive session', async ({ page }) => {
+    const sessions = [
+        createSession({ id: 'session-1', name: 'Primary' }),
+        createSession({ id: 'session-2', name: 'Analytics' }),
+    ];
+    const backend = await openWebviewPage(page, 'variables', {
+        configure: (mockBackend) => {
+            registerVariablesDefaults(mockBackend, {
+                entriesBySession: {
+                    'session-1': [
+                        {
+                            type: 'item',
+                            id: 'var-1',
+                            path: ['iris'],
+                            displayName: 'iris',
+                            displayValue: 'data.frame',
+                            displayType: 'data.frame',
+                            kind: 'table',
+                            hasChildren: true,
+                            hasViewer: true,
+                            isExpanded: false,
+                        },
+                    ],
+                    'session-2': [],
+                },
+            });
+        },
+    });
+
+    await expect.poll(() => backend.notificationCount(VariablesMethods.ready)).toBeGreaterThan(0);
+    await backend.notify(VariablesMethods.instanceStarted, {
+        instance: createVariablesInstance('session-1'),
+    });
+    await backend.notify(VariablesMethods.instanceStarted, {
+        instance: createVariablesInstance('session-2'),
+    });
+    await backend.notify(SessionMethods.info, {
+        sessions,
+        activeSessionId: 'session-1',
+    });
+    await expect(page.getByText('iris')).toBeVisible();
+
+    // Session-2 receives an entriesChanged notification while session-1 is active
+    await backend.notify(VariablesMethods.entriesChanged, {
+        sessionId: 'session-2',
+        entries: [
+            {
+                type: 'item',
+                id: 'var-2',
+                path: ['mtcars'],
+                displayName: 'mtcars',
+                displayValue: 'data.frame',
+                displayType: 'data.frame',
+                kind: 'table',
+                hasChildren: true,
+                hasViewer: true,
+                isExpanded: false,
+                isRecent: true,
+            },
+        ],
+    });
+    await page.waitForTimeout(300);
+
+    // Session-1's 'iris' should still be visible
+    await expect(page.getByText('iris')).toBeVisible();
+    // Session-2's 'mtcars' should NOT appear because session-2 is not active
+    await expect(page.getByText('mtcars')).toHaveCount(0);
+
+    // Now switch to session-2 and verify its variables appear
+    const setActiveSession = backend.waitForNextRequest(VariablesMethods.setActiveSession);
+    await page.getByLabel('Select session to view variables from').click();
+    await page.getByText('Analytics').click();
+    expect((await setActiveSession).params).toEqual({ sessionId: 'session-2' });
+
+    await backend.notify(VariablesMethods.activeInstanceChanged, {
+        sessionId: 'session-2',
+    });
+    await expect(page.getByText('mtcars')).toBeVisible();
+    // Session-1's 'iris' should no longer be visible
+    await expect(page.getByText('iris')).toHaveCount(0);
+});
+
+test('variables clears entries when session is destroyed and selects remaining session', async ({ page }) => {
+    const sessions = [
+        createSession({ id: 'session-1', name: 'Primary' }),
+        createSession({ id: 'session-2', name: 'Analytics' }),
+    ];
+    const backend = await openWebviewPage(page, 'variables', {
+        configure: (mockBackend) => {
+            registerVariablesDefaults(mockBackend, {
+                entriesBySession: {
+                    'session-1': [
+                        {
+                            type: 'item',
+                            id: 'var-1',
+                            path: ['iris'],
+                            displayName: 'iris',
+                            displayValue: 'data.frame',
+                            displayType: 'data.frame',
+                            kind: 'table',
+                            hasChildren: true,
+                            hasViewer: true,
+                            isExpanded: false,
+                        },
+                    ],
+                    'session-2': [
+                        {
+                            type: 'item',
+                            id: 'var-2',
+                            path: ['mtcars'],
+                            displayName: 'mtcars',
+                            displayValue: 'data.frame',
+                            displayType: 'data.frame',
+                            kind: 'table',
+                            hasChildren: true,
+                            hasViewer: true,
+                            isExpanded: false,
+                        },
+                    ],
+                },
+            });
+        },
+    });
+
+    await expect.poll(() => backend.notificationCount(VariablesMethods.ready)).toBeGreaterThan(0);
+    await backend.notify(VariablesMethods.instanceStarted, {
+        instance: createVariablesInstance('session-1'),
+    });
+    await backend.notify(VariablesMethods.instanceStarted, {
+        instance: createVariablesInstance('session-2'),
+    });
+    await backend.notify(SessionMethods.info, {
+        sessions,
+        activeSessionId: 'session-2',
+    });
+
+    // Session-2 is active, mtcars is visible
+    await expect(page.getByText('mtcars')).toBeVisible();
+
+    // Session-2 is destroyed
+    await backend.notify(VariablesMethods.instanceStopped, {
+        sessionId: 'session-2',
+    });
+    await backend.notify(SessionMethods.info, {
+        sessions: [sessions[0]],
+        activeSessionId: 'session-1',
+    });
+
+    // UI should fall back to session-1 and show its variables
+    await expect(page.getByText('iris')).toBeVisible();
+    // mtcars should no longer be visible
+    await expect(page.getByText('mtcars')).toHaveCount(0);
+});
+
