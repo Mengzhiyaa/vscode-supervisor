@@ -1276,6 +1276,18 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
             this._sendHistoryClear(sessionId);
         }));
 
+        // Add executed code to webview history (1:1 Positron pattern).
+        // In Positron, consoleInput.tsx listens for onDidExecuteCode and adds the
+        // code to its local HistoryNavigator2. Here we bridge the same event to
+        // the webview via the historyAdd notification so that code executed from
+        // the editor (Ctrl+Enter) is available for ArrowUp/Down recall.
+        disposables.push(instance.onDidExecuteCode(({ code, mode }) => {
+            if (mode === RuntimeCodeExecutionMode.Interactive ||
+                mode === RuntimeCodeExecutionMode.NonInteractive) {
+                this._sendHistoryAdd(sessionId, code);
+            }
+        }));
+
         disposables.push(instance.onDidSetPendingCode(code => {
             this._sendPendingCode(sessionId, code);
         }));
