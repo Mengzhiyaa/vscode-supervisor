@@ -27,6 +27,8 @@ webview/tsconfig.node.json
 webview/svelte.config.js
 webview/vite.config.ts
 webview/dev/**
+webview/test/**
+webview/test-pages/**
 src/**
 **/*.ts
 **/*.map

@@ -8,7 +8,8 @@
         "build": "vite build",
         "dev:serve": "vite",
         "dev:console": "vite --config vite.config.ts --open /dev/console-hmr.html",
-        "check": "svelte-check --tsconfig ./tsconfig.json"
+        "check": "svelte-check --tsconfig ./tsconfig.json",
+        "test:integration": "npm run build && playwright test -c test/playwright.config.ts"
     },
     "dependencies": {
         "@vscode/codicons": "^0.0.45",
@@ -18,6 +19,7 @@
         "vscode-textmate": "^9.3.2"
     },
     "devDependencies": {
+        "@playwright/test": "^1.54.2",
         "@sveltejs/vite-plugin-svelte": "^7.0.0",
         "@tsconfig/svelte": "^5.0.8",
         "svelte": "^5.54.0",

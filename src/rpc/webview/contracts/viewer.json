@@ -4,6 +4,72 @@
   "declarations": [
     {
       "kind": "notification",
+      "name": "ViewerNavigateNotification",
+      "method": "viewer/navigate",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "url",
+              "type": "string"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "ViewerNavigateBackNotification",
+      "method": "viewer/navigateBack",
+      "paramsType": "{}"
+    },
+    {
+      "kind": "notification",
+      "name": "ViewerNavigateForwardNotification",
+      "method": "viewer/navigateForward",
+      "paramsType": "{}"
+    },
+    {
+      "kind": "notification",
+      "name": "ViewerReloadNotification",
+      "method": "viewer/reload",
+      "paramsType": "{}"
+    },
+    {
+      "kind": "notification",
+      "name": "ViewerClearNotification",
+      "method": "viewer/clear",
+      "paramsType": "{}"
+    },
+    {
+      "kind": "notification",
+      "name": "ViewerOpenInBrowserNotification",
+      "method": "viewer/openInBrowser",
+      "paramsType": "{}"
+    },
+    {
+      "kind": "notification",
+      "name": "ViewerOpenInEditorNotification",
+      "method": "viewer/openInEditor",
+      "paramsType": "{}"
+    },
+    {
+      "kind": "notification",
+      "name": "ViewerOpenInNewWindowNotification",
+      "method": "viewer/openInNewWindow",
+      "paramsType": "{}"
+    },
+    {
+      "kind": "notification",
+      "name": "ViewerInterruptNotification",
+      "method": "viewer/interrupt",
+      "paramsType": "{}"
+    },
+    {
+      "kind": "notification",
       "name": "ViewerShowNotification",
       "method": "viewer/show",
       "paramsType": "Params",
@@ -35,6 +101,28 @@
               "name": "kind",
               "optional": true,
               "type": "'url' | 'html'"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "ViewerUpdateNavStateNotification",
+      "method": "viewer/updateNavState",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "canNavigateBack",
+              "type": "boolean"
+            },
+            {
+              "name": "canNavigateForward",
+              "type": "boolean"
             }
           ]
         }

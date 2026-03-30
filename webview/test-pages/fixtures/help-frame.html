@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Fixture Help Topic</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 16px;
+      font-family: ui-sans-serif, system-ui, sans-serif;
+      background: #ffffff;
+      color: #1e1e1e;
+    }
+  </style>
+</head>
+<body>
+  <h1>Fixture Help Topic</h1>
+  <p>This is a help iframe fixture.</p>
+  <script>
+    const parentWindow = window.parent;
+    const receivedMessages = [];
+
+    function post(message) {
+      parentWindow.postMessage(message, '*');
+    }
+
+    window.addEventListener('message', (event) => {
+      const message = event.data;
+      if (!message || typeof message.id !== 'string') {
+        return;
+      }
+
+      receivedMessages.push(message);
+
+      switch (message.id) {
+        case 'positron-help-scroll-to':
+          post({
+            id: 'positron-help-scroll',
+            scrollX: message.scrollX || 0,
+            scrollY: message.scrollY || 0,
+          });
+          break;
+        case 'positron-help-update-find':
+          post({
+            id: 'positron-help-find-result',
+            findResult: message.findValue !== 'missing',
+          });
+          break;
+        case 'positron-help-find-next':
+        case 'positron-help-find-previous':
+          post({
+            id: 'positron-help-find-result',
+            findResult: message.findValue !== 'missing',
+          });
+          break;
+        case 'positron-help-copy-selection':
+          post({
+            id: 'positron-help-copy-selection',
+            selection: 'fixture selection',
+          });
+          break;
+        default:
+          break;
+      }
+    });
+
+    window.addEventListener('load', () => {
+      post({
+        id: 'positron-help-complete',
+        title: document.title,
+      });
+    });
+
+    window.__helpFixture = {
+      triggerNavigate(url) {
+        post({ id: 'positron-help-navigate', url });
+      },
+      triggerBackward() {
+        post({ id: 'positron-help-navigate-backward' });
+      },
+      triggerForward() {
+        post({ id: 'positron-help-navigate-forward' });
+      },
+      triggerExecuteCommand(command) {
+        post({ id: 'positron-help-execute-command', command });
+      },
+      triggerCopyShortcut() {
+        post({
+          id: 'positron-help-keydown',
+          ctrlKey: true,
+          metaKey: false,
+          code: 'KeyC',
+        });
+      },
+      consumeMessages() {
+        return receivedMessages.splice(0, receivedMessages.length);
+      },
+    };
+  </script>
+</body>
+</html>

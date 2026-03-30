@@ -4,6 +4,55 @@
 
 import { NotificationType } from 'vscode-jsonrpc';
 
+export namespace ViewerNavigateNotification {
+
+    export interface Params {
+        url: string;
+    }
+
+    export const type = new NotificationType<Params>('viewer/navigate');
+}
+
+export namespace ViewerNavigateBackNotification {
+
+    export const type = new NotificationType<{}>('viewer/navigateBack');
+}
+
+export namespace ViewerNavigateForwardNotification {
+
+    export const type = new NotificationType<{}>('viewer/navigateForward');
+}
+
+export namespace ViewerReloadNotification {
+
+    export const type = new NotificationType<{}>('viewer/reload');
+}
+
+export namespace ViewerClearNotification {
+
+    export const type = new NotificationType<{}>('viewer/clear');
+}
+
+export namespace ViewerOpenInBrowserNotification {
+
+    export const type = new NotificationType<{}>('viewer/openInBrowser');
+}
+
+export namespace ViewerOpenInEditorNotification {
+
+    export const type = new NotificationType<{}>('viewer/openInEditor');
+}
+
+export namespace ViewerOpenInNewWindowNotification {
+
+    export const type = new NotificationType<{}>('viewer/openInNewWindow');
+}
+
+export namespace ViewerInterruptNotification {
+
+    export const type = new NotificationType<{}>('viewer/interrupt');
+}
+
 export namespace ViewerShowNotification {
 
     export interface Params {
@@ -15,4 +64,14 @@ export namespace ViewerShowNotification {
     }
 
     export const type = new NotificationType<Params>('viewer/show');
+}
+
+export namespace ViewerUpdateNavStateNotification {
+
+    export interface Params {
+        canNavigateBack: boolean;
+        canNavigateForward: boolean;
+    }
+
+    export const type = new NotificationType<Params>('viewer/updateNavState');
 }
