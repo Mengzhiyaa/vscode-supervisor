@@ -49,7 +49,7 @@
         height = 400,
         runtimeItems = [],
         runtimeItemsMarker = 0,
-        forceScrollMarker = 0,
+        executeScrollMarker = 0,
         wordWrap = true,
         revealRequest = undefined,
         openSearchRequest = undefined,
@@ -61,6 +61,7 @@
         onPasteText,
         onRestart = undefined,
         onInputAnchorReady = undefined,
+        onScrollLockChanged = undefined,
         onWidthInCharsChanged = undefined,
     }: {
         session: SessionInfo;
@@ -69,7 +70,7 @@
         height: number;
         runtimeItems: RuntimeItem[];
         runtimeItemsMarker: number;
-        forceScrollMarker: number;
+        executeScrollMarker: number;
         wordWrap: boolean;
         revealRequest:
             | { sessionId: string; executionId: string; nonce: number }
@@ -85,6 +86,10 @@
         onInputAnchorReady?: (
             sessionId: string,
             anchor: HTMLDivElement | null,
+        ) => void;
+        onScrollLockChanged?: (
+            sessionId: string,
+            scrollLocked: boolean,
         ) => void;
         onWidthInCharsChanged?: (
             sessionId: string,
@@ -104,7 +109,8 @@
     let inputAnchorRef: HTMLDivElement;
     let widthInCharsAnimationFrame: number | undefined;
     let lastRuntimeItemsMarker = $state(0);
-    let lastForceScrollMarker = $state(0);
+    let lastExecuteScrollMarker = $state(0);
+    let ignoreNextScrollEvent = $state(false);
 
     // Search state
     let searchVisible = $state(false);
@@ -160,6 +166,24 @@
         setVsCodeState(state);
     }
 
+    function distanceFromBottom(container: HTMLDivElement): number {
+        return Math.abs(
+            container.scrollHeight - container.clientHeight - container.scrollTop,
+        );
+    }
+
+    function setScrollLocked(
+        nextScrollLocked: boolean,
+        forceNotify: boolean = false,
+    ) {
+        const changed = scrollLocked !== nextScrollLocked;
+        scrollLocked = nextScrollLocked;
+
+        if (changed || forceNotify) {
+            onScrollLockChanged?.(session.id, nextScrollLocked);
+        }
+    }
+
     /**
      * Restores the scroll position from VS Code state.
      */
@@ -173,12 +197,14 @@
 
             requestAnimationFrame(() => {
                 if (consoleInstanceRef) {
+                    ignoreNextScrollEvent = true;
                     consoleInstanceRef.scrollTop = savedPosition;
-                    scrollLocked = savedLocked;
+                    setScrollLocked(savedLocked, true);
                     hasRestoredScroll = true;
                 }
             });
         } else {
+            setScrollLocked(false, true);
             hasRestoredScroll = true;
         }
     }
@@ -187,19 +213,16 @@
      * Handle scroll events for scroll lock
      */
     function handleScroll(e: Event) {
+        if (ignoreNextScrollEvent) {
+            ignoreNextScrollEvent = false;
+            return;
+        }
+
         const container = e.target as HTMLDivElement;
-        const scrollPosition = Math.abs(
-            container.scrollHeight -
-                container.clientHeight -
-                container.scrollTop,
-        );
+        const scrollPosition = distanceFromBottom(container);
 
         // Update scroll lock state
-        if (scrollPosition >= 1) {
-            scrollLocked = true;
-        } else {
-            scrollLocked = false;
-        }
+        setScrollLocked(scrollPosition >= 1);
 
         // Save scroll position for persistence
         saveScrollPosition();
@@ -209,8 +232,9 @@
      * Scroll to bottom
      */
     function scrollToBottom() {
-        scrollLocked = false;
+        setScrollLocked(false);
         if (consoleInstanceRef) {
+            ignoreNextScrollEvent = true;
             consoleInstanceRef.scrollTop = consoleInstanceRef.scrollHeight;
             saveScrollPosition();
         }
@@ -225,6 +249,7 @@
                 if (scrollLocked || !consoleInstanceRef) {
                     return;
                 }
+                ignoreNextScrollEvent = true;
                 consoleInstanceRef.scrollTop = consoleInstanceRef.scrollHeight;
                 saveScrollPosition();
             });
@@ -516,7 +541,7 @@
             switch (e.key) {
                 case "PageUp":
                     e.preventDefault();
-                    scrollLocked = true;
+                    setScrollLocked(true);
                     consoleInstanceRef.scrollTop -=
                         consoleInstanceRef.clientHeight * 0.9;
                     saveScrollPosition();
@@ -529,7 +554,7 @@
                     break;
                 case "Home":
                     e.preventDefault();
-                    scrollLocked = true;
+                    setScrollLocked(true);
                     consoleInstanceRef.scrollTop = 0;
                     saveScrollPosition();
                     break;
@@ -588,7 +613,7 @@
             const scrollable =
                 consoleInstanceRef.scrollHeight >
                 consoleInstanceRef.clientHeight;
-            scrollLocked = scrollable;
+            setScrollLocked(scrollable);
         }
     }
 
@@ -708,12 +733,12 @@
     });
 
     $effect(() => {
-        if (forceScrollMarker === lastForceScrollMarker) {
+        if (executeScrollMarker === lastExecuteScrollMarker) {
             return;
         }
 
-        lastForceScrollMarker = forceScrollMarker;
-        if (forceScrollMarker > 0) {
+        lastExecuteScrollMarker = executeScrollMarker;
+        if (executeScrollMarker > 0) {
             scrollToBottom();
         }
     });
@@ -877,6 +902,7 @@
     .console-input-anchor {
         width: 100%;
         min-height: 0;
+        overflow-anchor: none;
     }
 
     /* Enable text selection */

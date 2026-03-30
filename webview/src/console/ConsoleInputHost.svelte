@@ -29,6 +29,7 @@
         width: number;
         hidden: boolean;
         active: boolean;
+        scrollLocked: boolean;
         sessionId: string;
         languageId: string;
         state: SessionState;
@@ -56,6 +57,7 @@
         active,
         width = 0,
         hidden = false,
+        scrollLocked = false,
         anchorVersion = 0,
         languageAssetsVersion = 0,
         connection,
@@ -78,6 +80,7 @@
         active: SessionInputHostState | undefined;
         width: number;
         hidden?: boolean;
+        scrollLocked?: boolean;
         anchorVersion?: number;
         languageAssetsVersion?: number;
         connection: MessageConnection | undefined;
@@ -113,6 +116,7 @@
             width,
             hidden,
             active: true,
+            scrollLocked,
             sessionId: activeState.sessionId,
             languageId: activeState.languageId,
             state: activeState.state,
@@ -144,6 +148,7 @@
         mountedProps.width = width;
         mountedProps.hidden = hidden;
         mountedProps.active = true;
+        mountedProps.scrollLocked = scrollLocked;
         mountedProps.sessionId = activeState.sessionId;
         mountedProps.languageId = activeState.languageId;
         mountedProps.state = activeState.state;
@@ -174,6 +179,7 @@
         mountedProps = createMountProps(active);
 
         const hostContainer = document.createElement("div");
+        hostContainer.style.overflowAnchor = "none";
         const component = mount(ConsoleInput, {
             target: hostContainer,
             props: mountedProps,
@@ -225,6 +231,7 @@
     $effect(() => {
         activeSessionId;
         active;
+        scrollLocked;
         mountInputForActiveSession();
     });
 

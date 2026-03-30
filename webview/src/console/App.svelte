@@ -71,7 +71,7 @@
         runtimeItems: RuntimeItem[];
         runtimeItemActivities: Map<string, RuntimeItemActivity>;
         runtimeItemsMarker: number;
-        forceScrollMarker: number;
+        executeScrollMarker: number;
     }
 
     interface RuntimeStartupEvent {
@@ -128,13 +128,13 @@
     let sessionDataMap = $state(new Map<string, SessionData>());
     const sessionSyncSeqMap = new Map<string, number>();
     const pendingFullStateRequests = new Set<string>();
-    const pendingFirstOutputScrollSessionIds = new Set<string>();
     let inputCommand = $state<ConsoleInputCommandEnvelope | undefined>(
         undefined,
     );
     let inputCommandCounter = 0;
     let inputAnchorBySession = $state(new Map<string, HTMLDivElement>());
     let inputAnchorVersion = $state(0);
+    let scrollLockedBySession = $state(new Map<string, boolean>());
     let sessionSwitchNonce = 0;
     let revealRequest = $state<
         { sessionId: string; executionId: string; nonce: number } | undefined
@@ -306,7 +306,6 @@
                 sessionDataMap.delete(sessionId);
                 sessionSyncSeqMap.delete(sessionId);
                 pendingFullStateRequests.delete(sessionId);
-                pendingFirstOutputScrollSessionIds.delete(sessionId);
             }
         }
         sessionDataMap = new Map(sessionDataMap);
@@ -353,6 +352,13 @@
         }
         inputAnchorBySession = new Map(inputAnchorBySession);
         inputAnchorVersion += 1;
+
+        for (const sessionId of [...scrollLockedBySession.keys()]) {
+            if (!remainingSessionIds.has(sessionId)) {
+                scrollLockedBySession.delete(sessionId);
+            }
+        }
+        scrollLockedBySession = new Map(scrollLockedBySession);
 
         if (
             pendingForegroundSessionId &&
@@ -518,7 +524,7 @@
                 runtimeItems: [],
                 runtimeItemActivities: new Map(),
                 runtimeItemsMarker: 0,
-                forceScrollMarker: 0,
+                executeScrollMarker: 0,
             };
         }
         return data;
@@ -531,7 +537,7 @@
                 runtimeItems: [],
                 runtimeItemActivities: new Map(),
                 runtimeItemsMarker: 0,
-                forceScrollMarker: 0,
+                executeScrollMarker: 0,
             });
             sessionDataMap = new Map(sessionDataMap); // Trigger reactivity
         }
@@ -647,14 +653,14 @@
         sessionDataMap = new Map(sessionDataMap);
     }
 
-    function armForceScrollOnNextOutput(sessionId: string): void {
-        pendingFirstOutputScrollSessionIds.add(sessionId);
-    }
+    function signalCodeExecuted(sessionId: string): void {
+        const data = sessionDataMap.get(sessionId);
+        if (!data) {
+            return;
+        }
 
-    function consumeForceScrollOnNextOutput(sessionId: string): boolean {
-        const shouldForce = pendingFirstOutputScrollSessionIds.has(sessionId);
-        pendingFirstOutputScrollSessionIds.delete(sessionId);
-        return shouldForce;
+        data.executeScrollMarker += 1;
+        sessionDataMap = new Map(sessionDataMap);
     }
 
     function requestOpenSearch(sessionId: string): void {
@@ -678,6 +684,23 @@
                 continuationPrompt: "+",
             }
         );
+    }
+
+    function getScrollLocked(sessionId: string): boolean {
+        return scrollLockedBySession.get(sessionId) ?? false;
+    }
+
+    function handleScrollLockChanged(
+        sessionId: string,
+        nextScrollLocked: boolean,
+    ): void {
+        const previous = scrollLockedBySession.get(sessionId);
+        if (previous === nextScrollLocked) {
+            return;
+        }
+
+        scrollLockedBySession.set(sessionId, nextScrollLocked);
+        scrollLockedBySession = new Map(scrollLockedBySession);
     }
 
     function hasUnansweredPrompt(sessionId: string): boolean {
@@ -917,17 +940,11 @@
         }
     }
 
-    function syncSessionRuntimeItems(
-        sessionId: string,
-        forceScrollToBottom: boolean = false,
-    ): void {
+    function syncSessionRuntimeItems(sessionId: string): void {
         const data = getSessionData(sessionId);
         optimizeScrollbackForSession(sessionId);
         data.runtimeItems = [...data.runtimeItems];
         data.runtimeItemsMarker += 1;
-        if (forceScrollToBottom) {
-            data.forceScrollMarker += 1;
-        }
         sessionDataMap = new Map(sessionDataMap);
     }
 
@@ -1323,7 +1340,6 @@
         ensureSessionData(sessionId);
 
         let changed = false;
-        let shouldScroll = false;
         for (const change of changes) {
             switch (change.kind) {
                 case "appendRuntimeItem":
@@ -1333,7 +1349,6 @@
                             change.runtimeItem as SerializedRuntimeItem,
                             false,
                         ) || changed;
-                    shouldScroll = true;
                     break;
                 case "appendActivityItem":
                     changed =
@@ -1343,7 +1358,6 @@
                             change.activityItem as SerializedActivityItem,
                             false,
                         ) || changed;
-                    shouldScroll = true;
                     break;
                 case "replaceActivityOutput":
                     changed =
@@ -1354,7 +1368,6 @@
                             change.activityItem as SerializedActivityItem,
                             false,
                         ) || changed;
-                    shouldScroll = true;
                     break;
                 case "clearActivityOutput":
                     changed =
@@ -1363,7 +1376,6 @@
                             change.parentId as string,
                             false,
                         ) || changed;
-                    shouldScroll = true;
                     break;
                 case "updateActivityInputState":
                     changed =
@@ -1378,9 +1390,7 @@
         }
 
         if (changed) {
-            const forceScrollToBottom =
-                shouldScroll && consumeForceScrollOnNextOutput(sessionId);
-            syncSessionRuntimeItems(sessionId, forceScrollToBottom);
+            syncSessionRuntimeItems(sessionId);
         }
     }
 
@@ -1425,7 +1435,7 @@
                 entries,
             });
         }, 0);
-        syncSessionRuntimeItems(sessionId, true);
+        syncSessionRuntimeItems(sessionId);
     }
 
     onMount(() => {
@@ -2140,7 +2150,7 @@
                             height={adjustedHeight}
                             runtimeItems={getSessionData(session.id).runtimeItems}
                             runtimeItemsMarker={getSessionData(session.id).runtimeItemsMarker}
-                            forceScrollMarker={getSessionData(session.id).forceScrollMarker}
+                            executeScrollMarker={getSessionData(session.id).executeScrollMarker}
                             wordWrap={getWordWrap(session.id)}
                             {languageAssetsVersion}
                             {charWidth}
@@ -2152,6 +2162,7 @@
                             onPasteText={(text) => queuePastedInput(session.id, text)}
                             onRestart={() => restartSession(session.id)}
                             onInputAnchorReady={handleInputAnchorReady}
+                            onScrollLockChanged={handleScrollLockChanged}
                             onWidthInCharsChanged={handleWidthInCharsChanged}
                         />
                     {/each}
@@ -2161,6 +2172,9 @@
                         active={activeConsoleInputSession}
                         width={visibleConsolePaneWidth}
                         hidden={!activeConsoleInputSession}
+                        scrollLocked={activeConsoleSessionId
+                            ? getScrollLocked(activeConsoleSessionId)
+                            : false}
                         {languageAssetsVersion}
                         {connection}
                         {inputCommand}
@@ -2173,9 +2187,7 @@
                             selectAllRuntimeItems(activeConsoleSessionId)}
                         onCodeExecuted={() => {
                             if (activeConsoleSessionId) {
-                                armForceScrollOnNextOutput(
-                                    activeConsoleSessionId,
-                                );
+                                signalCodeExecuted(activeConsoleSessionId);
                             }
                         }}
                         onOpenSearch={requestOpenSearch}

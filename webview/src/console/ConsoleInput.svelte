@@ -53,6 +53,7 @@
         readonly width: number;
         readonly hidden: boolean;
         readonly active: boolean;
+        readonly scrollLocked: boolean;
         readonly sessionId: string;
         readonly languageId: string;
         readonly knownSessions?: KnownSessionInfo[];
@@ -85,6 +86,7 @@
         width,
         hidden,
         active = true,
+        scrollLocked = false,
         sessionId,
         languageId = "plaintext",
         knownSessions = [],
@@ -506,7 +508,7 @@
         return candidate instanceof HTMLElement ? candidate : undefined;
     }
 
-    function scheduleEnsureInputBottomVisible() {
+    function scheduleScrollInputIntoView() {
         if (inputVisibilityAnimationFrame !== undefined) {
             cancelAnimationFrame(inputVisibilityAnimationFrame);
         }
@@ -523,16 +525,15 @@
                 return;
             }
 
-            const bottomMarginPx = 8;
-            const consoleRect = consoleInstance.getBoundingClientRect();
-            const editorRect =
-                codeEditorWidgetContainerRef.getBoundingClientRect();
-            const overflowBottom =
-                editorRect.bottom - (consoleRect.bottom - bottomMarginPx);
-
-            if (overflowBottom > 0) {
-                consoleInstance.scrollTop += overflowBottom;
+            if (scrollLocked) {
+                return;
             }
+
+            // Our input is hosted through a bottom anchor, so scrollIntoView can
+            // leave the console a few pixels off the bottom and accidentally
+            // engage scroll lock. Following the bottom directly matches the
+            // intended Positron behavior in this structure.
+            consoleInstance.scrollTop = consoleInstance.scrollHeight;
         });
     }
 
@@ -556,8 +557,8 @@
 
             codeEditorWidget.setPosition({ lineNumber, column });
 
-            // Ensure the bottom of the expanding input stays visible inside the console viewport.
-            scheduleEnsureInputBottomVisible();
+            // Positron scrolls the input container itself into view after cursor moves.
+            scheduleScrollInputIntoView();
         }
     }
 
@@ -956,7 +957,7 @@
         activationState = "idle";
         activatingSessionId = undefined;
         flushPendingCommands(nextSessionId);
-        scheduleEnsureInputBottomVisible();
+        scheduleScrollInputIntoView();
         void maybeExecuteDeferredCode();
     }
 
@@ -1208,8 +1209,7 @@
             // Set up keyboard shortcuts (Positron keyDownHandler pattern)
             setupKeyBindings();
 
-            // Auto-grow the editor as content size changes (Positron pattern)
-            // Keep this handler layout-only to avoid fighting outer container scroll logic.
+            // Auto-grow the editor as content size changes (Positron pattern).
             disposables.push(
                 codeEditorWidget.onDidContentSizeChange(() => {
                     const contentHeight = codeEditorWidget.getContentHeight();
@@ -1225,7 +1225,7 @@
                         height: contentHeight,
                     });
 
-                    scheduleEnsureInputBottomVisible();
+                    scheduleScrollInputIntoView();
                 }),
             );
 
@@ -1304,7 +1304,7 @@
                                 currentSessionId(),
                         );
                     }
-                    scheduleEnsureInputBottomVisible();
+                    scheduleScrollInputIntoView();
                 }),
             );
 
@@ -1964,6 +1964,7 @@
         padding-bottom: 10px;
         background: var(--vscode-input-background);
         white-space: normal;
+        overflow-anchor: none;
     }
 
     .console-input.hidden {
@@ -1972,6 +1973,7 @@
 
     .code-editor-widget-container {
         width: 100%;
+        overflow-anchor: none;
     }
 
     /* Override Monaco's default styles to match VS Code webview */
