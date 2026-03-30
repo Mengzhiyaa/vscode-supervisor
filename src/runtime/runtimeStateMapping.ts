@@ -37,9 +37,8 @@ export function runtimeStateToPositronConsoleState(
             return PositronConsoleState.Uninitialized;
         case RuntimeState.Initializing:
         case RuntimeState.Starting:
-            return PositronConsoleState.Starting;
         case RuntimeState.Restarting:
-            return PositronConsoleState.Restarting;
+            return PositronConsoleState.Starting;
         case RuntimeState.Busy:
             return PositronConsoleState.Busy;
         case RuntimeState.Interrupting:
@@ -74,8 +73,6 @@ export function positronConsoleStateToConsoleState(
             return 'offline';
         case PositronConsoleState.Interrupting:
             return 'interrupting';
-        case PositronConsoleState.Restarting:
-            return 'restarting';
         case PositronConsoleState.Exiting:
             return 'exiting';
         case PositronConsoleState.Exited:

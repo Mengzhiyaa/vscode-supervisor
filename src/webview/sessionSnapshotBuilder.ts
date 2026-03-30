@@ -14,7 +14,7 @@ import {
 
 /**
  * Shared helper for building the `session/info` snapshot sent to webviews.
- * Providers can keep their own active-session precedence while reusing the
+ * Providers can keep their own foreground-session precedence while reusing the
  * same session/state mapping logic.
  */
 export class SessionSnapshotBuilder {
@@ -57,7 +57,7 @@ export class SessionSnapshotBuilder {
         return overlaidSessions;
     }
 
-    resolveActiveSessionId(
+    resolveForegroundConsoleSessionId(
         sessions: SessionProtocol.SessionInfo[],
         candidateIds: Array<string | undefined>
     ): string | undefined {
@@ -68,20 +68,27 @@ export class SessionSnapshotBuilder {
         const sessionsById = new Map(sessions.map(session => [session.id, session]));
         for (const candidateId of candidateIds) {
             const candidate = candidateId ? sessionsById.get(candidateId) : undefined;
-            if (candidate && isPreferredActiveSessionCandidate(candidate)) {
+            if (candidate && isPreferredForegroundConsoleSessionCandidate(candidate)) {
                 return candidateId;
             }
         }
 
         for (const candidateId of candidateIds) {
             const candidate = candidateId ? sessionsById.get(candidateId) : undefined;
-            if (candidate && isActiveSessionCandidate(candidate)) {
+            if (candidate && isForegroundConsoleSessionCandidate(candidate)) {
                 return candidateId;
             }
         }
 
-        return sessions.find(isPreferredActiveSessionCandidate)?.id ??
-            sessions.find(isActiveSessionCandidate)?.id;
+        return sessions.find(isPreferredForegroundConsoleSessionCandidate)?.id ??
+            sessions.find(isForegroundConsoleSessionCandidate)?.id;
+    }
+
+    resolveActiveSessionId(
+        sessions: SessionProtocol.SessionInfo[],
+        candidateIds: Array<string | undefined>
+    ): string | undefined {
+        return this.resolveForegroundConsoleSessionId(sessions, candidateIds);
     }
 
     private _buildBaseSessionInfo(session: RuntimeSession): SessionProtocol.SessionInfo {
@@ -146,7 +153,7 @@ export class SessionSnapshotBuilder {
     }
 }
 
-export function isActiveSessionCandidate(session: SessionProtocol.SessionInfo): boolean {
+export function isForegroundConsoleSessionCandidate(session: SessionProtocol.SessionInfo): boolean {
     switch (session.state) {
         case 'uninitialized':
         case 'exited':
@@ -157,10 +164,10 @@ export function isActiveSessionCandidate(session: SessionProtocol.SessionInfo): 
     }
 }
 
-export function isPreferredActiveSessionCandidate(
+export function isPreferredForegroundConsoleSessionCandidate(
     session: SessionProtocol.SessionInfo,
 ): boolean {
-    return isActiveSessionCandidate(session) && session.runtimeAttached;
+    return isForegroundConsoleSessionCandidate(session) && session.runtimeAttached;
 }
 
 export function mapConsoleStateToSessionState(

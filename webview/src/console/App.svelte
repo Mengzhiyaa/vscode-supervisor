@@ -123,8 +123,8 @@
     // State
     let connection = $state<MessageConnection | undefined>();
     let sessions = $state<SessionInfo[]>([]);
-    let activeSessionId = $state<string | undefined>();
-    let pendingActiveSessionId = $state<string | undefined>();
+    let activeConsoleSessionId = $state<string | undefined>();
+    let pendingForegroundSessionId = $state<string | undefined>();
     let sessionDataMap = $state(new Map<string, SessionData>());
     const sessionSyncSeqMap = new Map<string, number>();
     const pendingFullStateRequests = new Set<string>();
@@ -150,8 +150,8 @@
     // ActionBar state
     let workingDirectoryBySession = $state(new Map<string, string>());
     const currentWorkingDirectory = $derived(
-        activeSessionId
-            ? (workingDirectoryBySession.get(activeSessionId) ?? "")
+        activeConsoleSessionId
+            ? (workingDirectoryBySession.get(activeConsoleSessionId) ?? "")
             : "",
     );
     const knownSessions = $derived(
@@ -261,36 +261,36 @@
         languageAssetsVersion += 1;
     }
 
-    // Get active session
-    function getActiveSession(): SessionInfo | undefined {
-        return sessions.find((s) => s.id === activeSessionId);
+    // Get the foreground console session.
+    function getActiveConsoleSession(): SessionInfo | undefined {
+        return sessions.find((session) => session.id === activeConsoleSessionId);
     }
 
-    function resolveActiveSessionId(
+    function resolveForegroundConsoleSessionId(
         nextSessions: SessionInfo[],
-        requestedActiveSessionId?: string,
-        previousActiveSessionId?: string,
+        requestedForegroundSessionId?: string,
+        previousForegroundSessionId?: string,
     ): string | undefined {
         if (nextSessions.length === 0) {
             return undefined;
         }
 
         if (
-            requestedActiveSessionId &&
+            previousForegroundSessionId &&
             nextSessions.some(
-                (session) => session.id === requestedActiveSessionId,
+                (session) => session.id === previousForegroundSessionId,
             )
         ) {
-            return requestedActiveSessionId;
+            return previousForegroundSessionId;
         }
 
         if (
-            previousActiveSessionId &&
+            requestedForegroundSessionId &&
             nextSessions.some(
-                (session) => session.id === previousActiveSessionId,
+                (session) => session.id === requestedForegroundSessionId,
             )
         ) {
-            return previousActiveSessionId;
+            return requestedForegroundSessionId;
         }
 
         return nextSessions[0]?.id;
@@ -355,10 +355,10 @@
         inputAnchorVersion += 1;
 
         if (
-            pendingActiveSessionId &&
-            !remainingSessionIds.has(pendingActiveSessionId)
+            pendingForegroundSessionId &&
+            !remainingSessionIds.has(pendingForegroundSessionId)
         ) {
-            pendingActiveSessionId = undefined;
+            pendingForegroundSessionId = undefined;
         }
     }
 
@@ -410,6 +410,39 @@
         }
 
         return mergedSessions;
+    }
+
+    function syncForegroundConsoleSession(
+        nextSessions: SessionInfo[],
+        requestedForegroundSessionId?: string,
+    ): void {
+        const previousForegroundSessionId = activeConsoleSessionId;
+        const hasPendingForegroundSession =
+            pendingForegroundSessionId &&
+            nextSessions.some(
+                (session) => session.id === pendingForegroundSessionId,
+            );
+
+        if (pendingForegroundSessionId && hasPendingForegroundSession) {
+            activeConsoleSessionId = pendingForegroundSessionId;
+
+            if (
+                requestedForegroundSessionId === pendingForegroundSessionId
+            ) {
+                pendingForegroundSessionId = undefined;
+            }
+            return;
+        }
+
+        if (pendingForegroundSessionId && !hasPendingForegroundSession) {
+            pendingForegroundSessionId = undefined;
+        }
+
+        activeConsoleSessionId = resolveForegroundConsoleSessionId(
+            nextSessions,
+            requestedForegroundSessionId,
+            previousForegroundSessionId,
+        );
     }
 
     function upsertSession(nextSession: SessionInfo): SessionInfo[] {
@@ -625,8 +658,8 @@
     }
 
     function requestOpenSearch(sessionId: string): void {
-        if (sessionId !== activeSessionId) {
-            handleActivateSession(sessionId);
+        if (sessionId !== activeConsoleSessionId) {
+            handleSetForegroundSession(sessionId);
         }
 
         openSearchRequest = {
@@ -645,6 +678,27 @@
                 continuationPrompt: "+",
             }
         );
+    }
+
+    function hasUnansweredPrompt(sessionId: string): boolean {
+        const data = sessionDataMap.get(sessionId);
+        if (!data) {
+            return false;
+        }
+
+        for (const runtimeItemActivity of data.runtimeItemActivities.values()) {
+            if (
+                runtimeItemActivity.activityItems.some(
+                    (activityItem) =>
+                        activityItem instanceof ActivityItemPrompt &&
+                        activityItem.state === ActivityItemPromptState.Unanswered,
+                )
+            ) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     function getWordWrap(sessionId: string): boolean {
@@ -744,8 +798,8 @@
             emitInputCommand(sessionId, { kind: "focus" });
         };
 
-        if (sessionId !== activeSessionId) {
-            handleActivateSession(sessionId);
+        if (sessionId !== activeConsoleSessionId) {
+            handleSetForegroundSession(sessionId);
             requestAnimationFrame(() => {
                 focusPreferredInput();
             });
@@ -764,8 +818,8 @@
             return;
         }
 
-        if (sessionId !== activeSessionId) {
-            handleActivateSession(sessionId);
+        if (sessionId !== activeConsoleSessionId) {
+            handleSetForegroundSession(sessionId);
         }
         emitInputCommand(sessionId, { kind: "insertText", text });
     }
@@ -780,8 +834,8 @@
             return;
         }
 
-        if (sessionId !== activeSessionId) {
-            handleActivateSession(sessionId);
+        if (sessionId !== activeConsoleSessionId) {
+            handleSetForegroundSession(sessionId);
         }
         emitInputCommand(sessionId, { kind: "paste", text });
     }
@@ -1431,13 +1485,11 @@
         connection.onNotification(
             "session/info",
             (params: { sessions: SessionInfo[]; activeSessionId?: string }) => {
-                const previousActiveSessionId = activeSessionId;
                 const mergedSessions = applySessionSnapshot(params.sessions);
                 pruneRemovedSessions(mergedSessions);
-                activeSessionId = resolveActiveSessionId(
+                syncForegroundConsoleSession(
                     mergedSessions,
-                    pendingActiveSessionId ?? params.activeSessionId,
-                    previousActiveSessionId,
+                    params.activeSessionId,
                 );
             },
         );
@@ -1779,13 +1831,11 @@
             const loadedSessions = Array.isArray((result as any).sessions)
                 ? ((result as any).sessions as SessionInfo[])
                 : [];
-            const previousActiveSessionId = activeSessionId;
             const mergedSessions = applySessionSnapshot(loadedSessions);
             pruneRemovedSessions(mergedSessions);
-            activeSessionId = resolveActiveSessionId(
+            syncForegroundConsoleSession(
                 mergedSessions,
                 (result as any).activeSessionId,
-                previousActiveSessionId,
             );
         } catch (e) {
             console.error("Failed to load sessions:", e);
@@ -1803,13 +1853,8 @@
             })) as { session?: SessionInfo };
 
             if (result.session) {
-                const previousActiveSessionId = activeSessionId;
                 const mergedSessions = upsertSession(result.session);
-                activeSessionId = resolveActiveSessionId(
-                    mergedSessions,
-                    result.session.id,
-                    previousActiveSessionId,
-                );
+                syncForegroundConsoleSession(mergedSessions, result.session.id);
             }
         } catch (error) {
             console.error("Failed to create session:", error);
@@ -1819,7 +1864,7 @@
     async function handleExecute(sessionId: string, code: string) {
         if (!connection) return;
 
-        const targetSessionId = sessionId || activeSessionId;
+        const targetSessionId = sessionId || activeConsoleSessionId;
         if (!targetSessionId) return;
 
         const executionId = generateId();
@@ -1838,7 +1883,7 @@
 
     async function handleInterrupt(sessionId?: string) {
         if (!connection) return;
-        const targetSessionId = sessionId || activeSessionId;
+        const targetSessionId = sessionId || activeConsoleSessionId;
         if (!targetSessionId) return;
         try {
             await connection.sendRequest("console/interrupt", {
@@ -1852,7 +1897,7 @@
     async function handleOpenInEditor(sessionId: string, code?: string) {
         if (!connection) return;
 
-        const targetSessionId = sessionId || activeSessionId;
+        const targetSessionId = sessionId || activeConsoleSessionId;
         if (!targetSessionId) return;
 
         try {
@@ -1865,45 +1910,43 @@
         }
     }
 
-    async function handleSelectSession(
+    async function handleChangeForegroundSession(
         sessionId: string,
         optimistic: boolean = false,
     ) {
         if (!connection) return;
 
-        const previousActiveSessionId = activeSessionId;
+        const previousForegroundSessionId = activeConsoleSessionId;
         const switchNonce = ++sessionSwitchNonce;
 
         if (optimistic) {
-            pendingActiveSessionId = sessionId;
-            activeSessionId = sessionId;
+            pendingForegroundSessionId = sessionId;
+            activeConsoleSessionId = sessionId;
         }
 
         try {
             await connection.sendRequest("session/switch", { sessionId });
-            if (sessionSwitchNonce === switchNonce) {
-                pendingActiveSessionId = undefined;
-            }
         } catch (e) {
             if (
                 optimistic &&
                 sessionSwitchNonce === switchNonce &&
-                activeSessionId === sessionId
+                activeConsoleSessionId === sessionId &&
+                pendingForegroundSessionId === sessionId
             ) {
-                pendingActiveSessionId = undefined;
-                activeSessionId = resolveActiveSessionId(
+                pendingForegroundSessionId = undefined;
+                activeConsoleSessionId = resolveForegroundConsoleSessionId(
                     sessions,
-                    previousActiveSessionId,
-                    previousActiveSessionId,
+                    previousForegroundSessionId,
+                    previousForegroundSessionId,
                 );
             }
             console.error("Switch session failed:", e);
         }
     }
 
-    function handleActivateSession(sessionId: string) {
-        if (sessionId === activeSessionId) return;
-        void handleSelectSession(sessionId, true);
+    function handleSetForegroundSession(sessionId: string) {
+        if (sessionId === activeConsoleSessionId) return;
+        void handleChangeForegroundSession(sessionId, true);
     }
 
     async function handleDeleteSession(sessionId: string) {
@@ -1939,15 +1982,15 @@
     }
 
     async function restartCurrentSession() {
-        if (!activeSessionId) return;
-        await restartSession(activeSessionId);
+        if (!activeConsoleSessionId) return;
+        await restartSession(activeConsoleSessionId);
     }
 
     function clearOutput() {
-        if (!activeSessionId) return;
+        if (!activeConsoleSessionId) return;
         if (connection) {
             void connection.sendRequest("console/clearConsole", {
-                sessionId: activeSessionId,
+                sessionId: activeConsoleSessionId,
             });
         }
     }
@@ -1965,7 +2008,7 @@
     }
 
     function selectAllRuntimeItems(sessionId?: string) {
-        const targetSessionId = sessionId || activeSessionId;
+        const targetSessionId = sessionId || activeConsoleSessionId;
         if (!targetSessionId) {
             return;
         }
@@ -1984,24 +2027,26 @@
 
     // Derived state
     const adjustedHeight = $derived(containerHeight - ACTION_BAR_HEIGHT);
-    const activeSession = $derived(getActiveSession());
-    const activeInputSession = $derived.by(() => {
-        if (!activeSessionId) {
+    const activeSession = $derived(getActiveConsoleSession());
+    const activeConsoleInputSession = $derived.by(() => {
+        if (!activeConsoleSessionId) {
             return undefined;
         }
 
-        const session = sessions.find((s) => s.id === activeSessionId);
+        const session = sessions.find(
+            (entry) => entry.id === activeConsoleSessionId,
+        );
         if (
             !session ||
-            session.promptActive ||
+            hasUnansweredPrompt(activeConsoleSessionId) ||
             !session.runtimeAttached
         ) {
             return undefined;
         }
 
-        const prompt = getPrompt(activeSessionId);
+        const prompt = getPrompt(activeConsoleSessionId);
         return {
-            sessionId: activeSessionId,
+            sessionId: activeConsoleSessionId,
             languageId: session.languageId ?? "plaintext",
             state: session.state,
             inputPrompt: prompt.inputPrompt,
@@ -2038,43 +2083,46 @@
                 stateLabel={stateLabelForSession(activeSession)}
                 interruptible={activeSession?.state === "busy"}
                 interrupting={activeSession?.state === "interrupting"}
-                restarting={activeSession?.state === "restarting"}
+                restarting={
+                    activeSession?.state === "starting" ||
+                    activeSession?.state === "restarting"
+                }
                 showDeleteButton={Boolean(activeSession)}
                 canShutdown={canShutdownSession(activeSession)}
                 canStart={canStartSession(activeSession)}
-                traceEnabled={getTraceEnabled(activeSessionId)}
+                traceEnabled={getTraceEnabled(activeConsoleSessionId)}
                 session={activeSession}
                 onInterrupt={handleInterrupt}
                 onRestart={restartCurrentSession}
                 onClear={clearOutput}
                 onToggleWordWrap={() => {
-                    if (!activeSessionId) {
+                    if (!activeConsoleSessionId) {
                         return;
                     }
                     if (connection) {
                         void connection.sendRequest("console/toggleWordWrap", {
-                            sessionId: activeSessionId,
+                            sessionId: activeConsoleSessionId,
                         });
                     }
                 }}
                 onToggleTrace={() => {
-                    if (!activeSessionId) {
+                    if (!activeConsoleSessionId) {
                         return;
                     }
                     if (connection) {
                         void connection.sendRequest("console/toggleTrace", {
-                            sessionId: activeSessionId,
+                            sessionId: activeConsoleSessionId,
                         });
                     }
                 }}
                 onDeleteSession={() => {
-                    if (activeSessionId) {
-                        handleDeleteSession(activeSessionId);
+                    if (activeConsoleSessionId) {
+                        handleDeleteSession(activeConsoleSessionId);
                     }
                 }}
                 onOpenInEditor={() => {
-                    if (activeSessionId) {
-                        void handleOpenInEditor(activeSessionId);
+                    if (activeConsoleSessionId) {
+                        void handleOpenInEditor(activeConsoleSessionId);
                     }
                 }}
             />
@@ -2087,7 +2135,7 @@
                     {#each sessions as session (session.id)}
                         <ConsoleInstance
                             {session}
-                            active={session.id === activeSessionId}
+                            active={session.id === activeConsoleSessionId}
                             width={visibleConsolePaneWidth}
                             height={adjustedHeight}
                             runtimeItems={getSessionData(session.id).runtimeItems}
@@ -2109,10 +2157,10 @@
                     {/each}
 
                     <ConsoleInputHost
-                        {activeSessionId}
-                        active={activeInputSession}
+                        activeSessionId={activeConsoleSessionId}
+                        active={activeConsoleInputSession}
                         width={visibleConsolePaneWidth}
-                        hidden={!activeInputSession}
+                        hidden={!activeConsoleInputSession}
                         {languageAssetsVersion}
                         {connection}
                         {inputCommand}
@@ -2120,11 +2168,14 @@
                         {consoleSettings}
                         onExecute={handleExecute}
                         onInterrupt={handleInterrupt}
-                        onActivate={handleActivateSession}
-                        onSelectAll={() => selectAllRuntimeItems(activeSessionId)}
+                        onActivate={handleSetForegroundSession}
+                        onSelectAll={() =>
+                            selectAllRuntimeItems(activeConsoleSessionId)}
                         onCodeExecuted={() => {
-                            if (activeSessionId) {
-                                armForceScrollOnNextOutput(activeSessionId);
+                            if (activeConsoleSessionId) {
+                                armForceScrollOnNextOutput(
+                                    activeConsoleSessionId,
+                                );
                             }
                         }}
                         onOpenSearch={requestOpenSearch}
@@ -2151,12 +2202,12 @@
         {#if showSessionTabs && consoleTabListWidth > 0}
             <ConsoleTabList
                 {sessions}
-                {activeSessionId}
+                activeSessionId={activeConsoleSessionId}
                 width={consoleTabListWidth}
                 height={containerHeight}
                 {resourceUsageBySession}
                 onSelectSession={(sessionId) =>
-                    handleSelectSession(sessionId, true)}
+                    handleChangeForegroundSession(sessionId, true)}
                 onDeleteSession={handleDeleteSession}
                 onRenameSession={handleRenameSession}
             />

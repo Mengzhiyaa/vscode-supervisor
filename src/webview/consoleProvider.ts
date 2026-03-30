@@ -823,9 +823,9 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
 
         return {
             sessions,
-            activeSessionId: this._sessionSnapshotBuilder.resolveActiveSessionId(sessions, [
-                this._consoleService?.activePositronConsoleInstance?.sessionId,
+            activeSessionId: this._sessionSnapshotBuilder.resolveForegroundConsoleSessionId(sessions, [
                 this._sessionManager?.activeSessionId,
+                this._consoleService?.activePositronConsoleInstance?.sessionId,
             ]),
         };
     }

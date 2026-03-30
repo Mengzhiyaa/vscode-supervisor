@@ -95,7 +95,7 @@ suite('[Unit] session snapshot builder', () => {
         );
 
         assert.strictEqual(
-            builder.resolveActiveSessionId(sessions, ['missing', undefined]),
+            builder.resolveForegroundConsoleSessionId(sessions, ['missing', undefined]),
             'session-2',
         );
     });
@@ -135,7 +135,7 @@ suite('[Unit] session snapshot builder', () => {
         }]);
 
         assert.strictEqual(
-            builder.resolveActiveSessionId(sessions, ['missing', 'session-1']),
+            builder.resolveForegroundConsoleSessionId(sessions, ['missing', 'session-1']),
             'session-1',
         );
     });
@@ -162,12 +162,12 @@ suite('[Unit] session snapshot builder', () => {
         assert.deepStrictEqual(sessions, []);
 
         assert.strictEqual(
-            builder.resolveActiveSessionId(sessions, ['session-restore-1']),
+            builder.resolveForegroundConsoleSessionId(sessions, ['session-restore-1']),
             undefined,
         );
     });
 
-    test('resolveActiveSessionId skips exited sessions and prefers attached healthy sessions', () => {
+    test('resolveForegroundConsoleSessionId skips exited sessions and prefers attached healthy sessions', () => {
         const builder = new SessionSnapshotBuilder();
         const sessions = [
             {
@@ -197,7 +197,7 @@ suite('[Unit] session snapshot builder', () => {
         ];
 
         assert.strictEqual(
-            builder.resolveActiveSessionId(sessions, [
+            builder.resolveForegroundConsoleSessionId(sessions, [
                 'session-failed',
                 'session-detached',
                 'session-healthy',

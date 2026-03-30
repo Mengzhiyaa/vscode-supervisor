@@ -159,6 +159,9 @@
     // Ref to prevent concurrent execute attempts from key-repeat or rapid Enter presses.
     const executeAttemptInProgressRef = { current: false };
 
+    // Tracks a queued Enter press that should execute once this session is ready again.
+    const deferredExecuteSessionIdRef = { current: undefined as string | undefined };
+
     function normalizeLanguageId(value: string | undefined): string {
         const normalizedLanguageId = value?.trim().toLowerCase();
         return normalizedLanguageId || "plaintext";
@@ -437,12 +440,17 @@
         activeRef.current = active;
     });
     $effect(() => {
+        const previousState = stateRef.current;
         stateRef.current = consoleState;
 
         // Positron pattern: Update line numbers on state change
         if (codeEditorWidget) {
             // Update line number options when state changes (shows/hides prompt)
             codeEditorWidget.updateOptions(createLineNumbersOptions());
+        }
+
+        if (previousState !== "ready" && consoleState === "ready") {
+            void maybeExecuteDeferredCode();
         }
     });
 
@@ -464,11 +472,12 @@
             continuationPrompt.length,
         );
 
-        // Positron pattern: Show prompt only in ready, starting, or uninitialized states
-        // Hide prompt during busy/offline/exiting/exited states
+        // Keep the prompt visible while a restart is reconnecting so the input
+        // area does not visually disappear between banner restore and ready.
         const showPrompt =
             stateRef.current === "ready" ||
             stateRef.current === "starting" ||
+            stateRef.current === "restarting" ||
             stateRef.current === "uninitialized";
 
         return {
@@ -846,6 +855,7 @@
                         Position.Last,
                         Position.Last,
                     );
+                    void maybeExecuteDeferredCode();
                 }
                 break;
             case "historyAdd":
@@ -947,6 +957,7 @@
         activatingSessionId = undefined;
         flushPendingCommands(nextSessionId);
         scheduleEnsureInputBottomVisible();
+        void maybeExecuteDeferredCode();
     }
 
     function enqueuePendingCommand(
@@ -968,6 +979,10 @@
         const trimmedCode = code.trim();
         if (!trimmedCode) {
             return false;
+        }
+
+        if (deferredExecuteSessionIdRef.current === currentSessionId()) {
+            deferredExecuteSessionIdRef.current = undefined;
         }
 
         // Clear current code fragment
@@ -1083,12 +1098,32 @@
         }
     }
 
-    function queueCodeEditorWidgetCodeForRuntime(): boolean {
-        if (executeAttemptInProgressRef.current) {
-            return true;
-        }
+    function deferCodeEditorWidgetCodeUntilReady(): boolean {
         const code = codeEditorWidget.getValue();
-        return submitCodeEditorWidgetCode(code);
+        if (!code.trim()) {
+            return false;
+        }
+
+        deferredExecuteSessionIdRef.current = currentSessionId();
+        return true;
+    }
+
+    async function maybeExecuteDeferredCode(): Promise<void> {
+        if (!codeEditorWidget || stateRef.current !== "ready") {
+            return;
+        }
+
+        const deferredSessionId = deferredExecuteSessionIdRef.current;
+        if (!deferredSessionId || deferredSessionId !== currentSessionId()) {
+            return;
+        }
+
+        if (!codeEditorWidget.getValue().trim()) {
+            return;
+        }
+
+        deferredExecuteSessionIdRef.current = undefined;
+        await executeCodeEditorWidgetCodeIfPossible();
     }
 
     onMount(() => {
@@ -1591,12 +1626,10 @@
                     if (!activeRef.current && hasFocus) {
                         onActivate(currentSessionId());
                     }
-                    // Delegate deferred execution to the backend so queued
-                    // commands stay bound to the originating session.
                     if (stateRef.current !== "ready") {
                         e.preventDefault();
                         e.stopPropagation();
-                        if (!queueCodeEditorWidgetCodeForRuntime()) {
+                        if (!deferCodeEditorWidgetCodeUntilReady()) {
                             codeEditorWidget.trigger("keyboard", "type", {
                                 text: "\n",
                             });

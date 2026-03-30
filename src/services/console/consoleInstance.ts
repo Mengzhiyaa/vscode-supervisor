@@ -134,7 +134,6 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
     private _runtimeItemActivities = new Map<string, RuntimeItemActivity>();
     private _trace = false;
     private _wordWrap = true;
-    private _promptActive = false;
     private _inputPrompt = DEFAULT_INPUT_PROMPT;
     private _continuationPrompt = DEFAULT_CONTINUATION_PROMPT;
     private _workingDirectory: string | undefined;
@@ -206,7 +205,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
     get runtimeItems(): RuntimeItem[] { return this._runtimeItems; }
     get trace(): boolean { return this._trace; }
     get wordWrap(): boolean { return this._wordWrap; }
-    get promptActive(): boolean { return this._promptActive; }
+    get promptActive(): boolean { return this._activeActivityItemPrompt !== undefined; }
     get runtimeAttached(): boolean { return this._runtimeAttached; }
     get inputPrompt(): string { return this._inputPrompt; }
     get continuationPrompt(): string { return this._continuationPrompt; }
@@ -339,6 +338,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
         this._runtimeItemPendingInput = undefined;
         this._pendingCodeQueue = [];
         this._pendingCode = undefined;
+        this._activeActivityItemPrompt = undefined;
 
         for (const item of state.items) {
             switch (item.type) {
@@ -456,6 +456,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
         this._inputPrompt = resolvePromptValue(state.inputPrompt, DEFAULT_INPUT_PROMPT);
         this._continuationPrompt = resolvePromptValue(state.continuationPrompt, DEFAULT_CONTINUATION_PROMPT);
         this._workingDirectory = state.workingDirectory;
+        this._refreshActiveActivityItemPrompt();
 
         this._emitRuntimeItemsRestoreRequired();
         this._onDidChangeTraceEmitter.fire(this._trace);
@@ -502,6 +503,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
         this._runtimeItemPendingInput = undefined;
         this._pendingCodeQueue = [];
         this._pendingCode = undefined;
+        this._clearActiveActivityItemPrompt();
         this._onDidClearConsoleEmitter.fire();
         this._emitRuntimeItemsRestoreRequired();
         return true;
@@ -510,7 +512,6 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
     completeStartup(): void {
         if (
             this._state === PositronConsoleState.Starting ||
-            this._state === PositronConsoleState.Restarting ||
             (this._state === PositronConsoleState.Busy && this.hasStartingItem())
         ) {
             this.setState(PositronConsoleState.Ready);
@@ -542,8 +543,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
         if (this._activeActivityItemPrompt) {
             this._activeActivityItemPrompt.state = ActivityItemPromptState.Interrupted;
             this._emitRuntimeItemsRestoreRequired();
-            this._activeActivityItemPrompt = undefined;
-            this._promptActive = false;
+            this._clearActiveActivityItemPrompt();
         }
 
         const runtimeState = this._session?.state ?? RuntimeState.Uninitialized;
@@ -572,6 +572,9 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
             this.addOrUpdateRuntimeItemActivity(executionId, inputItem);
         }
 
+        setTimeout(() => {
+            this.focusInput();
+        }, 0);
     }
 
     /**
@@ -915,10 +918,13 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
             const id = this._activeActivityItemPrompt.id;
             this._activeActivityItemPrompt.state = ActivityItemPromptState.Answered;
             this._activeActivityItemPrompt.answer = !this._activeActivityItemPrompt.password ? value : '';
-            this._activeActivityItemPrompt = undefined;
-            this._promptActive = false;
+            this._clearActiveActivityItemPrompt();
             this._emitRuntimeItemsRestoreRequired();
             this._session.replyToPrompt(id, value);
+
+            setTimeout(() => {
+                this.focusInput();
+            }, 0);
         }
     }
 
@@ -1026,15 +1032,15 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
     }
 
     handlePrompt(message: LanguageRuntimePrompt): void {
-        this._promptActive = true;
-        this._activeActivityItemPrompt = new ActivityItemPrompt(
+        const activityItemPrompt = new ActivityItemPrompt(
             message.id || this.generateId(),
             message.parent_id,
             message.when ? new Date(message.when) : new Date(),
             message.prompt,
             message.password
         );
-        this.addOrUpdateRuntimeItemActivity(message.parent_id, this._activeActivityItemPrompt);
+        this._setActiveActivityItemPrompt(activityItemPrompt);
+        this.addOrUpdateRuntimeItemActivity(message.parent_id, activityItemPrompt);
     }
 
     handleClearOutput(message: LanguageRuntimeClearOutput): void {
@@ -1059,16 +1065,14 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
             if (message.parent_id.startsWith(CONSOLE_EXEC_PREFIX) ||
                 this._externalExecutionIds.has(message.parent_id) ||
                 this._state === PositronConsoleState.Offline ||
-                this._state === PositronConsoleState.Starting ||
-                this._state === PositronConsoleState.Restarting) {
+                this._state === PositronConsoleState.Starting) {
                 this.setState(PositronConsoleState.Busy);
             }
             this.markInputBusyState(message.parent_id, true);
         } else if (message.state === 'idle' as RuntimeOnlineState) {
             if (message.parent_id.startsWith(CONSOLE_EXEC_PREFIX) ||
                 this._externalExecutionIds.has(message.parent_id) ||
-                this._state === PositronConsoleState.Offline ||
-                this._state === PositronConsoleState.Restarting) {
+                this._state === PositronConsoleState.Offline) {
                 this.setState(PositronConsoleState.Ready);
             }
             this.markExecutionCompleted(message.parent_id);
@@ -1703,9 +1707,15 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
     }
 
     handlePromptRequest(parentId: string, prompt: string, password: boolean): void {
-        this._promptActive = true;
-        const promptItem = new ActivityItemPrompt(this.generateId(), parentId, new Date(), prompt, password);
-        this.addOrUpdateRuntimeItemActivity(parentId, promptItem);
+        const activityItemPrompt = new ActivityItemPrompt(
+            this.generateId(),
+            parentId,
+            new Date(),
+            prompt,
+            password,
+        );
+        this._setActiveActivityItemPrompt(activityItemPrompt);
+        this.addOrUpdateRuntimeItemActivity(parentId, activityItemPrompt);
     }
 
     /**
@@ -1776,7 +1786,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
         const sessionName = this.sessionName;
         if (attachMode === SessionAttachMode.Restarting ||
             (attachMode === SessionAttachMode.Starting && this._state === PositronConsoleState.Exited)) {
-            this.setState(PositronConsoleState.Restarting);
+            this.setState(PositronConsoleState.Starting);
             this.addRuntimeItem(new RuntimeItemStarting(
                 this.generateId(), new Date(),
                 `${sessionName} restarting.`, SessionAttachMode.Restarting));
@@ -1812,7 +1822,6 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
             case PositronConsoleState.Ready:
                 switch (this._state) {
                     case PositronConsoleState.Starting:
-                    case PositronConsoleState.Restarting:
                     case PositronConsoleState.Busy:
                         // Replace RuntimeItemStarting with RuntimeItemStarted
                         for (let i = this._runtimeItems.length - 1; i >= 0; i--) {
@@ -1863,8 +1872,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
 
     private detachRuntimeSession(): void {
         this._runtimeAttached = false;
-        this._activeActivityItemPrompt = undefined;
-        this._promptActive = false;
+        this._clearActiveActivityItemPrompt();
         this._clearStartupFailureFallback();
 
         // Clear executing state for all inputs when detaching (Positron pattern).
@@ -2042,18 +2050,50 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
             return;
         }
 
-        // Let completeStartup() perform the final starting/restarting -> ready
+        // Let completeStartup() perform the final starting -> ready
         // transition so startup items and pending input stay consistent.
         if (
             mappedState === PositronConsoleState.Ready &&
-            (this._state === PositronConsoleState.Starting ||
-                this._state === PositronConsoleState.Restarting)
+            this._state === PositronConsoleState.Starting
         ) {
             return;
         }
 
         this.setState(mappedState);
     }
+
+    private _setActiveActivityItemPrompt(
+        activityItemPrompt: ActivityItemPrompt,
+    ): void {
+        this._activeActivityItemPrompt = activityItemPrompt;
+    }
+
+    private _clearActiveActivityItemPrompt(): void {
+        this._activeActivityItemPrompt = undefined;
+    }
+
+    private _refreshActiveActivityItemPrompt(): void {
+        this._activeActivityItemPrompt = undefined;
+
+        for (let runtimeItemIndex = this._runtimeItems.length - 1; runtimeItemIndex >= 0; runtimeItemIndex--) {
+            const runtimeItem = this._runtimeItems[runtimeItemIndex];
+            if (!(runtimeItem instanceof RuntimeItemActivity)) {
+                continue;
+            }
+
+            for (let activityItemIndex = runtimeItem.activityItems.length - 1; activityItemIndex >= 0; activityItemIndex--) {
+                const activityItem = runtimeItem.activityItems[activityItemIndex];
+                if (
+                    activityItem instanceof ActivityItemPrompt &&
+                    activityItem.state === ActivityItemPromptState.Unanswered
+                ) {
+                    this._activeActivityItemPrompt = activityItem;
+                    return;
+                }
+            }
+        }
+    }
+
     private addOrUpdateRuntimeItemActivity(parentId: string, activityItem: ActivityItem): void {
         const existing = this._runtimeItemActivities.get(parentId);
         if (existing) {

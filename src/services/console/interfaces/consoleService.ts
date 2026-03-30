@@ -47,7 +47,6 @@ export const enum PositronConsoleState {
     Ready = 'Ready',
     Offline = 'Offline',
     Interrupting = 'Interrupting',
-    Restarting = 'Restarting',
     Exiting = 'Exiting',
     Exited = 'Exited',
     Disconnected = 'Disconnected'

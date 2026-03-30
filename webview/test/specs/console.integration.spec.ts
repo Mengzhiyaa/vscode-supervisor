@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { ConsoleMethods, SessionMethods, createSession, registerConsoleDefaults } from '../harness/domains';
 import { openWebviewPage } from '../harness/page';
 
@@ -61,6 +61,14 @@ function createConsoleStateWithItems(
         continuationPrompt: overrides.continuationPrompt ?? '+ ',
         workingDirectory: overrides.workingDirectory ?? '/workspace',
     };
+}
+
+async function readConsoleInputPrompts(page: Page): Promise<string[]> {
+    return page.locator('.console-input .monaco-editor .line-numbers').evaluateAll((nodes) =>
+        nodes
+            .map((node) => node.textContent?.trim() ?? '')
+            .filter((text) => text.length > 0),
+    );
 }
 
 test('console restores state and switches sessions through the sidebar', async ({ page }) => {
@@ -214,6 +222,234 @@ test('console toolbar actions stay aligned with extension-side requests', async 
     const stopRequest = backend.waitForNextRequest(SessionMethods.stop);
     await page.getByLabel('Delete Session').click();
     await expect.poll(async () => (await stopRequest).params).toEqual({ sessionId: 'session-1' });
+});
+
+test('console restart repro keeps the prompt visible and defers execute until the session is ready', async ({ page }) => {
+    const readySession = createSession({
+        id: 'session-1',
+        name: 'Primary',
+        promptActive: false,
+        runtimeAttached: true,
+        state: 'ready',
+    });
+    const backend = await openWebviewPage(page, 'console', {
+        configure: (mockBackend) => {
+            registerConsoleDefaults(mockBackend, {
+                sessions: [readySession],
+                activeSessionId: readySession.id,
+            });
+        },
+    });
+
+    await expect.poll(() => backend.notificationCount(ConsoleMethods.ready)).toBeGreaterThan(0);
+    await backend.notify(SessionMethods.info, {
+        sessions: [readySession],
+        activeSessionId: readySession.id,
+    });
+    await backend.notify(ConsoleMethods.restoreState, {
+        sessionId: readySession.id,
+        syncSeq: 1,
+        state: createConsoleState('before restart output'),
+    });
+
+    const monacoInput = page.locator('.console-input textarea').last();
+    await expect(page.locator('.console-input')).toBeVisible();
+    await expect.poll(() => readConsoleInputPrompts(page)).toContain('>');
+
+    const restartRequest = backend.waitForNextRequest(SessionMethods.restart);
+    await page.getByLabel('Restart Session').click();
+    await expect.poll(async () => (await restartRequest).params).toEqual({
+        sessionId: readySession.id,
+    });
+
+    const restartingSession = {
+        ...readySession,
+        state: 'restarting' as const,
+    };
+    await backend.notify(SessionMethods.info, {
+        sessions: [restartingSession],
+        activeSessionId: restartingSession.id,
+    });
+    await backend.notify(ConsoleMethods.restoreState, {
+        sessionId: restartingSession.id,
+        syncSeq: 2,
+        state: createConsoleStateWithItems([
+            {
+                type: 'started' as const,
+                id: 'runtime-restarted',
+                when: Date.now(),
+                sessionName: 'Primary restarted.',
+            },
+            {
+                type: 'startup' as const,
+                id: 'runtime-banner',
+                when: Date.now() + 1,
+                banner: 'R version 4.4.1 (restart banner)',
+                version: '4.4.1',
+            },
+        ]),
+    });
+
+    await expect(page.getByText('R version 4.4.1 (restart banner)')).toBeVisible();
+    await expect(page.locator('.console-input')).toBeVisible();
+    await page.waitForTimeout(200);
+    expect.soft(await readConsoleInputPrompts(page)).toContain('>');
+
+    await monacoInput.focus();
+    await backend.notify(ConsoleMethods.setPendingCode, {
+        sessionId: restartingSession.id,
+        code: 'value <- 1',
+    });
+    await page.waitForTimeout(200);
+
+    const executeCountBeforeReady = backend.requestCount(ConsoleMethods.execute);
+    await monacoInput.press('Enter');
+    await page.waitForTimeout(200);
+    expect.soft(backend.requestCount(ConsoleMethods.execute)).toBe(
+        executeCountBeforeReady,
+    );
+
+    await backend.notify(SessionMethods.info, {
+        sessions: [readySession],
+        activeSessionId: readySession.id,
+    });
+    await page.waitForTimeout(300);
+
+    expect.soft(backend.requestCount(ConsoleMethods.execute)).toBe(
+        executeCountBeforeReady + 1,
+    );
+    expect
+        .soft(backend.requests(ConsoleMethods.execute).at(-1)?.params)
+        .toEqual(
+            expect.objectContaining({
+                sessionId: readySession.id,
+                code: 'value <- 1',
+            }),
+        );
+});
+
+test('console session switch repro keeps the selected tab when another session finishes restarting', async ({ page }) => {
+    const primaryReady = createSession({
+        id: 'session-1',
+        name: 'Primary',
+        promptActive: false,
+        runtimeAttached: true,
+        state: 'ready',
+    });
+    const restartingSession = createSession({
+        id: 'session-2',
+        name: 'Restarting Session',
+        promptActive: false,
+        runtimeAttached: true,
+        state: 'restarting',
+    });
+
+    const backend = await openWebviewPage(page, 'console', {
+        configure: (mockBackend) => {
+            registerConsoleDefaults(mockBackend, {
+                sessions: [primaryReady, restartingSession],
+                activeSessionId: restartingSession.id,
+            });
+        },
+    });
+
+    await expect.poll(() => backend.notificationCount(ConsoleMethods.ready)).toBeGreaterThan(0);
+    await backend.notify(SessionMethods.info, {
+        sessions: [primaryReady, restartingSession],
+        activeSessionId: restartingSession.id,
+    });
+    await backend.notify(ConsoleMethods.restoreState, {
+        sessionId: primaryReady.id,
+        syncSeq: 1,
+        state: createConsoleState('primary output'),
+    });
+    await backend.notify(ConsoleMethods.restoreState, {
+        sessionId: restartingSession.id,
+        syncSeq: 1,
+        state: createConsoleState('restarting session output'),
+    });
+
+    await expect(page.getByRole('tab', { name: 'Restarting Session' })).toHaveAttribute(
+        'aria-selected',
+        'true',
+    );
+    await expect(page.getByText('restarting session output')).toBeVisible();
+
+    const switchRequest = backend.waitForNextRequest(SessionMethods.switch);
+    await page.getByRole('tab', { name: 'Primary' }).click();
+    await expect.poll(async () => (await switchRequest).params).toEqual({
+        sessionId: primaryReady.id,
+    });
+
+    await expect(page.getByRole('tab', { name: 'Primary' })).toHaveAttribute(
+        'aria-selected',
+        'true',
+    );
+    await expect(page.getByText('primary output')).toBeVisible();
+
+    const restartedReady = {
+        ...restartingSession,
+        state: 'ready' as const,
+    };
+    await backend.notify(SessionMethods.info, {
+        sessions: [primaryReady, restartedReady],
+        activeSessionId: restartedReady.id,
+    });
+    await page.waitForTimeout(300);
+
+    await expect(page.getByRole('tab', { name: 'Primary' })).toHaveAttribute(
+        'aria-selected',
+        'true',
+    );
+    await expect(page.getByText('primary output')).toBeVisible();
+});
+
+test('console ready-session repro keeps the standard input visible when no prompt item is active', async ({ page }) => {
+    const readySession = createSession({
+        id: 'session-1',
+        name: 'Primary',
+        promptActive: false,
+        runtimeAttached: true,
+        state: 'ready',
+    });
+
+    const backend = await openWebviewPage(page, 'console', {
+        configure: (mockBackend) => {
+            registerConsoleDefaults(mockBackend, {
+                sessions: [readySession],
+                activeSessionId: readySession.id,
+            });
+        },
+    });
+
+    await expect.poll(() => backend.notificationCount(ConsoleMethods.ready)).toBeGreaterThan(0);
+    await backend.notify(SessionMethods.info, {
+        sessions: [readySession],
+        activeSessionId: readySession.id,
+    });
+    await backend.notify(ConsoleMethods.restoreState, {
+        sessionId: readySession.id,
+        syncSeq: 1,
+        state: createConsoleState('ready output'),
+    });
+
+    await expect(page.locator('.prompt-input')).toHaveCount(0);
+    await expect(page.locator('.console-input')).toBeVisible();
+    await expect.poll(() => readConsoleInputPrompts(page)).toContain('>');
+
+    const readyButPromptStuck = {
+        ...readySession,
+        promptActive: true,
+    };
+    await backend.notify(SessionMethods.info, {
+        sessions: [readyButPromptStuck],
+        activeSessionId: readySession.id,
+    });
+    await page.waitForTimeout(300);
+
+    await expect(page.locator('.prompt-input')).toHaveCount(0);
+    await expect(page.locator('.console-input')).toBeVisible();
+    await expect.poll(() => readConsoleInputPrompts(page)).toContain('>');
 });
 
 test('console shows startup progress and can create a new session from the empty state', async ({ page }) => {

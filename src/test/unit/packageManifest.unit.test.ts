@@ -57,7 +57,7 @@ suite('[Unit] Supervisor package manifest', () => {
         assert.strictEqual(packageJson.scripts?.['vsce:package'], 'vsce package');
         assert.strictEqual(packageJson.scripts?.['install:binaries'], 'node scripts/install-binaries.mjs');
         assert.strictEqual(packageJson.scripts?.['build:webview'], 'npm --prefix webview run build');
-        assert.strictEqual(packageJson.scripts?.['build'], 'npm run build:webview && npm run copy:duckdb && npm run compile');
+        assert.strictEqual(packageJson.scripts?.['build'], 'npm run check:webview && npm run build:webview && npm run copy:duckdb && npm run compile');
         assert.strictEqual(
             packageJson.scripts?.['test:unit:ext'],
             'npm run test:prepare && node scripts/run-vscode-tests.mjs --label unit'

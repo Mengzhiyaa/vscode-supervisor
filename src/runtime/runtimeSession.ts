@@ -1748,7 +1748,7 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
             case RuntimeState.Exited:
                 await this._startExistingSession(session.sessionId, {
                     startMode: RuntimeStartMode.Restarting,
-                    activate: true,
+                    activate: session.sessionId === this._foregroundSessionId,
                     hasConsole: this._activeSessionsBySessionId.get(session.sessionId)?.hasConsole ?? true,
                 });
                 return;
@@ -1764,9 +1764,6 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
                 const restartPromise = (async () => {
                     await session.restart(session.workingDirectory);
                     await this._waitForSessionReady(session, 10000);
-                    if (session.sessionMetadata.sessionMode === LanguageRuntimeSessionMode.Console) {
-                        await this._setForegroundSession(session.sessionId);
-                    }
                     return session.sessionId;
                 })().finally(() => {
                     if (this._startingSessionsBySessionMapKey.get(sessionMapKey) === restartPromise) {
