@@ -423,6 +423,122 @@ test('console restart repro keeps the prompt visible and defers execute until th
         );
 });
 
+test('console restart repro recovers after a detached runtime frame', async ({ page }) => {
+    const readySession = createSession({
+        id: 'session-1',
+        name: 'Primary',
+        promptActive: false,
+        runtimeAttached: true,
+        state: 'ready',
+    });
+    const backend = await openWebviewPage(page, 'console', {
+        configure: (mockBackend) => {
+            registerConsoleDefaults(mockBackend, {
+                sessions: [readySession],
+                activeSessionId: readySession.id,
+            });
+        },
+    });
+
+    await expect.poll(() => backend.notificationCount(ConsoleMethods.ready)).toBeGreaterThan(0);
+    await backend.notify(SessionMethods.info, {
+        sessions: [readySession],
+        activeSessionId: readySession.id,
+    });
+    await backend.notify(ConsoleMethods.restoreState, {
+        sessionId: readySession.id,
+        syncSeq: 1,
+        state: createConsoleState('before detached restart output'),
+    });
+
+    const monacoInput = page.locator('.console-input textarea').last();
+    await expect(page.locator('.console-input')).toBeVisible();
+    await expect.poll(() => readConsoleInputPrompts(page)).toContain('>');
+
+    const restartRequest = backend.waitForNextRequest(SessionMethods.restart);
+    await page.getByLabel('Restart Session').click();
+    await expect.poll(async () => (await restartRequest).params).toEqual({
+        sessionId: readySession.id,
+    });
+
+    const detachedSession = {
+        ...readySession,
+        state: 'exited' as const,
+        runtimeAttached: false,
+    };
+    await backend.notify(SessionMethods.info, {
+        sessions: [detachedSession],
+    });
+
+    await expect(page.locator('.console-input')).toBeHidden();
+
+    await backend.notify(ConsoleMethods.restoreState, {
+        sessionId: detachedSession.id,
+        syncSeq: 2,
+        state: createConsoleStateWithItems([
+            {
+                type: 'started' as const,
+                id: 'runtime-restarted-detached',
+                when: Date.now(),
+                sessionName: 'Primary restarted.',
+            },
+            {
+                type: 'startup' as const,
+                id: 'runtime-banner-detached',
+                when: Date.now() + 1,
+                banner: 'R version 4.4.1 (detached restart banner)',
+                version: '4.4.1',
+            },
+        ]),
+    });
+
+    await expect(page.getByText('R version 4.4.1 (detached restart banner)')).toBeVisible();
+
+    const startingAttachedSession = {
+        ...readySession,
+        state: 'starting' as const,
+    };
+    await backend.notify(SessionMethods.info, {
+        sessions: [startingAttachedSession],
+        activeSessionId: startingAttachedSession.id,
+    });
+
+    await expect(page.locator('.console-input')).toBeVisible();
+    await expect.poll(() => readConsoleInputPrompts(page)).toContain('>');
+
+    await monacoInput.focus();
+    await backend.notify(ConsoleMethods.setPendingCode, {
+        sessionId: startingAttachedSession.id,
+        code: 'value <- 2',
+    });
+    await page.waitForTimeout(200);
+
+    const executeCountBeforeReady = backend.requestCount(ConsoleMethods.execute);
+    await monacoInput.press('Enter');
+    await page.waitForTimeout(200);
+    expect.soft(backend.requestCount(ConsoleMethods.execute)).toBe(
+        executeCountBeforeReady,
+    );
+
+    await backend.notify(SessionMethods.info, {
+        sessions: [readySession],
+        activeSessionId: readySession.id,
+    });
+    await page.waitForTimeout(300);
+
+    expect.soft(backend.requestCount(ConsoleMethods.execute)).toBe(
+        executeCountBeforeReady + 1,
+    );
+    expect
+        .soft(backend.requests(ConsoleMethods.execute).at(-1)?.params)
+        .toEqual(
+            expect.objectContaining({
+                sessionId: readySession.id,
+                code: 'value <- 2',
+            }),
+        );
+});
+
 test('console session switch repro keeps the selected tab when another session finishes restarting', async ({ page }) => {
     const primaryReady = createSession({
         id: 'session-1',

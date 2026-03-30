@@ -15,8 +15,8 @@
     import RuntimeRestartButton from "./RuntimeRestartButton.svelte";
     import RuntimeRestarting from "./RuntimeRestarting.svelte";
     import RuntimeStartupFailure from "./RuntimeStartupFailure.svelte";
+    import type { ConsoleInstanceModel } from "./models/consoleInstance";
     import {
-        RuntimeItem,
         RuntimeItemActivity,
         RuntimeItemStarted,
         RuntimeItemStartup,
@@ -28,13 +28,11 @@
         RuntimeItemReconnected,
         RuntimeItemStartupFailure,
         RuntimeItemRestarting,
+        RuntimeItemRestartButton,
     } from "./classes";
 
     interface Props {
-        runtimeItems: RuntimeItem[];
-        sessionName?: string;
-        languageName?: string;
-        languageId?: string;
+        consoleInstance: ConsoleInstanceModel;
         languageAssetsVersion?: number;
         onReconnect?: () => void;
         onRestart?: () => void;
@@ -42,17 +40,22 @@
     }
 
     let {
-        runtimeItems,
-        languageName = "R",
-        languageId = "plaintext",
+        consoleInstance,
         languageAssetsVersion = 0,
         onReconnect = undefined,
         onRestart = undefined,
         charWidth = 0,
     }: Props = $props();
 
-    // Pre-filter visible items using $derived for better reactivity and performance
-    let visibleItems = $derived(runtimeItems.filter((item) => !item.isHidden));
+    const visibleRuntimeItems = $derived(
+        consoleInstance.runtimeItems.filter((runtimeItem) => !runtimeItem.isHidden),
+    );
+    const trace = $derived(consoleInstance.trace);
+    const disconnected = $derived(consoleInstance.disconnected);
+    const languageId = $derived(consoleInstance.languageId);
+    const languageName = $derived(
+        consoleInstance.runtimeName || consoleInstance.sessionName || "R",
+    );
 
     function formatTraceTimestamp(timestamp: Date): string {
         const toTwoDigits = (value: number) =>
@@ -77,7 +80,7 @@
 <div class="console-instance-items">
     <div class="top-spacer"></div>
 
-    {#each visibleItems as runtimeItem (runtimeItem.id)}
+    {#each visibleRuntimeItems as runtimeItem (runtimeItem.id)}
         {#if runtimeItem instanceof RuntimeItemActivity}
             <RuntimeActivity
                 runtimeItemActivity={runtimeItem}
@@ -118,14 +121,22 @@
                 {/if}
             </div>
         {:else if runtimeItem instanceof RuntimeItemTrace}
-            <div class="runtime-trace">
-                <div class="trace-timestamp">
-                    {formatTraceTimestamp(runtimeItem.timestamp)}
+            {#if trace}
+                <div class="runtime-trace">
+                    <div class="trace-timestamp">
+                        {formatTraceTimestamp(runtimeItem.timestamp)}
+                    </div>
+                    <ConsoleOutputLines outputLines={runtimeItem.outputLines} />
                 </div>
-                <ConsoleOutputLines outputLines={runtimeItem.outputLines} />
-            </div>
+            {/if}
         {:else if runtimeItem instanceof RuntimeItemReconnected}
             <!-- Positron does not render a reconnected banner item here. -->
+        {:else if runtimeItem instanceof RuntimeItemRestartButton}
+            <RuntimeRestartButton
+                {languageName}
+                disabled={false}
+                onrestart={() => runtimeItem.onRestart()}
+            />
         {:else if runtimeItem instanceof RuntimeItemStartupFailure}
             <RuntimeStartupFailure runtimeItemStartupFailure={runtimeItem} />
         {:else}
@@ -133,6 +144,13 @@
             <div class="runtime-item-unknown">Unknown runtime item type</div>
         {/if}
     {/each}
+
+    {#if disconnected}
+        <div class="console-item-starting disconnected-banner">
+            <span class="codicon codicon-loading codicon-modifier-spin"></span>
+            <span>Extensions restarting...</span>
+        </div>
+    {/if}
 </div>
 
 <style>
@@ -185,6 +203,18 @@
     .trace-timestamp {
         font-family: var(--console-content-font-family);
         white-space: pre;
+    }
+
+    .console-item-starting {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 4px 0;
+        color: var(--vscode-descriptionForeground);
+    }
+
+    .disconnected-banner {
+        margin-top: 2px;
     }
 
 </style>

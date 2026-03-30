@@ -131,6 +131,85 @@ function makeNotebookSession(
     };
 }
 
+function makeAttachableConsoleSession(
+    runtimeMetadata: LanguageRuntimeMetadata,
+    sessionId: string,
+): {
+    session: {
+        sessionId: string;
+        runtimeMetadata: LanguageRuntimeMetadata;
+        sessionMetadata: IRuntimeSessionMetadata;
+        state: RuntimeState;
+        created: number;
+        workingDirectory: string | undefined;
+        clientManager: undefined;
+        dynState: {
+            sessionName: string;
+            inputPrompt: string;
+            continuationPrompt: string;
+            busy: boolean;
+            currentWorkingDirectory: string | undefined;
+        };
+        onDidCreateClientManager: vscode.Event<unknown>;
+        onDidChangeRuntimeState: vscode.Event<RuntimeState>;
+        onDidChangeWorkingDirectory: vscode.Event<string>;
+        onDidEndSession: vscode.Event<unknown>;
+        setForeground: (_foreground: boolean) => void;
+        dispose: () => Promise<void>;
+    };
+    fireRuntimeState: (state: RuntimeState) => void;
+    dispose: () => void;
+} {
+    const onDidCreateClientManager = new vscode.EventEmitter<unknown>();
+    const onDidChangeRuntimeState = new vscode.EventEmitter<RuntimeState>();
+    const onDidChangeWorkingDirectory = new vscode.EventEmitter<string>();
+    const onDidEndSession = new vscode.EventEmitter<unknown>();
+    const sessionMetadata: IRuntimeSessionMetadata = {
+        sessionId,
+        sessionMode: LanguageRuntimeSessionMode.Console,
+        sessionName: sessionId,
+        createdTimestamp: Date.now(),
+        startReason: 'unit-test',
+    };
+
+    const session = {
+        sessionId,
+        runtimeMetadata,
+        sessionMetadata,
+        state: RuntimeState.Idle,
+        created: Date.now(),
+        workingDirectory: undefined,
+        clientManager: undefined,
+        dynState: {
+            sessionName: sessionId,
+            inputPrompt: '>',
+            continuationPrompt: '+',
+            busy: false,
+            currentWorkingDirectory: undefined,
+        },
+        onDidCreateClientManager: onDidCreateClientManager.event,
+        onDidChangeRuntimeState: onDidChangeRuntimeState.event,
+        onDidChangeWorkingDirectory: onDidChangeWorkingDirectory.event,
+        onDidEndSession: onDidEndSession.event,
+        setForeground: (_foreground: boolean) => undefined,
+        dispose: async () => undefined,
+    };
+
+    return {
+        session,
+        fireRuntimeState: (state: RuntimeState) => {
+            session.state = state;
+            onDidChangeRuntimeState.fire(state);
+        },
+        dispose: () => {
+            onDidCreateClientManager.dispose();
+            onDidChangeRuntimeState.dispose();
+            onDidChangeWorkingDirectory.dispose();
+            onDidEndSession.dispose();
+        },
+    };
+}
+
 suite('[Unit] runtime session start semantics', () => {
     test('allows multiple console sessions for the same runtime', async () => {
         const service = new RuntimeSessionService(makeContext(), makeNoopLogChannel());
@@ -268,6 +347,47 @@ suite('[Unit] runtime session start semantics', () => {
 
         assert.strictEqual((service as any)._consoleSessionsByRuntimeId.has(runtimeMetadata.runtimeId), false);
         assert.strictEqual((service as any)._notebookSessionsByNotebookUri.has(notebookUri.toString()), false);
+        service.dispose();
+    });
+
+    test('treats exited to starting as a restart for attached sessions', () => {
+        const service = new RuntimeSessionService(makeContext(), makeNoopLogChannel());
+        const runtimeMetadata = makeRuntimeMetadata();
+        const { session, fireRuntimeState, dispose } = makeAttachableConsoleSession(
+            runtimeMetadata,
+            'console-session-1',
+        );
+        const willStartEvents: RuntimeStartMode[] = [];
+        const runtimeTransitions: Array<{ oldState: RuntimeState; newState: RuntimeState }> = [];
+
+        service.onWillStartSession((event) => {
+            willStartEvents.push(event.startMode);
+        });
+        service.onDidChangeRuntimeState((event) => {
+            runtimeTransitions.push({
+                oldState: event.old_state,
+                newState: event.new_state,
+            });
+        });
+
+        (service as any).attachToSession(session, true, true);
+
+        fireRuntimeState(RuntimeState.Exited);
+        fireRuntimeState(RuntimeState.Starting);
+
+        assert.deepStrictEqual(runtimeTransitions, [
+            {
+                oldState: RuntimeState.Idle,
+                newState: RuntimeState.Exited,
+            },
+            {
+                oldState: RuntimeState.Exited,
+                newState: RuntimeState.Starting,
+            },
+        ]);
+        assert.deepStrictEqual(willStartEvents, [RuntimeStartMode.Restarting]);
+
+        dispose();
         service.dispose();
     });
 });

@@ -1,6 +1,6 @@
 <script lang="ts">
     /**
-     * App.svelte - Console Core (Positron pattern)
+     * ConsoleCore.svelte - Console Core (Positron pattern)
      * Main container managing multi-session console with sidebar
      */
     import { onMount } from "svelte";
@@ -8,7 +8,7 @@
     import ActionBar from "./ActionBar.svelte";
     import ConsoleTabList from "./ConsoleTabList.svelte";
     import ConsoleInstance from "./ConsoleInstance.svelte";
-    import ConsoleInputHost from "./ConsoleInputHost.svelte";
+    import SharedConsoleInputHost from "./SharedConsoleInputHost.svelte";
     import VerticalSplitter from "./VerticalSplitter.svelte";
     import StartupStatus from "./StartupStatus.svelte";
     import EmptyConsole from "./EmptyConsole.svelte";
@@ -20,10 +20,14 @@
     } from "@shared/consoleState";
     import type { RuntimeResourceUsage as ResourceUsage } from "@shared/runtime";
     import type {
-        ConsoleState,
         ConsoleSettings,
         RuntimeStartupPhase,
     } from "../types/console";
+    import {
+        createConsoleInstanceModel,
+        type ConsoleInstanceModel,
+        type ConsoleSessionInfo as SessionInfo,
+    } from "./models/consoleInstance";
     import type { ConsoleInputCommand } from "./services/sessionModelManager";
     import type { MessageConnection } from "vscode-jsonrpc/browser";
     import {
@@ -52,26 +56,13 @@
     } from "./classes";
     import type { ConsoleThemeData } from "$lib/monaco/languageSupport";
 
-    interface SessionInfo {
-        id: string;
-        name: string;
-        runtimeName: string;
-        languageId?: string;
-        state: ConsoleState;
-        runtimePath?: string;
-        runtimeVersion?: string;
-        runtimeSource?: string;
-        base64EncodedIconSvg?: string;
-        promptActive: boolean;
-        runtimeAttached: boolean;
-    }
-
     // Per-session data storage
     interface SessionData {
         runtimeItems: RuntimeItem[];
         runtimeItemActivities: Map<string, RuntimeItemActivity>;
         runtimeItemsMarker: number;
         executeScrollMarker: number;
+        hydrated: boolean;
     }
 
     interface RuntimeStartupEvent {
@@ -153,12 +144,6 @@
         activeConsoleSessionId
             ? (workingDirectoryBySession.get(activeConsoleSessionId) ?? "")
             : "",
-    );
-    const knownSessions = $derived(
-        sessions.map((session) => ({
-            sessionId: session.id,
-            languageId: session.languageId ?? "plaintext",
-        })),
     );
     let promptBySession = $state(
         new Map<string, { inputPrompt: string; continuationPrompt: string }>(),
@@ -525,6 +510,7 @@
                 runtimeItemActivities: new Map(),
                 runtimeItemsMarker: 0,
                 executeScrollMarker: 0,
+                hydrated: false,
             };
         }
         return data;
@@ -538,6 +524,7 @@
                 runtimeItemActivities: new Map(),
                 runtimeItemsMarker: 0,
                 executeScrollMarker: 0,
+                hydrated: false,
             });
             sessionDataMap = new Map(sessionDataMap); // Trigger reactivity
         }
@@ -701,27 +688,6 @@
 
         scrollLockedBySession.set(sessionId, nextScrollLocked);
         scrollLockedBySession = new Map(scrollLockedBySession);
-    }
-
-    function hasUnansweredPrompt(sessionId: string): boolean {
-        const data = sessionDataMap.get(sessionId);
-        if (!data) {
-            return false;
-        }
-
-        for (const runtimeItemActivity of data.runtimeItemActivities.values()) {
-            if (
-                runtimeItemActivity.activityItems.some(
-                    (activityItem) =>
-                        activityItem instanceof ActivityItemPrompt &&
-                        activityItem.state === ActivityItemPromptState.Unanswered,
-                )
-            ) {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     function getWordWrap(sessionId: string): boolean {
@@ -1338,6 +1304,7 @@
         }
 
         ensureSessionData(sessionId);
+        getSessionData(sessionId).hydrated = true;
 
         let changed = false;
         for (const change of changes) {
@@ -1425,6 +1392,7 @@
 
         data.runtimeItems = runtimeItems;
         data.runtimeItemActivities = runtimeItemActivities;
+        data.hydrated = true;
         applySessionMetadataUpdate(sessionId, state);
 
         const historyEntries = state.inputHistory ?? [];
@@ -2038,31 +2006,39 @@
     // Derived state
     const adjustedHeight = $derived(containerHeight - ACTION_BAR_HEIGHT);
     const activeSession = $derived(getActiveConsoleSession());
-    const activeConsoleInputSession = $derived.by(() => {
-        if (!activeConsoleSessionId) {
-            return undefined;
-        }
+    const consoleInstances = $derived.by((): ConsoleInstanceModel[] =>
+        sessions.map((session) => {
+            const sessionData = getSessionData(session.id);
+            const prompt = getPrompt(session.id);
 
-        const session = sessions.find(
-            (entry) => entry.id === activeConsoleSessionId,
-        );
-        if (
-            !session ||
-            hasUnansweredPrompt(activeConsoleSessionId) ||
-            !session.runtimeAttached
-        ) {
-            return undefined;
-        }
-
-        const prompt = getPrompt(activeConsoleSessionId);
-        return {
-            sessionId: activeConsoleSessionId,
-            languageId: session.languageId ?? "plaintext",
-            state: session.state,
-            inputPrompt: prompt.inputPrompt,
-            continuationPrompt: prompt.continuationPrompt,
-        };
-    });
+            return createConsoleInstanceModel(session, {
+                runtimeItems: sessionData.runtimeItems,
+                runtimeItemActivities: sessionData.runtimeItemActivities,
+                runtimeItemsMarker: sessionData.runtimeItemsMarker,
+                executeScrollMarker: sessionData.executeScrollMarker,
+                inputPrompt: prompt.inputPrompt,
+                continuationPrompt: prompt.continuationPrompt,
+                wordWrap: getWordWrap(session.id),
+                trace: getTraceEnabled(session.id),
+                workingDirectory: workingDirectoryBySession.get(session.id),
+                resourceUsage: resourceUsageBySession.get(session.id),
+                scrollLocked: getScrollLocked(session.id),
+                sessionDataHydrated: sessionData.hydrated,
+            });
+        }),
+    );
+    const activeConsoleInstance = $derived(
+        consoleInstances.find(
+            (consoleInstance) =>
+                consoleInstance.sessionId === activeConsoleSessionId,
+        ),
+    );
+    const knownSessions = $derived(
+        consoleInstances.map((consoleInstance) => ({
+            sessionId: consoleInstance.sessionId,
+            languageId: consoleInstance.languageId,
+        })),
+    );
     const showSessionTabs = $derived(
         !consoleSessionListCollapsed && sessions.length > 1,
     );
@@ -2100,7 +2076,7 @@
                 showDeleteButton={Boolean(activeSession)}
                 canShutdown={canShutdownSession(activeSession)}
                 canStart={canStartSession(activeSession)}
-                traceEnabled={getTraceEnabled(activeConsoleSessionId)}
+                traceEnabled={activeConsoleInstance?.trace ?? false}
                 session={activeSession}
                 onInterrupt={handleInterrupt}
                 onRestart={restartCurrentSession}
@@ -2142,39 +2118,34 @@
                     class="console-instances-container"
                     style="height: {adjustedHeight}px;"
                 >
-                    {#each sessions as session (session.id)}
+                    {#each consoleInstances as consoleInstance (consoleInstance.sessionId)}
                         <ConsoleInstance
-                            {session}
-                            active={session.id === activeConsoleSessionId}
+                            {consoleInstance}
+                            active={consoleInstance.sessionId === activeConsoleSessionId}
                             width={visibleConsolePaneWidth}
                             height={adjustedHeight}
-                            runtimeItems={getSessionData(session.id).runtimeItems}
-                            runtimeItemsMarker={getSessionData(session.id).runtimeItemsMarker}
-                            executeScrollMarker={getSessionData(session.id).executeScrollMarker}
-                            wordWrap={getWordWrap(session.id)}
                             {languageAssetsVersion}
                             {charWidth}
                             {revealRequest}
                             {openSearchRequest}
-                            onSelectAll={() => selectAllRuntimeItems(session.id)}
-                            onFocusInput={() => requestInputFocus(session.id)}
-                            onInsertText={(text) => queueInsertText(session.id, text)}
-                            onPasteText={(text) => queuePastedInput(session.id, text)}
-                            onRestart={() => restartSession(session.id)}
+                            onSelectAll={() =>
+                                selectAllRuntimeItems(consoleInstance.sessionId)}
+                            onFocusInput={() =>
+                                requestInputFocus(consoleInstance.sessionId)}
+                            onInsertText={(text) =>
+                                queueInsertText(consoleInstance.sessionId, text)}
+                            onPasteText={(text) =>
+                                queuePastedInput(consoleInstance.sessionId, text)}
+                            onRestart={() => restartSession(consoleInstance.sessionId)}
                             onInputAnchorReady={handleInputAnchorReady}
                             onScrollLockChanged={handleScrollLockChanged}
                             onWidthInCharsChanged={handleWidthInCharsChanged}
                         />
                     {/each}
 
-                    <ConsoleInputHost
-                        activeSessionId={activeConsoleSessionId}
-                        active={activeConsoleInputSession}
+                    <SharedConsoleInputHost
+                        activeConsoleInstance={activeConsoleInstance}
                         width={visibleConsolePaneWidth}
-                        hidden={!activeConsoleInputSession}
-                        scrollLocked={activeConsoleSessionId
-                            ? getScrollLocked(activeConsoleSessionId)
-                            : false}
                         {languageAssetsVersion}
                         {connection}
                         {inputCommand}

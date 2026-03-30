@@ -440,17 +440,6 @@ export class PositronConsoleService implements IPositronConsoleService {
         }
     }
 
-    private _isTerminalConsoleState(state: PositronConsoleState): boolean {
-        switch (state) {
-            case PositronConsoleState.Disconnected:
-            case PositronConsoleState.Exiting:
-            case PositronConsoleState.Exited:
-                return true;
-            default:
-                return false;
-        }
-    }
-
     private _describeConsoleInstance(instance: IPositronConsoleInstance): string {
         const state = instance.state ? String(instance.state).toLowerCase() : 'unknown';
         const attachment = instance.runtimeAttached === false ? 'detached' : 'attached';
@@ -469,36 +458,6 @@ export class PositronConsoleService implements IPositronConsoleService {
         return Array.from(this._consoleInstancesBySessionId.values())
             .filter(instance => this._canRouteToConsoleInstance(instance))
             .sort((a, b) => b.sessionMetadata.createdTimestamp - a.sessionMetadata.createdTimestamp)[0];
-    }
-
-    private _ensureActiveConsoleInstanceIsRoutable(): void {
-        if (!this._activeConsoleInstance) {
-            return;
-        }
-
-        if (this._canRouteToConsoleInstance(this._activeConsoleInstance)) {
-            return;
-        }
-
-        const replacement = this._findReplacementActiveConsoleInstance();
-        if (replacement) {
-            this._setActivePositronConsoleInstance(replacement);
-            return;
-        }
-
-        this._clearActivePositronConsoleInstance();
-    }
-
-    private _handleConsoleInstanceStateChange(instance: PositronConsoleInstance): void {
-        if (instance !== this._activeConsoleInstance) {
-            return;
-        }
-
-        if (!this._isTerminalConsoleState(instance.state)) {
-            return;
-        }
-
-        this._ensureActiveConsoleInstanceIsRoutable();
     }
 
     private async _resolveConsoleInstance(
@@ -687,9 +646,6 @@ export class PositronConsoleService implements IPositronConsoleService {
         this._disposables.push(
             instance.onDidExecuteCode(event => {
                 this._onDidExecuteCodeEmitter.fire(event);
-            }),
-            instance.onDidChangeState(() => {
-                this._handleConsoleInstanceStateChange(instance);
             }),
             instance.onDidChangeInputState(event => {
                 this._onDidChangeInputStateEmitter.fire({

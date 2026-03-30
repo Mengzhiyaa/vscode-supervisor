@@ -4,25 +4,16 @@
     import ConsoleInput from "./ConsoleInput.svelte";
     import type { MessageConnection } from "vscode-jsonrpc/browser";
     import type { ConsoleThemeData } from "$lib/monaco/languageSupport";
+    import type { ConsoleInstanceModel } from "./models/consoleInstance";
     import type {
         ConsoleInputCommand,
         KnownSessionInfo,
     } from "./services/sessionModelManager";
 
-    type SessionState = ConsoleState;
-
     interface ConsoleInputCommandEnvelope {
         sessionId: string;
         command: ConsoleInputCommand;
         nonce: number;
-    }
-
-    interface SessionInputHostState {
-        sessionId: string;
-        languageId: string;
-        state: SessionState;
-        inputPrompt: string;
-        continuationPrompt: string;
     }
 
     interface ConsoleInputMountProps {
@@ -32,7 +23,7 @@
         scrollLocked: boolean;
         sessionId: string;
         languageId: string;
-        state: SessionState;
+        state: ConsoleState;
         inputPrompt: string;
         continuationPrompt: string;
         onExecute: (sessionId: string, code: string) => void;
@@ -53,11 +44,8 @@
     }
 
     let {
-        activeSessionId,
-        active,
+        activeConsoleInstance,
         width = 0,
-        hidden = false,
-        scrollLocked = false,
         anchorVersion = 0,
         languageAssetsVersion = 0,
         connection,
@@ -76,11 +64,8 @@
         knownSessions,
         getAnchor,
     }: {
-        activeSessionId: string | undefined;
-        active: SessionInputHostState | undefined;
+        activeConsoleInstance: ConsoleInstanceModel | undefined;
         width: number;
-        hidden?: boolean;
-        scrollLocked?: boolean;
         anchorVersion?: number;
         languageAssetsVersion?: number;
         connection: MessageConnection | undefined;
@@ -100,6 +85,8 @@
         getAnchor: (sessionId: string) => HTMLDivElement | undefined;
     } = $props();
 
+    const activeConsoleInstanceId = $derived(activeConsoleInstance?.sessionId);
+
     interface MountedInputInstance {
         component: object;
         hostContainer: HTMLDivElement;
@@ -110,18 +97,20 @@
     let mountedProps = $state<ConsoleInputMountProps | undefined>(undefined);
 
     function createMountProps(
-        activeState: SessionInputHostState,
+        activeConsoleInstance: ConsoleInstanceModel,
     ): ConsoleInputMountProps {
         return {
             width,
-            hidden,
+            hidden:
+                activeConsoleInstance.promptActive ||
+                !activeConsoleInstance.runtimeAttached,
             active: true,
-            scrollLocked,
-            sessionId: activeState.sessionId,
-            languageId: activeState.languageId,
-            state: activeState.state,
-            inputPrompt: activeState.inputPrompt,
-            continuationPrompt: activeState.continuationPrompt,
+            scrollLocked: activeConsoleInstance.scrollLocked,
+            sessionId: activeConsoleInstance.sessionId,
+            languageId: activeConsoleInstance.languageId,
+            state: activeConsoleInstance.state,
+            inputPrompt: activeConsoleInstance.inputPrompt,
+            continuationPrompt: activeConsoleInstance.continuationPrompt,
             onExecute,
             onInterrupt,
             onActivate,
@@ -140,20 +129,25 @@
         };
     }
 
-    function syncMountedProps(activeState: SessionInputHostState): void {
+    function syncMountedProps(
+        activeConsoleInstance: ConsoleInstanceModel,
+    ): void {
         if (!mountedProps) {
             return;
         }
 
         mountedProps.width = width;
-        mountedProps.hidden = hidden;
+        mountedProps.hidden =
+            activeConsoleInstance.promptActive ||
+            !activeConsoleInstance.runtimeAttached;
         mountedProps.active = true;
-        mountedProps.scrollLocked = scrollLocked;
-        mountedProps.sessionId = activeState.sessionId;
-        mountedProps.languageId = activeState.languageId;
-        mountedProps.state = activeState.state;
-        mountedProps.inputPrompt = activeState.inputPrompt;
-        mountedProps.continuationPrompt = activeState.continuationPrompt;
+        mountedProps.scrollLocked = activeConsoleInstance.scrollLocked;
+        mountedProps.sessionId = activeConsoleInstance.sessionId;
+        mountedProps.languageId = activeConsoleInstance.languageId;
+        mountedProps.state = activeConsoleInstance.state;
+        mountedProps.inputPrompt = activeConsoleInstance.inputPrompt;
+        mountedProps.continuationPrompt =
+            activeConsoleInstance.continuationPrompt;
         mountedProps.languageAssetsVersion = languageAssetsVersion;
         mountedProps.knownSessions = knownSessions;
         mountedProps.connection = connection;
@@ -172,11 +166,11 @@
     }
 
     function ensureInputMounted(anchor: HTMLDivElement): void {
-        if (mountedInput || !active) {
+        if (mountedInput || !activeConsoleInstance) {
             return;
         }
 
-        mountedProps = createMountProps(active);
+        mountedProps = createMountProps(activeConsoleInstance);
 
         const hostContainer = document.createElement("div");
         hostContainer.style.overflowAnchor = "none";
@@ -209,18 +203,18 @@
     }
 
     function mountInputForActiveSession(): void {
-        if (!activeSessionId || !active) {
+        if (!activeConsoleInstanceId || !activeConsoleInstance) {
             return;
         }
 
-        const anchor = getAnchor(activeSessionId);
+        const anchor = getAnchor(activeConsoleInstanceId);
         if (!anchor) {
             return;
         }
 
         ensureInputMounted(anchor);
         attachToAnchor(anchor);
-        syncMountedProps(active);
+        syncMountedProps(activeConsoleInstance);
     }
 
     $effect(() => {
@@ -229,9 +223,8 @@
     });
 
     $effect(() => {
-        activeSessionId;
-        active;
-        scrollLocked;
+        activeConsoleInstanceId;
+        activeConsoleInstance;
         mountInputForActiveSession();
     });
 
@@ -240,12 +233,12 @@
             return;
         }
 
-        if (!active || !activeSessionId) {
+        if (!activeConsoleInstance || !activeConsoleInstanceId) {
             hideMountedInput();
             return;
         }
 
-        syncMountedProps(active);
+        syncMountedProps(activeConsoleInstance);
     });
 
     $effect(() => {

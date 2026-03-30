@@ -9,9 +9,8 @@
     } from "../shared/ContextMenu.svelte";
     import ConsoleInstanceItems from "./ConsoleInstanceItems.svelte";
     import ConsoleSearchWidget from "./ConsoleSearchWidget.svelte";
-    import type { RuntimeItem } from "./classes";
+    import type { ConsoleInstanceModel } from "./models/consoleInstance";
     import { getVsCodeState, setVsCodeState } from "../lib/rpc/client";
-    import type { ConsoleState } from "../types/console";
     import {
         type SearchOptions,
         type SearchMatch,
@@ -27,14 +26,6 @@
         getScopedSelection,
     } from "./utils/selectionUtils";
 
-    interface SessionInfo {
-        id: string;
-        name: string;
-        runtimeName: string;
-        languageId?: string;
-        state: ConsoleState;
-    }
-
     /** Persisted state structure for this console */
     interface ConsolePersistedState {
         scrollPositions?: Record<string, number>;
@@ -43,14 +34,10 @@
 
     // Props
     let {
-        session,
+        consoleInstance,
         active = false,
         width = 600,
         height = 400,
-        runtimeItems = [],
-        runtimeItemsMarker = 0,
-        executeScrollMarker = 0,
-        wordWrap = true,
         revealRequest = undefined,
         openSearchRequest = undefined,
         languageAssetsVersion = 0,
@@ -64,14 +51,10 @@
         onScrollLockChanged = undefined,
         onWidthInCharsChanged = undefined,
     }: {
-        session: SessionInfo;
+        consoleInstance: ConsoleInstanceModel;
         active: boolean;
         width: number;
         height: number;
-        runtimeItems: RuntimeItem[];
-        runtimeItemsMarker: number;
-        executeScrollMarker: number;
-        wordWrap: boolean;
         revealRequest:
             | { sessionId: string; executionId: string; nonce: number }
             | undefined;
@@ -96,6 +79,18 @@
             widthInChars: number,
         ) => void;
     } = $props();
+
+    const session = $derived.by(() => ({
+        id: consoleInstance.sessionId,
+        name: consoleInstance.sessionName,
+        runtimeName: consoleInstance.runtimeName,
+        languageId: consoleInstance.languageId,
+        state: consoleInstance.state,
+    }));
+    const runtimeItems = $derived(consoleInstance.runtimeItems);
+    const runtimeItemsMarker = $derived(consoleInstance.runtimeItemsMarker);
+    const executeScrollMarker = $derived(consoleInstance.executeScrollMarker);
+    const wordWrap = $derived(consoleInstance.wordWrap);
 
     // State
     let scrollLocked = $state(false);
@@ -811,12 +806,10 @@
     <div class="console-instance-container">
         <!-- prettier-ignore -->
         <ConsoleInstanceItems
-            {runtimeItems}
-            languageId={session.languageId ?? "plaintext"}
+            {consoleInstance}
             {languageAssetsVersion}
             {charWidth}
             {onRestart}
-            sessionName={session.name || session.runtimeName || "Session"}
         />
         <div class="console-input-anchor" bind:this={inputAnchorRef}></div>
     </div>

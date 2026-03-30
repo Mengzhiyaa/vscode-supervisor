@@ -363,9 +363,9 @@ suite('[Unit] console service focus preservation', () => {
         service.dispose();
     });
 
-    test('promotes a healthy console when the active console exits', () => {
+    test('keeps the active console pinned while it transiently exits during restart', () => {
         const sessionManager = {
-            foregroundSession: { sessionId: 'r-healthy-session' },
+            foregroundSession: { sessionId: 'r-active-session' },
         } as any;
         const service = new PositronConsoleService(sessionManager, makeNoopLogChannel());
 
@@ -400,7 +400,7 @@ suite('[Unit] console service focus preservation', () => {
         (healthyInstance as any).setState(PositronConsoleState.Ready);
         (activeInstance as any).setState(PositronConsoleState.Exited);
 
-        assert.strictEqual(service.activePositronConsoleInstance?.sessionId, 'r-healthy-session');
+        assert.strictEqual(service.activePositronConsoleInstance?.sessionId, 'r-active-session');
 
         service.dispose();
     });

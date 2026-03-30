@@ -87,9 +87,6 @@ export class ActiveRuntimeSession implements vscode.Disposable {
             session.onDidCreateClientManager(() => {
                 this._attachToCurrentClientManager();
             }),
-            session.onDidChangeRuntimeState((state) => {
-                this.state = state;
-            }),
             session.onDidChangeWorkingDirectory((directory) => {
                 this.workingDirectory = directory;
             }),
