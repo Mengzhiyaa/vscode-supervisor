@@ -101,6 +101,7 @@ export class RuntimeMessageEmitter implements vscode.Disposable {
 	private onCommMessage(message: JupyterMessage, data: JupyterCommMsg): void {
 		this._emitter.fire({
 			id: message.header.msg_id,
+			event_clock: 0,
 			parent_id: message.parent_header?.msg_id,
 			when: message.header.date,
 			type: positron.LanguageRuntimeMessageType.CommData,
@@ -121,9 +122,11 @@ export class RuntimeMessageEmitter implements vscode.Disposable {
 	onExecuteResult(message: JupyterMessage, data: JupyterExecuteResult) {
 		this._emitter.fire({
 			id: message.header.msg_id,
+			event_clock: 0,
 			parent_id: message.parent_header?.msg_id,
 			when: message.header.date,
 			type: positron.LanguageRuntimeMessageType.Result,
+			kind: positron.RuntimeOutputKind.Unknown,
 			output_id: data.transient?.display_id,
 			data: data.data,
 			metadata: message.metadata,
@@ -142,9 +145,11 @@ export class RuntimeMessageEmitter implements vscode.Disposable {
 		//       which is not the same as message.metadata.
 		this._emitter.fire({
 			id: message.header.msg_id,
+			event_clock: 0,
 			parent_id: message.parent_header?.msg_id,
 			when: message.header.date,
 			type: positron.LanguageRuntimeMessageType.Output,
+			kind: positron.RuntimeOutputKind.Unknown,
 			output_id: data.transient?.display_id,
 			data: data.data,
 			metadata: message.metadata,
@@ -161,6 +166,7 @@ export class RuntimeMessageEmitter implements vscode.Disposable {
 	onExecuteInput(message: JupyterMessage, data: JupyterExecuteInput) {
 		this._emitter.fire({
 			id: message.header.msg_id,
+			event_clock: 0,
 			parent_id: message.parent_header?.msg_id,
 			when: message.header.date,
 			type: positron.LanguageRuntimeMessageType.Input,
@@ -183,6 +189,7 @@ export class RuntimeMessageEmitter implements vscode.Disposable {
 		}
 		this._emitter.fire({
 			id: message.header.msg_id,
+			event_clock: 0,
 			parent_id: message.parent_header?.msg_id,
 			when: message.header.date,
 			type: positron.LanguageRuntimeMessageType.State,
@@ -202,6 +209,7 @@ export class RuntimeMessageEmitter implements vscode.Disposable {
 	private onCommOpen(message: JupyterMessage, data: JupyterCommOpen): void {
 		this._emitter.fire({
 			id: message.header.msg_id,
+			event_clock: 0,
 			parent_id: message.parent_header?.msg_id,
 			when: message.header.date,
 			type: positron.LanguageRuntimeMessageType.CommOpen,
@@ -223,6 +231,7 @@ export class RuntimeMessageEmitter implements vscode.Disposable {
 	private onDebugEvent(message: JupyterMessage, data: positron.DebugProtocolEvent): void {
 		this._emitter.fire({
 			id: message.header.msg_id,
+			event_clock: 0,
 			parent_id: message.parent_header?.msg_id,
 			when: message.header.date,
 			type: positron.LanguageRuntimeMessageType.DebugEvent,
@@ -241,6 +250,7 @@ export class RuntimeMessageEmitter implements vscode.Disposable {
 	private onDebugReply(message: JupyterMessage, data: positron.DebugProtocolResponse): void {
 		this._emitter.fire({
 			id: message.header.msg_id,
+			event_clock: 0,
 			parent_id: message.parent_header?.msg_id,
 			when: message.header.date,
 			type: positron.LanguageRuntimeMessageType.DebugReply,
@@ -259,6 +269,7 @@ export class RuntimeMessageEmitter implements vscode.Disposable {
 	onClearOutput(message: JupyterMessage, data: JupyterClearOutput) {
 		this._emitter.fire({
 			id: message.header.msg_id,
+			event_clock: 0,
 			parent_id: message.parent_header?.msg_id,
 			when: message.header.date,
 			type: positron.LanguageRuntimeMessageType.ClearOutput,
@@ -277,6 +288,7 @@ export class RuntimeMessageEmitter implements vscode.Disposable {
 	private onErrorResult(message: JupyterMessage, data: JupyterErrorReply) {
 		this._emitter.fire({
 			id: message.header.msg_id,
+			event_clock: 0,
 			parent_id: message.parent_header?.msg_id,
 			when: message.header.date,
 			type: positron.LanguageRuntimeMessageType.Error,
@@ -300,6 +312,7 @@ export class RuntimeMessageEmitter implements vscode.Disposable {
 		}
 		this._emitter.fire({
 			id: message.header.msg_id,
+			event_clock: 0,
 			parent_id: message.parent_header?.msg_id,
 			when: message.header.date,
 			type: positron.LanguageRuntimeMessageType.Stream,
@@ -321,9 +334,11 @@ export class RuntimeMessageEmitter implements vscode.Disposable {
 		//       which is not the same as message.metadata.
 		this._emitter.fire({
 			id: message.header.msg_id,
+			event_clock: 0,
 			parent_id: message.parent_header?.msg_id,
 			when: message.header.date,
 			type: positron.LanguageRuntimeMessageType.UpdateOutput,
+			kind: positron.RuntimeOutputKind.Unknown,
 			output_id: data.transient.display_id,
 			data: data.data,
 			metadata: message.metadata,
@@ -339,6 +354,7 @@ export class RuntimeMessageEmitter implements vscode.Disposable {
 	private onInputRequest(message: JupyterMessage, req: JupyterInputRequest): void {
 		this._emitter.fire({
 			id: message.header.msg_id,
+			event_clock: 0,
 			parent_id: message.parent_header?.msg_id,
 			when: message.header.date,
 			type: positron.LanguageRuntimeMessageType.Prompt,

@@ -22,6 +22,16 @@ import {
     registerRuntimeClientInstance,
 } from './runtimeClientRegistry';
 
+enum RuntimeClientOwner {
+    ExtHost = 'extHost',
+    MainThread = 'mainThread',
+}
+
+interface ManagedRuntimeClientInstance {
+    readonly client: RuntimeClientInstance;
+    readonly owner: RuntimeClientOwner;
+}
+
 /**
  * Manages the lifecycle of Positron clients (comms) for a runtime session.
  * 
@@ -43,9 +53,9 @@ export class RuntimeClientManager implements vscode.Disposable {
     private _uiClientId: string | undefined;
     private _helpClientId: string | undefined;
 
-    // Map of comm_id to RuntimeClientInstance for kernel-initiated clients
-    // Matches Positron's _clients Map in ExtHostLanguageRuntimeSessionAdapter
-    private readonly _clients: Map<string, RuntimeClientInstance> = new Map();
+    // Map of comm_id to RuntimeClientInstance.
+    // Ownership distinguishes ext-host-handled clients from main-thread fallback clients.
+    private readonly _clients: Map<string, ManagedRuntimeClientInstance> = new Map();
 
     // Array of registered client handlers (matching Positron's _clientHandlers)
     private readonly _clientHandlers: RuntimeClientHandler[] = [];
@@ -118,6 +128,7 @@ export class RuntimeClientManager implements vscode.Disposable {
     ): LanguageRuntimeMessageCommOpen {
         return {
             id: clientId,
+            event_clock: 0,
             parent_id: '',
             when: new Date().toISOString(),
             type: LanguageRuntimeMessageType.CommOpen,
@@ -160,17 +171,43 @@ export class RuntimeClientManager implements vscode.Disposable {
         return false;
     }
 
+    private _isKnownClientType(targetName: string): targetName is RuntimeClientType {
+        return Object.values(RuntimeClientType).includes(targetName as RuntimeClientType);
+    }
+
+    private _storeClientInstance(
+        message: LanguageRuntimeMessageCommOpen,
+        owner: RuntimeClientOwner,
+        client = this._createRuntimeClientInstance(message)
+    ): RuntimeClientInstance {
+        const existingEntry = this._clients.get(message.comm_id);
+        if (existingEntry) {
+            return existingEntry.client;
+        }
+
+        const clientType = message.target_name as RuntimeClientType;
+        this._setKnownClientId(clientType, message.comm_id);
+        this._clients.set(message.comm_id, { client, owner });
+        this._onDidCreateClientInstance.fire({ client, message });
+        return client;
+    }
+
     private _registerSyntheticClient(
         clientId: string,
         clientType: RuntimeClientType,
         params: Record<string, unknown> = {}
     ): RuntimeClientInstance {
         const syntheticMessage = this._buildSyntheticOpenMessage(clientId, clientType, params);
-        const client = this._createRuntimeClientInstance(syntheticMessage);
+        const handled = this.handleCommOpen(syntheticMessage);
 
-        this._clients.set(clientId, client);
-        this._notifyClientHandlers(clientType, client, params);
-        this._onDidCreateClientInstance.fire({ client, message: syntheticMessage });
+        if (!handled) {
+            this.openClientInstance(syntheticMessage);
+        }
+
+        const client = this.getClient(clientId);
+        if (!client) {
+            throw new Error(`Synthetic client '${clientId}' failed to register`);
+        }
 
         return client;
     }
@@ -366,7 +403,7 @@ export class RuntimeClientManager implements vscode.Disposable {
             }
 
             for (const [commId, targetName] of entries) {
-                if (!Object.values(RuntimeClientType).includes(targetName as RuntimeClientType)) {
+                if (!this._isKnownClientType(targetName)) {
                     continue;
                 }
 
@@ -393,9 +430,11 @@ export class RuntimeClientManager implements vscode.Disposable {
                         break;
                 }
 
-                this.openClientInstance(
-                    this._buildSyntheticOpenMessage(commId, targetName as RuntimeClientType)
-                );
+                const message = this._buildSyntheticOpenMessage(commId, targetName);
+                const handled = this.handleCommOpen(message);
+                if (!handled) {
+                    this.openClientInstance(message);
+                }
             }
         } catch (error) {
             this._logChannel.warn(`RuntimeClientManager: Failed to restore existing clients: ${error}`);
@@ -407,7 +446,7 @@ export class RuntimeClientManager implements vscode.Disposable {
             `RuntimeClientManager: Runtime entered '${state}', clearing tracked clients`
         );
 
-        for (const [, client] of this._clients) {
+        for (const { client } of this._clients.values()) {
             client.setClientState(RuntimeClientState.Closed);
             client.dispose();
         }
@@ -417,8 +456,8 @@ export class RuntimeClientManager implements vscode.Disposable {
     }
 
     private _findExistingClientId(clientType: RuntimeClientType): string | undefined {
-        for (const [commId, client] of this._clients) {
-            if (client.message.target_name === clientType) {
+        for (const [commId, entry] of this._clients) {
+            if (entry.client.message.target_name === clientType) {
                 return commId;
             }
         }
@@ -430,17 +469,39 @@ export class RuntimeClientManager implements vscode.Disposable {
     // =========================================================================
 
     /**
-     * Opens a client instance (comm) on the frontend.
-     * Called when a new comm is created by the kernel (comm_open message).
-     * 
-     * Matches Positron's handleCommOpen() in extHostLanguageRuntime.ts
-     *
-     * @param message The comm_open message from the kernel
+     * Pre-handles a comm_open in ext-host style.
+     * Returns whether a registered client handler took ownership.
+     */
+    handleCommOpen(message: LanguageRuntimeMessageCommOpen): boolean {
+        if (!this._isKnownClientType(message.target_name)) {
+            return false;
+        }
+
+        const existingEntry = this._clients.get(message.comm_id);
+        if (existingEntry) {
+            return existingEntry.owner === RuntimeClientOwner.ExtHost;
+        }
+
+        const clientType = message.target_name;
+        const client = this._createRuntimeClientInstance(message);
+        const handled = this._notifyClientHandlers(clientType, client, message.data ?? {});
+
+        if (!handled) {
+            return false;
+        }
+
+        this._storeClientInstance(message, RuntimeClientOwner.ExtHost, client);
+        this._logChannel.info(
+            `RuntimeClientManager: Ext-host took ownership of '${message.comm_id}' for '${clientType}'`
+        );
+        return true;
+    }
+
+    /**
+     * Opens a client instance using main-thread fallback semantics.
      */
     openClientInstance(message: LanguageRuntimeMessageCommOpen): boolean {
-        // If the target name is not a valid client type, remove the backend
-        // client and return (Positron parity).
-        if (!Object.values(RuntimeClientType).includes(message.target_name as RuntimeClientType)) {
+        if (!this._isKnownClientType(message.target_name)) {
             this._logChannel.warn(
                 `RuntimeClientManager: Unknown client type '${message.target_name}', ` +
                 `removing backend client '${message.comm_id}'`
@@ -449,30 +510,16 @@ export class RuntimeClientManager implements vscode.Disposable {
             return true;
         }
 
-        const clientType = message.target_name as RuntimeClientType;
+        const existingEntry = this._clients.get(message.comm_id);
+        if (existingEntry) {
+            return true;
+        }
 
-        this._setKnownClientId(clientType, message.comm_id);
-
-        // Create a new client instance wrapper
-        const client = this._createRuntimeClientInstance(message);
-
-        // See if one of the registered client handlers wants to handle this
-        // (matching Positron's handleCommOpen pattern)
-        const handled = this._notifyClientHandlers(
-            clientType,
-            client,
-            (message.data ?? {}) as Record<string, unknown>
-        );
-
-        // Save the client instance
-        this._clients.set(message.comm_id, client);
+        const clientType = message.target_name;
+        this._storeClientInstance(message, RuntimeClientOwner.MainThread);
         this._logChannel.info(
-            `RuntimeClientManager: Created client instance '${message.comm_id}' ` +
-            `for '${clientType}' (handled: ${handled})`
+            `RuntimeClientManager: Created client instance '${message.comm_id}' for '${clientType}'`
         );
-
-        // Fire an event to notify listeners
-        this._onDidCreateClientInstance.fire({ client, message });
         return true;
     }
 
@@ -507,7 +554,7 @@ export class RuntimeClientManager implements vscode.Disposable {
         handler: (client: RuntimeClientInstance, message: LanguageRuntimeMessageCommOpen) => void
     ): vscode.Disposable {
         // Watch existing instances first (reconnect-safe semantics).
-        for (const client of this._clients.values()) {
+        for (const { client } of this._clients.values()) {
             if (client.message.target_name === clientType) {
                 handler(client, client.message);
             }
@@ -534,6 +581,40 @@ export class RuntimeClientManager implements vscode.Disposable {
     }
 
     /**
+     * Pre-handles a comm_data in ext-host style.
+     */
+    handleCommData(message: LanguageRuntimeMessageCommData): boolean {
+        const entry = this._clients.get(message.comm_id);
+        if (entry?.owner === RuntimeClientOwner.ExtHost) {
+            entry.client.emitMessage(message);
+            return true;
+        }
+
+        if (isRuntimeClientInstanceRegistered(message.comm_id)) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Pre-handles a comm_closed in ext-host style.
+     */
+    handleCommClosed(commId: string): boolean {
+        const entry = this._clients.get(commId);
+        if (entry?.owner === RuntimeClientOwner.ExtHost) {
+            this.emitClientState(commId, RuntimeClientState.Closed);
+            return true;
+        }
+
+        if (isRuntimeClientInstanceRegistered(commId)) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
      * Routes a comm_data message from the kernel to the appropriate client instance.
      * 
      * Matches Positron's emitDidReceiveClientMessage() in mainThreadLanguageRuntime.ts
@@ -541,9 +622,9 @@ export class RuntimeClientManager implements vscode.Disposable {
      * @param message The comm_data message from the kernel
      */
     emitDidReceiveClientMessage(message: LanguageRuntimeMessageCommData): boolean {
-        const client = this._clients.get(message.comm_id);
-        if (client) {
-            client.emitMessage(message);
+        const entry = this._clients.get(message.comm_id);
+        if (entry) {
+            entry.client.emitMessage(message);
             return true;
         }
 
@@ -568,13 +649,13 @@ export class RuntimeClientManager implements vscode.Disposable {
      * @param state The new state
      */
     emitClientState(commId: string, state: RuntimeClientState): boolean {
-        const client = this._clients.get(commId);
-        if (client) {
-            client.setClientState(state);
+        const entry = this._clients.get(commId);
+        if (entry) {
+            entry.client.setClientState(state);
 
             // If the client is closed, clean up
             if (state === RuntimeClientState.Closed) {
-                client.dispose();
+                entry.client.dispose();
                 this._clients.delete(commId);
                 this._clearKnownClientId(commId);
                 this._logChannel.debug(
@@ -600,7 +681,7 @@ export class RuntimeClientManager implements vscode.Disposable {
      * message.
      */
     updatePendingRpcState(message: LanguageRuntimeState): void {
-        for (const client of this._clients.values()) {
+        for (const { client } of this._clients.values()) {
             client.updatePendingRpcState(message);
         }
     }
@@ -612,14 +693,14 @@ export class RuntimeClientManager implements vscode.Disposable {
      * @returns The client instance, or undefined if not found
      */
     getClient(commId: string): RuntimeClientInstance | undefined {
-        return this._clients.get(commId);
+        return this._clients.get(commId)?.client;
     }
 
     /**
      * Gets all active client instances.
      */
     get clientInstances(): RuntimeClientInstance[] {
-        return Array.from(this._clients.values());
+        return Array.from(this._clients.values(), ({ client }) => client);
     }
 
     /**
@@ -633,7 +714,7 @@ export class RuntimeClientManager implements vscode.Disposable {
         const helpClientId = this._helpClientId;
 
         // Dispose kernel-initiated client instances
-        for (const [, client] of this._clients) {
+        for (const { client } of this._clients.values()) {
             client.setClientState(RuntimeClientState.Closed);
             client.dispose();
         }

@@ -1444,13 +1444,14 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
 
                 const session = this._sessionManager.getSession(sessionId);
                 const manager = session?.clientManager;
-                if (!manager) {
+                if (!session || !manager) {
                     throw new Error(`RuntimeClientManager is unavailable for session ${sessionId}`);
                 }
 
                 const commId = params.commId ?? `e2e-comm-open-${Date.now()}`;
-                const handled = manager.openClientInstance({
+                const handled = session.emitRuntimeMessage({
                     id: commId,
+                    event_clock: 0,
                     parent_id: '',
                     when: new Date().toISOString(),
                     type: LanguageRuntimeMessageType.CommOpen,
@@ -1478,7 +1479,7 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
 
                 const session = this._sessionManager.getSession(sessionId);
                 const manager = session?.clientManager;
-                if (!manager) {
+                if (!session || !manager) {
                     throw new Error(`RuntimeClientManager is unavailable for session ${sessionId}`);
                 }
 
@@ -1488,8 +1489,9 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
                 }
 
                 try {
-                    const handled = manager.emitDidReceiveClientMessage({
+                    const handled = session.emitRuntimeMessage({
                         id: `${params.commId}-data`,
+                        event_clock: 0,
                         parent_id: `${params.commId}-parent`,
                         when: new Date().toISOString(),
                         type: LanguageRuntimeMessageType.CommData,

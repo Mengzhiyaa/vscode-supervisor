@@ -84,7 +84,7 @@ export enum RuntimeClientStatus {
 
 export type RuntimeClientHandlerCallback = (
     client: RuntimeClientInstance,
-    params: Object
+    params: Record<string, unknown>
 ) => boolean;
 
 export interface RuntimeClientHandler {
@@ -128,11 +128,23 @@ export interface LanguageRuntimeInfo {
 
 export interface LanguageRuntimeMessage {
     id: string;
+    event_clock: number;
     parent_id: string;
     when: string;
     type: LanguageRuntimeMessageType;
     metadata?: Record<string, unknown>;
     buffers?: Array<Uint8Array>;
+}
+
+export enum RuntimeOutputKind {
+    Text = 'text',
+    StaticImage = 'static_image',
+    InlineHtml = 'inline_html',
+    ViewerWidget = 'viewer_widget',
+    PlotWidget = 'plot',
+    IPyWidget = 'ipywidget',
+    WebviewPreload = 'webview_preload',
+    Unknown = 'unknown',
 }
 
 export enum LanguageRuntimeMessageType {
@@ -155,11 +167,23 @@ export enum LanguageRuntimeMessageType {
 }
 
 export interface LanguageRuntimeOutput extends LanguageRuntimeMessage {
+    kind: RuntimeOutputKind;
     data: Record<string, unknown>;
     output_id?: string;
 }
 
 export interface LanguageRuntimeResult extends LanguageRuntimeOutput {
+}
+
+export enum PositronOutputLocation {
+    Console = 'console',
+    Viewer = 'viewer',
+    Plot = 'plot',
+}
+
+export interface LanguageRuntimeWebOutput extends LanguageRuntimeOutput {
+    output_location: PositronOutputLocation | undefined;
+    resource_roots: vscode.Uri[] | undefined;
 }
 
 export interface LanguageRuntimeStream extends LanguageRuntimeMessage {
@@ -186,6 +210,7 @@ export interface LanguageRuntimeClearOutput extends LanguageRuntimeMessage {
 }
 
 export interface LanguageRuntimeUpdateOutput extends LanguageRuntimeMessage {
+    kind: RuntimeOutputKind;
     data: Record<string, unknown>;
     output_id: string;
 }
@@ -199,18 +224,18 @@ export interface LanguageRuntimeError extends LanguageRuntimeMessage {
 export interface LanguageRuntimeCommOpen extends LanguageRuntimeMessage {
     comm_id: string;
     target_name: string;
-    data: object;
+    data: Record<string, unknown>;
 }
 
 export interface LanguageRuntimeCommMessage extends LanguageRuntimeMessage {
     comm_id: string;
-    data: object;
+    data: Record<string, unknown>;
     buffers?: Uint8Array[];
 }
 
 export interface LanguageRuntimeCommClosed extends LanguageRuntimeMessage {
     comm_id: string;
-    data: object;
+    data: Record<string, unknown>;
 }
 
 export type LanguageRuntimeMessageCommOpen = LanguageRuntimeCommOpen;

@@ -5,14 +5,6 @@ import {
 } from '../internal/runtimeTypes';
 
 /**
- * Runtime message envelope with Positron-style queue metadata.
- */
-export interface RuntimeMessageEnvelope {
-    readonly event_clock: number;
-    readonly message: LanguageRuntimeMessage;
-}
-
-/**
  * Base queued runtime event.
  */
 export abstract class QueuedRuntimeEvent {
@@ -28,13 +20,14 @@ export abstract class QueuedRuntimeEvent {
 export class QueuedRuntimeMessageEvent extends QueuedRuntimeEvent {
     constructor(
         clock: number,
-        readonly envelope: RuntimeMessageEnvelope,
+        readonly handled: boolean,
+        readonly message: LanguageRuntimeMessage,
     ) {
         super(clock);
     }
 
     summary(): string {
-        const type = this.envelope.message.type as LanguageRuntimeMessageType;
+        const type = this.message.type as LanguageRuntimeMessageType;
         return `message:${type}`;
     }
 }

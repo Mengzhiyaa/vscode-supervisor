@@ -1,42 +1,18 @@
-import type {
+import {
     LanguageRuntimeOutput,
+    PositronOutputLocation,
     LanguageRuntimeResult,
     LanguageRuntimeUpdateOutput,
+    RuntimeOutputKind,
 } from '../internal/runtimeTypes';
-
-/**
- * Output kind classification for runtime messages.
- * (1:1 Positron RuntimeOutputKind)
- *
- * Used to classify Output/Result/UpdateOutput messages based on their
- * MIME content, enabling consumers (Console, Plots, Viewer) to filter
- * by kind rather than re-parsing MIME types themselves.
- */
-export enum RuntimeOutputKind {
-    /** Plain text output. */
-    Text = 'text',
-    /** Static image output (PNG/JPEG/SVG/etc.). */
-    StaticImage = 'static_image',
-    /** Inline HTML fragment output for the console. */
-    InlineHtml = 'inline_html',
-    /** Output intended for the Viewer pane. */
-    ViewerWidget = 'viewer_widget',
-    /** Output intended for the Plots pane. */
-    PlotWidget = 'plot',
-    /** Jupyter widget output. */
-    IPyWidget = 'ipywidget',
-    /** Webview preload/replay message. */
-    WebviewPreload = 'webview_preload',
-    /** Unrecognized output type. */
-    Unknown = 'unknown',
-}
+export { RuntimeOutputKind } from '../internal/runtimeTypes';
 
 /**
  * Message shape needed to infer output kind.
  */
 export interface RuntimeOutputMessageLike {
     data?: Record<string, unknown>;
-    output_location?: unknown;
+    output_location?: PositronOutputLocation;
 }
 
 const PreloadRules = [

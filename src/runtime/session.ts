@@ -54,9 +54,9 @@ import {
     QueuedRuntimeEvent,
     QueuedRuntimeMessageEvent,
     QueuedRuntimeStateEvent,
-    type RuntimeMessageEnvelope,
 } from './runtimeMessageEnvelope';
 import type { PlotRenderSettings } from './comms/positronPlotComm';
+import { ExtHostLanguageRuntimeSessionAdapter } from './extHostLanguageRuntimeSessionAdapter';
 
 export interface LanguageRuntimeStartupFailure {
     message: string;
@@ -176,6 +176,7 @@ export class RuntimeSession implements vscode.Disposable {
     private _state: RuntimeState = RuntimeState.Uninitialized;
     private _kernel: JupyterLanguageRuntimeSession | undefined;
     private _clientManager: RuntimeClientManager | undefined;
+    private _extHostRuntimeSessionAdapter: ExtHostLanguageRuntimeSessionAdapter | undefined;
     private _workingDirectory: string | undefined;
     private _pendingConsoleWidthInChars: number | undefined;
     private _applyingConsoleWidthPromise: Promise<void> | undefined;
@@ -421,7 +422,14 @@ export class RuntimeSession implements vscode.Disposable {
 
         // Create the RuntimeClientManager for Positron client (comm) management
         this._clientManager = new RuntimeClientManager(kernel, this._logChannel);
+        this._extHostRuntimeSessionAdapter = new ExtHostLanguageRuntimeSessionAdapter(
+            this,
+            kernel,
+            this._clientManager,
+            () => this.nextEventClock(),
+        );
         this._disposables.push(this._clientManager);
+        this._disposables.push(this._extHostRuntimeSessionAdapter);
         this._clientManagerEmitter.fire(this._clientManager);
 
         // Track previous state for state transition logging
@@ -435,8 +443,8 @@ export class RuntimeSession implements vscode.Disposable {
                 previousState = state;
                 this._state = state;
 
-                const tick = this._nextRuntimeEventClock();
-                this._addToEventQueue(new QueuedRuntimeStateEvent(tick, state));
+                const clock = this.nextEventClock();
+                this.emitState(clock, state);
 
                 // Ensure Positron clients when kernel reaches Ready.
                 // Do not trigger on every Idle transition; initializeClients() may
@@ -444,27 +452,6 @@ export class RuntimeSession implements vscode.Disposable {
                 if (state === RuntimeState.Ready) {
                     this._initializeClientsAsync();
                 }
-            })
-        );
-
-        this._disposables.push(
-            kernel.onDidReceiveRuntimeMessage((message) => {
-                // Positron-style logging: <<< RECV msg_type [channel]: content
-                const rawMessage = message as unknown as Record<string, unknown>;
-                const channel = typeof rawMessage.channel === 'string' ? rawMessage.channel : 'iopub';
-                const msgContent = JSON.stringify(rawMessage.data ?? message);
-                this.log(`<<< RECV ${message.type} [${channel}]: ${msgContent}`, vscode.LogLevel.Debug);
-
-                const runtimeMessage = message as LanguageRuntimeMessage;
-                const tick = this._nextRuntimeEventClock();
-                const envelope: RuntimeMessageEnvelope = {
-                    event_clock: tick,
-                    message: runtimeMessage,
-                };
-
-                this._addToEventQueue(
-                    new QueuedRuntimeMessageEvent(tick, envelope)
-                );
             })
         );
 
@@ -511,15 +498,29 @@ export class RuntimeSession implements vscode.Disposable {
     /**
      * Gets the next monotonically increasing runtime event clock value.
      */
-    private _nextRuntimeEventClock(): number {
+    nextEventClock(): number {
         this._nextEventClock += 1;
         return this._nextEventClock;
+    }
+
+    handleRuntimeMessage(message: LanguageRuntimeMessage, handled: boolean): void {
+        const event = new QueuedRuntimeMessageEvent(message.event_clock, handled, message);
+        this.addToEventQueue(event);
+    }
+
+    emitState(clock: number, state: RuntimeState): void {
+        const event = new QueuedRuntimeStateEvent(clock, state);
+        this.addToEventQueue(event);
+    }
+
+    emitRuntimeMessage<T extends LanguageRuntimeMessage>(message: T): boolean {
+        return this._extHostRuntimeSessionAdapter?.handleRuntimeMessage(message) ?? false;
     }
 
     /**
      * Adds an event to the runtime queue and processes/debounces queue delivery.
      */
-    private _addToEventQueue(event: QueuedRuntimeEvent): void {
+    private addToEventQueue(event: QueuedRuntimeEvent): void {
         const clock = event.clock;
 
         if (clock < this._eventClock) {
@@ -528,7 +529,7 @@ export class RuntimeSession implements vscode.Disposable {
                     `Received '${event.summary()}' at tick ${clock} while waiting for tick ${this._eventClock + 1}; emitting anyway`,
                     vscode.LogLevel.Warning
                 );
-                this._processRuntimeMessage(event.envelope.message);
+                this.processMessage(event.message);
             }
             return;
         }
@@ -536,7 +537,7 @@ export class RuntimeSession implements vscode.Disposable {
         this._eventQueue.push(event);
 
         if (clock === this._eventClock + 1 || this._eventClock === 0) {
-            this._processEventQueue();
+            this.processEventQueue();
         } else {
             this.log(
                 `Received '${event.summary()}' at tick ${clock} while waiting for tick ${this._eventClock + 1}; deferring`,
@@ -553,7 +554,7 @@ export class RuntimeSession implements vscode.Disposable {
                     'Processing runtime event queue after timeout; event ordering issues possible.',
                     vscode.LogLevel.Warning
                 );
-                this._processEventQueue();
+                this.processEventQueue();
             }, 250);
         }
     }
@@ -561,7 +562,7 @@ export class RuntimeSession implements vscode.Disposable {
     /**
      * Processes queued runtime events in event_clock order.
      */
-    private _processEventQueue(): void {
+    private processEventQueue(): void {
         if (this._eventQueueTimer) {
             clearTimeout(this._eventQueueTimer);
             this._eventQueueTimer = undefined;
@@ -577,7 +578,7 @@ export class RuntimeSession implements vscode.Disposable {
 
         this._eventQueue.forEach((event) => {
             this._eventClock = event.clock;
-            this._handleQueuedRuntimeEvent(event);
+            this.handleQueuedEvent(event);
         });
 
         this._eventQueue = [];
@@ -586,9 +587,11 @@ export class RuntimeSession implements vscode.Disposable {
     /**
      * Handles an individual queued runtime event.
      */
-    private _handleQueuedRuntimeEvent(event: QueuedRuntimeEvent): void {
+    private handleQueuedEvent(event: QueuedRuntimeEvent): void {
         if (event instanceof QueuedRuntimeMessageEvent) {
-            this._processRuntimeMessage(event.envelope.message);
+            if (!event.handled) {
+                this.processMessage(event.message);
+            }
             return;
         }
 
@@ -600,16 +603,8 @@ export class RuntimeSession implements vscode.Disposable {
     /**
      * Dispatches a runtime message to typed event emitters.
      * (1:1 Positron mainThreadLanguageRuntime.processMessage)
-     *
-     * Comm messages are pre-handled first; if handled, no typed event is fired.
      */
-    private _processRuntimeMessage(message: LanguageRuntimeMessage): void {
-        // Pre-handle comm messages (Positron pattern: handle after dequeue)
-        if (this._preHandleCommMessage(message)) {
-            return;
-        }
-
-        // Typed dispatch (1:1 Positron processMessage)
+    private processMessage(message: LanguageRuntimeMessage): void {
         switch (message.type) {
             case LanguageRuntimeMessageType.Stream:
                 this._onDidReceiveRuntimeMessageStreamEmitter.fire(message as LanguageRuntimeStream);
@@ -620,18 +615,12 @@ export class RuntimeSession implements vscode.Disposable {
             case LanguageRuntimeMessageType.Error:
                 this._onDidReceiveRuntimeMessageErrorEmitter.fire(message as LanguageRuntimeErrorMessage);
                 break;
-            case LanguageRuntimeMessageType.Output: {
-                const outputMsg = message as LanguageRuntimeOutput;
-                const kind = inferPositronOutputKind(outputMsg);
-                this._onDidReceiveRuntimeMessageOutputEmitter.fire({ ...outputMsg, kind });
+            case LanguageRuntimeMessageType.Output:
+                this.emitRuntimeMessageOutput(message as LanguageRuntimeOutput);
                 break;
-            }
-            case LanguageRuntimeMessageType.Result: {
-                const resultMsg = message as LanguageRuntimeResult;
-                const kind = inferPositronOutputKind(resultMsg);
-                this._onDidReceiveRuntimeMessageResultEmitter.fire({ ...resultMsg, kind });
+            case LanguageRuntimeMessageType.Result:
+                this.emitRuntimeMessageResult(message as LanguageRuntimeResult);
                 break;
-            }
             case LanguageRuntimeMessageType.State:
                 if (this._clientManager) {
                     this._clientManager.updatePendingRpcState(message as LanguageRuntimeState);
@@ -644,12 +633,21 @@ export class RuntimeSession implements vscode.Disposable {
             case LanguageRuntimeMessageType.ClearOutput:
                 this._onDidReceiveRuntimeMessageClearOutputEmitter.fire(message as LanguageRuntimeClearOutput);
                 break;
-            case LanguageRuntimeMessageType.UpdateOutput: {
-                const updateMsg = message as LanguageRuntimeUpdateOutput;
-                const kind = inferPositronOutputKind(updateMsg);
-                this._onDidReceiveRuntimeMessageUpdateOutputEmitter.fire({ ...updateMsg, kind });
+            case LanguageRuntimeMessageType.UpdateOutput:
+                this.emitRuntimeMessageUpdateOutput(message as LanguageRuntimeUpdateOutput);
                 break;
-            }
+            case LanguageRuntimeMessageType.CommOpen:
+                this._clientManager?.openClientInstance(message as LanguageRuntimeMessageCommOpen);
+                break;
+            case LanguageRuntimeMessageType.CommData:
+                this._clientManager?.emitDidReceiveClientMessage(message as LanguageRuntimeMessageCommData);
+                break;
+            case LanguageRuntimeMessageType.CommClosed:
+                this._clientManager?.emitClientState(
+                    (message as LanguageRuntimeMessageCommClosed).comm_id,
+                    RuntimeClientState.Closed
+                );
+                break;
             case LanguageRuntimeMessageType.DebugEvent:
                 this._onDidReceiveRuntimeMessageDebugEventEmitter.fire(message as LanguageRuntimeDebugEvent);
                 break;
@@ -657,6 +655,30 @@ export class RuntimeSession implements vscode.Disposable {
                 this._onDidReceiveRuntimeMessageDebugReplyEmitter.fire(message as LanguageRuntimeDebugReply);
                 break;
         }
+    }
+
+    private emitRuntimeMessageOutput(message: LanguageRuntimeOutput): void {
+        const outputMessage: LanguageRuntimeOutputWithKind = {
+            ...message,
+            kind: inferPositronOutputKind(message),
+        };
+        this._onDidReceiveRuntimeMessageOutputEmitter.fire(outputMessage);
+    }
+
+    private emitRuntimeMessageResult(message: LanguageRuntimeResult): void {
+        const resultMessage: LanguageRuntimeResultWithKind = {
+            ...message,
+            kind: inferPositronOutputKind(message),
+        };
+        this._onDidReceiveRuntimeMessageResultEmitter.fire(resultMessage);
+    }
+
+    private emitRuntimeMessageUpdateOutput(message: LanguageRuntimeUpdateOutput): void {
+        const updateMessage: LanguageRuntimeUpdateOutputWithKind = {
+            ...message,
+            kind: inferPositronOutputKind(message),
+        };
+        this._onDidReceiveRuntimeMessageUpdateOutputEmitter.fire(updateMessage);
     }
 
     /**
@@ -680,38 +702,6 @@ export class RuntimeSession implements vscode.Disposable {
             };
         } finally {
             uiComm.dispose();
-        }
-    }
-
-    /**
-     * Performs Positron-style pre-handling of comm messages in the runtime layer.
-     */
-    private _preHandleCommMessage(message: LanguageRuntimeMessage): boolean {
-        if (!this._clientManager) {
-            return false;
-        }
-
-        switch (message.type) {
-            case LanguageRuntimeMessageType.CommOpen:
-                return this._clientManager.openClientInstance(
-                    message as LanguageRuntimeMessageCommOpen
-                );
-
-            case LanguageRuntimeMessageType.CommData:
-                return this._clientManager.emitDidReceiveClientMessage(
-                    message as LanguageRuntimeMessageCommData
-                );
-
-            case LanguageRuntimeMessageType.CommClosed: {
-                const commClosedMessage = message as LanguageRuntimeMessageCommClosed;
-                return this._clientManager.emitClientState(
-                    commClosedMessage.comm_id,
-                    RuntimeClientState.Closed
-                );
-            }
-
-            default:
-                return false;
         }
     }
 
