@@ -21,6 +21,7 @@ export function createDataExplorerStores() {
         error: null,
         layout: PositronDataExplorerLayout.SummaryOnLeft,
         summaryCollapsed: false,
+        summaryWidth: 350,
         inNewWindow: false,
     });
 

@@ -13,6 +13,7 @@ export type { SearchSchemaSortOrder };
 export interface DataExplorerState {
     identifier: string;
     displayName: string;
+    languageName?: string;
     backendState: BackendState | null;
     schema: SchemaColumn[];
     isLoading: boolean;
@@ -23,6 +24,7 @@ export interface DataExplorerState {
     codeSyntaxes?: string[];
     layout?: PositronDataExplorerLayout;
     summaryCollapsed?: boolean;
+    summaryWidth?: number;
     inNewWindow?: boolean;
 }
 
@@ -84,7 +86,7 @@ export type ExtensionMessage =
     | { type: 'summaryCollapsedChanged'; collapsed: boolean }
     | { type: 'convertToCodePreview'; desiredSyntax: string; requestId: number; code: string; error?: string }
     | { type: 'initialize'; state: DataExplorerState }
-    | { type: 'metadata'; displayName: string; numRows: number; numColumns: number }
+    | { type: 'metadata'; displayName: string; numRows: number; numColumns: number; hasRowLabels?: boolean }
     | { type: 'schema'; columns: SchemaColumn[] }
     | { type: 'data'; startRow: number; endRow: number; columns: string[][]; columnIndices?: number[]; rowLabels?: string[]; schema?: SchemaColumn[]; totalRows?: number; totalColumns?: number }
     | { type: 'summarySchema'; columns: SchemaColumn[]; columnIndices: number[]; requestId?: number }

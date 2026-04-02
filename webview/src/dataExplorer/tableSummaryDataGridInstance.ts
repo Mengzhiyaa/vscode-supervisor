@@ -11,7 +11,7 @@ import {
     type RowDescriptor,
     type IDataColumn,
     type DataGridCellContent,
-} from '../dataGrid/dataGridInstance';
+} from '../dataGrid/classes/dataGridInstance';
 import { SimpleHoverManager } from '../dataGrid/classes/simpleHoverManager';
 import type { SchemaColumn, BackendState } from '../dataGrid/types';
 import type { DataExplorerStores } from './stores';
@@ -26,9 +26,8 @@ import {
     isObjectDisplayType,
     isStringDisplayType,
 } from './columnDisplayTypeUtils';
-import { matchesColumnSchemaSearch } from './columnSchemaUtils';
-import ColumnSummaryCell from './components/ColumnSummaryCell.svelte';
-import { TableSummaryCache } from './tableSummaryCache';
+import ColumnSummaryCell from './components/columnSummaryCell.svelte';
+import { TableSummaryCache } from './common/tableSummaryCache';
 
 /**
  * Constants.
@@ -50,9 +49,7 @@ const COLUMN_PROFILE_OBJECT_LINE_COUNT = 3;
 export class TableSummaryDataGridInstance extends DataGridInstance {
     //#region Private Properties
 
-    private _sourceColumns: SchemaColumn[] = [];
     private _visibleColumns: SchemaColumn[] = [];
-    private _schemaByIndex = new Map<number, SchemaColumn>();
     private _rows = 0;
     private _searchText = '';
     private _sortOption: SearchSchemaSortOrder = 'original';
@@ -118,6 +115,10 @@ export class TableSummaryDataGridInstance extends DataGridInstance {
 
         const initialState = get(this._stores.state).backendState;
         this._updateSupportedFeatures(initialState);
+        this._summaryCache.setDimensions(
+            initialState?.table_shape.num_columns ?? 0,
+            initialState?.table_shape.num_rows ?? 0,
+        );
         this._searchText = get(this._stores.summarySearchText);
         this._sortOption = get(this._stores.summarySortOrder);
 
@@ -218,7 +219,7 @@ export class TableSummaryDataGridInstance extends DataGridInstance {
             return undefined;
         }
 
-        const columnSchema = this._schemaByIndex.get(rowIndex);
+        const columnSchema = this._summaryCache.getColumnSchema(rowIndex);
         if (!columnSchema) {
             return undefined;
         }
@@ -247,9 +248,9 @@ export class TableSummaryDataGridInstance extends DataGridInstance {
         this._summaryCache.requestColumnProfiles(
             columnIndices,
             this._expandedColumns,
-            (columnIndex) => this._schemaByIndex.get(columnIndex),
             this._supportsColumnProfiles,
         );
+        this._summaryCache.scheduleProfileTrim(columnIndices);
     }
 
     protected async doSortData(): Promise<void> {
@@ -293,6 +294,10 @@ export class TableSummaryDataGridInstance extends DataGridInstance {
         );
 
         this._updateSupportedFeatures(nextState);
+        this._summaryCache.setDimensions(
+            nextState?.table_shape.num_columns ?? 0,
+            nextState?.table_shape.num_rows ?? 0,
+        );
 
         if (!nextState || !previousState) {
             return;
@@ -312,8 +317,7 @@ export class TableSummaryDataGridInstance extends DataGridInstance {
             previousSupportsProfiles !== this._supportsColumnProfiles;
 
         if (columnsChanged || searchSupportChanged) {
-            this._summaryCache.invalidateProfiles();
-            this._sourceColumns = [];
+            this._summaryCache.clear();
             this._applyVisibleColumns([]);
             this._initialSummaryLoaded = false;
             this._queueSearchRefresh();
@@ -336,8 +340,7 @@ export class TableSummaryDataGridInstance extends DataGridInstance {
     }
 
     handleSchemaUpdated(): void {
-        this._summaryCache.invalidateProfiles();
-        this._sourceColumns = [];
+        this._summaryCache.clear();
         this._applyVisibleColumns([]);
         this._initialSummaryLoaded = false;
         this._queueSearchRefresh();
@@ -369,15 +372,9 @@ export class TableSummaryDataGridInstance extends DataGridInstance {
             .map((columnIndex) => columnMap.get(columnIndex))
             .filter((column): column is SchemaColumn => Boolean(column));
 
-        this._sourceColumns = ordered;
         this._initialSummaryLoaded = true;
         this._pendingSearchRefresh = false;
-
-        if (this._supportsSearchSchema) {
-            this._applyVisibleColumns(ordered);
-        } else {
-            this._applyVisibleColumns(this._computeLocalVisibleColumns());
-        }
+        this._applyVisibleColumns(ordered);
     }
 
     handleColumnProfiles(
@@ -405,7 +402,7 @@ export class TableSummaryDataGridInstance extends DataGridInstance {
             return false;
         }
 
-        const schema = this._schemaByIndex.get(columnIndex);
+        const schema = this._summaryCache.getColumnSchema(columnIndex);
         if (!schema) {
             return false;
         }
@@ -435,7 +432,7 @@ export class TableSummaryDataGridInstance extends DataGridInstance {
     }
 
     getColumnSchema(columnIndex: number): SchemaColumn | undefined {
-        return this._schemaByIndex.get(columnIndex);
+        return this._summaryCache.getColumnSchema(columnIndex);
     }
 
     getColumnProfile(columnIndex: number) {
@@ -487,13 +484,7 @@ export class TableSummaryDataGridInstance extends DataGridInstance {
 
         this._searchText = searchText;
         this._stores.summarySearchText.set(searchText);
-
-        if (this._supportsSearchSchema) {
-            await this._requestSummarySchema();
-            return;
-        }
-
-        this._applyVisibleColumns(this._computeLocalVisibleColumns());
+        await this._requestSummarySchema();
     }
 
     async setSortOption(sortOption: SearchSchemaSortOrder): Promise<void> {
@@ -503,13 +494,7 @@ export class TableSummaryDataGridInstance extends DataGridInstance {
 
         this._sortOption = sortOption;
         this._stores.summarySortOrder.set(sortOption);
-
-        if (this._supportsSearchSchema) {
-            await this._requestSummarySchema();
-            return;
-        }
-
-        this._applyVisibleColumns(this._computeLocalVisibleColumns());
+        await this._requestSummarySchema();
     }
 
     //#endregion Public Methods
@@ -579,24 +564,14 @@ export class TableSummaryDataGridInstance extends DataGridInstance {
         }
 
         this._pinnedColumns = columns;
-
-        if (this._supportsSearchSchema) {
-            await this._requestSummarySchema();
-            return;
-        }
-
-        this._applyVisibleColumns(this._computeLocalVisibleColumns());
+        await this._requestSummarySchema();
     }
 
     private async _requestSummarySchema(force = false): Promise<void> {
+        void force;
+
         if (!this._visible) {
             this._pendingSearchRefresh = true;
-            return;
-        }
-
-        if (!this._supportsSearchSchema && !force && this._initialSummaryLoaded) {
-            this._pendingSearchRefresh = false;
-            this._applyVisibleColumns(this._computeLocalVisibleColumns());
             return;
         }
 
@@ -604,8 +579,8 @@ export class TableSummaryDataGridInstance extends DataGridInstance {
         this._activeSearchRequestId += 1;
         this._postMessage({
             type: 'searchSchema',
-            text: this._supportsSearchSchema ? this._searchText : '',
-            sortOrder: this._supportsSearchSchema ? this._sortOption : 'original',
+            text: this._searchText,
+            sortOrder: this._sortOption,
             pinnedColumns: [...this._pinnedColumns],
             requestId: this._activeSearchRequestId,
         });
@@ -629,9 +604,7 @@ export class TableSummaryDataGridInstance extends DataGridInstance {
 
     private _applyVisibleColumns(columns: SchemaColumn[]): void {
         this._visibleColumns = columns;
-        this._schemaByIndex = new Map(
-            columns.map((column) => [column.column_index, column]),
-        );
+        this._summaryCache.setSchema(columns);
         this._stores.summaryColumns.set(columns);
         this._updateLayoutEntries();
         this._resetScrollOffset();
@@ -640,64 +613,6 @@ export class TableSummaryDataGridInstance extends DataGridInstance {
         } else {
             this._pendingProfileRefresh = true;
         }
-    }
-
-    private _computeLocalVisibleColumns(): SchemaColumn[] {
-        let working = this._sourceColumns;
-
-        if (this._searchText.trim()) {
-            working = working.filter((column) =>
-                matchesColumnSchemaSearch(column, this._searchText),
-            );
-        }
-
-        if (this._sortOption !== 'original') {
-            const sortByName = (a: SchemaColumn, b: SchemaColumn) =>
-                a.column_name?.localeCompare(b.column_name ?? '', undefined, {
-                    sensitivity: 'base',
-                }) ?? 0;
-            const sortByType = (a: SchemaColumn, b: SchemaColumn) =>
-                getEffectiveColumnDisplayType(
-                    a.type_display,
-                    a.type_name,
-                ).localeCompare(
-                    getEffectiveColumnDisplayType(
-                        b.type_display,
-                        b.type_name,
-                    ),
-                    undefined,
-                    { sensitivity: 'base' },
-                ) ?? 0;
-            const sorted = [...working];
-            switch (this._sortOption) {
-                case 'ascending_name':
-                    sorted.sort(sortByName);
-                    break;
-                case 'descending_name':
-                    sorted.sort((a, b) => sortByName(b, a));
-                    break;
-                case 'ascending_type':
-                    sorted.sort(sortByType);
-                    break;
-                case 'descending_type':
-                    sorted.sort((a, b) => sortByType(b, a));
-                    break;
-            }
-            working = sorted;
-        }
-
-        if (!this._pinnedColumns.length) {
-            return working;
-        }
-
-        const pinnedSet = new Set(this._pinnedColumns);
-        const pinned = this._pinnedColumns
-            .map((index) =>
-                this._sourceColumns.find((column) => column.column_index === index),
-            )
-            .filter((column): column is SchemaColumn => Boolean(column));
-        const rest = working.filter((column) => !pinnedSet.has(column.column_index));
-        return [...pinned, ...rest];
     }
 
     private _updateLayoutEntries(): void {
@@ -748,7 +663,7 @@ export class TableSummaryDataGridInstance extends DataGridInstance {
     }
 
     private _expandedRowHeight(rowIndex: number): number {
-        const columnSchema = this._schemaByIndex.get(rowIndex);
+        const columnSchema = this._summaryCache.getColumnSchema(rowIndex);
         if (!columnSchema) {
             return SUMMARY_HEIGHT;
         }
@@ -834,6 +749,7 @@ export class TableSummaryDataGridInstance extends DataGridInstance {
         }
         this._disposables.length = 0;
         this._hoverManager.dispose();
+        this._summaryCache.dispose();
         super.dispose();
     }
 

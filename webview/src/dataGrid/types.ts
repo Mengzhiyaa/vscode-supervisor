@@ -25,8 +25,8 @@ export type {
     DataGridOptions,
     RowDescriptor,
     ViewportState,
-} from './dataGridInstance';
-export { CellSelectionState } from './dataGridInstance';
+} from './classes/dataGridInstance';
+export { CellSelectionState } from './classes/dataGridInstance';
 export type { IColumnSortKey } from './interfaces/columnSortKey';
 export type { IDataColumn } from './interfaces/dataColumn';
 

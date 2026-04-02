@@ -406,22 +406,23 @@ export class VariablesViewProvider extends BaseWebviewProvider {
         connection.onRequest('variables/view', async (params: { name?: string; path?: string[]; sessionId?: string }) => {
             const targetPath = params.path ?? (params.name ? [params.name] : []);
             if (targetPath.length === 0) {
-                return;
+                return undefined;
             }
 
             const sessionId = this._resolveSessionId(params.sessionId);
             if (!sessionId) {
-                return;
+                return undefined;
             }
             const instance = this._variablesService.getVariablesInstance(sessionId);
             if (!instance) {
-                return;
+                return undefined;
             }
 
             try {
-                await instance.view(targetPath);
+                return await instance.view(targetPath);
             } catch (e) {
                 this.log(`Failed to open variable viewer: ${e}`, vscode.LogLevel.Warning);
+                return undefined;
             }
         });
     }

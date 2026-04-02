@@ -101,7 +101,7 @@ export interface VariablesClientInstance {
     delete(names: string[]): Promise<string[]>;
     inspect(path: string[]): Promise<InspectedVariable>;
     clipboardFormat(path: string[], format: string): Promise<string>;
-    view(path: string[]): Promise<void>;
+    view(path: string[]): Promise<string | undefined>;
 }
 
 /**
@@ -134,7 +134,7 @@ export interface IPositronVariablesInstance extends vscode.Disposable {
     list(): Promise<Variable[]>;
     inspect(path: string[]): Promise<InspectedVariable>;
     clipboardFormat(path: string[], format: string): Promise<string>;
-    view(path: string[]): Promise<void>;
+    view(path: string[]): Promise<string | undefined>;
     getClientInstance(): VariablesClientInstance | undefined;
 }
 

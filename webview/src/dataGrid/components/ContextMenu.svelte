@@ -4,7 +4,7 @@
 -->
 <script lang="ts">
     import { onMount } from "svelte";
-    import type { DataGridContextMenuItem } from "../dataGridInstance";
+    import type { DataGridContextMenuItem } from "../classes/dataGridInstance";
 
     export type ContextMenuItem = DataGridContextMenuItem;
 

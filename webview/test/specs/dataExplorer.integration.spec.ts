@@ -147,6 +147,58 @@ test('data explorer initializes, renders schema, and requests visible data', asy
     await expect(page.locator('.status-bar')).toContainText('2');
 });
 
+test('data explorer renders row-label placeholders until row labels are cached', async ({ page }) => {
+    const backend = await openWebviewPage(page, 'dataExplorer');
+    await expect(page.locator('.positron-data-explorer')).toBeVisible({ timeout: 15_000 });
+    await expect
+        .poll(() => backend.notificationCount(DataExplorerMethods.ready), {
+            timeout: 15_000,
+        })
+        .toBeGreaterThan(0);
+
+    await backend.notify(DataExplorerMethods.initialize, {
+        identifier: 'fixture-table',
+        displayName: 'Fixture Table',
+        backendState: createDataExplorerBackendState({
+            table_shape: { num_rows: 12, num_columns: 2 },
+            table_unfiltered_shape: { num_rows: 12, num_columns: 2 },
+            has_row_labels: true,
+        }),
+    });
+    await backend.notify(DataExplorerMethods.schema, {
+        columns: [
+            createDataExplorerSchemaColumn({
+                column_name: 'id',
+                column_index: 0,
+                type_name: 'INTEGER',
+                type_display: 'integer',
+            }),
+            createDataExplorerSchemaColumn({
+                column_name: 'species',
+                column_index: 1,
+                type_name: 'VARCHAR',
+                type_display: 'string',
+            }),
+        ],
+    });
+
+    const firstRowHeader = page.locator('.data-grid-row-header[data-row-index="0"]');
+    await expect(firstRowHeader).toContainText('...');
+
+    await backend.notify(DataExplorerMethods.data, {
+        startRow: 0,
+        endRow: 50,
+        columnIndices: [0, 1],
+        rowLabels: ['iris_1', 'iris_2', 'iris_3'],
+        columns: [
+            ['1', '2', '3'],
+            ['setosa', 'versicolor', 'virginica'],
+        ],
+    });
+
+    await expect(firstRowHeader).toContainText('iris_1');
+});
+
 test('data explorer sends toolbar and schema-expansion notifications', async ({ page }) => {
     const backend = await openWebviewPage(page, 'dataExplorer');
     await expect(page.locator('.positron-data-explorer')).toBeVisible({ timeout: 15_000 });
@@ -635,7 +687,10 @@ test('data explorer requests summary schema and column profiles from summary int
     });
 
     const profileRequest = backend.waitForNextNotification(DataExplorerMethods.requestColumnProfiles);
-    await page.locator('.summary-panel [title="Expand"]').first().click();
+    const summaryToggleButton = page
+        .locator('.column-summary .expand-collapse-button')
+        .first();
+    await summaryToggleButton.click();
     const expandedProfileRequest = await profileRequest;
     expect(expandedProfileRequest.params).toMatchObject({
         type: 'requestColumnProfiles',
@@ -658,6 +713,15 @@ test('data explorer requests summary schema and column profiles from summary int
         ],
         requestId: (expandedProfileRequest.params as { requestId?: number }).requestId,
     });
+
+    const requestCountAfterExpanded = backend.notificationCount(
+        DataExplorerMethods.requestColumnProfiles,
+    );
+    await summaryToggleButton.click();
+    await summaryToggleButton.click();
+    await expect
+        .poll(() => backend.notificationCount(DataExplorerMethods.requestColumnProfiles))
+        .toBe(requestCountAfterExpanded);
 });
 
 test('data explorer adds, updates, removes, and clears row filters through the UI', async ({ page }) => {

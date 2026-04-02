@@ -308,8 +308,8 @@ export class VariablesClientInstance implements vscode.Disposable {
      * Request a viewer for a variable.
      * Alias for comm.view().
      */
-    async view(path: string[]): Promise<void> {
-        await this._comm.view(path);
+    async view(path: string[]): Promise<string | undefined> {
+        return await this._comm.view(path);
     }
 
     /**

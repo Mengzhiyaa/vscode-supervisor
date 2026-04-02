@@ -327,13 +327,13 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
         );
     }
 
-    async view(path: string[]): Promise<void> {
+    async view(path: string[]): Promise<string | undefined> {
         if (!this._variablesClient) {
             this._warnMissingClient('view');
-            return;
+            return undefined;
         }
 
-        await this._runWithClientRequest(() => this._variablesClient!.view(path));
+        return this._runWithClientRequest(() => this._variablesClient!.view(path));
     }
 
     getClientInstance(): VariablesClientInstance | undefined { return this._variablesClient; }

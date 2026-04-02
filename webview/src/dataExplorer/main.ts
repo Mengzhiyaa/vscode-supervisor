@@ -4,11 +4,11 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { mount } from 'svelte';
-import DataExplorer from './DataExplorer.svelte';
+import PositronDataExplorer from './positronDataExplorer.svelte';
 import './styles.css';
 
 // Mount the Data Explorer component using Svelte 5 API
-const app = mount(DataExplorer, {
+const app = mount(PositronDataExplorer, {
     target: document.getElementById('app') || document.body
 });
 

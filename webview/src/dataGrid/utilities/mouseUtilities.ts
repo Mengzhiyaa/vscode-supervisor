@@ -2,7 +2,7 @@
  *  Mouse Utilities - Port from Positron's mouseUtilities
  *--------------------------------------------------------------------------------------------*/
 
-import { MouseSelectionType } from '../dataGridInstance';
+import { MouseSelectionType } from '../classes/dataGridInstance';
 
 const isMacintosh =
     typeof navigator !== 'undefined' &&
@@ -22,4 +22,3 @@ export const selectionType = (event: MouseEvent): MouseSelectionType => {
 
     return MouseSelectionType.Single;
 };
-

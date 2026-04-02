@@ -29,9 +29,13 @@ import { PositronHelpService } from './services/help';
 import { PositronPlotsService } from './runtime/positronPlotsService';
 import { PlotEditorProvider, PlotsGalleryEditorProvider } from './editor';
 import { registerConsoleActions } from './services/console/consoleActions';
-import { DataExplorerService, DataExplorerEditorProvider, DataExplorerCustomEditorProvider } from './services/dataExplorer';
+import {
+    PositronDataExplorerService,
+    PositronDataExplorerEditorProvider,
+    PositronDataExplorerCustomEditorProvider,
+} from './services/dataExplorer';
 import { DuckDBInstance } from './services/duckdb/duckdbInstance';
-import { DataExplorerCommandId } from './services/dataExplorer/dataExplorerEditorProvider';
+import { PositronDataExplorerCommandId } from './services/dataExplorer/positronDataExplorerActions';
 import { CoreCommandIds, ContextKeys, InternalCommandIds, TestCommandIds } from './coreCommandIds';
 import { UiFrontendEvent } from './runtime/comms/positronUiComm';
 import {
@@ -149,8 +153,8 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
     private readonly _plotsGalleryEditorProvider: PlotsGalleryEditorProvider;
 
     // Data Explorer service (1:1 Positron pattern)
-    private readonly _dataExplorerService: DataExplorerService;
-    private readonly _dataExplorerEditorProvider: DataExplorerEditorProvider;
+    private readonly _positronDataExplorerService: PositronDataExplorerService;
+    private readonly _positronDataExplorerEditorProvider: PositronDataExplorerEditorProvider;
     private readonly _sessionLifecycleWiredIds = new Set<string>();
 
     constructor(
@@ -225,29 +229,29 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
         this._disposables.push(this._plotEditorProvider);
 
         // Initialize Data Explorer service and editor provider
-        this._dataExplorerService = new DataExplorerService(this._sessionManager, this._outputChannel);
-        this._disposables.push(this._dataExplorerService);
+        this._positronDataExplorerService = new PositronDataExplorerService(this._sessionManager, this._outputChannel);
+        this._disposables.push(this._positronDataExplorerService);
 
         // Data Explorer editor provider (opens in editor area as tabs)
-        this._dataExplorerEditorProvider = new DataExplorerEditorProvider(
+        this._positronDataExplorerEditorProvider = new PositronDataExplorerEditorProvider(
             this._context.extensionUri,
-            this._dataExplorerService,
+            this._positronDataExplorerService,
             this._outputChannel,
             () => this._getLanguageWebviewLocalResourceRoots(),
             (webview) => this._getLanguageMonacoSupportModuleUris(webview),
             (webview) => this._getLanguageTextMateGrammarDefinitions(webview),
         );
-        this._disposables.push(this._dataExplorerEditorProvider);
+        this._disposables.push(this._positronDataExplorerEditorProvider);
 
         // Custom editor provider (enables "Reopen With → Data Explorer" for data files)
-        const dataExplorerCustomEditorProvider = new DataExplorerCustomEditorProvider(
-            this._dataExplorerService,
-            this._dataExplorerEditorProvider,
+        const dataExplorerCustomEditorProvider = new PositronDataExplorerCustomEditorProvider(
+            this._positronDataExplorerService,
+            this._positronDataExplorerEditorProvider,
             this._outputChannel
         );
         this._disposables.push(
             vscode.window.registerCustomEditorProvider(
-                DataExplorerCustomEditorProvider.viewType,
+                PositronDataExplorerCustomEditorProvider.viewType,
                 dataExplorerCustomEditorProvider,
                 { supportsMultipleEditorsPerDocument: false }
             )
@@ -987,7 +991,7 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
         this._plotsService.initialize(this._sessionManager);
         this._previewService.initialize();
         this._helpService.initialize();
-        this._dataExplorerService.initialize();
+        this._positronDataExplorerService.initialize();
 
         // Pre-initialize DuckDB-WASM engine so it's ready when a file is opened.
         // Fire-and-forget: failure here is non-fatal (DuckDB will retry on first use).
@@ -1275,82 +1279,82 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
         // Data Explorer command aliases (keep command surface explicit in app registrations).
         this._disposables.push(
             vscode.commands.registerCommand(CoreCommandIds.dataExplorerCopy, () =>
-                vscode.commands.executeCommand(DataExplorerCommandId.Copy)
+                vscode.commands.executeCommand(PositronDataExplorerCommandId.Copy)
             )
         );
         this._disposables.push(
             vscode.commands.registerCommand(CoreCommandIds.dataExplorerCopyTableData, () =>
-                vscode.commands.executeCommand(DataExplorerCommandId.CopyTableData)
+                vscode.commands.executeCommand(PositronDataExplorerCommandId.CopyTableData)
             )
         );
         this._disposables.push(
             vscode.commands.registerCommand(CoreCommandIds.dataExplorerCollapseSummary, () =>
-                vscode.commands.executeCommand(DataExplorerCommandId.CollapseSummary)
+                vscode.commands.executeCommand(PositronDataExplorerCommandId.CollapseSummary)
             )
         );
         this._disposables.push(
             vscode.commands.registerCommand(CoreCommandIds.dataExplorerExpandSummary, () =>
-                vscode.commands.executeCommand(DataExplorerCommandId.ExpandSummary)
+                vscode.commands.executeCommand(PositronDataExplorerCommandId.ExpandSummary)
             )
         );
         this._disposables.push(
             vscode.commands.registerCommand(CoreCommandIds.dataExplorerSummaryOnLeft, () =>
-                vscode.commands.executeCommand(DataExplorerCommandId.SummaryOnLeft)
+                vscode.commands.executeCommand(PositronDataExplorerCommandId.SummaryOnLeft)
             )
         );
         this._disposables.push(
             vscode.commands.registerCommand(CoreCommandIds.dataExplorerSummaryOnRight, () =>
-                vscode.commands.executeCommand(DataExplorerCommandId.SummaryOnRight)
+                vscode.commands.executeCommand(PositronDataExplorerCommandId.SummaryOnRight)
             )
         );
         this._disposables.push(
             vscode.commands.registerCommand(CoreCommandIds.dataExplorerSummaryOnLeftActive, () =>
-                vscode.commands.executeCommand(DataExplorerCommandId.SummaryOnLeft)
+                vscode.commands.executeCommand(PositronDataExplorerCommandId.SummaryOnLeft)
             )
         );
         this._disposables.push(
             vscode.commands.registerCommand(CoreCommandIds.dataExplorerSummaryOnRightActive, () =>
-                vscode.commands.executeCommand(DataExplorerCommandId.SummaryOnRight)
+                vscode.commands.executeCommand(PositronDataExplorerCommandId.SummaryOnRight)
             )
         );
         this._disposables.push(
             vscode.commands.registerCommand(CoreCommandIds.dataExplorerClearColumnSorting, () =>
-                vscode.commands.executeCommand(DataExplorerCommandId.ClearColumnSorting)
+                vscode.commands.executeCommand(PositronDataExplorerCommandId.ClearColumnSorting)
             )
         );
         this._disposables.push(
             vscode.commands.registerCommand(CoreCommandIds.dataExplorerConvertToCode, () =>
-                vscode.commands.executeCommand(DataExplorerCommandId.ConvertToCode)
+                vscode.commands.executeCommand(PositronDataExplorerCommandId.ConvertToCode)
             )
         );
         this._disposables.push(
             vscode.commands.registerCommand(CoreCommandIds.dataExplorerOpenAsPlaintext, () =>
-                vscode.commands.executeCommand(DataExplorerCommandId.OpenAsPlaintext)
+                vscode.commands.executeCommand(PositronDataExplorerCommandId.OpenAsPlaintext)
             )
         );
         this._disposables.push(
             vscode.commands.registerCommand(CoreCommandIds.dataExplorerToggleFileOptions, () =>
-                vscode.commands.executeCommand(DataExplorerCommandId.ToggleFileOptions)
+                vscode.commands.executeCommand(PositronDataExplorerCommandId.ToggleFileOptions)
             )
         );
         this._disposables.push(
             vscode.commands.registerCommand(CoreCommandIds.dataExplorerMoveToNewWindow, () =>
-                vscode.commands.executeCommand(DataExplorerCommandId.MoveToNewWindow)
+                vscode.commands.executeCommand(PositronDataExplorerCommandId.MoveToNewWindow)
             )
         );
         this._disposables.push(
             vscode.commands.registerCommand(CoreCommandIds.dataExplorerShowColumnContextMenu, () =>
-                vscode.commands.executeCommand(DataExplorerCommandId.ShowColumnContextMenu)
+                vscode.commands.executeCommand(PositronDataExplorerCommandId.ShowColumnContextMenu)
             )
         );
         this._disposables.push(
             vscode.commands.registerCommand(CoreCommandIds.dataExplorerShowRowContextMenu, () =>
-                vscode.commands.executeCommand(DataExplorerCommandId.ShowRowContextMenu)
+                vscode.commands.executeCommand(PositronDataExplorerCommandId.ShowRowContextMenu)
             )
         );
         this._disposables.push(
             vscode.commands.registerCommand(CoreCommandIds.dataExplorerShowCellContextMenu, () =>
-                vscode.commands.executeCommand(DataExplorerCommandId.ShowCellContextMenu)
+                vscode.commands.executeCommand(PositronDataExplorerCommandId.ShowCellContextMenu)
             )
         );
 
@@ -1374,7 +1378,7 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
                 }
 
                 try {
-                    await this._dataExplorerService.openWithDuckDB(uri);
+                    await this._positronDataExplorerService.openWithDuckDB(uri);
                 } catch (error) {
                     this._outputChannel.error(`[DuckDB] Failed to open file: ${error}`);
                     vscode.window.showErrorMessage(`Failed to open file in Data Explorer: ${error}`);

@@ -2,7 +2,7 @@
  *  SimpleHoverManager - lightweight hover manager for DataGrid tooltips
  *--------------------------------------------------------------------------------------------*/
 
-import type { DataGridHoverManager } from '../dataGridInstance';
+import type { DataGridHoverManager } from './dataGridInstance';
 
 let sharedTooltip: HTMLDivElement | undefined;
 const INSTANT_HOVER_TIME_LIMIT = 200;

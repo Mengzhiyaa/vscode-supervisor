@@ -410,9 +410,10 @@ export async function ensureBinaries(
         }
 
         if (expectedVersion && installedVersion !== expectedVersion) {
-            // Binary exists but version mismatch — needs update
-            missing.push(name);
-            log.info(`[BinaryManager] ${name} version mismatch: installed=${installedVersion ?? 'unknown'}, expected=${expectedVersion}`);
+            // Binary exists but version mismatch — log but do NOT re-download.
+            // The existing binary is functional; forcing a download risks 404s
+            // when the expected release has not been published yet.
+            log.info(`[BinaryManager] ${name} version mismatch: installed=${installedVersion ?? 'unknown'}, expected=${expectedVersion} (keeping existing)`);
         }
     }
 

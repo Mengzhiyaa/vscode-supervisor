@@ -31,6 +31,7 @@ const MIME_TYPE_TEXT_HTML = 'text/html';
 const MIME_TYPE_TEXT_MARKDOWN = 'text/markdown';
 const MIME_TYPE_POSITRON_PLOT = 'application/vnd.positron.plot+json';
 const MIME_TYPE_POSITRON_VIEWER = 'application/vnd.positron.viewer+json';
+const MIME_TYPE_POSITRON_DATA_EXPLORER = 'application/vnd.positron.dataExplorer+json';
 const MIME_TYPE_WIDGET_STATE = 'application/vnd.jupyter.widget-state+json';
 const MIME_TYPE_WIDGET_VIEW = 'application/vnd.jupyter.widget-view+json';
 const MIME_TYPE_HOLOVIEWS_LOAD = 'application/vnd.holoviews_load.v0+json';
@@ -124,6 +125,10 @@ export function inferPositronOutputKind(message: RuntimeOutputMessageLike): Runt
 
     // Explicit Positron/Jupyter rich-output MIME kinds.
     if (mimeTypes.includes(MIME_TYPE_POSITRON_VIEWER)) {
+        return RuntimeOutputKind.ViewerWidget;
+    }
+
+    if (mimeTypes.includes(MIME_TYPE_POSITRON_DATA_EXPLORER)) {
         return RuntimeOutputKind.ViewerWidget;
     }
 
