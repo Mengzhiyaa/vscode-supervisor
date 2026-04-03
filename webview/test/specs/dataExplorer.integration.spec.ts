@@ -228,7 +228,7 @@ test('data explorer sends toolbar and schema-expansion notifications', async ({ 
 
     const clearSort = backend.waitForNextNotification(DataExplorerMethods.clearSort);
     await page.getByLabel('Clear sorting').click();
-    expect((await clearSort).params).toEqual({});
+    expect((await clearSort).params).toEqual({ type: 'clearSort' });
 
     const setLayout = backend.waitForNextNotification(DataExplorerMethods.setLayout);
     await page.getByLabel('Change layout').click();
@@ -262,7 +262,7 @@ test('data explorer notifies summary collapse changes from the splitter control'
 
     await initializeExplorerFixture(backend);
     const splitterButton = page.locator('.expand-collapse-button');
-    await expect.poll(() => splitterButton.getAttribute('aria-label')).toBe('Collapse Summary');
+    await expect.poll(() => splitterButton.getAttribute('aria-label')).toBe('Collapse summary');
 
     const collapseSummary = backend.waitForNextNotification(DataExplorerMethods.setSummaryCollapsed);
     await splitterButton.focus();
@@ -271,7 +271,7 @@ test('data explorer notifies summary collapse changes from the splitter control'
         type: 'setSummaryCollapsed',
         collapsed: true,
     });
-    await expect.poll(() => splitterButton.getAttribute('aria-label')).toBe('Expand Summary');
+    await expect.poll(() => splitterButton.getAttribute('aria-label')).toBe('Expand summary');
     await expect.poll(async () => {
         const state = await backend.getState<{
             dataExplorerPanel?: { isSummaryCollapsed?: boolean };
@@ -285,7 +285,7 @@ test('data explorer notifies summary collapse changes from the splitter control'
         type: 'setSummaryCollapsed',
         collapsed: false,
     });
-    await expect.poll(() => splitterButton.getAttribute('aria-label')).toBe('Collapse Summary');
+    await expect.poll(() => splitterButton.getAttribute('aria-label')).toBe('Collapse summary');
     await expect.poll(async () => {
         const state = await backend.getState<{
             dataExplorerPanel?: { isSummaryCollapsed?: boolean };
@@ -478,7 +478,7 @@ test('data explorer syncs panel state, metadata, status indicators, and closed o
         }>();
         return state?.dataExplorerPanel?.isSummaryCollapsed;
     }).toBe(true);
-    await expect(page.getByLabel('Expand Summary')).toBeVisible();
+    await expect(page.getByLabel('Expand summary')).toBeVisible();
 
     await backend.notify(DataExplorerMethods.metadata, {
         displayName: 'Updated Table',

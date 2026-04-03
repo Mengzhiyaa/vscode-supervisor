@@ -1,14 +1,14 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { type LanguageRuntimeMetadata } from '../api';
-import { Barrier } from '../supervisor/async';
 import {
     type IPositronNewFolderService,
     type IPositronNewFolderTaskOptions,
+    type LanguageRuntimeMetadata,
     type NewFolderConfiguration,
     NewFolderStartupPhase,
-    POSITRON_NEW_FOLDER_CONFIG_STORAGE_KEY,
-} from './positronNewFolder';
+} from '../api';
+import { Barrier } from '../supervisor/async';
+import { POSITRON_NEW_FOLDER_CONFIG_STORAGE_KEY } from './positronNewFolder';
 
 interface IPositronNewFolderTaskRegistration {
     readonly id: number;

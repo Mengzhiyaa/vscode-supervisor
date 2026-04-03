@@ -1,18 +1,124 @@
 import * as vscode from 'vscode';
-import type { LanguageRuntimeExit } from './internal/runtimeTypes';
-import type { IPositronNewFolderService } from './newFolder/positronNewFolder';
-import { RuntimeExitReason, RuntimeStartMode, RuntimeState } from './internal/runtimeTypes';
-import { RuntimeStartupPhase } from './shared/runtime';
 
-export type { LanguageRuntimeExit } from './internal/runtimeTypes';
-export { RuntimeExitReason, RuntimeStartMode, RuntimeState } from './internal/runtimeTypes';
-export { RuntimeStartupPhase } from './shared/runtime';
-export { NewFolderStartupPhase } from './newFolder/positronNewFolder';
-export type {
-    NewFolderConfiguration,
-    IPositronNewFolderService,
-    IPositronNewFolderTaskOptions,
-} from './newFolder/positronNewFolder';
+// ===== Types formerly in internal/runtimeTypes.ts =====
+
+export enum RuntimeState {
+    Uninitialized = 'uninitialized',
+    Initializing = 'initializing',
+    Starting = 'starting',
+    Ready = 'ready',
+    Idle = 'idle',
+    Busy = 'busy',
+    Restarting = 'restarting',
+    Exiting = 'exiting',
+    Exited = 'exited',
+    Offline = 'offline',
+    Interrupting = 'interrupting',
+}
+
+export enum RuntimeExitReason {
+    Unknown = 'unknown',
+    Shutdown = 'shutdown',
+    ForcedQuit = 'forcedQuit',
+    Restart = 'restart',
+    Error = 'error',
+    StartupFailed = 'startupFailed',
+    SwitchRuntime = 'switchRuntime',
+    ExtensionHost = 'extensionHost',
+    Transferred = 'transferred',
+}
+
+export enum RuntimeStartMode {
+    Starting = 'starting',
+    Restarting = 'restarting',
+    Reconnecting = 'reconnecting',
+    Switching = 'switching',
+}
+
+export interface LanguageRuntimeExit {
+    runtime_name: string;
+    session_name?: string;
+    exit_code: number;
+    reason: RuntimeExitReason;
+    message: string;
+}
+
+// ===== Types formerly in shared/runtime.ts =====
+
+import { RuntimeStartupPhase } from './shared/runtimeStartupPhase';
+export { RuntimeStartupPhase } from './shared/runtimeStartupPhase';
+
+// ===== Types formerly in newFolder/positronNewFolder.ts =====
+
+export enum NewFolderStartupPhase {
+    Initializing = 'initializing',
+    ApplyLayout = 'applyLayout',
+    AwaitingTrust = 'awaitingTrust',
+    CreatingFolder = 'creatingFolder',
+    RuntimeStartup = 'runtimeStartup',
+    PostInitialization = 'postInitialization',
+    Complete = 'complete',
+}
+
+/**
+ * Read-only view of a {@link Barrier} for the public API surface.
+ * Consumers can query whether it is open and wait for it, but cannot open it.
+ */
+export interface BarrierLike {
+    isOpen(): boolean;
+    wait(): Promise<boolean>;
+}
+
+export interface NewFolderConfiguration {
+    readonly folderScheme?: string;
+    readonly folderAuthority?: string;
+    readonly runtimeMetadata?: LanguageRuntimeMetadata;
+    readonly folderTemplate?: string;
+    readonly folderPath?: string;
+    readonly folderName?: string;
+    readonly initGitRepo?: boolean;
+    readonly createPyprojectToml?: boolean;
+    readonly pythonEnvProviderId?: string;
+    readonly pythonEnvProviderName?: string;
+    readonly pythonEnvName?: string;
+    readonly installIpykernel?: boolean;
+    readonly condaPythonVersion?: string;
+    readonly uvPythonVersion?: string;
+    readonly useRenv?: boolean;
+    readonly openInNewWindow?: boolean;
+}
+
+export interface IPositronNewFolderTaskOptions {
+    readonly label?: string;
+    readonly runtimeMetadata?: LanguageRuntimeMetadata;
+}
+
+export interface IPositronNewFolderService extends vscode.Disposable {
+    readonly onDidChangeNewFolderStartupPhase: vscode.Event<NewFolderStartupPhase>;
+    readonly startupPhase: NewFolderStartupPhase;
+    readonly onDidChangePendingInitTasks: vscode.Event<Set<string>>;
+    readonly onDidChangePostInitTasks: vscode.Event<Set<string>>;
+    readonly pendingInitTasks: Set<string>;
+    readonly pendingPostInitTasks: Set<string>;
+    readonly initTasksComplete: BarrierLike;
+    readonly postInitTasksComplete: BarrierLike;
+    readonly newFolderRuntimeMetadata: LanguageRuntimeMetadata | undefined;
+    storeNewFolderConfig(newFolderConfig: NewFolderConfiguration): Promise<void>;
+    clearNewFolderConfig(): Promise<void>;
+    initNewFolder(): Promise<void>;
+    completeRuntimeStartup(): Promise<void>;
+    isCurrentWindowNewFolder(): boolean;
+    registerInitTask(
+        task: Promise<void> | (() => Promise<void>),
+        options?: IPositronNewFolderTaskOptions,
+    ): vscode.Disposable;
+    registerPostInitTask(
+        task: Promise<void> | (() => Promise<void>),
+        options?: IPositronNewFolderTaskOptions,
+    ): vscode.Disposable;
+}
+
+// ===== Original api.ts types =====
 
 export enum LanguageRuntimeSessionMode {
     Console = 'console',

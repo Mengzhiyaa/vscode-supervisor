@@ -1,12 +1,5 @@
-export enum RuntimeStartupPhase {
-    Initializing = 'initializing',
-    AwaitingTrust = 'awaitingTrust',
-    Reconnecting = 'reconnecting',
-    NewFolderTasks = 'newFolderTasks',
-    Starting = 'starting',
-    Discovering = 'discovering',
-    Complete = 'complete',
-}
+import { RuntimeStartupPhase } from './runtimeStartupPhase';
+export { RuntimeStartupPhase } from './runtimeStartupPhase';
 
 export type RuntimeStartupPhaseValue = `${RuntimeStartupPhase}`;
 

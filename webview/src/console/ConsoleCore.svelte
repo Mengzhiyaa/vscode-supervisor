@@ -116,6 +116,7 @@
     let sessions = $state<SessionInfo[]>([]);
     let activeConsoleSessionId = $state<string | undefined>();
     let pendingForegroundSessionId = $state<string | undefined>();
+    let userSelectedForegroundSessionId = $state<string | undefined>();
     let sessionDataMap = $state(new Map<string, SessionData>());
     const sessionSyncSeqMap = new Map<string, number>();
     const pendingFullStateRequests = new Set<string>();
@@ -261,21 +262,23 @@
         }
 
         if (
-            previousForegroundSessionId &&
-            nextSessions.some(
-                (session) => session.id === previousForegroundSessionId,
-            )
-        ) {
-            return previousForegroundSessionId;
-        }
-
-        if (
             requestedForegroundSessionId &&
             nextSessions.some(
                 (session) => session.id === requestedForegroundSessionId,
             )
         ) {
             return requestedForegroundSessionId;
+        }
+
+        // The backend foreground session is the fallback when there is no
+        // local tab selection to preserve.
+        if (
+            previousForegroundSessionId &&
+            nextSessions.some(
+                (session) => session.id === previousForegroundSessionId,
+            )
+        ) {
+            return previousForegroundSessionId;
         }
 
         return nextSessions[0]?.id;
@@ -350,6 +353,13 @@
             !remainingSessionIds.has(pendingForegroundSessionId)
         ) {
             pendingForegroundSessionId = undefined;
+        }
+
+        if (
+            userSelectedForegroundSessionId &&
+            !remainingSessionIds.has(userSelectedForegroundSessionId)
+        ) {
+            userSelectedForegroundSessionId = undefined;
         }
     }
 
@@ -427,6 +437,27 @@
 
         if (pendingForegroundSessionId && !hasPendingForegroundSession) {
             pendingForegroundSessionId = undefined;
+        }
+
+        const hasUserSelectedForegroundSession =
+            userSelectedForegroundSessionId &&
+            nextSessions.some(
+                (session) => session.id === userSelectedForegroundSessionId,
+            );
+
+        if (
+            userSelectedForegroundSessionId &&
+            !hasUserSelectedForegroundSession
+        ) {
+            userSelectedForegroundSessionId = undefined;
+        }
+
+        if (
+            userSelectedForegroundSessionId &&
+            hasUserSelectedForegroundSession
+        ) {
+            activeConsoleSessionId = userSelectedForegroundSessionId;
+            return;
         }
 
         activeConsoleSessionId = resolveForegroundConsoleSessionId(
@@ -1895,10 +1926,13 @@
         if (!connection) return;
 
         const previousForegroundSessionId = activeConsoleSessionId;
+        const previousUserSelectedForegroundSessionId =
+            userSelectedForegroundSessionId;
         const switchNonce = ++sessionSwitchNonce;
 
         if (optimistic) {
             pendingForegroundSessionId = sessionId;
+            userSelectedForegroundSessionId = sessionId;
             activeConsoleSessionId = sessionId;
         }
 
@@ -1912,6 +1946,8 @@
                 pendingForegroundSessionId === sessionId
             ) {
                 pendingForegroundSessionId = undefined;
+                userSelectedForegroundSessionId =
+                    previousUserSelectedForegroundSessionId;
                 activeConsoleSessionId = resolveForegroundConsoleSessionId(
                     sessions,
                     previousForegroundSessionId,
@@ -1923,6 +1959,7 @@
     }
 
     function handleSetForegroundSession(sessionId: string) {
+        userSelectedForegroundSessionId = sessionId;
         if (sessionId === activeConsoleSessionId) return;
         void handleChangeForegroundSession(sessionId, true);
     }
@@ -2189,8 +2226,7 @@
                 width={consoleTabListWidth}
                 height={containerHeight}
                 {resourceUsageBySession}
-                onSelectSession={(sessionId) =>
-                    handleChangeForegroundSession(sessionId, true)}
+                onSelectSession={handleSetForegroundSession}
                 onDeleteSession={handleDeleteSession}
                 onRenameSession={handleRenameSession}
             />

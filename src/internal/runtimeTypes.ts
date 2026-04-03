@@ -3,7 +3,10 @@ import type {
     LanguageRuntimeDynState,
     LanguageRuntimeMetadata,
     IRuntimeSessionMetadata,
+    RuntimeExitReason,
+    LanguageRuntimeExit,
 } from '../api';
+import { RuntimeState } from '../api';
 import {
     RuntimeCodeExecutionMode,
     RuntimeErrorBehavior,
@@ -15,37 +18,12 @@ export {
     RuntimeErrorBehavior,
     type RuntimeResourceUsage,
 } from '../shared/runtime';
-
-export enum RuntimeState {
-    Uninitialized = 'uninitialized',
-    Initializing = 'initializing',
-    Starting = 'starting',
-    Ready = 'ready',
-    Idle = 'idle',
-    Busy = 'busy',
-    Restarting = 'restarting',
-    Exiting = 'exiting',
-    Exited = 'exited',
-    Offline = 'offline',
-    Interrupting = 'interrupting',
-}
+export { RuntimeState, RuntimeExitReason, RuntimeStartMode, type LanguageRuntimeExit } from '../api';
 
 export enum RuntimeOnlineState {
     Starting = 'starting',
     Idle = 'idle',
     Busy = 'busy',
-}
-
-export enum RuntimeExitReason {
-    Unknown = 'unknown',
-    Shutdown = 'shutdown',
-    ForcedQuit = 'forcedQuit',
-    Restart = 'restart',
-    Error = 'error',
-    StartupFailed = 'startupFailed',
-    SwitchRuntime = 'switchRuntime',
-    ExtensionHost = 'extensionHost',
-    Transferred = 'transferred',
 }
 
 export enum RuntimeCodeFragmentStatus {
@@ -110,12 +88,7 @@ export enum LanguageRuntimeStreamName {
     Stderr = 'stderr',
 }
 
-export enum RuntimeStartMode {
-    Starting = 'starting',
-    Restarting = 'restarting',
-    Reconnecting = 'reconnecting',
-    Switching = 'switching',
-}
+
 
 export interface LanguageRuntimeInfo {
     banner: string;
@@ -242,13 +215,7 @@ export type LanguageRuntimeMessageCommOpen = LanguageRuntimeCommOpen;
 export type LanguageRuntimeMessageCommData = LanguageRuntimeCommMessage;
 export type LanguageRuntimeMessageCommClosed = LanguageRuntimeCommClosed;
 
-export interface LanguageRuntimeExit {
-    runtime_name: string;
-    session_name?: string;
-    exit_code: number;
-    reason: RuntimeExitReason;
-    message: string;
-}
+
 
 export interface RuntimeMethodError {
     code: RuntimeMethodErrorCode;

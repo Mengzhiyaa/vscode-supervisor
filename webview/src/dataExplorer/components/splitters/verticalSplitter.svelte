@@ -12,8 +12,10 @@
     }
 
     interface Props {
+        collapseAriaLabel?: string;
         alwaysShowExpandCollapseButton?: boolean;
         collapsible?: boolean;
+        expandAriaLabel?: string;
         invert?: boolean;
         isCollapsed?: boolean;
         showSash?: boolean;
@@ -24,8 +26,10 @@
     }
 
     let {
+        collapseAriaLabel = "Collapse",
         alwaysShowExpandCollapseButton = false,
         collapsible = false,
+        expandAriaLabel = "Expand",
         invert = false,
         isCollapsed = false,
         showSash = true,
@@ -289,7 +293,9 @@
                     onclick={handleExpandCollapsePressed}
                     onpointerenter={handleButtonPointerEnter}
                     onpointerleave={handleButtonPointerLeave}
-                    aria-label={collapsed ? "Expand summary" : "Collapse summary"}
+                    aria-label={
+                        collapsed ? expandAriaLabel : collapseAriaLabel
+                    }
                 >
                     <span class={`codicon ${buttonChevronClass}`}></span>
                 </button>

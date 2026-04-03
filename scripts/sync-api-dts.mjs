@@ -52,7 +52,11 @@ try {
         throw new Error(`Generated declaration not found: ${generatedPath}`);
     }
 
-    const generated = fs.readFileSync(generatedPath, 'utf8').replace(/\r\n/g, '\n');
+    let generated = fs.readFileSync(generatedPath, 'utf8').replace(/\r\n/g, '\n');
+
+    // --- Post-process: inline leaf declarations to produce a self-contained bundle ---
+    generated = inlineLeafDeclarations(generated, tempDir);
+
     const current = fs.existsSync(targetPath)
         ? fs.readFileSync(targetPath, 'utf8').replace(/\r\n/g, '\n')
         : undefined;
@@ -77,4 +81,63 @@ try {
     console.log(`Generated ${targetPath} from ${sourcePath}`);
 } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
+}
+
+/**
+ * Inline any relative-path re-exports from leaf declaration files into the
+ * main api.d.ts, producing a self-contained single-file declaration bundle.
+ *
+ * Handles patterns like:
+ *   import { Foo } from './shared/bar';
+ *   export { Foo } from './shared/bar';
+ * by replacing them with the actual declaration body from the leaf .d.ts.
+ */
+function inlineLeafDeclarations(source, tempOutDir) {
+    // Match pairs of: import { X } from './path'; ... export { X } from './path';
+    // Also handle standalone export { X } from './path'; without a preceding import.
+    const reExportPattern = /^export \{[^}]+\} from '(\.\/[^']+)';$/gm;
+    const importPattern = /^import \{[^}]+\} from '(\.\/[^']+)';$/gm;
+
+    // Collect all relative module specifiers that appear in re-exports
+    const leafSpecifiers = new Set();
+    for (const match of source.matchAll(reExportPattern)) {
+        leafSpecifiers.add(match[1]);
+    }
+
+    if (leafSpecifiers.size === 0) {
+        return source;
+    }
+
+    for (const specifier of leafSpecifiers) {
+        // Resolve the leaf .d.ts from tsc output
+        const leafDtsPath = path.join(tempOutDir, specifier + '.d.ts');
+        if (!fs.existsSync(leafDtsPath)) {
+            console.warn(`Warning: leaf declaration not found for '${specifier}', skipping inline`);
+            continue;
+        }
+
+        const leafContents = fs.readFileSync(leafDtsPath, 'utf8')
+            .replace(/\r\n/g, '\n')
+            .trim();
+
+        // Remove the `import { ... } from '<specifier>';` line
+        const importRe = new RegExp(
+            `^import \\{[^}]+\\} from '${escapeRegExp(specifier)}';\\n`,
+            'gm',
+        );
+        source = source.replace(importRe, '');
+
+        // Replace the `export { ... } from '<specifier>';` line with the leaf body
+        const exportRe = new RegExp(
+            `^export \\{[^}]+\\} from '${escapeRegExp(specifier)}';$`,
+            'gm',
+        );
+        source = source.replace(exportRe, leafContents);
+    }
+
+    return source;
+}
+
+function escapeRegExp(s) {
+    return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

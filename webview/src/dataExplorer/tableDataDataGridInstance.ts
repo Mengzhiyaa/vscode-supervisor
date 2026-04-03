@@ -204,13 +204,6 @@ export class TableDataDataGridInstance extends DataGridInstance {
                 }),
             },
         );
-        this._disposables.push(
-            {
-                dispose: this.sortKeysStore.subscribe((sortKeys) => {
-                    this._handleSortKeysChanged(sortKeys);
-                }),
-            },
-        );
     }
 
     get columns(): number {
@@ -548,6 +541,28 @@ export class TableDataDataGridInstance extends DataGridInstance {
     }
 
     protected async doSortData(): Promise<void> {
+        this._syncSortKeysStore();
+
+        const sortKeysToSend = this._sortedInternalSortKeys().map((sortKey) => ({
+            columnIndex: sortKey.columnIndex,
+            ascending: sortKey.ascending,
+        }));
+        const nextSignature = sortKeysSignature(sortKeysToSend);
+        if (nextSignature === this._lastSortKeysSignature) {
+            return;
+        }
+
+        this._lastSortKeysSignature = nextSignature;
+
+        if (sortKeysToSend.length === 0) {
+            this._postMessage({ type: 'clearSort' });
+        } else {
+            this._postMessage({
+                type: 'sort',
+                sortKeys: sortKeysToSend,
+            });
+        }
+
         this.invalidateCache(InvalidateCacheFlags.Data);
     }
 
@@ -890,27 +905,6 @@ export class TableDataDataGridInstance extends DataGridInstance {
         this._hoverManager.dispose();
         this._tableDataCache.dispose();
         super.dispose();
-    }
-
-    private _handleSortKeysChanged(sortKeys: Map<number, IColumnSortKey>): void {
-        const sortKeysToSend = normalizeSortKeys(sortKeys.values());
-        const nextSignature = sortKeysSignature(sortKeysToSend);
-        if (nextSignature === this._lastSortKeysSignature) {
-            return;
-        }
-
-        this._lastSortKeysSignature = nextSignature;
-        this.invalidateCache(InvalidateCacheFlags.Data);
-
-        if (sortKeysToSend.length === 0) {
-            this._postMessage({ type: 'clearSort' });
-            return;
-        }
-
-        this._postMessage({
-            type: 'sort',
-            sortKeys: sortKeysToSend,
-        });
     }
 
     private _scheduleVisibleDataRequest(): void {

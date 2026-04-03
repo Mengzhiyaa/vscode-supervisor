@@ -259,7 +259,9 @@
     <div class="splitter">
         <VerticalSplitter
             alwaysShowExpandCollapseButton={true}
+            collapseAriaLabel="Collapse summary"
             collapsible={true}
+            expandAriaLabel="Expand summary"
             invert={layout === PositronDataExplorerLayout.SummaryOnRight}
             isCollapsed={columnsCollapsed}
             showSash={true}

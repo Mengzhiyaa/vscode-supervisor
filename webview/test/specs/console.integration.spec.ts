@@ -214,6 +214,57 @@ test('console restores state and switches sessions through the sidebar', async (
     await expect(page.getByText('session-two output')).toBeVisible();
 });
 
+test('console follows the backend foreground session when a new session is added', async ({ page }) => {
+    const initialSessions = [
+        createSession({ id: 'session-1', name: 'Primary' }),
+    ];
+    const backend = await openWebviewPage(page, 'console', {
+        configure: (mockBackend) => {
+            registerConsoleDefaults(mockBackend, {
+                sessions: initialSessions,
+                activeSessionId: 'session-1',
+            });
+        },
+    });
+    await expect.poll(() => backend.notificationCount(ConsoleMethods.ready)).toBeGreaterThan(0);
+
+    await backend.notify(SessionMethods.info, {
+        sessions: initialSessions,
+        activeSessionId: 'session-1',
+    });
+    await backend.notify('console/restoreState', {
+        sessionId: 'session-1',
+        syncSeq: 1,
+        state: createConsoleState('session-one output'),
+    });
+    await expect(page.getByText('session-one output')).toBeVisible();
+
+    const nextSessions = [
+        ...initialSessions,
+        createSession({
+            id: 'session-2',
+            name: 'Fresh Session',
+            runtimeName: 'Python',
+            languageId: 'python',
+        }),
+    ];
+    await backend.notify(SessionMethods.info, {
+        sessions: nextSessions,
+        activeSessionId: 'session-2',
+    });
+    await backend.notify('console/restoreState', {
+        sessionId: 'session-2',
+        syncSeq: 1,
+        state: createConsoleState('fresh session output'),
+    });
+
+    await expect(page.getByRole('tab', { name: 'Fresh Session' })).toHaveAttribute(
+        'aria-selected',
+        'true',
+    );
+    await expect(page.getByText('fresh session output')).toBeVisible();
+});
+
 test('console requests a full-state refresh when runtime change sync gaps appear', async ({ page }) => {
     const backend = await openWebviewPage(page, 'console', {
         configure: (mockBackend) => {
