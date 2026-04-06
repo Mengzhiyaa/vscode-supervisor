@@ -21,11 +21,10 @@
     {#each runtimeItemPendingInput.outputLines as outputLine (outputLine.id)}
         <div class="pending-line">
             <span class="prompt" style:width={promptWidthPx}
-                >{runtimeItemPendingInput.inputPrompt}&nbsp;</span
-            >
-            {#each outputLine.outputRuns as outputRun (outputRun.id)}
-                <OutputRun {outputRun} />
-            {/each}
+                >{runtimeItemPendingInput.inputPrompt}</span
+            >{#each outputLine.outputRuns as outputRun (outputRun.id)}<OutputRun
+                {outputRun}
+            />{/each}
         </div>
     {/each}
 </div>
@@ -47,6 +46,7 @@
     .prompt {
         user-select: none;
         display: inline-block;
+        box-sizing: content-box;
         padding-right: var(--console-char-width, 1ch);
         white-space: pre;
     }

@@ -164,24 +164,20 @@
         <!-- Colorized output using Monaco tokenization -->
         {#each colorizedLines as html, lineIndex}
             <div class="input-line">
-                <span class="prompt" style:width={promptWidthPx}>
-                    {getPromptText(lineIndex)}
-                </span>
-                <span class="code colorized">
-                    {@html html}
-                </span>
+                <span class="prompt" style:width={promptWidthPx}
+                    >{getPromptText(lineIndex)}</span
+                ><span class="code colorized">{@html html}</span>
             </div>
         {/each}
     {:else}
         <!-- Fallback: Plain text output -->
         {#each activityItemInput.codeOutputLines as line, lineIndex (line.id)}
             <div class="input-line">
-                <span class="prompt" style:width={promptWidthPx}>
-                    {getPromptText(lineIndex)}
-                </span>
-                {#each line.outputRuns as run (run.id)}
-                    <OutputRun outputRun={run} />
-                {/each}
+                <span class="prompt" style:width={promptWidthPx}
+                    >{getPromptText(lineIndex)}</span
+                >{#each line.outputRuns as run (run.id)}<OutputRun
+                    outputRun={run}
+                />{/each}
             </div>
         {/each}
     {/if}
@@ -256,6 +252,7 @@
     .prompt {
         user-select: none;
         display: inline-block;
+        box-sizing: content-box;
         text-align: right;
         /* Width is set inline from Monaco-measured character width. */
         /* Padding provides the space after the prompt, matching Monaco's lineDecorationsWidth. */
