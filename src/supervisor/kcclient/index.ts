@@ -1,5 +1,5 @@
 /* tslint:disable */
-/* eslint-disable */
+ 
 /**
  * Kallichore API
  * Kallichore is a Jupyter kernel gateway and supervisor

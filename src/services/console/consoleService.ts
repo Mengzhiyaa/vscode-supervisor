@@ -349,6 +349,7 @@ export class PositronConsoleService implements IPositronConsoleService {
         this._onDidExecuteCodeEmitter.dispose();
         this._onDidChangeInputStateEmitter.dispose();
         this._onDidRevealExecutionEmitter.dispose();
+        this._onDidChangePendingInputEmitter.dispose();
 
         // Dispose subscriptions
         this._disposables.forEach(d => d.dispose());

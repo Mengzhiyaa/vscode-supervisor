@@ -639,7 +639,7 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
 
     private getFilteredItems(): VariableItem[] {
         const items = Array.from(this._variableItems.values());
-        if (!this._filterText) return items;
+        if (!this._filterText) {return items;}
         const lowerFilter = this._filterText.toLowerCase();
         return items.filter(item =>
             item.displayName.toLowerCase().includes(lowerFilter) ||
@@ -658,8 +658,8 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
                 break;
             case PositronVariablesSorting.Recent:
                 sorted.sort((a, b) => {
-                    if (a.isRecent && !b.isRecent) return -1;
-                    if (!a.isRecent && b.isRecent) return 1;
+                    if (a.isRecent && !b.isRecent) {return -1;}
+                    if (!a.isRecent && b.isRecent) {return 1;}
                     return a.displayName.localeCompare(b.displayName);
                 });
                 break;
@@ -739,34 +739,34 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
     private groupByKind(items: VariableItem[]): VariablesTreeEntry[] {
         const groups: Record<string, VariableItem[]> = { data: [], values: [], functions: [], classes: [] };
         for (const item of items) {
-            if (item.kind === 'table') groups.data.push(item);
-            else if (item.kind === 'function') groups.functions.push(item);
-            else if (item.kind === 'class') groups.classes.push(item);
-            else groups.values.push(item);
+            if (item.kind === 'table') {groups.data.push(item);}
+            else if (item.kind === 'function') {groups.functions.push(item);}
+            else if (item.kind === 'class') {groups.classes.push(item);}
+            else {groups.values.push(item);}
         }
 
         const entries: VariablesTreeEntry[] = [];
-        if (groups.data.length > 0) entries.push(new VariableGroup('group/data', 'Data', !this._collapsedGroupIds.has('group/data'), this.sortItems(groups.data)));
-        if (groups.values.length > 0) entries.push(new VariableGroup('group/values', 'Values', !this._collapsedGroupIds.has('group/values'), this.sortItems(groups.values)));
-        if (groups.functions.length > 0) entries.push(new VariableGroup('group/functions', 'Functions', !this._collapsedGroupIds.has('group/functions'), this.sortItems(groups.functions)));
-        if (groups.classes.length > 0) entries.push(new VariableGroup('group/classes', 'Classes', !this._collapsedGroupIds.has('group/classes'), this.sortItems(groups.classes)));
+        if (groups.data.length > 0) {entries.push(new VariableGroup('group/data', 'Data', !this._collapsedGroupIds.has('group/data'), this.sortItems(groups.data)));}
+        if (groups.values.length > 0) {entries.push(new VariableGroup('group/values', 'Values', !this._collapsedGroupIds.has('group/values'), this.sortItems(groups.values)));}
+        if (groups.functions.length > 0) {entries.push(new VariableGroup('group/functions', 'Functions', !this._collapsedGroupIds.has('group/functions'), this.sortItems(groups.functions)));}
+        if (groups.classes.length > 0) {entries.push(new VariableGroup('group/classes', 'Classes', !this._collapsedGroupIds.has('group/classes'), this.sortItems(groups.classes)));}
         return entries;
     }
 
     private groupBySize(items: VariableItem[]): VariablesTreeEntry[] {
         const groups: Record<string, VariableItem[]> = { small: [], medium: [], large: [], veryLarge: [] };
         for (const item of items) {
-            if (item.size < 1024) groups.small.push(item);
-            else if (item.size < 1024 * 1024) groups.medium.push(item);
-            else if (item.size < 1024 * 1024 * 100) groups.large.push(item);
-            else groups.veryLarge.push(item);
+            if (item.size < 1024) {groups.small.push(item);}
+            else if (item.size < 1024 * 1024) {groups.medium.push(item);}
+            else if (item.size < 1024 * 1024 * 100) {groups.large.push(item);}
+            else {groups.veryLarge.push(item);}
         }
 
         const entries: VariablesTreeEntry[] = [];
-        if (groups.veryLarge.length > 0) entries.push(new VariableGroup('group/very-large', 'Very Large (>100MB)', !this._collapsedGroupIds.has('group/very-large'), this.sortItems(groups.veryLarge)));
-        if (groups.large.length > 0) entries.push(new VariableGroup('group/large', 'Large (1MB-100MB)', !this._collapsedGroupIds.has('group/large'), this.sortItems(groups.large)));
-        if (groups.medium.length > 0) entries.push(new VariableGroup('group/medium', 'Medium (1KB-1MB)', !this._collapsedGroupIds.has('group/medium'), this.sortItems(groups.medium)));
-        if (groups.small.length > 0) entries.push(new VariableGroup('group/small', 'Small (<1KB)', !this._collapsedGroupIds.has('group/small'), this.sortItems(groups.small)));
+        if (groups.veryLarge.length > 0) {entries.push(new VariableGroup('group/very-large', 'Very Large (>100MB)', !this._collapsedGroupIds.has('group/very-large'), this.sortItems(groups.veryLarge)));}
+        if (groups.large.length > 0) {entries.push(new VariableGroup('group/large', 'Large (1MB-100MB)', !this._collapsedGroupIds.has('group/large'), this.sortItems(groups.large)));}
+        if (groups.medium.length > 0) {entries.push(new VariableGroup('group/medium', 'Medium (1KB-1MB)', !this._collapsedGroupIds.has('group/medium'), this.sortItems(groups.medium)));}
+        if (groups.small.length > 0) {entries.push(new VariableGroup('group/small', 'Small (<1KB)', !this._collapsedGroupIds.has('group/small'), this.sortItems(groups.small)));}
         return entries;
     }
 

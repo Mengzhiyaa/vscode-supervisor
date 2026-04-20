@@ -20,12 +20,12 @@ const DUCKDB_BUNDLE_DIR = path.join(__dirname, 'duckdb');
 
 // Dynamically load the Node.js entry of duckdb-wasm — esbuild will bundle this
 // along with its apache-arrow dependency into extension.js.
-// eslint-disable-next-line @typescript-eslint/no-var-requires
+ 
 const duckdb: typeof DuckDBTypes = require('@duckdb/duckdb-wasm/dist/duckdb-node.cjs');
 
 // Load worker_threads using Node's native require.
 // esbuild treats Node.js builtins as external automatically.
-// eslint-disable-next-line @typescript-eslint/no-var-requires
+ 
 const workerThreads: typeof import('worker_threads') = require('worker_threads');
 
 type DuckDBWorkerEvent = 'message' | 'error' | 'close';

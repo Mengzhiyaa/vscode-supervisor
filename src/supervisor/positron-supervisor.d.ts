@@ -50,13 +50,13 @@ export interface JupyterKernelSpec {
 	argv: Array<string>;
 
 	/** The kernel's display name */
-	display_name: string;  // eslint-disable-line
+	display_name: string;   
 
 	/** The language the kernel executes */
 	language: string;
 
 	/** Interrupt mode (signal or message) */
-	interrupt_mode?: 'signal' | 'message'; // eslint-disable-line
+	interrupt_mode?: 'signal' | 'message';  
 
 	/** Environment variables to set when starting the kernel */
 	env?: NodeJS.ProcessEnv;
@@ -67,7 +67,7 @@ export interface JupyterKernelSpec {
 	 * When protocol >= 5.5 is used, the supervisor will use a handshake
 	 * to negotiate ports instead of picking them ahead of time (JEP 66)
 	 */
-	kernel_protocol_version: string; // eslint-disable-line
+	kernel_protocol_version: string;  
 
 	/** Optional preflight command to run before starting the kernel */
 	startup_command?: string;

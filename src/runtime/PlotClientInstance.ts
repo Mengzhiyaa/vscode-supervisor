@@ -403,9 +403,9 @@ export class PlotClientInstance extends RuntimeClientInstance {
         left: { size?: IPlotSize; pixel_ratio: number; format?: PlotRenderFormat },
         right: { size?: IPlotSize; pixel_ratio: number; format?: PlotRenderFormat }
     ): boolean {
-        if (left.size?.height !== right.size?.height) return false;
-        if (left.size?.width !== right.size?.width) return false;
-        if (left.pixel_ratio !== right.pixel_ratio) return false;
+        if (left.size?.height !== right.size?.height) {return false;}
+        if (left.size?.width !== right.size?.width) {return false;}
+        if (left.pixel_ratio !== right.pixel_ratio) {return false;}
         return true;
     }
 

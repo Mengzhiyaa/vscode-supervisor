@@ -266,9 +266,10 @@ export class ConsoleStateStore implements vscode.Disposable {
         }
 
         // Phase 2: remove oldest top-level items until within budget.
-        // Pre-compute per-item sizes to avoid O(n²) re-serialisation.
+        // Pre-compute per-item sizes (in UTF-8 bytes, matching
+        // _estimateStateBytes) to avoid O(n²) re-serialisation.
         const itemSizes = prepared.items.map(item => {
-            try { return JSON.stringify(item).length; } catch { return 0; }
+            try { return Buffer.byteLength(JSON.stringify(item), 'utf8'); } catch { return 0; }
         });
         let runningSize = sizeBytes;
         let removeCount = 0;
@@ -282,14 +283,15 @@ export class ConsoleStateStore implements vscode.Disposable {
             prepared = { ...prepared, items: prepared.items.slice(removeCount) };
         }
 
-        // Precise re-check after the approximation-based removal.
+        // Precise re-check: the per-item byte estimates above don't account
+        // for JSON structural overhead (array commas, brackets) so the
+        // running total may drift slightly.  Do one exact measurement and,
+        // if still over budget, continue removing oldest items one by one.
         sizeBytes = this._estimateStateBytes(prepared);
         if (sizeBytes <= MaxPersistedStateBytes) {
             return prepared;
         }
 
-        // If still above budget after removing all items, it's the
-        // inputHistory that's too large.  Trim from oldest.
         while (prepared.items.length > 0 && sizeBytes > MaxPersistedStateBytes) {
             prepared = { ...prepared, items: prepared.items.slice(1) };
             sizeBytes = this._estimateStateBytes(prepared);
@@ -433,21 +435,24 @@ export class ConsoleStateStore implements vscode.Disposable {
      * Removes oldest entries so that the most recent commands survive.
      */
     private _trimInputHistory(history: string[]): string[] {
-        // Trim by count.
-        let trimmed = history.slice(-MaxPersistedInputHistoryEntries);
+        // Trim by count (keep newest).
+        const trimmed = history.slice(-MaxPersistedInputHistoryEntries);
 
         // Trim by bytes (rough UTF-16 estimate: 2 bytes per char).
+        // Use an index instead of repeatedly slicing to avoid O(n) array
+        // copies per removed entry.
         let totalBytes = 0;
         for (const entry of trimmed) {
             totalBytes += entry.length * 2;
         }
 
-        while (trimmed.length > 0 && totalBytes > MaxPersistedInputHistoryBytes) {
-            totalBytes -= trimmed[0].length * 2;
-            trimmed = trimmed.slice(1);
+        let startIndex = 0;
+        while (startIndex < trimmed.length && totalBytes > MaxPersistedInputHistoryBytes) {
+            totalBytes -= trimmed[startIndex].length * 2;
+            startIndex++;
         }
 
-        return trimmed;
+        return startIndex > 0 ? trimmed.slice(startIndex) : trimmed;
     }
 
     // -----------------------------------------------------------------------
