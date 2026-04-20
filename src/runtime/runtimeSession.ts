@@ -1073,8 +1073,50 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
         return this._shutdownPromise;
     }
 
+    async detachForExtensionHostShutdown(): Promise<void> {
+        if (this._shutdownPromise) {
+            return this._shutdownPromise;
+        }
+
+        this._shutdownPromise = (async () => {
+            const sessions = Array.from(this._sessions.values());
+            for (const session of sessions) {
+                this._detachSessionFromServiceState(session);
+
+                try {
+                    await session.detachForExtensionHostShutdown();
+                } catch (error) {
+                    this._outputChannel.warn(
+                        `[RuntimeSession] Error detaching session ${session.sessionId} for extension host shutdown: ${error}`,
+                    );
+                }
+            }
+
+            this._foregroundSessionId = undefined;
+            this._startingConsolesByRuntimeId.clear();
+            this._startingNotebooksByNotebookUri.clear();
+            this._startingSessionsBySessionMapKey.clear();
+            this._consoleSessionsByRuntimeId.clear();
+            this._notebookSessionsByNotebookUri.clear();
+            this._lastActiveConsoleSessionByLanguageId.clear();
+            this._shuttingDownNotebookSessionsByNotebookUri.clear();
+            this._restoredSessionIds.clear();
+            this._restartingSessionPromises.clear();
+
+            for (const disposable of this._deferredAutoStartDisposablesByRuntimeId.values()) {
+                disposable.dispose();
+            }
+            this._deferredAutoStartDisposablesByRuntimeId.clear();
+
+            this._localSupervisor?.dispose();
+            this._localSupervisor = undefined;
+        })();
+
+        return this._shutdownPromise;
+    }
+
     dispose(): void {
-        void this.shutdown().finally(() => {
+        void this.detachForExtensionHostShutdown().finally(() => {
             for (const disposable of this._disposables) {
                 disposable.dispose();
             }
@@ -2099,8 +2141,22 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
     }
 
     private async _removeSession(session: RuntimeSession): Promise<void> {
+        const detachedForegroundSession = this._detachSessionFromServiceState(session);
+        if (detachedForegroundSession) {
+            const nextSessionId = this.sessions.find((candidate) =>
+                candidate.sessionMetadata.sessionMode === LanguageRuntimeSessionMode.Console,
+            )?.sessionId;
+            await this._setForegroundSession(nextSessionId);
+        }
+
+        await session.dispose();
+        this._onDidDeleteSession.fire(session.sessionId);
+    }
+
+    private _detachSessionFromServiceState(session: RuntimeSession): boolean {
         const sessionId = session.sessionId;
         const notebookUri = session.sessionMetadata.notebookUri;
+        const detachedForegroundSession = this._foregroundSessionId === sessionId;
 
         this._disposeSessionLifecycleDisposables(sessionId);
         this.updateSessionMapsAfterExit(session);
@@ -2141,15 +2197,11 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
             }
         }
 
-        if (this._foregroundSessionId === sessionId) {
-            const nextSessionId = this.sessions.find((candidate) =>
-                candidate.sessionMetadata.sessionMode === LanguageRuntimeSessionMode.Console,
-            )?.sessionId;
-            await this._setForegroundSession(nextSessionId);
+        if (detachedForegroundSession) {
+            this._foregroundSessionId = undefined;
         }
 
-        await session.dispose();
-        this._onDidDeleteSession.fire(sessionId);
+        return detachedForegroundSession;
     }
 
     private _disposeSessionLifecycleDisposables(sessionId: string): void {

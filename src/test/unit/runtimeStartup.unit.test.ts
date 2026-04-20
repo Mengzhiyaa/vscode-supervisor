@@ -585,6 +585,66 @@ suite('[Unit] runtime startup', () => {
         startupService.dispose();
     });
 
+    test('does not persist sessions that are already exiting', async () => {
+        const context = makeContext();
+        const logChannel = makeNoopLogChannel();
+        const localSessionManager = makeSessionManager();
+        const runtimeProvider = makeRuntimeProvider();
+        const readySession = makeLiveSession('session-ready', {
+            created: 10,
+            state: RuntimeState.Ready,
+        });
+        const exitingSession = makeLiveSession('session-exiting', {
+            created: 20,
+            state: RuntimeState.Exiting,
+        });
+
+        localSessionManager.value.sessions = [readySession, exitingSession];
+        localSessionManager.value.activeSessionId = readySession.sessionId;
+        localSessionManager.value.getSession = (sessionId: string) => {
+            if (sessionId === readySession.sessionId) {
+                return readySession;
+            }
+
+            if (sessionId === exitingSession.sessionId) {
+                return exitingSession;
+            }
+
+            return undefined;
+        };
+        localSessionManager.value.getActiveSession = (sessionId: string) => {
+            if (sessionId === readySession.sessionId || sessionId === exitingSession.sessionId) {
+                return { hasConsole: true };
+            }
+
+            return undefined;
+        };
+
+        const startupService = new RuntimeStartupService(
+            context,
+            {
+                ...makeRuntimeManager(),
+                getRuntimeProvider: () => runtimeProvider,
+            } as any,
+            localSessionManager.value,
+            makeNewFolderService(context, logChannel),
+            logChannel,
+        );
+
+        await startupService.prepareForExtensionHostShutdown();
+
+        const persistedSessions = context.workspaceState.get<SerializedSessionMetadata[]>(
+            WORKSPACE_SESSION_LIST_KEY,
+            [],
+        )!;
+        assert.deepStrictEqual(
+            persistedSessions.map((session) => session.metadata.sessionId),
+            ['session-ready'],
+        );
+
+        startupService.dispose();
+    });
+
     test('preserves sessions owned by other windows when saving workspace sessions', async () => {
         const context = makeContext({}, {
             [WORKSPACE_SESSION_LIST_KEY]: [

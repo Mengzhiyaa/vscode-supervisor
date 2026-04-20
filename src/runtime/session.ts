@@ -184,6 +184,7 @@ export class RuntimeSession implements vscode.Disposable {
     private readonly _localSupervisor: LocalSupervisorApi | undefined;
     private readonly _kernelSpec: JupyterKernelSpec | undefined;
     private readonly _kernelExtra: JupyterKernelExtra | undefined;
+    private _disposed = false;
 
     /** Event clock of the last processed runtime event. */
     private _eventClock = 0;
@@ -996,6 +997,23 @@ export class RuntimeSession implements vscode.Disposable {
     }
 
     /**
+     * Disconnects the local extension-host side of the session without asking
+     * the runtime to exit, so a later reload can reconnect to it.
+     */
+    async detachForExtensionHostShutdown(): Promise<void> {
+        try {
+            await this._deactivateServices('disconnecting extension host');
+        } catch (error) {
+            this.log(
+                `Failed to deactivate services before detaching extension host: ${error}`,
+                vscode.LogLevel.Warning,
+            );
+        }
+
+        await this.dispose();
+    }
+
+    /**
      * Sets the console width in characters.
      * Called when the console container is resized.
      * @param widthInChars The new console width in characters
@@ -1298,6 +1316,11 @@ export class RuntimeSession implements vscode.Disposable {
      * Disposes the session
      */
     async dispose(): Promise<void> {
+        if (this._disposed) {
+            return;
+        }
+        this._disposed = true;
+
         if (this._eventQueueTimer) {
             clearTimeout(this._eventQueueTimer);
             this._eventQueueTimer = undefined;
@@ -1306,8 +1329,12 @@ export class RuntimeSession implements vscode.Disposable {
         await this._dapComm?.then((dap) => dap.dispose());
         this._dapComm = undefined;
         await this._lsp.dispose();
-        this._disposables.forEach(d => d.dispose());
+        const disposables = this._disposables.splice(0);
+        disposables.forEach(d => d.dispose());
         const kernel = this._kernel as ({ dispose?: () => void | Promise<void> } | undefined);
+        this._kernel = undefined;
+        this._clientManager = undefined;
+        this._extHostRuntimeSessionAdapter = undefined;
         await kernel?.dispose?.();
     }
 }

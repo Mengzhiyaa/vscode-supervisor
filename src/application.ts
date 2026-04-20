@@ -1590,7 +1590,8 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
         this._outputChannel.debug('[Ark] Disposing extension...');
 
         await this._consoleService.flushPersistedState();
-        await this._sessionManager.shutdown();
+        await this._runtimeStartupService.prepareForExtensionHostShutdown();
+        await this._sessionManager.detachForExtensionHostShutdown();
 
         this._disposables.forEach(d => {
             if (d !== this._sessionManager) {

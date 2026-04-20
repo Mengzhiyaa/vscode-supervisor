@@ -170,6 +170,11 @@ export class RuntimeStartupService implements vscode.Disposable {
         return this._startupPromise;
     }
 
+    async prepareForExtensionHostShutdown(): Promise<void> {
+        await this._restoredSessionsLoadedPromise;
+        await this.saveWorkspaceSessions();
+    }
+
     resetArchitectureMismatchWarning(languageId?: string): void {
         if (languageId) {
             this._shownArchitectureMismatchWarnings.delete(languageId);
@@ -835,6 +840,7 @@ export class RuntimeStartupService implements vscode.Disposable {
     private _isSessionRestorable(session: RuntimeSession): boolean {
         return session.state !== RuntimeState.Uninitialized &&
             session.state !== RuntimeState.Initializing &&
+            session.state !== RuntimeState.Exiting &&
             session.state !== RuntimeState.Exited &&
             session.state !== RuntimeState.Offline;
     }
