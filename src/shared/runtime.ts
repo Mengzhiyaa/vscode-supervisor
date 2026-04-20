@@ -37,6 +37,7 @@ export enum RuntimeErrorBehavior {
 export interface RuntimeResourceUsage {
     cpu_percent: number;
     memory_bytes: number;
+    process_id?: number;
     thread_count?: number;
     sampling_period_ms?: number;
     timestamp?: number;

@@ -5,6 +5,7 @@ import type {
     IRuntimeSessionMetadata,
     RuntimeExitReason,
     LanguageRuntimeExit,
+    Utf8Location,
 } from '../api';
 import { RuntimeState } from '../api';
 import {
@@ -271,7 +272,9 @@ export interface LanguageRuntimeSession extends vscode.Disposable {
         code: string,
         id: string,
         mode: RuntimeCodeExecutionMode,
-        errorBehavior: RuntimeErrorBehavior
+        errorBehavior: RuntimeErrorBehavior,
+        codeLocation?: Utf8Location,
+        executionMetadata?: Record<string, unknown>
     ): void;
 
     isCodeFragmentComplete(code: string): Thenable<RuntimeCodeFragmentStatus>;

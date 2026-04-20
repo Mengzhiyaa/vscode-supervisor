@@ -1,12 +1,14 @@
 import * as vscode from 'vscode';
 import {
     type LanguageRuntimeDynState,
+    type ICodeExecutionAttribution,
     type LanguageRuntimeMetadata,
     type JupyterKernelSpec,
     type IRuntimeSessionMetadata,
     type ILanguageLsp,
     type ILanguageLspFactory,
     type ILanguageRuntimeClientInstance,
+    type Utf8Location,
     LanguageRuntimeClientType,
     LanguageLspState,
 } from '../api';
@@ -800,13 +802,42 @@ export class RuntimeSession implements vscode.Disposable {
         id: string,
         mode: RuntimeCodeExecutionMode = RuntimeCodeExecutionMode.Interactive,
         errorBehavior: RuntimeErrorBehavior = RuntimeErrorBehavior.Continue,
+        attribution?: ICodeExecutionAttribution,
     ): void {
         if (!this._kernel) {
             throw new Error('Kernel not attached');
         }
         const codePreview = code.length > 100 ? code.substring(0, 100) + '...' : code;
         this.log(`>>> SEND execute_request [${id}]: ${codePreview}`, vscode.LogLevel.Debug);
-        this._kernel.execute(code, id, mode, errorBehavior);
+        this._kernel.execute(
+            code,
+            id,
+            mode,
+            errorBehavior,
+            this._toCodeLocation(attribution),
+            attribution?.metadata,
+        );
+    }
+
+    private _toCodeLocation(attribution?: ICodeExecutionAttribution): Utf8Location | undefined {
+        if (!attribution?.fileUri) {
+            return undefined;
+        }
+
+        const zeroBasedLine = Math.max(0, (attribution.lineNumber ?? 1) - 1);
+        return {
+            uri: attribution.fileUri,
+            range: {
+                start: {
+                    line: zeroBasedLine,
+                    character: 0,
+                },
+                end: {
+                    line: zeroBasedLine,
+                    character: 0,
+                },
+            },
+        };
     }
 
     /**

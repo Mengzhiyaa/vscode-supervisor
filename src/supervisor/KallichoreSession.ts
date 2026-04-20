@@ -40,6 +40,7 @@ import { createUniqueId, delay, summarizeError, summarizeAxiosError } from './ut
 import { AdoptedSession } from './AdoptedSession';
 import { DebugRequest } from './jupyter/DebugRequest';
 import { JupyterMessageType } from './jupyter/JupyterMessageType';
+import type { JupyterPositronLocation } from './jupyter/JupyterPositronTypes';
 import { isAxiosError } from './httpClient';
 import { KallichoreTransport } from './KallichoreApiInstance';
 import { JupyterCommClose } from './jupyter/JupyterCommClose';
@@ -168,6 +169,12 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 	 * defined for sessions that have been restored after reload or navigation.
 	 */
 	private _activeSession: ActiveSession | undefined;
+
+	/** Cached OS process ID of the kernel, used for resource usage reporting. */
+	private _processId: number | undefined;
+
+	/** Guard flag to prevent concurrent getSession() calls when fetching the PID. */
+	private _fetchingProcessId = false;
 
 	/**
 	 * The message header for the current requests if any is active.  This is
@@ -802,7 +809,9 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 	execute(code: string,
 		id: string,
 		mode: positron.RuntimeCodeExecutionMode,
-		errorBehavior: positron.RuntimeErrorBehavior): void {
+		errorBehavior: positron.RuntimeErrorBehavior,
+		codeLocation?: positron.Utf8Location,
+		executionMetadata?: Record<string, unknown>): void {
 
 		// Translate the parameters into a Jupyter execute request
 		const request: JupyterExecuteRequest = {
@@ -814,6 +823,15 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 			stop_on_error: errorBehavior === positron.RuntimeErrorBehavior.Stop,
 		};
 
+		if (codeLocation || executionMetadata) {
+			request.positron = {
+				...(codeLocation ? {
+					code_location: this._toJupyterPositronLocation(codeLocation),
+				} : {}),
+				...(executionMetadata ? { executionMetadata } : {}),
+			};
+		}
+
 		// Create and send the execute request
 		const execute = new ExecuteRequest(id, request);
 		this.sendRequest(execute).then((reply) => {
@@ -823,6 +841,22 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 			// the request to Kallichore rather than a failure to execute it
 			this.log(`Failed to send execution request for '${code}': ${err}`, vscode.LogLevel.Error);
 		});
+	}
+
+	private _toJupyterPositronLocation(codeLocation: positron.Utf8Location): JupyterPositronLocation {
+		return {
+			uri: codeLocation.uri.toString(),
+			range: {
+				start: {
+					line: codeLocation.range.start.line,
+					character: codeLocation.range.start.character,
+				},
+				end: {
+					line: codeLocation.range.end.line,
+					character: codeLocation.range.end.character,
+				},
+			},
+		};
 	}
 
 	/**
@@ -1106,6 +1140,7 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 		// Save the kernel info
 		this.runtimeInfoFromKernelInfo(session.kernel_info as KernelInfoReply);
 		this._activeSession = session;
+		this._processId = session.process_id;
 	}
 
 	/**
@@ -1200,7 +1235,18 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 		await kernel.connected.wait();
 
 		// Connect to the session's websocket
-		await withTimeout(this.connect(), 2000, `Start failed: timed out connecting to adopted session ${this.metadata.sessionId}`);
+		try {
+			await this._connectWithStartupRetry(
+				'connecting to the adopted session websocket',
+				2000,
+			);
+		} catch (error) {
+			if (this._isStructuredStartupError(error)) {
+				throw error;
+			}
+
+			throw this._createStartupError('websocket', summarizeError(error), error);
+		}
 
 		// Mark the session as ready
 		this.markReady('kernel adoption complete');
@@ -1325,8 +1371,8 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 		promise: Promise<T>,
 		phase: SessionStartupPhase,
 		action: string,
+		timeoutMs: number = this._getStartupTimeoutMs(),
 	): Promise<T> {
-		const timeoutMs = this._getStartupTimeoutMs();
 		const timeoutMessage = `Startup timed out after ${timeoutMs}ms while ${action}`;
 		return withTimeout(
 			promise,
@@ -1347,6 +1393,51 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 				error,
 			);
 		});
+	}
+
+	private _isRetriableConnectError(error: unknown): boolean {
+		if (isAxiosError(error)) {
+			return true;
+		}
+
+		if (!error || typeof error !== 'object') {
+			return false;
+		}
+
+		const candidate = error as { code?: unknown; message?: unknown };
+		if (typeof candidate.code === 'string') {
+			return ['ECONNREFUSED', 'ECONNRESET', 'ENOENT', 'ETIMEDOUT', 'EPIPE'].includes(candidate.code);
+		}
+
+		if (typeof candidate.message === 'string') {
+			return /ECONNREFUSED|ECONNRESET|ENOENT|ETIMEDOUT|socket hang up|Unexpected server response/i.test(
+				candidate.message
+			);
+		}
+
+		return false;
+	}
+
+	private async _connectWithStartupRetry(
+		action: string,
+		timeoutMs: number = this._getStartupTimeoutMs(),
+	): Promise<void> {
+		for (let attempt = 0; attempt < 2; attempt++) {
+			try {
+				await this._withStartupTimeout(this.connect(), 'websocket', action, timeoutMs);
+				return;
+			} catch (error) {
+				if (attempt === 0 && this._isRetriableConnectError(error)) {
+					this.log(
+						`Failed to connect to session websocket; retrying once: ${summarizeError(error)}`,
+						vscode.LogLevel.Warning,
+					);
+					continue;
+				}
+
+				throw error;
+			}
+		}
 	}
 
 	/**
@@ -1428,17 +1519,13 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 
 		// Connect to the session's websocket
 		try {
-			await this._withStartupTimeout(
-				this.connect(),
-				'websocket',
-				'connecting to the session websocket'
-			);
-		} catch (err) {
-			if (this._isStructuredStartupError(err)) {
-				throw err;
+			await this._connectWithStartupRetry('connecting to the session websocket');
+		} catch (error) {
+			if (this._isStructuredStartupError(error)) {
+				throw error;
 			}
 
-			throw this._createStartupError('websocket', summarizeError(err), err);
+			throw this._createStartupError('websocket', summarizeError(error), error);
 		}
 
 		if (this._new) {
@@ -1954,7 +2041,7 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 			this._kernelChannel.append(output.output[1]);
 		} else if (data.hasOwnProperty('resourceUsage')) {
 			const resourceUsage = data.resourceUsage as positron.RuntimeResourceUsage;
-			this._resourceUsage.fire(resourceUsage);
+			this._emitResourceUsage(resourceUsage);
 		} else if (data.hasOwnProperty('clientDisconnected')) {
 			// Log the disconnection and close the socket
 			this._kernelChannel.append(`Client disconnected: ${data.clientDisconnected}`);
@@ -1987,6 +2074,34 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 	updateSessionName(sessionName: string): void {
 		// Update the dynamic state with the new values
 		this.dynState.sessionName = sessionName;
+	}
+
+	private _emitResourceUsage(resourceUsage: positron.RuntimeResourceUsage): void {
+		if (this._processId) {
+			resourceUsage.process_id = this._processId;
+		} else {
+			void this._refreshProcessIdFromSession();
+		}
+
+		this._resourceUsage.fire(resourceUsage);
+	}
+
+	private async _refreshProcessIdFromSession(): Promise<void> {
+		if (this._fetchingProcessId) {
+			return;
+		}
+
+		this._fetchingProcessId = true;
+		try {
+			const result = await this._api.getSession(this.metadata.sessionId);
+			if (typeof result.data.process_id === 'number') {
+				this._processId = result.data.process_id;
+			}
+		} catch {
+			// Best effort only; future resource usage events will retry.
+		} finally {
+			this._fetchingProcessId = false;
+		}
 	}
 
 	/**

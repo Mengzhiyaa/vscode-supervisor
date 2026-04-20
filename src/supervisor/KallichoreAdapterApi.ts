@@ -175,6 +175,70 @@ export class KCApi implements PositronSupervisorApi {
 		}));
 	}
 
+	private _describeTerminalExitReason(reason: vscode.TerminalExitReason | undefined): string {
+		if (reason === undefined) {
+			return 'unknown reason';
+		}
+
+		switch (reason) {
+			case vscode.TerminalExitReason.Process:
+				return 'the process exited';
+			case vscode.TerminalExitReason.User:
+				return 'the user closed the terminal';
+			case vscode.TerminalExitReason.Unknown:
+				return 'an unknown error occurred';
+			case vscode.TerminalExitReason.Extension:
+				return 'the extension closed the terminal';
+			case vscode.TerminalExitReason.Shutdown:
+				return 'the terminal was closed due to shutdown';
+			default:
+				return `reason code ${reason}`;
+		}
+	}
+
+	private _shouldIgnoreTerminalCloseDuringStartup(
+		shutdownTimeout: string,
+		exitStatus: vscode.TerminalExitStatus | undefined,
+	): boolean {
+		return shutdownTimeout !== 'immediately' &&
+			(exitStatus?.code === undefined || exitStatus.code === 0);
+	}
+
+	private async _waitForTerminalProcessId(startupTimeout: number): Promise<number | undefined> {
+		if (!this._terminal) {
+			throw new Error('Terminal has not been created');
+		}
+
+		return withTimeout(
+			Promise.resolve(this._terminal.processId),
+			startupTimeout,
+			`Timed out waiting for supervisor terminal PID after ${startupTimeout}ms`,
+		);
+	}
+
+	private _logDetailedError(prefix: string, error: unknown): void {
+		this.log(`${prefix}: ${summarizeError(error)}`, vscode.LogLevel.Error);
+
+		if (!error || typeof error !== 'object') {
+			return;
+		}
+
+		const candidate = error as { stack?: unknown; cause?: unknown };
+		if (typeof candidate.stack === 'string' && candidate.stack.trim().length > 0) {
+			this.log(`Stack trace: ${candidate.stack}`, vscode.LogLevel.Debug);
+		}
+
+		if (candidate.cause !== undefined) {
+			this.log(`Caused by: ${summarizeError(candidate.cause)}`, vscode.LogLevel.Debug);
+			if (candidate.cause && typeof candidate.cause === 'object') {
+				const cause = candidate.cause as { stack?: unknown };
+				if (typeof cause.stack === 'string' && cause.stack.trim().length > 0) {
+					this.log(`Cause stack trace: ${cause.stack}`, vscode.LogLevel.Debug);
+				}
+			}
+		}
+	}
+
 	/**
 	 * Ensures that the server has been started. If the server is already
 	 * started, this is a no-op. If the server is starting, this waits for the
@@ -401,15 +465,32 @@ export class KCApi implements PositronSupervisorApi {
 				return;
 			}
 
+			if (this._shouldIgnoreTerminalCloseDuringStartup(shutdownTimeout, this._terminal.exitStatus)) {
+				this.log(
+					`Supervisor terminal closed (${this._describeTerminalExitReason(this._terminal.exitStatus?.reason)}) during startup; ` +
+						`ignoring because shutdownTimeout is set to '${shutdownTimeout}'`,
+					vscode.LogLevel.Debug,
+				);
+				return;
+			}
+
 			// Mark the terminal as exited
 			exited = true;
 
 			// Read the contents of the output file and log it
 			const contents = fs.readFileSync(outFile, 'utf8');
 			if (this._terminal.exitStatus && this._terminal.exitStatus.code) {
-				this.log(`Supervisor terminal closed with exit code ${this._terminal.exitStatus.code}; output:\n${contents}`, vscode.LogLevel.Error);
+				this.log(
+					`Supervisor terminal closed (${this._describeTerminalExitReason(this._terminal.exitStatus.reason)}) ` +
+						`with exit code ${this._terminal.exitStatus.code}; output:\n${contents}`,
+					vscode.LogLevel.Error,
+				);
 			} else {
-				this.log(`Supervisor terminal closed unexpectedly; output:\n${contents}`, vscode.LogLevel.Error);
+				this.log(
+					`Supervisor terminal closed unexpectedly (${this._describeTerminalExitReason(this._terminal.exitStatus?.reason)}); ` +
+						`output:\n${contents}`,
+					vscode.LogLevel.Error,
+				);
 			}
 
 			// Display a notification that directs users to open the log to get more information
@@ -456,7 +537,7 @@ export class KCApi implements PositronSupervisorApi {
 		}));
 
 		// Wait for the terminal to start and get the PID
-		let processId = await this._terminal.processId;
+		let processId = await this._waitForTerminalProcessId(startupTimeout);
 
 		// Wait for the connection file to be written by the server
 		let connectionData: KallichoreServerState | undefined = undefined;
@@ -501,7 +582,7 @@ export class KCApi implements PositronSupervisorApi {
 			}
 
 			// Every 10 retries, check to see if the server process has exited.
-			if (!exited && processId && retry % 10 === 0) {
+			if (!exited && processId && shutdownTimeout === 'immediately' && retry % 10 === 0) {
 				try {
 					process.kill(processId, 0);
 				} catch (err) {
@@ -980,6 +1061,11 @@ export class KCApi implements PositronSupervisorApi {
 						continue;
 					}
 				}
+
+				this._logDetailedError(
+					`Failed to create session '${sessionMetadata.sessionId}'`,
+					err,
+				);
 
 				// Rethrow the error for the caller to handle. Use a summary to
 				// unroll AggregateErrors.

@@ -710,7 +710,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
         }
 
         this.setPendingCode();
-        this._session.execute(code, execId, mode, errorBehavior);
+        this._session.execute(code, execId, mode, errorBehavior, executionAttribution);
 
         if (mode !== RuntimeCodeExecutionMode.Silent) {
             this.addToInputHistory(code);
@@ -874,7 +874,13 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
             pendingItem.code,
             pendingItem.attribution,
         );
-        this._session.execute(pendingItem.code, id, pendingItem.mode, pendingItem.errorBehavior);
+        this._session.execute(
+            pendingItem.code,
+            id,
+            pendingItem.mode,
+            pendingItem.errorBehavior,
+            executionAttribution,
+        );
 
         if (pendingItem.mode !== RuntimeCodeExecutionMode.Silent) {
             this.addToInputHistory(pendingItem.code);
