@@ -68,6 +68,60 @@ export namespace VariablesReadyNotification {
     export const type = new NotificationType<void>('variables/ready');
 }
 
+export interface MemorySessionUsage {
+    sessionId: string;
+    sessionName: string;
+    languageId: string;
+    memoryBytes: number;
+    processId?: number;
+}
+
+export interface LowMemoryStatus {
+    unit: 'percent' | 'megabytes';
+    threshold: number;
+    remaining: number;
+}
+
+export interface MemoryUsageSnapshot {
+    timestamp: number;
+    totalSystemMemory: number;
+    freeSystemMemory: number;
+    kernelSessions: MemorySessionUsage[];
+    kernelTotalBytes: number;
+    positronOverheadBytes: number;
+    extensionHostOverheadBytes: number;
+    otherProcessesBytes: number;
+    lowMemory?: LowMemoryStatus;
+}
+
+export namespace GetMemoryUsageRequest {
+
+    export interface Result {
+        enabled: boolean;
+        snapshot?: MemoryUsageSnapshot;
+    }
+
+    export const type = new RequestType<void, Result, void>('variables/getMemoryUsage');
+}
+
+export namespace MemoryUsageUpdatedNotification {
+
+    export interface Params {
+        snapshot: MemoryUsageSnapshot;
+    }
+
+    export const type = new NotificationType<Params>('variables/memoryUsageUpdated');
+}
+
+export namespace MemoryUsageEnabledChangedNotification {
+
+    export interface Params {
+        enabled: boolean;
+    }
+
+    export const type = new NotificationType<Params>('variables/memoryUsageEnabledChanged');
+}
+
 export interface VariablesInstanceInfo {
     sessionId: string;
     state: 'uninitialized' | 'opening' | 'connected' | 'closing' | 'closed';

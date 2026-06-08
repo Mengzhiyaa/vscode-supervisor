@@ -24,13 +24,7 @@ import { runtimeStateToConsoleState } from './runtimeStateMapping';
 import { ActiveRuntimeSession } from './activeRuntimeSession';
 import { UiClientInstance } from './UiClientInstance';
 import {
-    OpenEditorKind,
-    type OpenEditorEvent,
-    type OpenWithSystemEvent,
-    type OpenWorkspaceEvent,
     type PromptStateEvent,
-    type SetEditorSelectionsEvent,
-    type ShowMessageEvent,
     type WorkingDirectoryEvent,
     type BusyEvent,
     UiFrontendEvent,
@@ -999,7 +993,6 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
         }
 
         const normalizedData = this._normalizeRuntimeEvent(session, name, data);
-        this._dispatchRuntimeFrontendEvent(name, normalizedData);
         this._onDidReceiveRuntimeEvent.fire({
             session_id: sessionId,
             event: {
@@ -1200,7 +1193,6 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
 
         disposables.push(
             activeSession.onDidReceiveRuntimeEvent((event) => {
-                this._dispatchRuntimeFrontendEvent(event.event.name, event.event.data);
                 this._onDidReceiveRuntimeEvent.fire(event);
             }),
             activeSession.onUiClientStarted((uiClient) => {
@@ -2036,108 +2028,6 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
         }
 
         return { directory };
-    }
-
-    private _dispatchRuntimeFrontendEvent(name: UiFrontendEvent, data: unknown): void {
-        switch (name) {
-            case UiFrontendEvent.ShowMessage: {
-                const event = data as Partial<ShowMessageEvent>;
-                if (typeof event.message === 'string' && event.message.length > 0) {
-                    void vscode.window.showInformationMessage(event.message);
-                }
-                break;
-            }
-
-            case UiFrontendEvent.OpenWorkspace: {
-                const event = data as Partial<OpenWorkspaceEvent>;
-                if (typeof event.path === 'string' && event.path.length > 0) {
-                    void vscode.commands.executeCommand(
-                        'vscode.openFolder',
-                        vscode.Uri.file(event.path),
-                        !!event.new_window,
-                    );
-                }
-                break;
-            }
-
-            case UiFrontendEvent.OpenEditor:
-                void this._openRuntimeEditor(data as Partial<OpenEditorEvent>);
-                break;
-
-            case UiFrontendEvent.SetEditorSelections:
-                this._setActiveEditorSelections(data as Partial<SetEditorSelectionsEvent>);
-                break;
-
-            case UiFrontendEvent.OpenWithSystem: {
-                const event = data as Partial<OpenWithSystemEvent>;
-                if (typeof event.path === 'string' && event.path.length > 0) {
-                    void vscode.env.openExternal(vscode.Uri.file(event.path));
-                }
-                break;
-            }
-        }
-    }
-
-    private async _openRuntimeEditor(event: Partial<OpenEditorEvent>): Promise<void> {
-        if (typeof event.file !== 'string' || event.file.length === 0) {
-            return;
-        }
-
-        const targetUri = event.kind === OpenEditorKind.Uri
-            ? vscode.Uri.parse(event.file)
-            : vscode.Uri.file(event.file);
-
-        const targetLine = typeof event.line === 'number' && Number.isFinite(event.line)
-            ? Math.max(Math.trunc(event.line) - 1, 0)
-            : 0;
-        const targetColumn = typeof event.column === 'number' && Number.isFinite(event.column)
-            ? Math.max(Math.trunc(event.column) - 1, 0)
-            : 0;
-
-        const targetPosition = new vscode.Position(targetLine, targetColumn);
-        const targetSelection = new vscode.Selection(targetPosition, targetPosition);
-
-        await vscode.window.showTextDocument(targetUri, {
-            selection: targetSelection,
-            preview: event.pinned === false,
-            preserveFocus: false,
-        });
-    }
-
-    private _setActiveEditorSelections(event: Partial<SetEditorSelectionsEvent>): void {
-        if (!Array.isArray(event.selections) || event.selections.length === 0) {
-            return;
-        }
-
-        const activeEditor = vscode.window.activeTextEditor;
-        if (!activeEditor) {
-            return;
-        }
-
-        const selections: vscode.Selection[] = [];
-        for (const selection of event.selections) {
-            if (!selection || !selection.start || !selection.end) {
-                continue;
-            }
-
-            selections.push(
-                new vscode.Selection(
-                    new vscode.Position(
-                        Math.max(Math.trunc(selection.start.line), 0),
-                        Math.max(Math.trunc(selection.start.character), 0),
-                    ),
-                    new vscode.Position(
-                        Math.max(Math.trunc(selection.end.line), 0),
-                        Math.max(Math.trunc(selection.end.character), 0),
-                    ),
-                ),
-            );
-        }
-
-        if (selections.length > 0) {
-            activeEditor.selections = selections;
-            activeEditor.revealRange(selections[0]);
-        }
     }
 
     private async _removeSession(session: RuntimeSession): Promise<void> {

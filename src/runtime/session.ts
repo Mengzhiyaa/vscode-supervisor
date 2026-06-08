@@ -1,3 +1,4 @@
+import * as crypto from 'crypto';
 import * as vscode from 'vscode';
 import {
     type LanguageRuntimeDynState,
@@ -46,6 +47,7 @@ import {
     RuntimeExitReason,
     RuntimeCodeExecutionMode,
     RuntimeErrorBehavior,
+    RuntimeOnlineState,
     LanguageRuntimeSessionChannel,
 } from '../internal/runtimeTypes';
 import { RuntimeClientManager } from './runtimeClientManager';
@@ -859,6 +861,99 @@ export class RuntimeSession implements vscode.Disposable {
         }
 
         return this._kernel.evaluate(code);
+    }
+
+    async executeAndWait(
+        code: string,
+        options: {
+            mode?: RuntimeCodeExecutionMode;
+            errorBehavior?: RuntimeErrorBehavior;
+            attribution?: ICodeExecutionAttribution;
+        } = {},
+        token?: vscode.CancellationToken
+    ): Promise<void> {
+        if (token?.isCancellationRequested) {
+            throw new vscode.CancellationError();
+        }
+
+        const id = crypto.randomUUID();
+        const mode = options.mode ?? RuntimeCodeExecutionMode.Interactive;
+        const errorBehavior = options.errorBehavior ?? RuntimeErrorBehavior.Continue;
+
+        await new Promise<void>((resolve, reject) => {
+            let completed = false;
+            let stateDisposable: vscode.Disposable | undefined;
+            let errorDisposable: vscode.Disposable | undefined;
+            let exitDisposable: vscode.Disposable | undefined;
+            let cancellationDisposable: vscode.Disposable | undefined;
+
+            const cleanup = () => {
+                stateDisposable?.dispose();
+                errorDisposable?.dispose();
+                exitDisposable?.dispose();
+                cancellationDisposable?.dispose();
+            };
+
+            const finish = (error?: unknown) => {
+                if (completed) {
+                    return;
+                }
+                completed = true;
+                cleanup();
+                if (error) {
+                    reject(error);
+                } else {
+                    resolve();
+                }
+            };
+
+            stateDisposable = this.onDidReceiveRuntimeMessageState(message => {
+                if (message.parent_id !== id) {
+                    return;
+                }
+
+                if (message.state === RuntimeOnlineState.Idle) {
+                    finish();
+                }
+            });
+
+            errorDisposable = this.onDidReceiveRuntimeMessageError(message => {
+                if (message.parent_id !== id) {
+                    return;
+                }
+
+                finish(new Error(message.message || message.name || 'Runtime execution failed'));
+            });
+
+            exitDisposable = this.onDidEndSession(exit => {
+                finish(new Error(exit.message || 'Runtime session ended before execution completed'));
+            });
+
+            cancellationDisposable = token?.onCancellationRequested(() => {
+                void this.interrupt().catch(error => {
+                    this.log(`Failed to interrupt cancelled execution ${id}: ${error}`, vscode.LogLevel.Warning);
+                });
+                finish(new vscode.CancellationError());
+            });
+
+            try {
+                this.execute(code, id, mode, errorBehavior, options.attribution);
+            } catch (error) {
+                finish(error);
+            }
+        });
+    }
+
+    async callMethod(method: string, ...args: unknown[]): Promise<unknown> {
+        const typed = await this._invokeTypedUiComm((uiComm) =>
+            uiComm.callMethod(method, args as UiParam[])
+        );
+
+        if (!typed.available) {
+            throw new Error('UI comm is not available for this runtime session');
+        }
+
+        return typed.value;
     }
 
     /**

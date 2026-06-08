@@ -93,6 +93,16 @@ try {
  * by replacing them with the actual declaration body from the leaf .d.ts.
  */
 function inlineLeafDeclarations(source, tempOutDir) {
+    let previous;
+    do {
+        previous = source;
+        source = inlineLeafDeclarationsOnce(source, tempOutDir);
+    } while (source !== previous);
+
+    return source;
+}
+
+function inlineLeafDeclarationsOnce(source, tempOutDir) {
     // Match pairs of: import { X } from './path'; ... export { X } from './path';
     // Also handle standalone export { X } from './path'; without a preceding import.
     const reExportPattern = /^export \{[^}]+\} from '(\.\/[^']+)';$/gm;
@@ -119,6 +129,7 @@ function inlineLeafDeclarations(source, tempOutDir) {
         const leafContents = fs.readFileSync(leafDtsPath, 'utf8')
             .replace(/\r\n/g, '\n')
             .trim();
+        const rewrittenLeafContents = rewriteRelativeSpecifiers(leafContents, specifier);
 
         // Remove the `import { ... } from '<specifier>';` line
         const importRe = new RegExp(
@@ -132,10 +143,18 @@ function inlineLeafDeclarations(source, tempOutDir) {
             `^export \\{[^}]+\\} from '${escapeRegExp(specifier)}';$`,
             'gm',
         );
-        source = source.replace(exportRe, leafContents);
+        source = source.replace(exportRe, rewrittenLeafContents);
     }
 
     return source;
+}
+
+function rewriteRelativeSpecifiers(source, leafSpecifier) {
+    const baseDir = path.posix.dirname(leafSpecifier);
+    return source.replace(/from '(\.\/[^']+)'/g, (_match, nestedSpecifier) => {
+        const resolved = path.posix.normalize(path.posix.join(baseDir, nestedSpecifier));
+        return `from '${resolved.startsWith('.') ? resolved : `./${resolved}`}'`;
+    });
 }
 
 function escapeRegExp(s) {

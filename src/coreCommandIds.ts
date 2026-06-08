@@ -8,6 +8,8 @@ export const CoreCommandIds = {
     openPlotsGallery: 'supervisor.openPlotsGallery',
     openPlotInEditor: 'supervisor.openPlotInEditor',
     closeAuxiliaryPlotsPanel: 'supervisor.closeAuxiliaryPlotsPanel',
+    packagesRefresh: 'supervisor.packages.refresh',
+    packagesUpdateAll: 'supervisor.packages.updateAll',
     consoleExecuteCode: 'supervisor.console.executeCode',
     consoleExecuteCodeWithoutAdvancing: 'supervisor.console.executeCodeWithoutAdvancing',
     consoleClearConsole: 'supervisor.console.clearConsole',
@@ -61,6 +63,7 @@ export const ViewIds = {
     console: 'supervisor.console',
     variables: 'supervisor.variables',
     plots: 'supervisor.plots',
+    packages: 'supervisor.packages',
     viewer: 'supervisor.viewer',
     help: 'supervisor.help',
 } as const;
@@ -98,6 +101,10 @@ export const ContextKeys = {
     dataExplorerSummaryCollapsed: 'supervisor.dataExplorerSummaryCollapsed',
     dataExplorerFocused: 'supervisor.dataExplorerFocused',
     dataExplorerInNewWindow: 'supervisor.dataExplorerInNewWindow',
+    packagesHasActiveSession: 'supervisor.packages.hasActiveSession',
+    packagesIsBusy: 'supervisor.packages.isBusy',
+    packagesSelectedPackage: 'supervisor.packages.selectedPackage',
+    packagesItemSize: 'supervisor.packages.itemSize',
 } as const;
 
 export const CoreConfigurationSections = {

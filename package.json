@@ -124,6 +124,18 @@
         "category": "Ark"
       },
       {
+        "command": "supervisor.packages.refresh",
+        "title": "Refresh Packages",
+        "category": "Ark Packages",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "supervisor.packages.updateAll",
+        "title": "Update All Packages",
+        "category": "Ark Packages",
+        "icon": "$(cloud-download)"
+      },
+      {
         "command": "supervisor.console.executeCode",
         "title": "Execute Code in Console",
         "category": "Ark Console"
@@ -346,6 +358,16 @@
           "submenu": "supervisor.console.sessionMenu",
           "when": "view == supervisor.console && supervisor.consoleSessionsExist",
           "group": "navigation@1"
+        },
+        {
+          "command": "supervisor.packages.refresh",
+          "when": "view == supervisor.packages && supervisor.packages.hasActiveSession && !supervisor.packages.isBusy",
+          "group": "navigation@1"
+        },
+        {
+          "command": "supervisor.packages.updateAll",
+          "when": "view == supervisor.packages && supervisor.packages.hasActiveSession && !supervisor.packages.isBusy",
+          "group": "navigation@2"
         }
       ],
       "supervisor.console.sessionMenu": [
@@ -527,6 +549,13 @@
           "id": "supervisor.plots",
           "contextualOnly": true,
           "icon": "$(preview)"
+        },
+        {
+          "name": "Packages",
+          "type": "webview",
+          "id": "supervisor.packages",
+          "contextualOnly": true,
+          "icon": "$(package)"
         }
       ],
       "supervisor-sidebar-exploration": [
@@ -642,6 +671,36 @@
           "minimum": 0,
           "maximum": 60000,
           "description": "Resource usage polling interval in milliseconds. Set to 0 to disable."
+        },
+        "memoryUsage.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Display memory usage in the Variables pane."
+        },
+        "memoryUsage.pollingIntervalMs": {
+          "type": "number",
+          "default": 10000,
+          "minimum": 1000,
+          "maximum": 60000,
+          "description": "How often to poll for system memory usage, in milliseconds."
+        },
+        "memoryUsage.lowMemoryThresholdPercent": {
+          "type": "number",
+          "default": 5,
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Show a low-memory warning when free system memory drops to or below this percentage of total memory. Set to 0 to disable."
+        },
+        "memoryUsage.lowMemoryThresholdMB": {
+          "type": "number",
+          "default": 0,
+          "minimum": 0,
+          "description": "Show a low-memory warning when free system memory drops to or below this number of megabytes. Set to 0 to disable."
+        },
+        "memoryUsage.lowMemoryNotification": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show a one-time notification when the system enters a low-memory state."
         },
         "supervisor.console.fontSize": {
           "type": "number",

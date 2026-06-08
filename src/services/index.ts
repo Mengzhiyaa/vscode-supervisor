@@ -13,3 +13,9 @@ export * from './preview';
 
 // Help Service
 export * from './help';
+
+// Packages Service
+export * from './packages';
+
+// Memory Usage Service
+export * from './memory';

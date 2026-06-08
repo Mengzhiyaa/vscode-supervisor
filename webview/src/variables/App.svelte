@@ -10,6 +10,7 @@
     import VariableOverflow from "./VariableOverflow.svelte";
     import VariablesEmpty from "./VariablesEmpty.svelte";
     import { patchEntries } from "./patchEntries";
+    import type { MemoryUsageSnapshot } from "../types/memory";
     import type {
         IVariableGroup,
         IVariableItem,
@@ -86,6 +87,8 @@
     let contextMenuEntry = $state<VariableEntry | null>(null);
     let showDeleteAllDialog = $state(false);
     let viewerLoadingEntryIds = $state<Set<string>>(new Set());
+    let memoryUsageEnabled = $state(true);
+    let memoryUsageSnapshot = $state<MemoryUsageSnapshot | undefined>();
 
     function getSessionData(sessionId: string): SessionVariablesData {
         return (
@@ -190,7 +193,8 @@
     let resizeObserver: ResizeObserver | undefined;
 
     onMount(() => {
-        connection = getRpcConnection();
+        const rpc = getRpcConnection();
+        connection = rpc;
 
         resizeObserver = new ResizeObserver((entries) => {
             for (const entry of entries) {
@@ -201,7 +205,7 @@
             resizeObserver.observe(containerRef);
         }
 
-        connection.onNotification(
+        rpc.onNotification(
             "variables/entriesChanged",
             (params: { sessionId: string; entries: VariableEntry[] }) => {
                 const data = ensureSessionData(params.sessionId);
@@ -225,7 +229,7 @@
             },
         );
 
-        connection.onNotification(
+        rpc.onNotification(
             "session/info",
             (params: { sessions: SessionInfo[]; activeSessionId?: string }) => {
                 const previousActiveSessionId = activeSessionId;
@@ -279,7 +283,7 @@
             },
         );
 
-        connection.onNotification(
+        rpc.onNotification(
             "variables/instanceStarted",
             (params: { instance: VariablesInstanceInfo }) => {
                 variablesInstanceMap.set(
@@ -290,7 +294,7 @@
             },
         );
 
-        connection.onNotification(
+        rpc.onNotification(
             "variables/instanceStopped",
             (params: { sessionId: string }) => {
                 variablesInstanceMap.delete(params.sessionId);
@@ -308,7 +312,7 @@
             },
         );
 
-        connection.onNotification(
+        rpc.onNotification(
             "variables/activeInstanceChanged",
             (params: { sessionId?: string }) => {
                 const previousActiveSessionId = activeSessionId;
@@ -333,7 +337,26 @@
             },
         );
 
-        connection.sendNotification("variables/ready");
+        rpc.onNotification(
+            "variables/memoryUsageUpdated",
+            (params: { snapshot: MemoryUsageSnapshot }) => {
+                memoryUsageEnabled = true;
+                memoryUsageSnapshot = params.snapshot;
+            },
+        );
+
+        rpc.onNotification(
+            "variables/memoryUsageEnabledChanged",
+            (params: { enabled: boolean }) => {
+                memoryUsageEnabled = params.enabled;
+                if (!params.enabled) {
+                    memoryUsageSnapshot = undefined;
+                }
+            },
+        );
+
+        rpc.sendNotification("variables/ready");
+        void hydrateMemoryUsage(rpc);
     });
 
     onDestroy(() => {
@@ -424,6 +447,21 @@
             console.error("Failed to fetch variable entries:", error);
         } finally {
             loading = false;
+        }
+    }
+
+    async function hydrateMemoryUsage(rpc: MessageConnection) {
+        try {
+            const state = (await rpc.sendRequest(
+                "variables/getMemoryUsage",
+            )) as {
+                enabled: boolean;
+                snapshot?: MemoryUsageSnapshot;
+            };
+            memoryUsageEnabled = state.enabled;
+            memoryUsageSnapshot = state.enabled ? state.snapshot : undefined;
+        } catch (error) {
+            console.error("Failed to fetch memory usage:", error);
         }
     }
 
@@ -909,6 +947,8 @@
         instances={variablesInstances}
         activeInstanceId={activeVariablesInstanceId ?? activeSessionId}
         hasActiveInstance={variablesInstances.length > 0}
+        {memoryUsageEnabled}
+        {memoryUsageSnapshot}
         onrefresh={refreshActiveSession}
         ondeleteAll={() => (showDeleteAllDialog = true)}
         onfilterChange={handleFilterChange}

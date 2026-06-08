@@ -45,8 +45,16 @@ export interface LanguageRuntimeExit {
 
 // ===== Types formerly in shared/runtime.ts =====
 
-import { RuntimeStartupPhase } from './shared/runtimeStartupPhase';
-export { RuntimeStartupPhase } from './shared/runtimeStartupPhase';
+import {
+    RuntimeCodeExecutionMode,
+    RuntimeErrorBehavior,
+    RuntimeStartupPhase,
+} from './shared/runtime';
+export {
+    RuntimeCodeExecutionMode,
+    RuntimeErrorBehavior,
+    RuntimeStartupPhase,
+} from './shared/runtime';
 
 // ===== Types formerly in newFolder/positronNewFolder.ts =====
 
@@ -339,6 +347,17 @@ export interface ICodeExecutionAttribution {
     metadata?: Record<string, unknown>;
 }
 
+export interface RuntimeCodeExecutionOptions {
+    mode?: RuntimeCodeExecutionMode;
+    errorBehavior?: RuntimeErrorBehavior;
+    attribution?: ICodeExecutionAttribution;
+}
+
+export interface EvaluateCodeResult {
+    result: any;
+    output: string;
+}
+
 export enum LanguageRuntimeClientType {
     Variables = 'positron.variables',
     Lsp = 'positron.lsp',
@@ -377,6 +396,20 @@ export interface ILanguageRuntimeSession {
     connectDap(): Promise<boolean>;
     disconnectDap(): Promise<void>;
     setConsoleWidth(widthInChars: number): Promise<void>;
+    execute(
+        code: string,
+        id: string,
+        mode?: RuntimeCodeExecutionMode,
+        errorBehavior?: RuntimeErrorBehavior,
+        attribution?: ICodeExecutionAttribution,
+    ): void;
+    evaluate(code: string): Promise<EvaluateCodeResult>;
+    executeAndWait(
+        code: string,
+        options?: RuntimeCodeExecutionOptions,
+        token?: vscode.CancellationToken
+    ): Promise<void>;
+    callMethod(method: string, ...args: unknown[]): Promise<unknown>;
     watchRuntimeClient(
         clientType: LanguageRuntimeClientType,
         handler: (client: ILanguageRuntimeClientInstance) => void
@@ -415,6 +448,87 @@ export interface ILanguageRuntimeSessionStateEvent {
 export interface IRuntimeUiClientStartedEvent {
     sessionId: string;
     uiClient: IUiClientInstance;
+}
+
+export interface LanguageRuntimePackage {
+    id: string;
+    name: string;
+    displayName: string;
+    version: string;
+    license?: string;
+    latestVersion?: string;
+    publishedDate?: string;
+    attached?: boolean;
+    outdated?: boolean;
+    description?: string;
+}
+
+export interface PackageSpec {
+    name: string;
+    version?: string;
+}
+
+export interface ILanguageRuntimePackageManager {
+    getPackages(token?: vscode.CancellationToken): Promise<LanguageRuntimePackage[]>;
+    installPackages(packages: PackageSpec[], token?: vscode.CancellationToken): Promise<void>;
+    uninstallPackages(packageNames: string[], token?: vscode.CancellationToken): Promise<void>;
+    updatePackages(packages: PackageSpec[], token?: vscode.CancellationToken): Promise<void>;
+    updateAllPackages(token?: vscode.CancellationToken): Promise<void>;
+    searchPackages(query: string, token?: vscode.CancellationToken): Promise<LanguageRuntimePackage[]>;
+    searchPackageVersions(name: string, token?: vscode.CancellationToken): Promise<string[]>;
+    getPackageMetadata?(
+        packageNames: string[],
+        token?: vscode.CancellationToken
+    ): Promise<Map<string, Partial<LanguageRuntimePackage>> | undefined>;
+}
+
+export interface ILanguageRuntimePackageManagerProvider {
+    readonly languageId: string;
+    createPackageManager(session: ILanguageRuntimeSession): ILanguageRuntimePackageManager | undefined;
+}
+
+export type PackagesItemSize = 'card' | 'row';
+
+export interface IPositronPackagesInstance {
+    readonly packages: LanguageRuntimePackage[];
+    readonly session: ILanguageRuntimeSession;
+    readonly onDidRefreshPackagesInstance: vscode.Event<LanguageRuntimePackage[]>;
+    readonly onDidChangeRefreshState: vscode.Event<boolean>;
+    readonly onDidChangeInstallState: vscode.Event<boolean>;
+    readonly onDidChangeUninstallState: vscode.Event<boolean>;
+    readonly onDidChangeUpdateState: vscode.Event<boolean>;
+    readonly onDidChangeUpdateAllState: vscode.Event<boolean>;
+    refreshPackages(token?: vscode.CancellationToken): Promise<LanguageRuntimePackage[]>;
+    refreshMetadata(token?: vscode.CancellationToken): Promise<void>;
+    installPackages(packages: PackageSpec[], token?: vscode.CancellationToken): Promise<void>;
+    uninstallPackages(packageNames: string[], token?: vscode.CancellationToken): Promise<void>;
+    updatePackages(packages: PackageSpec[], token?: vscode.CancellationToken): Promise<void>;
+    updateAllPackages(token?: vscode.CancellationToken): Promise<void>;
+    searchPackages(query: string, token?: vscode.CancellationToken): Promise<LanguageRuntimePackage[]>;
+    searchPackageVersions(name: string, token?: vscode.CancellationToken): Promise<string[]>;
+}
+
+export interface IPositronPackagesService extends vscode.Disposable {
+    readonly activeSession: ILanguageRuntimeSession | undefined;
+    readonly activePackagesInstance: IPositronPackagesInstance | undefined;
+    readonly selectedPackage: string | undefined;
+    readonly itemSize: PackagesItemSize;
+    readonly onDidChangeActivePackagesInstance: vscode.Event<IPositronPackagesInstance | undefined>;
+    readonly onDidStopPackagesInstance: vscode.Event<IPositronPackagesInstance>;
+    readonly onDidChangeItemSize: vscode.Event<PackagesItemSize>;
+    registerPackageManagerProvider(provider: ILanguageRuntimePackageManagerProvider): vscode.Disposable;
+    setActivePositronPackagesSession(session: ILanguageRuntimeSession): void;
+    setSelectedPackage(packageName: string | undefined): void;
+    setItemSize(itemSize: PackagesItemSize): void;
+    getInstances(): IPositronPackagesInstance[];
+    refreshPackages(token?: vscode.CancellationToken): Promise<LanguageRuntimePackage[]>;
+    refreshMetadata(token?: vscode.CancellationToken): Promise<void>;
+    installPackages(packages: PackageSpec[], token?: vscode.CancellationToken): Promise<void>;
+    uninstallPackages(packageNames: string[], token?: vscode.CancellationToken): Promise<void>;
+    updatePackages(packages: PackageSpec[], token?: vscode.CancellationToken): Promise<void>;
+    updateAllPackages(token?: vscode.CancellationToken): Promise<void>;
+    searchPackages(query: string, token?: vscode.CancellationToken): Promise<LanguageRuntimePackage[]>;
+    searchPackageVersions(name: string, token?: vscode.CancellationToken): Promise<string[]>;
 }
 
 export interface INotebookSessionUriChangedEvent {
@@ -592,6 +706,7 @@ export interface ILanguageContributionServices {
     readonly runtimeManager: IRuntimeManager;
     readonly positronConsoleService: IPositronConsoleService;
     readonly positronHelpService: IPositronHelpService;
+    readonly positronPackagesService: IPositronPackagesService;
 }
 
 export type LanguageContributionRegistrationResult =

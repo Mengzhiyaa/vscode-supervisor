@@ -21,11 +21,14 @@ import { PositronNewFolderService } from './newFolder/positronNewFolderService';
 import { RuntimeManager } from './runtime/manager';
 import { RuntimeSession } from './runtime/session';
 import { RuntimeSessionService } from './runtime/runtimeSession';
+import { RuntimeFrontendEventService } from './runtime/runtimeFrontendEventService';
 import { RuntimeStartupService } from './runtime/runtimeStartup';
 import { PositronConsoleService } from './services/console';
 import { PositronVariablesService } from './services/variables';
 import { PositronPreviewService } from './services/preview';
 import { PositronHelpService } from './services/help';
+import { MemoryUsageService } from './services/memory';
+import { PositronPackagesService } from './services/packages';
 import { PositronPlotsService } from './runtime/positronPlotsService';
 import { PlotEditorProvider, PlotsGalleryEditorProvider } from './editor';
 import { registerConsoleActions } from './services/console/consoleActions';
@@ -129,6 +132,7 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
     private readonly _webviewManager: WebviewManager;
     private readonly _runtimeManager: RuntimeManager;
     private readonly _sessionManager: RuntimeSessionService;
+    private readonly _runtimeFrontendEventService: RuntimeFrontendEventService;
     private readonly _runtimeStartupService: RuntimeStartupService;
     private readonly _positronNewFolderService: PositronNewFolderService;
     private readonly _outputChannel: vscode.LogOutputChannel;
@@ -146,7 +150,9 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
     private readonly _variablesService: PositronVariablesService;
     private readonly _previewService: PositronPreviewService;
     private readonly _helpService: PositronHelpService;
+    private readonly _memoryUsageService: MemoryUsageService;
     private readonly _plotsService: PositronPlotsService;
+    private readonly _packagesService: PositronPackagesService;
 
     // Editor providers for plots
     private readonly _plotEditorProvider: PlotEditorProvider;
@@ -175,6 +181,12 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
                     LanguageRuntimeSession | undefined
             )
         );
+
+        this._runtimeFrontendEventService = new RuntimeFrontendEventService(
+            this._sessionManager,
+            this._outputChannel,
+        );
+        this._disposables.push(this._runtimeFrontendEventService);
 
         // Initialize runtime manager
         this._runtimeManager = new RuntimeManager(_context, this._sessionManager, this._outputChannel);
@@ -211,8 +223,18 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
         this._variablesService = new PositronVariablesService(this._sessionManager, this._outputChannel);
         this._disposables.push(this._variablesService);
 
+        this._memoryUsageService = new MemoryUsageService(this._sessionManager, this._outputChannel);
+        this._disposables.push(this._memoryUsageService);
+
         this._plotsService = new PositronPlotsService(this._outputChannel, this._context);
         this._disposables.push(this._plotsService);
+
+        this._packagesService = new PositronPackagesService(
+            this._context,
+            this._sessionManager,
+            this._outputChannel,
+        );
+        this._disposables.push(this._packagesService);
 
         this._previewService = new PositronPreviewService(this._sessionManager, this._plotsService, this._outputChannel);
         this._disposables.push(this._previewService);
@@ -264,7 +286,9 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
             this._sessionManager,
             this._consoleService,
             this._variablesService,
+            this._memoryUsageService,
             this._plotsService,
+            this._packagesService,
             this._previewService,
             this._helpService,
             this._runtimeStartupService,
@@ -486,6 +510,7 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
                     ),
             },
             positronHelpService: this._helpService,
+            positronPackagesService: this._packagesService,
         };
     }
 
@@ -989,9 +1014,11 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
         this._consoleService.initialize();
         this._variablesService.initialize();
         this._plotsService.initialize(this._sessionManager);
+        this._packagesService.initialize();
         this._previewService.initialize();
         this._helpService.initialize();
         this._positronDataExplorerService.initialize();
+        this._runtimeFrontendEventService.initialize();
 
         // Pre-initialize DuckDB-WASM engine so it's ready when a file is opened.
         // Fire-and-forget: failure here is non-fatal (DuckDB will retry on first use).
@@ -1257,6 +1284,28 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
                     }
                 } else {
                     vscode.window.showWarningMessage('No plot selected to open in editor');
+                }
+            })
+        );
+
+        this._disposables.push(
+            vscode.commands.registerCommand(CoreCommandIds.packagesRefresh, async () => {
+                try {
+                    await this._packagesService.refreshPackages();
+                } catch (error) {
+                    this._outputChannel.warn(`[Packages] Refresh failed: ${error}`);
+                    vscode.window.showErrorMessage(`Failed to refresh packages: ${error}`);
+                }
+            })
+        );
+
+        this._disposables.push(
+            vscode.commands.registerCommand(CoreCommandIds.packagesUpdateAll, async () => {
+                try {
+                    await this._packagesService.updateAllPackages();
+                } catch (error) {
+                    this._outputChannel.warn(`[Packages] Update all failed: ${error}`);
+                    vscode.window.showErrorMessage(`Failed to update packages: ${error}`);
                 }
             })
         );

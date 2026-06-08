@@ -11,8 +11,10 @@
         type DynamicAction,
     } from "../shared/DynamicActionBar.svelte";
     import GroupingMenuButton from "./GroupingMenuButton.svelte";
+    import MemoryUsageMeter from "./MemoryUsageMeter.svelte";
     import SortingMenuButton from "./SortingMenuButton.svelte";
     import VariablesInstanceMenuButton from "./VariablesInstanceMenuButton.svelte";
+    import type { MemoryUsageSnapshot } from "../types/memory";
     import type {
         VariablesInstance,
         VariablesGrouping,
@@ -28,6 +30,8 @@
         instances?: VariablesInstance[];
         activeInstanceId?: string;
         hasActiveInstance?: boolean;
+        memoryUsageEnabled?: boolean;
+        memoryUsageSnapshot?: MemoryUsageSnapshot;
         onrefresh?: () => void;
         ondeleteAll?: () => void;
         onfilterChange?: (text: string) => void;
@@ -45,6 +49,8 @@
         instances = [],
         activeInstanceId,
         hasActiveInstance = true,
+        memoryUsageEnabled = true,
+        memoryUsageSnapshot,
         onrefresh,
         ondeleteAll,
         onfilterChange,
@@ -85,6 +91,16 @@
     ]);
 
     const rightActions: DynamicAction[] = $derived([
+        ...(memoryUsageEnabled
+            ? [
+                  {
+                      fixedWidth: 154,
+                      minWidth: 66,
+                      separator: true,
+                      component: memoryUsageSnippet,
+                  },
+              ]
+            : []),
         {
             fixedWidth: 24,
             separator: true,
@@ -121,6 +137,13 @@
         {highlightRecent}
         onselectSorting={(s) => onsortingChange?.(s)}
         ontoggleHighlightRecent={() => onhighlightRecentChange?.(!highlightRecent)}
+    />
+{/snippet}
+
+{#snippet memoryUsageSnippet()}
+    <MemoryUsageMeter
+        enabled={memoryUsageEnabled}
+        snapshot={memoryUsageSnapshot}
     />
 {/snippet}
 

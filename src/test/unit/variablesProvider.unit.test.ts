@@ -30,6 +30,15 @@ function createEventStub<T>(): vscode.Event<T> {
     return () => ({ dispose: () => undefined });
 }
 
+function makeMemoryUsageServiceStub() {
+    return {
+        enabled: true,
+        currentSnapshot: undefined,
+        onDidUpdateMemoryUsage: createEventStub(),
+        onDidChangeEnabled: createEventStub(),
+    } as any;
+}
+
 class FakeConnection {
     readonly requests = new Map<string, (params: any) => Promise<any> | any>();
 
@@ -79,6 +88,7 @@ suite('[Unit] variables provider active-session sync', () => {
                 getVariablesInstance: () => undefined,
                 setViewVisible: () => undefined,
             } as any,
+            makeMemoryUsageServiceStub(),
         );
 
         const connection = new FakeConnection();
@@ -125,6 +135,7 @@ suite('[Unit] variables provider active-session sync', () => {
                 getVariablesInstance: () => undefined,
                 setViewVisible: () => undefined,
             } as any,
+            makeMemoryUsageServiceStub(),
         );
 
         const connection = new FakeConnection();

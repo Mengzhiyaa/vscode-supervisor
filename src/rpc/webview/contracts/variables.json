@@ -169,6 +169,155 @@
     },
     {
       "kind": "interface",
+      "name": "MemorySessionUsage",
+      "fields": [
+        {
+          "name": "sessionId",
+          "type": "string"
+        },
+        {
+          "name": "sessionName",
+          "type": "string"
+        },
+        {
+          "name": "languageId",
+          "type": "string"
+        },
+        {
+          "name": "memoryBytes",
+          "type": "number"
+        },
+        {
+          "name": "processId",
+          "optional": true,
+          "type": "number"
+        }
+      ]
+    },
+    {
+      "kind": "interface",
+      "name": "LowMemoryStatus",
+      "fields": [
+        {
+          "name": "unit",
+          "type": "'percent' | 'megabytes'"
+        },
+        {
+          "name": "threshold",
+          "type": "number"
+        },
+        {
+          "name": "remaining",
+          "type": "number"
+        }
+      ]
+    },
+    {
+      "kind": "interface",
+      "name": "MemoryUsageSnapshot",
+      "fields": [
+        {
+          "name": "timestamp",
+          "type": "number"
+        },
+        {
+          "name": "totalSystemMemory",
+          "type": "number"
+        },
+        {
+          "name": "freeSystemMemory",
+          "type": "number"
+        },
+        {
+          "name": "kernelSessions",
+          "type": "MemorySessionUsage[]"
+        },
+        {
+          "name": "kernelTotalBytes",
+          "type": "number"
+        },
+        {
+          "name": "positronOverheadBytes",
+          "type": "number"
+        },
+        {
+          "name": "extensionHostOverheadBytes",
+          "type": "number"
+        },
+        {
+          "name": "otherProcessesBytes",
+          "type": "number"
+        },
+        {
+          "name": "lowMemory",
+          "optional": true,
+          "type": "LowMemoryStatus"
+        }
+      ]
+    },
+    {
+      "kind": "request",
+      "name": "GetMemoryUsageRequest",
+      "method": "variables/getMemoryUsage",
+      "paramsType": "void",
+      "resultType": "Result",
+      "errorType": "void",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Result",
+          "fields": [
+            {
+              "name": "enabled",
+              "type": "boolean"
+            },
+            {
+              "name": "snapshot",
+              "optional": true,
+              "type": "MemoryUsageSnapshot"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "MemoryUsageUpdatedNotification",
+      "method": "variables/memoryUsageUpdated",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "snapshot",
+              "type": "MemoryUsageSnapshot"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "MemoryUsageEnabledChangedNotification",
+      "method": "variables/memoryUsageEnabledChanged",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "enabled",
+              "type": "boolean"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "interface",
       "name": "VariablesInstanceInfo",
       "fields": [
         {

@@ -4,11 +4,14 @@ import { VariablesViewProvider } from './variablesProvider';
 import { PlotsViewProvider } from './plotsProvider';
 import { ViewerViewProvider } from './viewerProvider';
 import { HelpViewProvider } from './helpProvider';
+import { PackagesViewProvider } from './packagesProvider';
 import { ViewIds } from '../coreCommandIds';
 import { RuntimeSessionService } from '../runtime/runtimeSession';
 import { RuntimeSession } from '../runtime/session';
 import { PositronConsoleService } from '../services/console';
 import { PositronVariablesService } from '../services/variables';
+import { PositronPackagesService } from '../services/packages';
+import { MemoryUsageService } from '../services/memory';
 import { PositronPlotsService } from '../runtime/positronPlotsService';
 import { PositronPreviewService } from '../services/preview';
 import { PositronHelpService } from '../services/help';
@@ -23,6 +26,7 @@ export class WebviewManager implements vscode.Disposable {
     private _consoleProvider: ConsoleViewProvider | undefined;
     private _variablesProvider: VariablesViewProvider | undefined;
     private _plotsProvider: PlotsViewProvider | undefined;
+    private _packagesProvider: PackagesViewProvider | undefined;
     private _viewerProvider: ViewerViewProvider | undefined;
     private _helpProvider: HelpViewProvider | undefined;
 
@@ -32,7 +36,9 @@ export class WebviewManager implements vscode.Disposable {
         private readonly _sessionManager: RuntimeSessionService,
         private readonly _consoleService: PositronConsoleService,
         private readonly _variablesService: PositronVariablesService,
+        private readonly _memoryUsageService: MemoryUsageService,
         private readonly _plotsService: PositronPlotsService,
+        private readonly _packagesService: PositronPackagesService,
         private readonly _previewService: PositronPreviewService,
         private readonly _helpService: PositronHelpService,
         private readonly _runtimeStartupService: RuntimeStartupService,
@@ -77,6 +83,7 @@ export class WebviewManager implements vscode.Disposable {
             this._outputChannel,
             this._sessionManager,
             this._variablesService,
+            this._memoryUsageService,
             this._getAdditionalLocalResourceRoots,
         );
         this._disposables.push(
@@ -104,6 +111,26 @@ export class WebviewManager implements vscode.Disposable {
             vscode.window.registerWebviewViewProvider(
                 ViewIds.plots,
                 this._plotsProvider,
+                {
+                    webviewOptions: {
+                        retainContextWhenHidden: true
+                    }
+                }
+            )
+        );
+
+        // Packages Sidebar Provider
+        this._packagesProvider = new PackagesViewProvider(
+            this._context.extensionUri,
+            this._outputChannel,
+            this._packagesService,
+            this._getAdditionalLocalResourceRoots,
+        );
+        this._disposables.push(
+            this._packagesProvider,
+            vscode.window.registerWebviewViewProvider(
+                ViewIds.packages,
+                this._packagesProvider,
                 {
                     webviewOptions: {
                         retainContextWhenHidden: true
@@ -278,6 +305,10 @@ export class WebviewManager implements vscode.Disposable {
      */
     get plotsProvider(): PlotsViewProvider | undefined {
         return this._plotsProvider;
+    }
+
+    get packagesProvider(): PackagesViewProvider | undefined {
+        return this._packagesProvider;
     }
 
     dispose(): void {

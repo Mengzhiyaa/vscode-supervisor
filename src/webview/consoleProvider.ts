@@ -808,8 +808,10 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
         return {
             sessions,
             activeSessionId: this._sessionSnapshotBuilder.resolveForegroundConsoleSessionId(sessions, [
-                this._sessionManager?.activeSessionId,
+                // Follow the console service first so provisional sessions created
+                // from onWillStartSession become active before the runtime is ready.
                 this._consoleService?.activePositronConsoleInstance?.sessionId,
+                this._sessionManager?.activeSessionId,
             ]),
         };
     }

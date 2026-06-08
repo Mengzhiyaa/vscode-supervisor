@@ -5,6 +5,7 @@ import * as VariablesProtocol from '../rpc/webview/variables';
 import * as SessionProtocol from '../rpc/webview/session';
 import { RuntimeSession } from '../runtime/session';
 import { RuntimeSessionService } from '../runtime/runtimeSession';
+import { MemoryUsageService } from '../services/memory';
 import {
     PositronVariablesService,
     IPositronVariablesInstance,
@@ -49,6 +50,7 @@ export class VariablesViewProvider extends BaseWebviewProvider {
         outputChannel: vscode.LogOutputChannel,
         private readonly _sessionManager: RuntimeSessionService | undefined,
         private readonly _variablesService: PositronVariablesService,
+        private readonly _memoryUsageService: MemoryUsageService,
         getAdditionalLocalResourceRoots: () => readonly vscode.Uri[] = () => [],
     ) {
         super(extensionUri, outputChannel, getAdditionalLocalResourceRoots);
@@ -125,6 +127,12 @@ export class VariablesViewProvider extends BaseWebviewProvider {
             this._variablesService.onDidChangeActivePositronVariablesInstance(instance => {
                 this._sendActiveVariablesInstanceChanged(instance?.session.sessionId);
                 this._sendSessionInfoUpdate();
+            }),
+            this._memoryUsageService.onDidUpdateMemoryUsage(snapshot => {
+                this._sendMemoryUsageSnapshot(snapshot);
+            }),
+            this._memoryUsageService.onDidChangeEnabled(enabled => {
+                this._sendMemoryUsageEnabled(enabled);
             })
         );
     }
@@ -208,6 +216,13 @@ export class VariablesViewProvider extends BaseWebviewProvider {
         connection.onRequest('session/list', async () => {
             this.log('Session list request', vscode.LogLevel.Debug);
             return this._buildSessionInfoSnapshot();
+        });
+
+        connection.onRequest(VariablesProtocol.GetMemoryUsageRequest.type, async () => {
+            return {
+                enabled: this._memoryUsageService.enabled,
+                snapshot: this._memoryUsageService.currentSnapshot,
+            };
         });
 
         connection.onRequest(VariablesProtocol.ListVariablesRequest.type, async (params) => {
@@ -500,6 +515,10 @@ export class VariablesViewProvider extends BaseWebviewProvider {
         for (const [sessionId, entries] of this._sessionEntries.entries()) {
             this.sendVariableEntriesChanged(entries, sessionId);
         }
+        this._sendMemoryUsageEnabled(this._memoryUsageService.enabled);
+        if (this._memoryUsageService.currentSnapshot) {
+            this._sendMemoryUsageSnapshot(this._memoryUsageService.currentSnapshot);
+        }
     }
 
     private _sendExistingVariablesInstanceNotifications(): void {
@@ -557,6 +576,28 @@ export class VariablesViewProvider extends BaseWebviewProvider {
         this._connection.sendNotification(
             VariablesProtocol.ActiveVariablesInstanceChangedNotification.type,
             { sessionId }
+        );
+    }
+
+    private _sendMemoryUsageSnapshot(snapshot: VariablesProtocol.MemoryUsageSnapshot): void {
+        if (!this._connection || !this._webviewReady) {
+            return;
+        }
+
+        this._connection.sendNotification(
+            VariablesProtocol.MemoryUsageUpdatedNotification.type,
+            { snapshot }
+        );
+    }
+
+    private _sendMemoryUsageEnabled(enabled: boolean): void {
+        if (!this._connection || !this._webviewReady) {
+            return;
+        }
+
+        this._connection.sendNotification(
+            VariablesProtocol.MemoryUsageEnabledChangedNotification.type,
+            { enabled }
         );
     }
 
