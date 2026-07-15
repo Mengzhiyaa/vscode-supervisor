@@ -23,6 +23,7 @@ export class RuntimeManager implements vscode.Disposable, IRuntimeManager {
     private readonly _languagesWithExternalDiscoveryManagers = new Set<string>();
     private _isDiscovering = false;
     private _discoveryComplete = false;
+    private _discoveryPromise: Promise<void> | undefined;
 
     readonly id = RuntimeManager._nextRuntimeManagerId++;
 
@@ -82,12 +83,17 @@ export class RuntimeManager implements vscode.Disposable, IRuntimeManager {
     }
 
     async discoverAllRuntimes(disabledLanguageIds: string[]): Promise<void> {
-        if (this._isDiscovering) {
-            this._outputChannel.debug('Discovery already in progress, skipping...');
+        if (this._discoveryPromise) {
+            this._outputChannel.debug('Discovery already in progress, waiting for it...');
+            await this._discoveryPromise;
             return;
         }
 
         this._isDiscovering = true;
+        let resolveDiscovery!: () => void;
+        this._discoveryPromise = new Promise<void>((resolve) => {
+            resolveDiscovery = resolve;
+        });
         this._outputChannel.debug('Starting incremental runtime discovery...');
 
         try {
@@ -101,10 +107,14 @@ export class RuntimeManager implements vscode.Disposable, IRuntimeManager {
                     );
                     continue;
                 }
-                await this._discoverProvider(provider);
+                try {
+                    await this._discoverProvider(provider);
+                } catch (error) {
+                    this._outputChannel.error(
+                        `Error discovering runtimes for ${provider.languageId}: ${error}`,
+                    );
+                }
             }
-        } catch (error) {
-            this._outputChannel.error(`Error during runtime discovery: ${error}`);
         } finally {
             this._isDiscovering = false;
             this._discoveryComplete = true;
@@ -112,6 +122,8 @@ export class RuntimeManager implements vscode.Disposable, IRuntimeManager {
             this._outputChannel.debug(
                 `Discovery complete. Found ${this.getInstallations().length} installation(s)`
             );
+            this._discoveryPromise = undefined;
+            resolveDiscovery();
         }
     }
 

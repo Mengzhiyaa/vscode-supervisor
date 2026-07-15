@@ -190,6 +190,7 @@ class PositronDataExplorerInstance implements IPositronDataExplorerInstance {
     private readonly _onDidRequestFocus = new vscode.EventEmitter<void>();
     private readonly _schemaCache = new Map<number, TableSchema['columns'][number]>();
     private _fileHasHeaderRow = true;
+    private _disposed = false;
 
     constructor(
         private readonly _clientInstance: DataExplorerClientInstance,
@@ -303,8 +304,15 @@ class PositronDataExplorerInstance implements IPositronDataExplorerInstance {
     }
 
     dispose(): void {
-        this._disposables.forEach(d => d.dispose());
+        if (this._disposed) {
+            return;
+        }
+        this._disposed = true;
+
+        // Keep the client close subscription alive until the client has emitted
+        // its close event so the service can remove this instance from its map.
         this._clientInstance.dispose();
+        this._disposables.forEach(d => d.dispose());
     }
 }
 
@@ -410,11 +418,20 @@ export class PositronDataExplorerService implements IPositronDataExplorerService
         // Create instance
         const instance = new PositronDataExplorerInstance(clientInstance, languageName, options?.inlineOnly === true);
 
-        // Store instance
+        // Store the replacement first so a late close from the previous
+        // instance cannot remove this one from the registry.
+        const replacedInstance = this._instances.get(instance.identifier);
         this._instances.set(instance.identifier, instance);
+        replacedInstance?.dispose();
 
         // Handle instance close
         instance.onDidClose(() => {
+            // A newer instance can legitimately reuse the same identifier. Do
+            // not let a late close from the old instance remove its replacement.
+            if (this._instances.get(instance.identifier) !== instance) {
+                return;
+            }
+
             this._instances.delete(instance.identifier);
             this._onDidCloseInstance.fire(instance.identifier);
 
@@ -434,6 +451,9 @@ export class PositronDataExplorerService implements IPositronDataExplorerService
                     this._variablePathToInstanceMap.delete(key);
                 }
             }
+            // Backend-initiated closes also need to release the instance's
+            // remaining subscriptions and comm resources.
+            instance.dispose();
         });
 
         if (options?.sessionId && options.variablePath && options.variablePath.length > 0) {

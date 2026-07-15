@@ -522,16 +522,19 @@ export class PositronConsoleService implements IPositronConsoleService {
             );
         }
 
-        this._outputChannel.debug(`[PositronConsoleService] No preferred runtime for ${languageId}; falling back to startConsoleSession`);
-        const session = await this._sessionManager.startConsoleSession();
+        this._outputChannel.debug(
+            `[PositronConsoleService] No preferred runtime for ${languageId}; starting its registered provider`,
+        );
+        const session = await this._sessionManager.startConsoleSessionForLanguage(languageId);
         const instance = this._consoleInstancesBySessionId.get(session.sessionId);
         if (!instance) {
             throw new Error(`Console instance was not created for session ${session.sessionId}`);
         }
 
         if (instance.runtimeMetadata.languageId !== languageId) {
-            this._outputChannel.warn(
-                `Started fallback console session ${session.sessionId} for language ${instance.runtimeMetadata.languageId} while executing ${languageId} code (${code}).`,
+            throw new Error(
+                `Started console session ${session.sessionId} for language ` +
+                `${instance.runtimeMetadata.languageId}, but ${languageId} was requested while executing ${code}.`,
             );
         }
 

@@ -528,40 +528,20 @@ export class RuntimeSession implements vscode.Disposable {
     private addToEventQueue(event: QueuedRuntimeEvent): void {
         const clock = event.clock;
 
-        if (clock < this._eventClock) {
+        if (clock <= this._eventClock) {
+            this.log(
+                `Received stale '${event.summary()}' at tick ${clock}; current tick is ${this._eventClock}`,
+                vscode.LogLevel.Warning,
+            );
             if (event instanceof QueuedRuntimeMessageEvent) {
-                this.log(
-                    `Received '${event.summary()}' at tick ${clock} while waiting for tick ${this._eventClock + 1}; emitting anyway`,
-                    vscode.LogLevel.Warning
-                );
                 this.processMessage(event.message);
             }
             return;
         }
 
         this._eventQueue.push(event);
-
-        if (clock === this._eventClock + 1 || this._eventClock === 0) {
-            this.processEventQueue();
-        } else {
-            this.log(
-                `Received '${event.summary()}' at tick ${clock} while waiting for tick ${this._eventClock + 1}; deferring`,
-                vscode.LogLevel.Info
-            );
-
-            if (this._eventQueueTimer) {
-                clearTimeout(this._eventQueueTimer);
-                this._eventQueueTimer = undefined;
-            }
-
-            this._eventQueueTimer = setTimeout(() => {
-                this.log(
-                    'Processing runtime event queue after timeout; event ordering issues possible.',
-                    vscode.LogLevel.Warning
-                );
-                this.processEventQueue();
-            }, 250);
-        }
+        this._eventQueue.sort((a, b) => a.clock - b.clock);
+        this.processEventQueue();
     }
 
     /**
@@ -574,19 +554,49 @@ export class RuntimeSession implements vscode.Disposable {
         }
 
         if (this._eventQueue.length > 1) {
-            this._eventQueue.sort((a, b) => a.clock - b.clock);
             this.log(
-                `Processing ${this._eventQueue.length} runtime events. Clocks: ${this._eventQueue.map((event) => `${event.clock}: ${event.summary()}`).join(', ')}`,
-                vscode.LogLevel.Info
+                `Queued runtime event clocks: ${this._eventQueue.map((event) => event.clock).join(', ')}`,
+                vscode.LogLevel.Info,
             );
         }
 
-        this._eventQueue.forEach((event) => {
+        while (this._eventQueue.length > 0) {
+            const event = this._eventQueue[0];
+            if (
+                this._eventClock !== 0 &&
+                event.clock !== this._eventClock + 1
+            ) {
+                break;
+            }
+
+            this._eventQueue.shift();
             this._eventClock = event.clock;
             this.handleQueuedEvent(event);
-        });
+        }
 
-        this._eventQueue = [];
+        if (this._eventQueue.length === 0) {
+            return;
+        }
+
+        const nextEvent = this._eventQueue[0];
+        this.log(
+            `Deferring '${nextEvent.summary()}' at tick ${nextEvent.clock}; waiting for tick ${this._eventClock + 1}`,
+            vscode.LogLevel.Info,
+        );
+        this._eventQueueTimer = setTimeout(() => {
+            this._eventQueueTimer = undefined;
+            const firstEvent = this._eventQueue[0];
+            if (!firstEvent) {
+                return;
+            }
+
+            this.log(
+                `Runtime event tick ${this._eventClock + 1} did not arrive; resuming at tick ${firstEvent.clock}`,
+                vscode.LogLevel.Warning,
+            );
+            this._eventClock = firstEvent.clock - 1;
+            this.processEventQueue();
+        }, 250);
     }
 
     /**

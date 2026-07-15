@@ -234,7 +234,8 @@ export class RuntimeClientInstance implements vscode.Disposable {
         timeout?: number,
         responseKeys: Array<string> = []
     ): Promise<T> {
-        return (await this.performRpcWithBuffers<T>(data, timeout, responseKeys)).data;
+        const response = await this.performRpcWithBuffers<T>(data, timeout ?? 10000, responseKeys);
+        return response.data;
     }
 
     updatePendingRpcState(message: LanguageRuntimeState): void {

@@ -359,7 +359,7 @@ export class MemoryUsageService implements vscode.Disposable {
 
     private _maybeNotifyLowMemory(snapshot: MemoryUsageSnapshot): void {
         const isLowMemory = !!snapshot.lowMemory;
-        const enteredLowMemory = isLowMemory && this._wasLowMemory === false;
+        const enteredLowMemory = isLowMemory && this._wasLowMemory !== true;
         this._wasLowMemory = isLowMemory;
 
         if (!enteredLowMemory || this._lowMemoryNotificationShown) {

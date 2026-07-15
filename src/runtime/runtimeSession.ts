@@ -436,6 +436,23 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
         this._requireLocalSupervisor();
 
         const provider = this._getDefaultRuntimeProvider();
+        return this._startConsoleSessionWithProvider(provider, sessionName, 'startConsoleSession');
+    }
+
+    async startConsoleSessionForLanguage(
+        languageId: string,
+        sessionName?: string,
+    ): Promise<RuntimeSession> {
+        this._requireLocalSupervisor();
+        const provider = this._requireRuntimeProvider(languageId);
+        return this._startConsoleSessionWithProvider(provider, sessionName, 'startConsoleSessionForLanguage');
+    }
+
+    private async _startConsoleSessionWithProvider(
+        provider: ILanguageRuntimeProvider<any>,
+        sessionName: string | undefined,
+        source: string,
+    ): Promise<RuntimeSession> {
         const installation = await this._resolveInstallationForNewSession(provider);
         const runtimeMetadata = provider.createRuntimeMetadata(this._context, installation, this._outputChannel);
         this.registerDiscoveredRuntime(provider.languageId, installation, runtimeMetadata);
@@ -444,7 +461,7 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
             sessionName || provider.formatRuntimeName(installation),
             LanguageRuntimeSessionMode.Console,
             undefined,
-            'startConsoleSession',
+            source,
             RuntimeStartMode.Starting,
             true,
         );
@@ -1798,6 +1815,7 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
                 const restartPromise = (async () => {
                     await session.restart(session.workingDirectory);
                     await this._waitForSessionReady(session, 10000);
+                    this.restoreSessionMapsAfterRestart(session);
                     return session.sessionId;
                 })().finally(() => {
                     if (this._startingSessionsBySessionMapKey.get(sessionMapKey) === restartPromise) {
@@ -2190,6 +2208,23 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
 
         if (sessionMode === LanguageRuntimeSessionMode.Notebook && notebookUri) {
             this._startingNotebooksByNotebookUri.delete(getNotebookSessionMapKey(notebookUri));
+        }
+    }
+
+    private restoreSessionMapsAfterRestart(session: RuntimeSession): void {
+        if (session.sessionMetadata.sessionMode === LanguageRuntimeSessionMode.Console) {
+            this.addSessionToConsoleSessionMap(session);
+            return;
+        }
+
+        if (
+            session.sessionMetadata.sessionMode === LanguageRuntimeSessionMode.Notebook &&
+            session.sessionMetadata.notebookUri
+        ) {
+            this._notebookSessionsByNotebookUri.set(
+                getNotebookSessionMapKey(session.sessionMetadata.notebookUri),
+                session,
+            );
         }
     }
 

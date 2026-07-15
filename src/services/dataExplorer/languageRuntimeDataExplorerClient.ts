@@ -118,6 +118,8 @@ export class DataExplorerClientInstance implements vscode.Disposable {
     private _cachedBackendState: BackendState | undefined;
     private _backendPromise: Promise<BackendState> | undefined;
     private _numPendingTasks = 0;
+    private _disposed = false;
+    private _closeNotified = false;
 
     // Format options
     private readonly _dataFormatOptions = DEFAULT_DATA_FORMAT_OPTIONS;
@@ -185,8 +187,7 @@ export class DataExplorerClientInstance implements vscode.Disposable {
         );
         this._disposables.push(
             this._comm.onDidClose(() => {
-                this._setStatus(DataExplorerClientStatus.Disconnected);
-                this._onDidClose.fire();
+                this._notifyClosed();
             })
         );
     }
@@ -493,11 +494,20 @@ export class DataExplorerClientInstance implements vscode.Disposable {
     }
 
     dispose(): void {
+        if (this._disposed) {
+            return;
+        }
+        this._disposed = true;
+
         for (const [callbackId, pendingTask] of this._asyncTasks) {
             clearTimeout(pendingTask.timeoutHandle);
             pendingTask.reject(new Error('Data Explorer client disposed while waiting for column profiles.'));
             this._asyncTasks.delete(callbackId);
         }
+        // Notify owners before disposing our event emitters. In particular, the
+        // Data Explorer service removes the corresponding instance from its
+        // registry in response to this event.
+        this._notifyClosed();
         this._disposables.forEach(d => d.dispose());
         this._comm.closeClient();
         this._comm.dispose();
@@ -506,6 +516,15 @@ export class DataExplorerClientInstance implements vscode.Disposable {
     // =========================================================================
     // Private Methods
     // =========================================================================
+
+    private _notifyClosed(): void {
+        if (this._closeNotified) {
+            return;
+        }
+        this._closeNotified = true;
+        this._setStatus(DataExplorerClientStatus.Disconnected);
+        this._onDidClose.fire();
+    }
 
     private async _runBackendTask<T>(
         task: () => Promise<T>,
@@ -522,7 +541,11 @@ export class DataExplorerClientInstance implements vscode.Disposable {
             return await task();
         } finally {
             this._numPendingTasks -= 1;
-            if (this._numPendingTasks === 0) {
+            if (
+                this._numPendingTasks === 0 &&
+                !this._disposed &&
+                !this._closeNotified
+            ) {
                 this._setStatus(DataExplorerClientStatus.Idle);
             }
         }

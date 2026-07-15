@@ -311,6 +311,8 @@ function padBase64(data: string): string {
 export class PositronPlotRenderQueue implements vscode.Disposable {
     private readonly _queue: QueuedOperation[] = [];
     private _isProcessing = false;
+    private _activeOperation: QueuedOperation | undefined;
+    private _disposed = false;
     private readonly _disposables: vscode.Disposable[] = [];
 
     /**
@@ -340,6 +342,15 @@ export class PositronPlotRenderQueue implements vscode.Disposable {
                         this.processQueue();
                     }
                 } else if (state === RuntimeState.Exited) {
+                    if (this._activeOperation) {
+                        this._activeOperation.operation.cancel();
+                        this.trace(
+                            `Runtime exited, cancelling active operation: ` +
+                            `${JSON.stringify(this._activeOperation.operation.operationRequest)} ` +
+                            `(${this._activeOperation.comm.clientId})`);
+                        this._activeOperation = undefined;
+                        this._isProcessing = false;
+                    }
                     this._queue.forEach((queuedOperation) => {
                         queuedOperation.operation.cancel();
                         this.trace(
@@ -347,6 +358,7 @@ export class PositronPlotRenderQueue implements vscode.Disposable {
                             `${JSON.stringify(queuedOperation.operation.operationRequest)} (${queuedOperation.comm.clientId})`);
                     });
                     this._queue.length = 0;
+                    this.cleanupUnusedCloseListeners();
                 }
             })
         );
@@ -360,6 +372,10 @@ export class PositronPlotRenderQueue implements vscode.Disposable {
      */
     public queueOperation(request: PlotOperationRequest, comm: IPlotComm): DeferredPlotOperation {
         const deferredOperation = new DeferredPlotOperation(request);
+        if (this._disposed) {
+            deferredOperation.cancel();
+            return deferredOperation;
+        }
         this._queue.push(new QueuedOperation(deferredOperation, comm));
 
         // Ensure we have a close listener for this comm
@@ -494,6 +510,10 @@ export class PositronPlotRenderQueue implements vscode.Disposable {
      * do nothing.
      */
     private processQueue(): void {
+        if (this._disposed) {
+            return;
+        }
+
         // Nothing to do if the queue is empty.
         if (this._queue.length === 0) {
             this._isProcessing = false;
@@ -507,12 +527,18 @@ export class PositronPlotRenderQueue implements vscode.Disposable {
             return;
         }
 
+        const runtimeState = this._session.getRuntimeState();
+        if (runtimeState !== RuntimeState.Idle && runtimeState !== RuntimeState.Ready) {
+            return;
+        }
+
         this._isProcessing = true;
         const queuedOperation = this._queue.shift();
         if (!queuedOperation) {
             this._isProcessing = false;
             return;
         }
+        this._activeOperation = queuedOperation;
 
         this.trace(`Processing ${queuedOperation.operation.operationRequest.type} request: ` +
             `${JSON.stringify(queuedOperation.operation.operationRequest)} ` +
@@ -545,9 +571,7 @@ export class PositronPlotRenderQueue implements vscode.Disposable {
             }).catch((err) => {
                 queuedOperation.operation.error(err);
             }).finally(() => {
-                // Mark processing as complete and process the next item in the queue
-                this._isProcessing = false;
-                this.processQueue();
+                this.finishOperation(queuedOperation);
             });
         } else if (operationRequest.type === OperationType.GetIntrinsicSize) {
             // Handle intrinsic size operation
@@ -557,9 +581,7 @@ export class PositronPlotRenderQueue implements vscode.Disposable {
                 // Handle the error
                 queuedOperation.operation.error(err);
             }).finally(() => {
-                // Mark processing as complete and process the next item in the queue
-                this._isProcessing = false;
-                this.processQueue();
+                this.finishOperation(queuedOperation);
             });
         } else if (operationRequest.type === OperationType.GetMetadata) {
             // Handle metadata operation
@@ -569,16 +591,22 @@ export class PositronPlotRenderQueue implements vscode.Disposable {
                 // Handle the error
                 queuedOperation.operation.error(err);
             }).finally(() => {
-                // Mark processing as complete and process the next item in the queue
-                this._isProcessing = false;
-                this.processQueue();
+                this.finishOperation(queuedOperation);
             });
         } else {
             // Unknown operation type
             queuedOperation.operation.error(new Error(`Unknown operation type: ${operationRequest.type}`));
-            this._isProcessing = false;
-            this.processQueue();
+            this.finishOperation(queuedOperation);
         }
+    }
+
+    private finishOperation(operation: QueuedOperation): void {
+        if (this._activeOperation !== operation) {
+            return;
+        }
+        this._activeOperation = undefined;
+        this._isProcessing = false;
+        this.processQueue();
     }
 
     /**
@@ -620,6 +648,13 @@ export class PositronPlotRenderQueue implements vscode.Disposable {
     private cancelOperationsForClosedComm(clientId: string): void {
         let cancelledCount = 0;
 
+        if (this._activeOperation?.comm.clientId === clientId) {
+            this._activeOperation.operation.cancel();
+            this._activeOperation = undefined;
+            this._isProcessing = false;
+            cancelledCount++;
+        }
+
         // Iterate through the queue in reverse order to safely remove items
         for (let i = this._queue.length - 1; i >= 0; i--) {
             const queuedOperation = this._queue[i];
@@ -638,6 +673,7 @@ export class PositronPlotRenderQueue implements vscode.Disposable {
         if (cancelledCount > 0) {
             this.trace(`Cancelled ${cancelledCount} operations for closed comm ${clientId}`);
         }
+        this.processQueue();
     }
 
     /**
@@ -647,6 +683,9 @@ export class PositronPlotRenderQueue implements vscode.Disposable {
     private cleanupUnusedCloseListeners(): void {
         // Get all comm client IDs that currently have operations in the queue
         const activeCommIds = new Set(this._queue.map(op => op.comm.clientId));
+        if (this._activeOperation) {
+            activeCommIds.add(this._activeOperation.comm.clientId);
+        }
 
         // Find close listeners for comms that are no longer in the queue
         const unusedListeners: string[] = [];
@@ -670,6 +709,15 @@ export class PositronPlotRenderQueue implements vscode.Disposable {
      * Dispose the render queue and clean up resources.
      */
     dispose(): void {
+        if (this._disposed) {
+            return;
+        }
+        this._disposed = true;
+
+        this._activeOperation?.operation.cancel();
+        this._activeOperation = undefined;
+        this._isProcessing = false;
+
         // Cancel any remaining operations in the queue
         for (const queuedOperation of this._queue) {
             queuedOperation.operation.cancel();
