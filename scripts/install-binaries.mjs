@@ -1,10 +1,11 @@
 import fs from 'fs';
+import crypto from 'crypto';
 import http from 'http';
 import https from 'https';
 import os from 'os';
 import path from 'path';
 import process from 'process';
-import { execSync } from 'child_process';
+import { execFileSync, execSync } from 'child_process';
 import { fileURLToPath } from 'url';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -67,14 +68,37 @@ function detectPlatform(explicitPlatform) {
     return `${normalizeOs(os.platform())}-${normalizeArch(os.arch())}`;
 }
 
-function readKallichoreVersion() {
+function readKallichoreManifest(platform) {
     const pkg = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'));
     const version = pkg?.positron?.binaryDependencies?.kallichore;
     if (!version) {
         throw new Error('Missing positron.binaryDependencies.kallichore in package.json');
     }
 
-    return version;
+    return {
+        version,
+        checksum: pkg?.positron?.binaryChecksums?.kallichore?.[platform],
+    };
+}
+
+function verifyChecksum(filePath, expectedDigest) {
+    if (!expectedDigest) {
+        throw new Error(`Missing checksum for ${path.basename(filePath)}`);
+    }
+
+    const [algorithm, expected] = expectedDigest.split(':', 2);
+    if (algorithm !== 'sha256' || !expected) {
+        throw new Error(`Unsupported checksum '${expectedDigest}' for ${path.basename(filePath)}`);
+    }
+
+    const actual = crypto.createHash(algorithm).update(fs.readFileSync(filePath)).digest('hex');
+    if (actual !== expected.toLowerCase()) {
+        throw new Error(
+            `Checksum mismatch for ${path.basename(filePath)}: expected ${expected}, got ${actual}`,
+        );
+    }
+
+    console.log(`Verified ${algorithm} checksum for ${path.basename(filePath)}`);
 }
 
 function binaryName(basePlatform) {
@@ -154,7 +178,7 @@ function findFile(rootDir, filename) {
 }
 
 async function installKallichore(platform) {
-    const version = readKallichoreVersion();
+    const { version, checksum } = readKallichoreManifest(platform);
     const executableName = binaryName(platform);
     const archiveFile = archiveName(version, platform);
     const downloadUrl = `https://github.com/posit-dev/kallichore-builds/releases/download/${version}/${archiveFile}`;
@@ -168,6 +192,7 @@ async function installKallichore(platform) {
         console.log(`Installing kallichore ${version} for ${platform}`);
         console.log(`Downloading ${downloadUrl}`);
         await download(downloadUrl, archivePath);
+        verifyChecksum(archivePath, checksum);
         extractZip(archivePath, extractDir);
 
         const extractedBinary = findFile(extractDir, executableName);
@@ -177,13 +202,39 @@ async function installKallichore(platform) {
 
         fs.mkdirSync(installDir, { recursive: true });
         const destination = path.join(installDir, executableName);
-        fs.copyFileSync(extractedBinary, destination);
+		const staged = path.join(
+			installDir,
+			`.install-${process.pid}-${Date.now()}-${executableName}`,
+		);
+		let reportedVersion;
+		try {
+			fs.copyFileSync(extractedBinary, staged);
+			if (process.platform !== 'win32') {
+				fs.chmodSync(staged, 0o755);
+			}
 
-        if (process.platform !== 'win32') {
-            fs.chmodSync(destination, 0o755);
-        }
+			reportedVersion = execFileSync(staged, ['--version'], {
+				encoding: 'utf8',
+				stdio: ['ignore', 'pipe', 'pipe'],
+			}).trim();
+			const parsedVersion = reportedVersion.match(
+				/\b(\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?)\b/,
+			)?.[1];
+			if (parsedVersion !== version) {
+				throw new Error(
+					`Downloaded binary reported '${reportedVersion || 'unknown'}'; expected ${version}`,
+				);
+			}
 
-        console.log(`Installed ${destination}`);
+			if (process.platform === 'win32' && fs.existsSync(destination)) {
+				fs.unlinkSync(destination);
+			}
+			fs.renameSync(staged, destination);
+		} finally {
+			fs.rmSync(staged, { force: true });
+		}
+
+        console.log(`Installed ${destination} (${reportedVersion})`);
     } finally {
         fs.rmSync(tempDir, { recursive: true, force: true });
     }

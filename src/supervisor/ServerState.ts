@@ -26,6 +26,9 @@ export interface KallichoreServerState {
 	/** The bearer token used to authenticate with the server */
 	bearer_token: string;
 
+	/** A unique identifier generated each time the server starts. */
+	server_id?: string;
+
 	/** The path to the log file */
 	log_path: string;
 

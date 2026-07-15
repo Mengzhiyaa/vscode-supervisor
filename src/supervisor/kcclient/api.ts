@@ -18,7 +18,7 @@ import type { AxiosPromise, AxiosInstance, RawAxiosRequestConfig } from '../http
 import globalAxios from '../httpClient';
 // Some imports not used depending on template conditions
 // @ts-ignore
-import { DUMMY_BASE_URL, assertParamExists, setApiKeyToObject, setBasicAuthToObject, setBearerAuthToObject, setOAuthToObject, setSearchParams, serializeDataIfNeeded, toPathString, createRequestFunction, replaceWithSerializableTypeIfNeeded } from './common';
+import { DUMMY_BASE_URL, assertParamExists, setApiKeyToObject, setBasicAuthToObject, setBearerAuthToObject, setOAuthToObject, setSearchParams, serializeDataIfNeeded, toPathString, createRequestFunction } from './common';
 import type { RequestArgs } from './base';
 // @ts-ignore
 import { BASE_PATH, COLLECTION_FORMATS, BaseAPI, RequiredError, operationServerMap } from './base';
@@ -146,6 +146,118 @@ export interface ConnectionInfo {
      * The IP address for the connection
      */
     'ip': string;
+}
+/**
+ * A single output message produced during code execution
+ */
+export interface ExecuteOutput {
+    /**
+     * The output message type
+     */
+    'type': ExecuteOutputTypeEnum;
+    /**
+     * The stream name (stdout or stderr), for stream output
+     */
+    'stream_name'?: string;
+    /**
+     * The text content, for stream output
+     */
+    'text'?: string;
+    /**
+     * MIME-keyed data, for display_data output
+     */
+    'data'?: { [key: string]: string; };
+    /**
+     * Metadata dictionary, for display_data output
+     */
+    'metadata'?: object;
+    /**
+     * The error name, for error output
+     */
+    'error_name'?: string;
+    /**
+     * The error message, for error output
+     */
+    'error_message'?: string;
+    /**
+     * The error traceback lines, for error output
+     */
+    'error_traceback'?: Array<string>;
+}
+
+export const ExecuteOutputTypeEnum = {
+    Stream: 'stream',
+    DisplayData: 'display_data',
+    Error: 'error'
+} as const;
+
+export type ExecuteOutputTypeEnum = typeof ExecuteOutputTypeEnum[keyof typeof ExecuteOutputTypeEnum];
+
+/**
+ * The result of executing code in a session
+ */
+export interface ExecuteReply {
+    /**
+     * Whether the execution succeeded or errored
+     */
+    'status': ExecuteReplyStatusEnum;
+    /**
+     * The kernel\'s execution counter
+     */
+    'execution_count': number;
+    /**
+     * All output messages produced during execution, in order
+     */
+    'output': Array<ExecuteOutput>;
+    /**
+     * The execution result as a MIME-keyed dictionary (from execute_result), if the execution produced a result
+     */
+    'data'?: { [key: string]: string; };
+    /**
+     * The error name, if the execution failed
+     */
+    'error_name'?: string;
+    /**
+     * The error message, if the execution failed
+     */
+    'error_message'?: string;
+    /**
+     * The error traceback, if the execution failed
+     */
+    'error_traceback'?: Array<string>;
+}
+
+export const ExecuteReplyStatusEnum = {
+    Ok: 'ok',
+    Error: 'error'
+} as const;
+
+export type ExecuteReplyStatusEnum = typeof ExecuteReplyStatusEnum[keyof typeof ExecuteReplyStatusEnum];
+
+/**
+ * A request to execute code in a session
+ */
+export interface ExecuteRequest {
+    /**
+     * The code to execute
+     */
+    'code': string;
+    /**
+     * If true, signals the kernel to execute quietly: no broadcast on iopub, no execute_result, and the execution_count is not incremented. Defaults to false.
+     */
+    'silent'?: boolean;
+    /**
+     * If true (default), the code is stored in the kernel\'s history. Set to false for throwaway executions.
+     */
+    'store_history'?: boolean;
+    /**
+     * If true (default), abort the execution queue on error. If false, queued execute requests will still be processed even if this one fails.
+     */
+    'stop_on_error'?: boolean;
+    /**
+     * Maximum number of seconds to wait for execution to complete. If not specified, the request will block indefinitely until execution finishes.
+     */
+    'timeout_seconds'?: number;
 }
 /**
  * The execution queue for a session
@@ -331,6 +443,10 @@ export interface ServerStatus {
      * An ISO 8601 timestamp of when the server was started
      */
     'started': string;
+    /**
+     * A unique identifier generated when the server starts. Clients can compare this against a previously observed value to detect that they are talking to a different server instance (e.g. one that was restarted), and therefore that any persisted bearer token may be stale.
+     */
+    'server_id'?: string;
 }
 export interface SessionList {
     'total': number;
@@ -424,10 +540,10 @@ export type VarActionType = typeof VarActionType[keyof typeof VarActionType];
 export const DefaultApiAxiosParamCreator = function (configuration?: Configuration) {
     return {
         /**
-         * 
+         *
          * @summary Adopt an existing session
-         * @param {string} sessionId 
-         * @param {ConnectionInfo} connectionInfo 
+         * @param {string} sessionId
+         * @param {ConnectionInfo} connectionInfo
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
@@ -449,8 +565,9 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             const localVarHeaderParameter = {} as any;
             const localVarQueryParameter = {} as any;
 
+
+
             localVarHeaderParameter['Content-Type'] = 'application/json';
-            localVarHeaderParameter['Accept'] = 'application/json';
 
             setSearchParams(localVarUrlObj, localVarQueryParameter);
             let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
@@ -463,9 +580,9 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             };
         },
         /**
-         * 
+         *
          * @summary Upgrade to a WebSocket or domain socket for channel communication
-         * @param {string} sessionId 
+         * @param {string} sessionId
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
@@ -485,7 +602,7 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             const localVarHeaderParameter = {} as any;
             const localVarQueryParameter = {} as any;
 
-            localVarHeaderParameter['Accept'] = 'application/json';
+
 
             setSearchParams(localVarUrlObj, localVarQueryParameter);
             let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
@@ -497,9 +614,9 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             };
         },
         /**
-         * 
+         *
          * @summary Notify the server that a client is connected
-         * @param {ClientHeartbeat} clientHeartbeat 
+         * @param {ClientHeartbeat} clientHeartbeat
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
@@ -518,8 +635,9 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             const localVarHeaderParameter = {} as any;
             const localVarQueryParameter = {} as any;
 
+
+
             localVarHeaderParameter['Content-Type'] = 'application/json';
-            localVarHeaderParameter['Accept'] = 'application/json';
 
             setSearchParams(localVarUrlObj, localVarQueryParameter);
             let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
@@ -532,9 +650,9 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             };
         },
         /**
-         * 
+         *
          * @summary Get Jupyter connection information for the session
-         * @param {string} sessionId 
+         * @param {string} sessionId
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
@@ -554,7 +672,7 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             const localVarHeaderParameter = {} as any;
             const localVarQueryParameter = {} as any;
 
-            localVarHeaderParameter['Accept'] = 'application/json';
+
 
             setSearchParams(localVarUrlObj, localVarQueryParameter);
             let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
@@ -566,9 +684,9 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             };
         },
         /**
-         * 
+         *
          * @summary Delete session
-         * @param {string} sessionId 
+         * @param {string} sessionId
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
@@ -588,7 +706,7 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             const localVarHeaderParameter = {} as any;
             const localVarQueryParameter = {} as any;
 
-            localVarHeaderParameter['Accept'] = 'application/json';
+
 
             setSearchParams(localVarUrlObj, localVarQueryParameter);
             let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
@@ -600,7 +718,47 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             };
         },
         /**
-         * 
+         *
+         * @summary Execute code and return results
+         * @param {string} sessionId
+         * @param {ExecuteRequest} executeRequest
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        executeCode: async (sessionId: string, executeRequest: ExecuteRequest, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'sessionId' is not null or undefined
+            assertParamExists('executeCode', 'sessionId', sessionId)
+            // verify required parameter 'executeRequest' is not null or undefined
+            assertParamExists('executeCode', 'executeRequest', executeRequest)
+            const localVarPath = `/sessions/{session_id}/execute`
+                .replace(`{${"session_id"}}`, encodeURIComponent(String(sessionId)));
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'POST', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+
+
+            localVarHeaderParameter['Content-Type'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+            localVarRequestOptions.data = serializeDataIfNeeded(executeRequest, localVarRequestOptions, configuration)
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         *
          * @summary Get the server configuration
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
@@ -618,7 +776,7 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             const localVarHeaderParameter = {} as any;
             const localVarQueryParameter = {} as any;
 
-            localVarHeaderParameter['Accept'] = 'application/json';
+
 
             setSearchParams(localVarUrlObj, localVarQueryParameter);
             let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
@@ -630,9 +788,9 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             };
         },
         /**
-         * 
+         *
          * @summary Get session details
-         * @param {string} sessionId 
+         * @param {string} sessionId
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
@@ -652,7 +810,7 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             const localVarHeaderParameter = {} as any;
             const localVarQueryParameter = {} as any;
 
-            localVarHeaderParameter['Accept'] = 'application/json';
+
 
             setSearchParams(localVarUrlObj, localVarQueryParameter);
             let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
@@ -664,9 +822,9 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             };
         },
         /**
-         * 
+         *
          * @summary Interrupt session
-         * @param {string} sessionId 
+         * @param {string} sessionId
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
@@ -686,7 +844,7 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             const localVarHeaderParameter = {} as any;
             const localVarQueryParameter = {} as any;
 
-            localVarHeaderParameter['Accept'] = 'application/json';
+
 
             setSearchParams(localVarUrlObj, localVarQueryParameter);
             let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
@@ -698,9 +856,9 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             };
         },
         /**
-         * 
+         *
          * @summary Force quit session
-         * @param {string} sessionId 
+         * @param {string} sessionId
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
@@ -720,7 +878,7 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             const localVarHeaderParameter = {} as any;
             const localVarQueryParameter = {} as any;
 
-            localVarHeaderParameter['Accept'] = 'application/json';
+
 
             setSearchParams(localVarUrlObj, localVarQueryParameter);
             let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
@@ -732,7 +890,7 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             };
         },
         /**
-         * 
+         *
          * @summary List active sessions
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
@@ -750,7 +908,7 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             const localVarHeaderParameter = {} as any;
             const localVarQueryParameter = {} as any;
 
-            localVarHeaderParameter['Accept'] = 'application/json';
+
 
             setSearchParams(localVarUrlObj, localVarQueryParameter);
             let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
@@ -762,9 +920,9 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             };
         },
         /**
-         * 
+         *
          * @summary Create a new session
-         * @param {NewSession} newSession 
+         * @param {NewSession} newSession
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
@@ -783,8 +941,9 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             const localVarHeaderParameter = {} as any;
             const localVarQueryParameter = {} as any;
 
+
+
             localVarHeaderParameter['Content-Type'] = 'application/json';
-            localVarHeaderParameter['Accept'] = 'application/json';
 
             setSearchParams(localVarUrlObj, localVarQueryParameter);
             let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
@@ -797,10 +956,10 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             };
         },
         /**
-         * 
+         *
          * @summary Restart a session
-         * @param {string} sessionId 
-         * @param {RestartSession} [restartSession] 
+         * @param {string} sessionId
+         * @param {RestartSession} [restartSession]
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
@@ -820,8 +979,9 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             const localVarHeaderParameter = {} as any;
             const localVarQueryParameter = {} as any;
 
+
+
             localVarHeaderParameter['Content-Type'] = 'application/json';
-            localVarHeaderParameter['Accept'] = 'application/json';
 
             setSearchParams(localVarUrlObj, localVarQueryParameter);
             let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
@@ -834,7 +994,7 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             };
         },
         /**
-         * 
+         *
          * @summary Get server status and information
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
@@ -852,7 +1012,7 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             const localVarHeaderParameter = {} as any;
             const localVarQueryParameter = {} as any;
 
-            localVarHeaderParameter['Accept'] = 'application/json';
+
 
             setSearchParams(localVarUrlObj, localVarQueryParameter);
             let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
@@ -864,9 +1024,9 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             };
         },
         /**
-         * 
+         *
          * @summary Change the server configuration
-         * @param {ServerConfiguration} serverConfiguration 
+         * @param {ServerConfiguration} serverConfiguration
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
@@ -885,8 +1045,9 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             const localVarHeaderParameter = {} as any;
             const localVarQueryParameter = {} as any;
 
+
+
             localVarHeaderParameter['Content-Type'] = 'application/json';
-            localVarHeaderParameter['Accept'] = 'application/json';
 
             setSearchParams(localVarUrlObj, localVarQueryParameter);
             let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
@@ -899,7 +1060,7 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             };
         },
         /**
-         * 
+         *
          * @summary Shut down all sessions and the server itself
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
@@ -917,7 +1078,7 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             const localVarHeaderParameter = {} as any;
             const localVarQueryParameter = {} as any;
 
-            localVarHeaderParameter['Accept'] = 'application/json';
+
 
             setSearchParams(localVarUrlObj, localVarQueryParameter);
             let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
@@ -929,9 +1090,9 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             };
         },
         /**
-         * 
+         *
          * @summary Start a session
-         * @param {string} sessionId 
+         * @param {string} sessionId
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
@@ -951,7 +1112,7 @@ export const DefaultApiAxiosParamCreator = function (configuration?: Configurati
             const localVarHeaderParameter = {} as any;
             const localVarQueryParameter = {} as any;
 
-            localVarHeaderParameter['Accept'] = 'application/json';
+
 
             setSearchParams(localVarUrlObj, localVarQueryParameter);
             let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
@@ -972,10 +1133,10 @@ export const DefaultApiFp = function(configuration?: Configuration) {
     const localVarAxiosParamCreator = DefaultApiAxiosParamCreator(configuration)
     return {
         /**
-         * 
+         *
          * @summary Adopt an existing session
-         * @param {string} sessionId 
-         * @param {ConnectionInfo} connectionInfo 
+         * @param {string} sessionId
+         * @param {ConnectionInfo} connectionInfo
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
@@ -986,9 +1147,9 @@ export const DefaultApiFp = function(configuration?: Configuration) {
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
-         * 
+         *
          * @summary Upgrade to a WebSocket or domain socket for channel communication
-         * @param {string} sessionId 
+         * @param {string} sessionId
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
@@ -999,9 +1160,9 @@ export const DefaultApiFp = function(configuration?: Configuration) {
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
-         * 
+         *
          * @summary Notify the server that a client is connected
-         * @param {ClientHeartbeat} clientHeartbeat 
+         * @param {ClientHeartbeat} clientHeartbeat
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
@@ -1012,9 +1173,9 @@ export const DefaultApiFp = function(configuration?: Configuration) {
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
-         * 
+         *
          * @summary Get Jupyter connection information for the session
-         * @param {string} sessionId 
+         * @param {string} sessionId
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
@@ -1025,9 +1186,9 @@ export const DefaultApiFp = function(configuration?: Configuration) {
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
-         * 
+         *
          * @summary Delete session
-         * @param {string} sessionId 
+         * @param {string} sessionId
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
@@ -1038,7 +1199,21 @@ export const DefaultApiFp = function(configuration?: Configuration) {
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
-         * 
+         *
+         * @summary Execute code and return results
+         * @param {string} sessionId
+         * @param {ExecuteRequest} executeRequest
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async executeCode(sessionId: string, executeRequest: ExecuteRequest, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<ExecuteReply>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.executeCode(sessionId, executeRequest, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['DefaultApi.executeCode']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         *
          * @summary Get the server configuration
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
@@ -1050,9 +1225,9 @@ export const DefaultApiFp = function(configuration?: Configuration) {
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
-         * 
+         *
          * @summary Get session details
-         * @param {string} sessionId 
+         * @param {string} sessionId
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
@@ -1063,9 +1238,9 @@ export const DefaultApiFp = function(configuration?: Configuration) {
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
-         * 
+         *
          * @summary Interrupt session
-         * @param {string} sessionId 
+         * @param {string} sessionId
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
@@ -1076,9 +1251,9 @@ export const DefaultApiFp = function(configuration?: Configuration) {
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
-         * 
+         *
          * @summary Force quit session
-         * @param {string} sessionId 
+         * @param {string} sessionId
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
@@ -1089,7 +1264,7 @@ export const DefaultApiFp = function(configuration?: Configuration) {
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
-         * 
+         *
          * @summary List active sessions
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
@@ -1101,9 +1276,9 @@ export const DefaultApiFp = function(configuration?: Configuration) {
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
-         * 
+         *
          * @summary Create a new session
-         * @param {NewSession} newSession 
+         * @param {NewSession} newSession
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
@@ -1114,10 +1289,10 @@ export const DefaultApiFp = function(configuration?: Configuration) {
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
-         * 
+         *
          * @summary Restart a session
-         * @param {string} sessionId 
-         * @param {RestartSession} [restartSession] 
+         * @param {string} sessionId
+         * @param {RestartSession} [restartSession]
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
@@ -1128,7 +1303,7 @@ export const DefaultApiFp = function(configuration?: Configuration) {
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
-         * 
+         *
          * @summary Get server status and information
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
@@ -1140,9 +1315,9 @@ export const DefaultApiFp = function(configuration?: Configuration) {
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
-         * 
+         *
          * @summary Change the server configuration
-         * @param {ServerConfiguration} serverConfiguration 
+         * @param {ServerConfiguration} serverConfiguration
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
@@ -1153,7 +1328,7 @@ export const DefaultApiFp = function(configuration?: Configuration) {
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
-         * 
+         *
          * @summary Shut down all sessions and the server itself
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
@@ -1165,9 +1340,9 @@ export const DefaultApiFp = function(configuration?: Configuration) {
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
-         * 
+         *
          * @summary Start a session
-         * @param {string} sessionId 
+         * @param {string} sessionId
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
@@ -1187,10 +1362,10 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
     const localVarFp = DefaultApiFp(configuration)
     return {
         /**
-         * 
+         *
          * @summary Adopt an existing session
-         * @param {string} sessionId 
-         * @param {ConnectionInfo} connectionInfo 
+         * @param {string} sessionId
+         * @param {ConnectionInfo} connectionInfo
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
@@ -1198,9 +1373,9 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
             return localVarFp.adoptSession(sessionId, connectionInfo, options).then((request) => request(axios, basePath));
         },
         /**
-         * 
+         *
          * @summary Upgrade to a WebSocket or domain socket for channel communication
-         * @param {string} sessionId 
+         * @param {string} sessionId
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
@@ -1208,9 +1383,9 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
             return localVarFp.channelsUpgrade(sessionId, options).then((request) => request(axios, basePath));
         },
         /**
-         * 
+         *
          * @summary Notify the server that a client is connected
-         * @param {ClientHeartbeat} clientHeartbeat 
+         * @param {ClientHeartbeat} clientHeartbeat
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
@@ -1218,9 +1393,9 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
             return localVarFp.clientHeartbeat(clientHeartbeat, options).then((request) => request(axios, basePath));
         },
         /**
-         * 
+         *
          * @summary Get Jupyter connection information for the session
-         * @param {string} sessionId 
+         * @param {string} sessionId
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
@@ -1228,9 +1403,9 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
             return localVarFp.connectionInfo(sessionId, options).then((request) => request(axios, basePath));
         },
         /**
-         * 
+         *
          * @summary Delete session
-         * @param {string} sessionId 
+         * @param {string} sessionId
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
@@ -1238,7 +1413,18 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
             return localVarFp.deleteSession(sessionId, options).then((request) => request(axios, basePath));
         },
         /**
-         * 
+         *
+         * @summary Execute code and return results
+         * @param {string} sessionId
+         * @param {ExecuteRequest} executeRequest
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        executeCode(sessionId: string, executeRequest: ExecuteRequest, options?: RawAxiosRequestConfig): AxiosPromise<ExecuteReply> {
+            return localVarFp.executeCode(sessionId, executeRequest, options).then((request) => request(axios, basePath));
+        },
+        /**
+         *
          * @summary Get the server configuration
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
@@ -1247,9 +1433,9 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
             return localVarFp.getServerConfiguration(options).then((request) => request(axios, basePath));
         },
         /**
-         * 
+         *
          * @summary Get session details
-         * @param {string} sessionId 
+         * @param {string} sessionId
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
@@ -1257,9 +1443,9 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
             return localVarFp.getSession(sessionId, options).then((request) => request(axios, basePath));
         },
         /**
-         * 
+         *
          * @summary Interrupt session
-         * @param {string} sessionId 
+         * @param {string} sessionId
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
@@ -1267,9 +1453,9 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
             return localVarFp.interruptSession(sessionId, options).then((request) => request(axios, basePath));
         },
         /**
-         * 
+         *
          * @summary Force quit session
-         * @param {string} sessionId 
+         * @param {string} sessionId
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
@@ -1277,7 +1463,7 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
             return localVarFp.killSession(sessionId, options).then((request) => request(axios, basePath));
         },
         /**
-         * 
+         *
          * @summary List active sessions
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
@@ -1286,9 +1472,9 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
             return localVarFp.listSessions(options).then((request) => request(axios, basePath));
         },
         /**
-         * 
+         *
          * @summary Create a new session
-         * @param {NewSession} newSession 
+         * @param {NewSession} newSession
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
@@ -1296,10 +1482,10 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
             return localVarFp.newSession(newSession, options).then((request) => request(axios, basePath));
         },
         /**
-         * 
+         *
          * @summary Restart a session
-         * @param {string} sessionId 
-         * @param {RestartSession} [restartSession] 
+         * @param {string} sessionId
+         * @param {RestartSession} [restartSession]
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
@@ -1307,7 +1493,7 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
             return localVarFp.restartSession(sessionId, restartSession, options).then((request) => request(axios, basePath));
         },
         /**
-         * 
+         *
          * @summary Get server status and information
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
@@ -1316,9 +1502,9 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
             return localVarFp.serverStatus(options).then((request) => request(axios, basePath));
         },
         /**
-         * 
+         *
          * @summary Change the server configuration
-         * @param {ServerConfiguration} serverConfiguration 
+         * @param {ServerConfiguration} serverConfiguration
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
@@ -1326,7 +1512,7 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
             return localVarFp.setServerConfiguration(serverConfiguration, options).then((request) => request(axios, basePath));
         },
         /**
-         * 
+         *
          * @summary Shut down all sessions and the server itself
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
@@ -1335,9 +1521,9 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
             return localVarFp.shutdownServer(options).then((request) => request(axios, basePath));
         },
         /**
-         * 
+         *
          * @summary Start a session
-         * @param {string} sessionId 
+         * @param {string} sessionId
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
@@ -1352,10 +1538,10 @@ export const DefaultApiFactory = function (configuration?: Configuration, basePa
  */
 export class DefaultApi extends BaseAPI {
     /**
-     * 
+     *
      * @summary Adopt an existing session
-     * @param {string} sessionId 
-     * @param {ConnectionInfo} connectionInfo 
+     * @param {string} sessionId
+     * @param {ConnectionInfo} connectionInfo
      * @param {*} [options] Override http request option.
      * @throws {RequiredError}
      */
@@ -1364,9 +1550,9 @@ export class DefaultApi extends BaseAPI {
     }
 
     /**
-     * 
+     *
      * @summary Upgrade to a WebSocket or domain socket for channel communication
-     * @param {string} sessionId 
+     * @param {string} sessionId
      * @param {*} [options] Override http request option.
      * @throws {RequiredError}
      */
@@ -1375,9 +1561,9 @@ export class DefaultApi extends BaseAPI {
     }
 
     /**
-     * 
+     *
      * @summary Notify the server that a client is connected
-     * @param {ClientHeartbeat} clientHeartbeat 
+     * @param {ClientHeartbeat} clientHeartbeat
      * @param {*} [options] Override http request option.
      * @throws {RequiredError}
      */
@@ -1386,9 +1572,9 @@ export class DefaultApi extends BaseAPI {
     }
 
     /**
-     * 
+     *
      * @summary Get Jupyter connection information for the session
-     * @param {string} sessionId 
+     * @param {string} sessionId
      * @param {*} [options] Override http request option.
      * @throws {RequiredError}
      */
@@ -1397,9 +1583,9 @@ export class DefaultApi extends BaseAPI {
     }
 
     /**
-     * 
+     *
      * @summary Delete session
-     * @param {string} sessionId 
+     * @param {string} sessionId
      * @param {*} [options] Override http request option.
      * @throws {RequiredError}
      */
@@ -1408,7 +1594,19 @@ export class DefaultApi extends BaseAPI {
     }
 
     /**
-     * 
+     *
+     * @summary Execute code and return results
+     * @param {string} sessionId
+     * @param {ExecuteRequest} executeRequest
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public executeCode(sessionId: string, executeRequest: ExecuteRequest, options?: RawAxiosRequestConfig) {
+        return DefaultApiFp(this.configuration).executeCode(sessionId, executeRequest, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     *
      * @summary Get the server configuration
      * @param {*} [options] Override http request option.
      * @throws {RequiredError}
@@ -1418,9 +1616,9 @@ export class DefaultApi extends BaseAPI {
     }
 
     /**
-     * 
+     *
      * @summary Get session details
-     * @param {string} sessionId 
+     * @param {string} sessionId
      * @param {*} [options] Override http request option.
      * @throws {RequiredError}
      */
@@ -1429,9 +1627,9 @@ export class DefaultApi extends BaseAPI {
     }
 
     /**
-     * 
+     *
      * @summary Interrupt session
-     * @param {string} sessionId 
+     * @param {string} sessionId
      * @param {*} [options] Override http request option.
      * @throws {RequiredError}
      */
@@ -1440,9 +1638,9 @@ export class DefaultApi extends BaseAPI {
     }
 
     /**
-     * 
+     *
      * @summary Force quit session
-     * @param {string} sessionId 
+     * @param {string} sessionId
      * @param {*} [options] Override http request option.
      * @throws {RequiredError}
      */
@@ -1451,7 +1649,7 @@ export class DefaultApi extends BaseAPI {
     }
 
     /**
-     * 
+     *
      * @summary List active sessions
      * @param {*} [options] Override http request option.
      * @throws {RequiredError}
@@ -1461,9 +1659,9 @@ export class DefaultApi extends BaseAPI {
     }
 
     /**
-     * 
+     *
      * @summary Create a new session
-     * @param {NewSession} newSession 
+     * @param {NewSession} newSession
      * @param {*} [options] Override http request option.
      * @throws {RequiredError}
      */
@@ -1472,10 +1670,10 @@ export class DefaultApi extends BaseAPI {
     }
 
     /**
-     * 
+     *
      * @summary Restart a session
-     * @param {string} sessionId 
-     * @param {RestartSession} [restartSession] 
+     * @param {string} sessionId
+     * @param {RestartSession} [restartSession]
      * @param {*} [options] Override http request option.
      * @throws {RequiredError}
      */
@@ -1484,7 +1682,7 @@ export class DefaultApi extends BaseAPI {
     }
 
     /**
-     * 
+     *
      * @summary Get server status and information
      * @param {*} [options] Override http request option.
      * @throws {RequiredError}
@@ -1494,9 +1692,9 @@ export class DefaultApi extends BaseAPI {
     }
 
     /**
-     * 
+     *
      * @summary Change the server configuration
-     * @param {ServerConfiguration} serverConfiguration 
+     * @param {ServerConfiguration} serverConfiguration
      * @param {*} [options] Override http request option.
      * @throws {RequiredError}
      */
@@ -1505,7 +1703,7 @@ export class DefaultApi extends BaseAPI {
     }
 
     /**
-     * 
+     *
      * @summary Shut down all sessions and the server itself
      * @param {*} [options] Override http request option.
      * @throws {RequiredError}
@@ -1515,9 +1713,9 @@ export class DefaultApi extends BaseAPI {
     }
 
     /**
-     * 
+     *
      * @summary Start a session
-     * @param {string} sessionId 
+     * @param {string} sessionId
      * @param {*} [options] Override http request option.
      * @throws {RequiredError}
      */
@@ -1525,5 +1723,3 @@ export class DefaultApi extends BaseAPI {
         return DefaultApiFp(this.configuration).startSession(sessionId, options).then((request) => request(this.axios, this.basePath));
     }
 }
-
-

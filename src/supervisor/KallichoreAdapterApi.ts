@@ -19,8 +19,10 @@ import { KallichoreServerState } from './ServerState';
 import { KallichoreApiInstance, KallichoreTransport } from './KallichoreApiInstance';
 import { KallichoreInstances } from './KallichoreInstances';
 import { DapComm } from './DapComm';
+import { HandshakeSocket } from './HandshakeSocket';
 
 export const KALLICHORE_STATE_KEY = 'positron-supervisor.v2';
+const HANDSHAKE_SOCKET_ENV_VAR = 'POSITRON_SUPERVISOR_HANDSHAKE_SOCKET';
 
 /**
  * Determines if a base path is using a domain socket transport
@@ -58,6 +60,19 @@ function extractSocketPath(basePath: string): string | null {
 function extractPipeName(basePath: string): string | null {
 	const match = basePath.match(/npipe:([^:]+)/);
 	return match ? match[1] : null;
+}
+
+/** Returns true when an HTTP client error represents a stale-token response. */
+export function isUnauthorizedError(err: unknown): boolean {
+	return isAxiosError(err) && (err.response?.status === 401 || err.status === 401);
+}
+
+/** Returns true only when both server identities exist and differ. */
+export function isServerIdentityStale(
+	savedServerId: string | undefined,
+	liveServerId: string | undefined,
+): boolean {
+	return !!savedServerId && !!liveServerId && savedServerId !== liveServerId;
 }
 
 export class KCApi implements PositronSupervisorApi {
@@ -278,13 +293,32 @@ export class KCApi implements PositronSupervisorApi {
 	 * @throws An error if the server cannot be started or reconnected to.
 	 */
 	async start() {
+		// In remote/server mode a broker may already own the Kallichore process
+		// and replay its connection details over a handshake socket.
+		const brokerSocket = process.env[HANDSHAKE_SOCKET_ENV_VAR];
+		if (brokerSocket) {
+			try {
+				const config = vscode.workspace.getConfiguration('kernelSupervisor');
+				const startupTimeout = config.get<number>('startupTimeout', 10) * 1000;
+				const connectionContents = await HandshakeSocket.connect(brokerSocket, startupTimeout);
+				if (await this.reconnect(connectionContents)) {
+					this.log(`Connected to previously established supervisor over ${HANDSHAKE_SOCKET_ENV_VAR}.`, vscode.LogLevel.Debug);
+					return;
+				}
+			} catch (err) {
+				this.log(
+					`Error connecting to Kallichore over handshake socket ${brokerSocket}: ${summarizeError(err)}`,
+					vscode.LogLevel.Warning);
+			}
+		}
+
 		// Check the POSITRON_SUPERVISOR_CONNECTION_FILE environment variable to
-		// see if we're trying to connect to an existing server.
+		// see if we're trying to connect to a legacy pre-0.1.67 server.
 		//
 		// In web/server mode, the server is started concurrently with the node
 		// server, and its connection details are passed to Positron via an
 		// environment variable that points to a connection file.
-		let connectionFile = process.env['POSITRON_SUPERVISOR_CONNECTION_FILE'];
+		const connectionFile = process.env['POSITRON_SUPERVISOR_CONNECTION_FILE'];
 		if (connectionFile) {
 			if (fs.existsSync(connectionFile)) {
 				this.log(`Using connection file from ` +
@@ -351,11 +385,11 @@ export class KCApi implements PositronSupervisorApi {
 		// Create a server session ID (8 characters)
 		const sessionId = `${createUniqueId()}-${process.pid}`;
 
-		// If no connection file was provided, generate one using the process PID
-		if (!connectionFile) {
-			connectionFile = path.join(os.tmpdir(), `kallichore-${sessionId}.json`);
-			this.log(`Generated connection file path: ${connectionFile}`, vscode.LogLevel.Debug);
-		}
+		// Kallichore 0.1.67 reports connection details over a client-owned,
+		// one-shot socket. The bearer token therefore never touches disk.
+		const handshake = await HandshakeSocket.create(`kallichore-${sessionId}`);
+		this._disposables.push(handshake);
+		this.log(`Listening for supervisor handshake on ${handshake.socketPath}`, vscode.LogLevel.Debug);
 
 		// Start a timer so we can track server startup time
 		const startTime = Date.now();
@@ -391,8 +425,8 @@ export class KCApi implements PositronSupervisorApi {
 		shellArgs.push(...[
 			'--log-level', logLevel,
 			'--log-file', logFile,
-			'--connection-file', connectionFile,
-			// '--resource-sample-interval', resourcePollInterval.toString()
+			'--handshake-socket', handshake.socketPath,
+			'--resource-sample-interval', resourcePollInterval.toString()
 		]);
 
 		// Add transport option
@@ -509,7 +543,7 @@ export class KCApi implements PositronSupervisorApi {
 
 		// Start the server in a new terminal
 		this.log(`Starting Kallichore server ${shellPath} ` +
-			`with connection file ${connectionFile} and ` +
+			`with handshake socket ${handshake.socketPath} and ` +
 			`${startupTimeout}ms startup timeout`, vscode.LogLevel.Debug);
 
 		this._terminal = vscode.window.createTerminal({
@@ -539,105 +573,70 @@ export class KCApi implements PositronSupervisorApi {
 		// Wait for the terminal to start and get the PID
 		let processId = await this._waitForTerminalProcessId(startupTimeout);
 
-		// Wait for the connection file to be written by the server
-		let connectionData: KallichoreServerState | undefined = undefined;
-		let basePath: string = '';
-		let serverPort: number = 0;
-
-		// Wait for the connection file to exist and be readable
-		for (let retry = 0; retry < 100; retry++) {
+		const readServerOutput = (): string => {
 			try {
-				if (fs.existsSync(connectionFile)) {
-					connectionData = JSON.parse(fs.readFileSync(connectionFile, 'utf8'));
-					if (!connectionData) {
-						this.log(`Connection file ${connectionFile} is empty or invalid`, vscode.LogLevel.Warning);
-						throw new Error(`Connection file ${connectionFile} is empty or invalid`);
+				if (fs.existsSync(outFile)) {
+					const contents = fs.readFileSync(outFile, 'utf8');
+					if (contents) {
+						return `; output:\n\n${contents}`;
 					}
-
-					// Handle base_path (TCP), socket_path (domain socket), and named_pipe (named pipe) formats
-					if (connectionData.base_path) {
-						// TCP connection with explicit base_path
-						basePath = connectionData.base_path;
-						serverPort = connectionData.port || 0;
-						this.log(`Read TCP connection information from ${connectionFile}: ${basePath}`, vscode.LogLevel.Debug);
-					} else if (connectionData.socket_path) {
-						// Domain socket connection - construct HTTP over Unix socket URL
-						basePath = `http://unix:${connectionData.socket_path}:`;
-						serverPort = 0; // No port for domain sockets
-						this.log(`Read domain socket connection information from ${connectionFile}: ${connectionData.socket_path}, constructed base path: ${basePath}`, vscode.LogLevel.Debug);
-					} else if (connectionData.named_pipe) {
-						// Named pipe connection - construct HTTP over named pipe URL
-						basePath = `http://npipe:${connectionData.named_pipe}:`;
-						serverPort = 0; // No port for named pipes
-						this.log(`Read named pipe connection information from ${connectionFile}: ${connectionData.named_pipe}, constructed base path: ${basePath}`, vscode.LogLevel.Debug);
-					} else {
-						this.log(`Connection file ${connectionFile} missing base_path, socket_path, and named_pipe`, vscode.LogLevel.Error);
-						throw new Error(`Connection file ${connectionFile} missing base_path, socket_path, and named_pipe`);
-					}
-					break;
 				}
 			} catch (err) {
-				// Connection file might not be ready yet or might be invalid
-				this.log(`Error reading connection file (attempt ${retry}): ${err}`, vscode.LogLevel.Debug);
+				this.log(`Error reading supervisor output file ${outFile}: ${err}`, vscode.LogLevel.Warning);
 			}
+			return '';
+		};
 
-			// Every 10 retries, check to see if the server process has exited.
-			if (!exited && processId && shutdownTimeout === 'immediately' && retry % 10 === 0) {
+		let rejectOnExit!: (err: Error) => void;
+		const processExited = new Promise<never>((_, reject) => {
+			rejectOnExit = reject;
+		});
+		const exitPoller = setInterval(() => {
+			if (!exited && processId) {
 				try {
 					process.kill(processId, 0);
-				} catch (err) {
-					this.log(`Kallichore server PID ${processId} is not running`, vscode.LogLevel.Error);
+				} catch {
 					exited = true;
 				}
 			}
-
-			// Has the terminal exited? if it has, there's no point in continuing to retry.
 			if (exited) {
-				let message = `The supervisor process exited unexpectedly during startup`;
-
-				// Include any output from the server process to help diagnose the problem
-				if (fs.existsSync(outFile)) {
-					const contents = fs.readFileSync(outFile, 'utf8');
-					if (contents) {
-						message += `; output:\n\n${contents}`;
-					}
-				}
-				this.log(message, vscode.LogLevel.Error);
-				throw new Error(message);
+				clearInterval(exitPoller);
+				rejectOnExit(new Error(
+					`The supervisor process exited unexpectedly during startup${readServerOutput()}`));
 			}
+		}, 100);
+		exitPoller.unref?.();
 
-			const elapsed = Date.now() - startTime;
-			if (elapsed > startupTimeout) {
-				let message = `Connection file was not created after ${elapsed}ms`;
-
-				// Include any output from the server process to help diagnose the problem
-				if (fs.existsSync(outFile)) {
-					const contents = fs.readFileSync(outFile, 'utf8');
-					if (contents) {
-						message += `; output:\n\n${contents}`;
-					}
-				}
-				this.log(message, vscode.LogLevel.Error);
-				throw new Error(message);
-			}
-
-			// Wait a bit and try again
-			await new Promise((resolve) => setTimeout(resolve, 100));
-		}
-
-		if (!connectionData) {
-			let message = `Timed out waiting for connection file to be ` +
-				`created at ${connectionFile} after ${startupTimeout}ms`;
-
-			// Include any output from the server process to help diagnose the problem
-			if (fs.existsSync(outFile)) {
-				const contents = fs.readFileSync(outFile, 'utf8');
-				if (contents) {
-					message += `; output:\n\n${contents}`;
-				}
-			}
+		let connectionData: KallichoreServerState;
+		try {
+			connectionData = await Promise.race([
+				handshake.payload(startupTimeout),
+				processExited,
+			]);
+		} catch (err) {
+			const base = err instanceof Error ? err.message : String(err);
+			const message = base.includes('output:') ? base : base + readServerOutput();
 			this.log(message, vscode.LogLevel.Error);
 			throw new Error(message);
+		} finally {
+			clearInterval(exitPoller);
+			handshake.dispose();
+		}
+
+		let basePath = '';
+		let serverPort = 0;
+		if (connectionData.base_path) {
+			basePath = connectionData.base_path;
+			serverPort = connectionData.port || 0;
+			this.log(`Received TCP connection information: ${basePath}`, vscode.LogLevel.Debug);
+		} else if (connectionData.socket_path) {
+			basePath = `http://unix:${connectionData.socket_path}:`;
+			this.log(`Received domain socket connection information: ${connectionData.socket_path}`, vscode.LogLevel.Debug);
+		} else if (connectionData.named_pipe) {
+			basePath = `http://npipe:${connectionData.named_pipe}:`;
+			this.log(`Received named pipe connection information: ${connectionData.named_pipe}`, vscode.LogLevel.Debug);
+		} else {
+			throw new Error('Handshake payload missing base_path, socket_path, and named_pipe');
 		}
 
 		// Create a bearer auth object with the token
@@ -647,9 +646,11 @@ export class KCApi implements PositronSupervisorApi {
 		// List the sessions to verify that the server is up. The process is
 		// alive for a few milliseconds (or more, on slower systems) before the
 		// HTTP server is ready, so we may need to retry a few times.
+		let serverStatus: ServerStatus | undefined;
 		for (let retry = 0; retry < 100; retry++) {
 			try {
 				const status = await this._api.api.serverStatus();
+				serverStatus = status.data;
 				this.log(`Kallichore ${status.data.version} server online with ${status.data.sessions} sessions`);
 
 				// Update the process ID; this can be different than the process
@@ -730,6 +731,9 @@ export class KCApi implements PositronSupervisorApi {
 				throw err;
 			}
 		}
+		if (!serverStatus) {
+			throw new Error('Kallichore server did not report its status before the startup retry limit was reached');
+		}
 
 		this.log(`Kallichore server started in ${Date.now() - startTime}ms`);
 
@@ -750,13 +754,13 @@ export class KCApi implements PositronSupervisorApi {
 
 		const state: KallichoreServerState = {
 			// Save the constructed basePath for API usage
-			// @ts-ignore
 			base_path: this._api.basePath,
 			port: serverPort,
 			server_path: shellPath,
 			server_pid: processId || 0,
 			bearer_token: bearerToken,
 			log_path: logFile,
+			server_id: serverStatus.server_id,
 			transport: this._api.transport,
 			// For domain sockets, also save the original socket_path from connection data
 			socket_path: connectionData?.socket_path || (isDomainSocketPath(basePath) ? extractSocketPath(basePath) || undefined : undefined),
@@ -764,9 +768,13 @@ export class KCApi implements PositronSupervisorApi {
 			named_pipe: connectionData?.named_pipe || (isNamedPipePath(basePath) ? extractPipeName(basePath) || undefined : undefined)
 		};
 
+		// Keep the finalized state (including the live server identity) in the
+		// active API instance as well as in reconnect storage.
+		this.refreshServerState(state);
+
 		// Save the server state for reconnect if enabled
 		if (this._reconnect) {
-			this.saveServerState(state);
+			await this.saveServerState(state);
 		}
 
 		await KallichoreInstances.recordSupervisor(this.getWorkspaceName(), state);
@@ -777,8 +785,8 @@ export class KCApi implements PositronSupervisorApi {
 	 *
 	 * @param state The server state to save, or undefined to clear the saved state.
 	 */
-	private saveServerState(state: KallichoreServerState | undefined) {
-		this._context.workspaceState.update(KALLICHORE_STATE_KEY, state);
+	private async saveServerState(state: KallichoreServerState | undefined): Promise<void> {
+		await this._context.workspaceState.update(KALLICHORE_STATE_KEY, state);
 	}
 
 	/**
@@ -893,6 +901,21 @@ export class KCApi implements PositronSupervisorApi {
 		});
 
 		const status = await this._api.api.serverStatus();
+		if (isServerIdentityStale(serverState.server_id, status.data.server_id)) {
+			this.log(
+				`Refusing to reconnect: saved server ID ${serverState.server_id} does not match ` +
+				`the server at ${connectionInfo} (${status.data.server_id})`,
+				vscode.LogLevel.Warning,
+			);
+			return false;
+		}
+		if (!serverState.server_id && status.data.server_id) {
+			// Migrate connection state written by Kallichore versions older than 0.1.66.
+			serverState.server_id = status.data.server_id;
+			if (this._reconnect) {
+				await this.saveServerState(serverState);
+			}
+		}
 		this._started.open();
 		this.log(`Kallichore ${status.data.version} server reconnected with ${status.data.sessions} sessions`);
 
@@ -1050,13 +1073,14 @@ export class KCApi implements PositronSupervisorApi {
 			} catch (err) {
 				// If the connection was refused, check the server status; this
 				// suggests that the server may have exited
-				if ((err.code === 'ECONNREFUSED' || err.code === 'ENOENT') && !retried) {
-					this.log(`Could not connect while attempting to create session; checking server status`, vscode.LogLevel.Warning);
+				if ((err.code === 'ECONNREFUSED' || err.code === 'ENOENT' || isUnauthorizedError(err)) && !retried) {
+					this.log(`Could not authenticate or connect while attempting to create session; checking server status`, vscode.LogLevel.Warning);
 					await this.testServerExited();
 
 					// If the open barrier is now open, we can retry the
 					// session creation once.
 					if (this._started.isOpen()) {
+						session.refreshApi(this._api.api);
 						retried = true;
 						continue;
 					}
@@ -1179,6 +1203,28 @@ export class KCApi implements PositronSupervisorApi {
 			}
 		}
 
+		// PIDs can be reused and a socket/port can be rebound by another process.
+		// Kallichore 0.1.66+ exposes a stable instance ID so that we do not send a
+		// saved bearer token or session operations to the wrong server.
+		if (serverRunning && serverState.server_id) {
+			try {
+				const status = await this._api.api.serverStatus();
+				if (isServerIdentityStale(serverState.server_id, status.data.server_id)) {
+					this.log(
+						`Kallichore server identity changed from ${serverState.server_id} to ${status.data.server_id}; treating the saved server as exited`,
+						vscode.LogLevel.Warning,
+					);
+					serverRunning = false;
+				}
+			} catch (err) {
+				if (err.code === 'ECONNREFUSED' || err.code === 'ENOENT') {
+					serverRunning = false;
+				} else {
+					this.log(`Could not verify Kallichore server identity: ${summarizeError(err)}`, vscode.LogLevel.Warning);
+				}
+			}
+		}
+
 		// The server is still running; nothing to do
 		if (serverRunning) {
 			return false;
@@ -1190,7 +1236,7 @@ export class KCApi implements PositronSupervisorApi {
 		// Clean up the state so we don't try to reconnect to a server that
 		// isn't running.
 		if (this._reconnect) {
-			this.saveServerState(undefined);
+			await this.saveServerState(undefined);
 		}
 
 		// We need to mark all sessions as exited since (at least right now)
@@ -1390,9 +1436,9 @@ export class KCApi implements PositronSupervisorApi {
 		// whichever is newest. This is the location where the kernel is typically built
 		// by developers, who have `positron` and `kallichore` directories side-by-side.
 		let devBinary: string | undefined;
-		const positronParent = path.dirname(path.dirname(path.dirname(this._context.extensionPath)));
-		const devDebugBinary = path.join(positronParent, 'kallichore', 'target', 'debug', serverBin);
-		const devReleaseBinary = path.join(positronParent, 'kallichore', 'target', 'release', serverBin);
+		const projectParent = path.dirname(this._context.extensionPath);
+		const devDebugBinary = path.join(projectParent, 'kallichore', 'target', 'debug', serverBin);
+		const devReleaseBinary = path.join(projectParent, 'kallichore', 'target', 'release', serverBin);
 		const debugModified = fs.statSync(devDebugBinary, { throwIfNoEntry: false })?.mtime;
 		const releaseModified = fs.statSync(devReleaseBinary, { throwIfNoEntry: false })?.mtime;
 
@@ -1472,7 +1518,7 @@ export class KCApi implements PositronSupervisorApi {
 
 		// Clear the workspace state so we don't try to reconnect to the old
 		// server
-		this.saveServerState(undefined);
+		await this.saveServerState(undefined);
 
 		// Do the same with the environment variable, and clean up the
 		// connection file if it exists.

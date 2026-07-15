@@ -17,6 +17,7 @@ interface PackageJsonShape {
     devDependencies?: Record<string, string | undefined>;
     positron?: {
         binaryDependencies?: Record<string, string | undefined>;
+        binaryChecksums?: Record<string, Record<string, string | undefined> | undefined>;
     };
     contributes?: {
         languages?: Array<{ id?: string }>;
@@ -50,12 +51,18 @@ suite('[Unit] Supervisor package manifest', () => {
         assert.strictEqual(packageJson.bugs?.url, 'https://github.com/Mengzhiyaa/vscode-supervisor/issues');
         assert.deepStrictEqual(packageJson.activationEvents, ['onStartupFinished']);
         assert.deepStrictEqual(packageJson.workspaces, ['webview']);
-        assert.strictEqual(packageJson.positron?.binaryDependencies?.kallichore, '0.1.64');
+        assert.strictEqual(packageJson.positron?.binaryDependencies?.kallichore, '0.1.67');
         assert.strictEqual(packageJson.positron?.binaryDependencies?.ark, undefined);
+        assert.match(
+            packageJson.positron?.binaryChecksums?.kallichore?.['linux-x64'] ?? '',
+            /^sha256:[0-9a-f]{64}$/,
+        );
         assert.ok(packageJson.devDependencies?.['@vscode/vsce']);
         assert.ok(packageJson.devDependencies?.ovsx);
         assert.strictEqual(packageJson.scripts?.['vsce:package'], 'vsce package');
         assert.strictEqual(packageJson.scripts?.['install:binaries'], 'node scripts/install-binaries.mjs');
+        assert.strictEqual(packageJson.scripts?.['sync:kallichore-api'], 'node scripts/sync-kallichore-api.mjs');
+        assert.strictEqual(packageJson.scripts?.['verify:kallichore-api'], 'node scripts/sync-kallichore-api.mjs --check');
         assert.strictEqual(packageJson.scripts?.['build:webview'], 'npm --prefix webview run build');
         assert.strictEqual(packageJson.scripts?.['build'], 'npm run check:webview && npm run build:webview && npm run copy:duckdb && npm run compile');
         assert.strictEqual(

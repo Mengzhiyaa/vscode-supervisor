@@ -26,6 +26,9 @@ export class KallichoreApiInstance {
 	/** The API instance itself */
 	private _api: DefaultApi | undefined;
 
+	/** The base path currently used by the generated API client. */
+	private _basePath: string | undefined;
+
 	/** The current server state, if any */
 	private _serverState: KallichoreServerState | undefined;
 
@@ -53,6 +56,11 @@ export class KallichoreApiInstance {
 	 */
 	get transport(): KallichoreTransport {
 		return this._transport;
+	}
+
+	/** Get the base path currently used by the generated API client. */
+	get basePath(): string | undefined {
+		return this._basePath;
 	}
 
 	/**
@@ -137,6 +145,8 @@ export class KallichoreApiInstance {
 			}
 		}
 
+		this._basePath = basePath;
+
 		// Create the API instance
 		this._api = new DefaultApi(
 			new Configuration({
@@ -145,7 +155,7 @@ export class KallichoreApiInstance {
 				accessToken: state.bearer_token,
 				baseOptions,
 			}),
-			basePath,
+			basePath || undefined,
 			axiosInstance // Use custom axios instance for named pipes, undefined for others
 		);
 	}

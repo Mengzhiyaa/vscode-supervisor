@@ -336,12 +336,34 @@ async function installBinary(
             throw new Error(`Could not find ${def.binaryName} in downloaded archive for ${name}`);
         }
 
-        // Copy to install location
-        fs.copyFileSync(binaryPath, destPath);
+		// Stage and verify the new executable before replacing the active one.
+		// The staged filename keeps the .exe suffix on Windows.
+		const stagedPath = path.join(
+			installDir,
+			`.install-${process.pid}-${Date.now()}-${def.binaryName}`,
+		);
+		try {
+			fs.copyFileSync(binaryPath, stagedPath);
+			if (!isWindows) {
+				fs.chmodSync(stagedPath, 0o755);
+			}
 
-        if (!isWindows) {
-            fs.chmodSync(destPath, 0o755);
-        }
+			const installedVersion = resolveInstalledVersion(stagedPath);
+			if (installedVersion !== version) {
+				throw new Error(
+					`Downloaded ${name} reported version ${installedVersion ?? 'unknown'}; expected ${version}`,
+				);
+			}
+
+			// rename is atomic on Unix. Windows cannot replace an existing file with
+			// renameSync, so remove it only after the staged executable is verified.
+			if (isWindows && fs.existsSync(destPath)) {
+				fs.unlinkSync(destPath);
+			}
+			fs.renameSync(stagedPath, destPath);
+		} finally {
+			fs.rmSync(stagedPath, { force: true });
+		}
 
         const size = (fs.statSync(destPath).size / 1024 / 1024).toFixed(2);
         log.info(`[BinaryManager] ✅ Installed ${name} v${version} (${size} MB) → ${destPath}`);
@@ -373,8 +395,8 @@ export async function ensureBinaries(
     const defs = getBinaryDefs(context.extensionPath, binaryProviders);
     const platform = detectPlatform();
 
-    // Check which binaries are missing
-    const missing: string[] = [];
+    // Check which binaries are missing or incompatible with package.json.
+    const needsInstall: string[] = [];
     const installedVersions = context.globalState.get<Record<string, string>>(BINARY_VERSION_STATE_KEY, {});
     let installedVersionsChanged = false;
 
@@ -386,7 +408,7 @@ export async function ensureBinaries(
         );
 
         if (!fs.existsSync(binaryPath)) {
-            missing.push(name);
+            needsInstall.push(name);
             log.info(`[BinaryManager] ${name} binary not found at ${binaryPath}`);
             continue;
         }
@@ -410,14 +432,12 @@ export async function ensureBinaries(
         }
 
         if (expectedVersion && installedVersion !== expectedVersion) {
-            // Binary exists but version mismatch — log but do NOT re-download.
-            // The existing binary is functional; forcing a download risks 404s
-            // when the expected release has not been published yet.
-            log.info(`[BinaryManager] ${name} version mismatch: installed=${installedVersion ?? 'unknown'}, expected=${expectedVersion} (keeping existing)`);
+			needsInstall.push(name);
+			log.warn(`[BinaryManager] ${name} version mismatch: installed=${installedVersion ?? 'unknown'}, expected=${expectedVersion}; upgrading`);
         }
     }
 
-    if (missing.length === 0) {
+    if (needsInstall.length === 0) {
         if (installedVersionsChanged) {
             await context.globalState.update(BINARY_VERSION_STATE_KEY, installedVersions);
         }
@@ -425,7 +445,7 @@ export async function ensureBinaries(
         return;
     }
 
-    log.info(`[BinaryManager] Missing binaries: ${missing.join(', ')}. Starting download...`);
+    log.info(`[BinaryManager] Binaries requiring installation: ${needsInstall.join(', ')}. Starting download...`);
 
     // Download with progress notification
     await vscode.window.withProgress(
@@ -435,7 +455,7 @@ export async function ensureBinaries(
             cancellable: false,
         },
         async (progress) => {
-            for (const name of missing) {
+            for (const name of needsInstall) {
                 const resolvedDef = defs[name];
                 const { definition: def, version } = resolvedDef;
 
