@@ -20,6 +20,7 @@ export interface ConsoleSettings {
     fontFamily: string;
     fontSize: number;
     lineHeight: number;
+    showResourceMonitor: boolean;
 }
 
 export enum RuntimeCodeExecutionMode {

@@ -13,6 +13,10 @@ import { DataExplorerRuntime } from './dataExplorerRuntime';
 import { DuckDBInstance } from '../duckdb/duckdbInstance';
 import { DuckDBTableView } from '../duckdb/duckdbTableView';
 import { DuckDBDataExplorerComm } from '../duckdb/duckdbDataExplorerComm';
+import {
+    DataExplorerBackendProvider,
+    DataExplorerBackendRegistry,
+} from './positronDataExplorerExtensionBackend';
 
 /**
  * Interface for a data explorer instance (matching Positron's IPositronDataExplorerInstance)
@@ -66,6 +70,10 @@ export interface IPositronDataExplorerInstance extends vscode.Disposable {
      * Gets current "has header row" option state.
      */
     readonly fileHasHeaderRow: boolean;
+
+    readonly fileAvailableSheets: readonly string[];
+
+    readonly fileSelectedSheet: string | undefined;
 
     /**
      * Whether this instance is for inline-only display and should not auto-open an editor.
@@ -176,6 +184,10 @@ export interface IPositronDataExplorerService extends vscode.Disposable {
      * Opens a file (CSV/TSV/Parquet) in the Data Explorer using DuckDB-WASM.
      */
     openWithDuckDB(uri: vscode.Uri): Promise<IPositronDataExplorerInstance>;
+
+    registerBackendProvider(provider: DataExplorerBackendProvider): vscode.Disposable;
+
+    openWithBackend(uri: vscode.Uri, providerId?: string): Promise<IPositronDataExplorerInstance>;
 }
 
 export interface PositronDataExplorerCreateOptions {
@@ -194,6 +206,7 @@ class PositronDataExplorerInstance implements IPositronDataExplorerInstance {
     private readonly _onDidRequestFocus = new vscode.EventEmitter<void>();
     private readonly _schemaCache = new Map<number, TableSchema['columns'][number]>();
     private _fileHasHeaderRow = true;
+    private _fileSheetName: string | undefined;
     private _disposed = false;
 
     constructor(
@@ -259,6 +272,14 @@ class PositronDataExplorerInstance implements IPositronDataExplorerInstance {
         return this._fileHasHeaderRow;
     }
 
+    get fileAvailableSheets(): readonly string[] {
+        return this.backendState?.available_sheets ?? [];
+    }
+
+    get fileSelectedSheet(): string | undefined {
+        return this._fileSheetName ?? this.fileAvailableSheets[0];
+    }
+
     get inlineOnly(): boolean {
         return this._inlineOnly;
     }
@@ -309,6 +330,9 @@ class PositronDataExplorerInstance implements IPositronDataExplorerInstance {
         if (Object.prototype.hasOwnProperty.call(options, 'has_header_row') && options.has_header_row !== undefined) {
             this._fileHasHeaderRow = options.has_header_row;
         }
+        if (Object.prototype.hasOwnProperty.call(options, 'sheet_name')) {
+            this._fileSheetName = options.sheet_name;
+        }
         return result;
     }
 
@@ -330,6 +354,7 @@ class PositronDataExplorerInstance implements IPositronDataExplorerInstance {
  */
 export class PositronDataExplorerService implements IPositronDataExplorerService {
     private readonly _disposables: vscode.Disposable[] = [];
+    private readonly _backendRegistry = new DataExplorerBackendRegistry();
     private readonly _instances = new Map<string, IPositronDataExplorerInstance>();
     private readonly _variableToInstanceMap = new Map<string, string>();
     private readonly _variablePathToInstanceMap = new Map<string, string>();
@@ -602,6 +627,22 @@ export class PositronDataExplorerService implements IPositronDataExplorerService
         }
     }
 
+    registerBackendProvider(provider: DataExplorerBackendProvider): vscode.Disposable {
+        return this._backendRegistry.registerProvider(provider);
+    }
+
+    async openWithBackend(uri: vscode.Uri, providerId?: string): Promise<IPositronDataExplorerInstance> {
+        const backend = await this._backendRegistry.open(uri, providerId);
+        const existing = this._instances.get(backend.clientId);
+        if (existing) {
+            backend.dispose();
+            existing.requestFocus();
+            return existing;
+        }
+        const clientInstance = new DataExplorerClientInstance(backend, this._logChannel);
+        return this.createInstance(clientInstance, 'extension');
+    }
+
     dispose(): void {
         // Dispose DuckDB instance if it was initialized
         DuckDBInstance.getInstance().dispose().catch(() => { });
@@ -614,5 +655,6 @@ export class PositronDataExplorerService implements IPositronDataExplorerService
         this._variableToInstanceMap.clear();
         this._variablePathToInstanceMap.clear();
         this._disposables.forEach(d => d.dispose());
+        this._backendRegistry.dispose();
     }
 }

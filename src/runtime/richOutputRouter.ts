@@ -12,6 +12,7 @@ import type { PositronPreviewService } from '../services/preview';
 import {
     createSurfaceModelId,
     SurfaceLifecycleService,
+    SurfaceKind,
     SurfaceModelKind,
     SurfaceSourceKind,
 } from '../services/surfaces/surfaceLifecycleService';
@@ -39,7 +40,9 @@ export interface RichOutputRouteRecord {
     readonly outputId?: string;
     readonly kind: RuntimeOutputKind;
     readonly consumer: RuntimeOutputConsumerId;
-    readonly status: 'routed' | 'fallback' | 'failed';
+    readonly status: 'accepted' | 'instance-created' | 'surface-opened' | 'routed' | 'fallback' | 'failed';
+    readonly phase?: 'accepted' | 'instance-created' | 'surface-opened';
+    readonly rendererCompatible: boolean;
     readonly detail?: string;
     readonly timestamp: number;
 }
@@ -245,12 +248,17 @@ export class RichOutputRouter implements vscode.Disposable {
             const commId = dataExplorerPayload?.comm_id;
             if (typeof commId === 'string' && commId.length > 0) {
                 const isNotebook = session.sessionMetadata.sessionMode === 'notebook';
+                if (!isNotebook) {
+                    await this._routeDataExplorerOutput(session, message, commId);
+                    return;
+                }
                 this._record(
                     session,
                     message,
                     isNotebook ? 'notebook-inline-data-explorer' : 'data-explorer',
-                    'routed',
+                    'accepted',
                     commId,
+                    'accepted',
                 );
                 return;
             }
@@ -297,6 +305,87 @@ export class RichOutputRouter implements vscode.Disposable {
             ? 'Inline Data Explorer output requires a dedicated inline surface; the payload is preserved here.'
             : 'No supported URL or HTML representation was present in the Viewer output.';
         await this._routeFallback(session, message, reason);
+    }
+
+    private async _routeDataExplorerOutput(
+        session: RuntimeSession,
+        message: RichOutputMessage,
+        commId: string,
+    ): Promise<void> {
+        this._record(session, message, 'data-explorer', 'accepted', commId, 'accepted');
+
+        if (!await this._waitForDataExplorerPhase(commId, 'instance-created')) {
+            await this._routeFallback(
+                session,
+                message,
+                `Data Explorer accepted comm '${commId}', but no surface model was created. ` +
+                    'The original MIME bundle is preserved and is not considered renderer-compatible.',
+            );
+            return;
+        }
+        this._record(session, message, 'data-explorer', 'instance-created', commId, 'instance-created');
+
+        if (!await this._waitForDataExplorerPhase(commId, 'surface-opened')) {
+            await this._routeFallback(
+                session,
+                message,
+                `Data Explorer instance '${commId}' was created, but its editor did not open. ` +
+                    'The original MIME bundle is preserved and is not considered renderer-compatible.',
+            );
+            return;
+        }
+        this._record(session, message, 'data-explorer', 'surface-opened', commId, 'surface-opened');
+    }
+
+    private _waitForDataExplorerPhase(
+        commId: string,
+        phase: 'instance-created' | 'surface-opened',
+        timeoutMs = 10_000,
+    ): Promise<boolean> {
+        const lifecycle = this._surfaceLifecycle;
+        if (!lifecycle) {
+            return Promise.resolve(false);
+        }
+        const modelId = createSurfaceModelId(SurfaceModelKind.DataExplorer, commId);
+        const isSatisfied = () => {
+            const model = lifecycle.getModel(modelId);
+            if (!model) {
+                return false;
+            }
+            return phase === 'instance-created' || model.attachments.some(
+                attachment => attachment.kind === SurfaceKind.DataExplorerEditor,
+            );
+        };
+        if (isSatisfied()) {
+            return Promise.resolve(true);
+        }
+
+        return new Promise(resolve => {
+            let settled = false;
+            let listener: vscode.Disposable | undefined;
+            let timer: NodeJS.Timeout | undefined;
+            const finish = (result: boolean) => {
+                if (settled) {
+                    return;
+                }
+                settled = true;
+                if (timer) {
+                    clearTimeout(timer);
+                }
+                listener?.dispose();
+                resolve(result);
+            };
+            listener = lifecycle.onDidChange(event => {
+                if (event.model.id === modelId && isSatisfied()) {
+                    finish(true);
+                }
+            });
+            timer = setTimeout(() => finish(false), timeoutMs);
+            // Close the getModel()/listener-registration race.
+            if (isSatisfied()) {
+                finish(true);
+            }
+        });
     }
 
     private async _routePlotOutput(session: RuntimeSession, message: RichOutputMessage): Promise<void> {
@@ -437,6 +526,7 @@ ${plainText ? `<pre>${escapeHtml(plainText)}</pre>` : ''}
         consumer: RuntimeOutputConsumerId,
         status: RichOutputRouteRecord['status'],
         detail?: string,
+        phase?: RichOutputRouteRecord['phase'],
     ): void {
         const record: RichOutputRouteRecord = {
             sessionId: session.sessionId,
@@ -445,6 +535,9 @@ ${plainText ? `<pre>${escapeHtml(plainText)}</pre>` : ''}
             kind: message.kind,
             consumer,
             status,
+            phase,
+            rendererCompatible:
+                status === 'routed' || status === 'surface-opened',
             detail,
             timestamp: Date.now(),
         };

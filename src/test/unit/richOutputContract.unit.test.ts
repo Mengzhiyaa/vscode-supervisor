@@ -238,4 +238,49 @@ suite('[Unit] P0 rich output and compatibility contracts', () => {
         router.dispose();
         await vscode.workspace.fs.delete(storageUri, { recursive: true, useTrash: false });
     });
+
+    test('confirms data explorer acceptance, instance creation, and editor attachment separately', async () => {
+        const commId = 'data-explorer-console-1';
+        const model = {
+            id: `data-explorer:${encodeURIComponent(commId)}`,
+            attachments: [{ kind: 'data-explorer-editor' }],
+        };
+        const router = new RichOutputRouter(
+            { globalStorageUri: vscode.Uri.file('/tmp/rich-output-phases') } as any,
+            {
+                sessions: [],
+                onDidCreateSession: createEventStub(),
+                onDidDeleteRuntimeSession: createEventStub(),
+            } as any,
+            {} as any,
+            {} as any,
+            makeNoopLogChannel(),
+            {
+                getModel: (modelId: string) => modelId === model.id ? model : undefined,
+                onDidChange: createEventStub(),
+            } as any,
+        );
+        const session = {
+            sessionId: 'console-session-1',
+            sessionMetadata: { sessionMode: 'console' },
+        } as any;
+
+        await (router as any)._routeOutput(session, output(RuntimeOutputKind.ViewerWidget, {
+            [RuntimeOutputMime.positronDataExplorer]: JSON.stringify({ comm_id: commId }),
+        }));
+
+        const records = router.getRouteRecords(session.sessionId);
+        assert.deepStrictEqual(records.map(record => record.status), [
+            'accepted',
+            'instance-created',
+            'surface-opened',
+        ]);
+        assert.deepStrictEqual(records.map(record => record.phase), [
+            'accepted',
+            'instance-created',
+            'surface-opened',
+        ]);
+        assert.deepStrictEqual(records.map(record => record.rendererCompatible), [false, false, true]);
+        router.dispose();
+    });
 });

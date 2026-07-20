@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { randomUUID } from 'crypto';
 import { CoreCommandIds, ViewContainerIds } from '../../coreCommandIds';
 import {
     createSurfaceModelId,
@@ -9,14 +10,14 @@ import {
 } from '../surfaces/surfaceLifecycleService';
 import {
     type ConnectionPathEntry,
-    type PositronConnectionInstance,
+    type IConnectionInstance,
     type PositronConnectionNode,
     PositronConnectionsService,
 } from './positronConnectionsService';
 
 export type ConnectionsTreeNode =
-    | { readonly kind: 'connection'; readonly connection: PositronConnectionInstance }
-    | { readonly kind: 'object'; readonly connection: PositronConnectionInstance; readonly object: PositronConnectionNode }
+    | { readonly kind: 'connection'; readonly connection: IConnectionInstance }
+    | { readonly kind: 'object'; readonly connection: IConnectionInstance; readonly object: PositronConnectionNode }
     | { readonly kind: 'error'; readonly message: string };
 
 export class ConnectionsTreeProvider implements vscode.TreeDataProvider<ConnectionsTreeNode>, vscode.Disposable {
@@ -46,6 +47,7 @@ export class ConnectionsTreeProvider implements vscode.TreeDataProvider<Connecti
                 }
                 this.refresh();
             }),
+            vscode.commands.registerCommand(CoreCommandIds.connectionsNew, () => this._createConnection()),
             vscode.commands.registerCommand(CoreCommandIds.connectionsDisconnect, (node?: ConnectionsTreeNode) => {
                 if (node?.kind === 'connection') {
                     node.connection.disconnect();
@@ -165,9 +167,76 @@ export class ConnectionsTreeProvider implements vscode.TreeDataProvider<Connecti
         }
     }
 
-    private async revealConnection(connection: PositronConnectionInstance): Promise<void> {
+    private async revealConnection(connection: IConnectionInstance): Promise<void> {
         await vscode.commands.executeCommand(`workbench.view.extension.${ViewContainerIds.explorationSidebar}`);
         await this._treeView?.reveal({ kind: 'connection', connection }, { focus: true, select: true, expand: true });
+    }
+
+    private async _createConnection(): Promise<void> {
+        const drivers = this._connections.driverManager.getDrivers();
+        if (drivers.length === 0) {
+            vscode.window.showInformationMessage('No data connection drivers are registered.');
+            return;
+        }
+        const driverPick = await vscode.window.showQuickPick(
+            drivers.map(driver => ({ label: driver.metadata.name, description: driver.metadata.description, driver })),
+            { title: 'New Data Connection', placeHolder: 'Select a connection provider' },
+        );
+        if (!driverPick) { return; }
+        const mechanisms = driverPick.driver.metadata.mechanisms;
+        const mechanism = mechanisms.length === 1
+            ? mechanisms[0]
+            : (await vscode.window.showQuickPick(
+                mechanisms.map(value => ({ label: value.label, description: value.description, value })),
+                { title: 'Connection Method' },
+            ))?.value;
+        if (!mechanism) { return; }
+
+        const parameterValues: Record<string, boolean | number | string> = {};
+        for (const parameter of mechanism.parameters) {
+            if (parameter.type === 'boolean') {
+                const selected = await vscode.window.showQuickPick(['Yes', 'No'], {
+                    title: parameter.label,
+                    placeHolder: parameter.placeholder,
+                });
+                if (!selected && parameter.required) { return; }
+                parameterValues[parameter.id] = selected === 'Yes';
+                continue;
+            }
+            if (parameter.type === 'option') {
+                const selected = await vscode.window.showQuickPick([...(parameter.options ?? [])], {
+                    title: parameter.label,
+                    placeHolder: parameter.placeholder,
+                });
+                if (!selected && parameter.required) { return; }
+                if (selected) { parameterValues[parameter.id] = selected; }
+                continue;
+            }
+            const value = await vscode.window.showInputBox({
+                title: parameter.label,
+                placeHolder: parameter.placeholder,
+                password: parameter.type === 'password' || parameter.secret === true,
+                value: parameter.defaultValue === undefined ? undefined : String(parameter.defaultValue),
+                validateInput: input => parameter.required && !input ? `${parameter.label} is required.` : undefined,
+            });
+            if (value === undefined) { return; }
+            parameterValues[parameter.id] = parameter.type === 'number' ? Number(value) : value;
+        }
+        const connectionName = await vscode.window.showInputBox({
+            title: 'Connection Name',
+            value: driverPick.driver.metadata.name,
+            validateInput: value => value.trim() ? undefined : 'A connection name is required.',
+        });
+        if (!connectionName) { return; }
+        await this._connections.addUpdateProfile({
+            id: randomUUID(),
+            createdAt: Date.now(),
+            driverId: driverPick.driver.id,
+            connectionName,
+            mechanismId: mechanism.id,
+            parameterValues,
+            autoConnect: true,
+        });
     }
 
     private _reconcileSurfaceAttachments(): void {

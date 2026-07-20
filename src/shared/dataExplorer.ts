@@ -322,4 +322,5 @@ export interface BackendState {
     supported_features: SupportedFeatures;
     connected?: boolean;
     error_message?: string;
+    available_sheets?: string[];
 }

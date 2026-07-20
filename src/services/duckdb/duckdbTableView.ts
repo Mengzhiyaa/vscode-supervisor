@@ -11,6 +11,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as zlib from 'zlib';
 import { DuckDBInstance } from './duckdbInstance';
+import { readXlsxWorksheetNames } from './xlsxWorkbook';
 import {
     escapeIdentifier,
     escapeValue,
@@ -172,8 +173,9 @@ export class DuckDBTableView {
     private _rowCountPromise: Promise<void> = Promise.resolve();
     private _hasHeaderRow = true;
     private _displayName = '';
-    private _fileType: 'csv' | 'tsv' | 'parquet' = 'csv';
+    private _fileType: 'csv' | 'tsv' | 'parquet' | 'xlsx' = 'csv';
     private _isGzipped = false;
+    private _availableSheets: readonly string[] = [];
 
     // Cached clause strings for performance (aligned with positron)
     private _whereClause = '';
@@ -207,12 +209,23 @@ export class DuckDBTableView {
      * registers buffer, creates TABLE (not VIEW), retrieves schema.
      */
     async importFile(options?: DatasetImportOptions): Promise<void> {
+        this.importOptions = options;
         if (options?.has_header_row !== undefined) {
             this._hasHeaderRow = options.has_header_row;
         }
 
         // Read the file
         let fileData = await vscode.workspace.fs.readFile(this._uri);
+
+        if (this._fileType === 'xlsx') {
+            this._availableSheets = readXlsxWorksheetNames(fileData) ?? [];
+            if (options?.sheet_name && !this._availableSheets.includes(options.sheet_name)) {
+                throw new Error(
+                    `Worksheet '${options.sheet_name}' was not found. Available worksheets: ` +
+                    `${this._availableSheets.join(', ') || '(unknown)'}.`,
+                );
+            }
+        }
 
         // Gzip decompression (aligned with positron)
         if (this._isGzipped) {
@@ -306,6 +319,8 @@ export class DuckDBTableView {
             }
         } else if (lowerPath.endsWith('.parquet') || lowerPath.endsWith('.parq')) {
             this._fileType = 'parquet';
+        } else if (lowerPath.endsWith('.xlsx')) {
+            this._fileType = 'xlsx';
         } else if (lowerPath.endsWith('.tsv')) {
             this._fileType = 'tsv';
         } else {
@@ -321,6 +336,27 @@ export class DuckDBTableView {
         if (this._fileType === 'parquet') {
             await this._duckdb.query(
                 `CREATE OR REPLACE TABLE ${escapeIdentifier(this._tableName)} AS SELECT * FROM parquet_scan('${vfsName}')`
+            );
+            return;
+        }
+
+        if (this._fileType === 'xlsx') {
+            try {
+                await this._duckdb.query('LOAD excel');
+            } catch {
+                try {
+                    await this._duckdb.query('INSTALL excel; LOAD excel');
+                } catch (error) {
+                    throw new Error(`DuckDB Excel support could not be loaded: ${String(error)}`);
+                }
+            }
+            const options = [`header=${this._hasHeaderRow}`];
+            if (this.importOptions?.sheet_name) {
+                options.push(`sheet='${this.importOptions.sheet_name.replace(/'/g, "''")}'`);
+            }
+            await this._duckdb.query(
+                `CREATE OR REPLACE TABLE ${escapeIdentifier(this._tableName)} AS ` +
+                `SELECT * FROM read_xlsx('${vfsName.replace(/'/g, "''")}', ${options.join(', ')})`,
             );
             return;
         }
@@ -443,6 +479,7 @@ export class DuckDBTableView {
             sort_keys: this._sortKeys,
             supported_features: this._getSupportedFeatures(),
             connected: true,
+            available_sheets: [...this._availableSheets],
         };
     }
 

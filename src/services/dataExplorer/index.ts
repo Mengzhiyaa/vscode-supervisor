@@ -16,3 +16,7 @@ export * from './dataExplorerCustomEditorProvider';
 export * from './positronDataExplorerCustomEditorProvider';
 export * from './positronDataExplorerActions';
 export * from './positronDataExplorerContextKeys';
+export * from './positronDataExplorerExtensionBackend';
+export * from './positronDataExplorerEditorContribution';
+export * from './positronDataExplorerResolveDataFrame';
+export * from './dataExplorerUri';

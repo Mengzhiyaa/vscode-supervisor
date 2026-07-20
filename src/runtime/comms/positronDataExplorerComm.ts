@@ -271,6 +271,7 @@ export interface SetDatasetImportOptionsResult {
  */
 export interface DatasetImportOptions {
     has_header_row?: boolean;
+    sheet_name?: string;
 }
 
 /**
