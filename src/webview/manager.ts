@@ -148,6 +148,7 @@ export class WebviewManager implements vscode.Disposable {
             this._getAdditionalLocalResourceRoots,
         );
         this._disposables.push(
+            this._viewerProvider,
             vscode.window.registerWebviewViewProvider(
                 ViewIds.viewer,
                 this._viewerProvider,

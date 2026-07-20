@@ -39,6 +39,7 @@ export abstract class BaseWebviewProvider implements vscode.WebviewViewProvider 
             this._connection?.dispose();
             this._connection = undefined;
             this._view = undefined;
+            this._onDidDisposeWebviewView();
         });
 
         this._outputChannel.debug(`[${this._providerName}] Webview resolved`);
@@ -78,6 +79,9 @@ export abstract class BaseWebviewProvider implements vscode.WebviewViewProvider 
      * Gets the name of this provider for logging
      */
     protected abstract get _providerName(): string;
+
+    /** Optional lifecycle hook for subclasses that hold surface attachments. */
+    protected _onDidDisposeWebviewView(): void { }
 
     /**
      * Logs a message to the output channel.

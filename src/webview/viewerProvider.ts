@@ -18,7 +18,9 @@ interface ViewerHistoryEntry {
  * Displays HTML/URL previews from the UI comm.
  */
 export class ViewerViewProvider extends BaseWebviewProvider {
+    private readonly _disposables: vscode.Disposable[] = [];
     private _lastPreview: PreviewItem | undefined;
+    private _surfaceAttachment: vscode.Disposable | undefined;
 
     /** Navigation history stack */
     private _history: ViewerHistoryEntry[] = [];
@@ -35,6 +37,13 @@ export class ViewerViewProvider extends BaseWebviewProvider {
     ) {
         super(extensionUri, outputChannel, getAdditionalLocalResourceRoots);
         this._subscribeToPreviewService();
+        void this._previewService.restoreLastPreview?.().then(preview => {
+            if (preview && !this._lastPreview) {
+                this._acceptPreview(preview);
+            }
+        }).catch(error => {
+            this.log(`Failed to restore Viewer model: ${error}`, vscode.LogLevel.Warning);
+        });
     }
 
     protected get _providerName(): string {
@@ -42,22 +51,40 @@ export class ViewerViewProvider extends BaseWebviewProvider {
     }
 
     private _subscribeToPreviewService(): void {
-        this._previewService.onDidShowPreview(preview => {
-            this._lastPreview = preview;
+        this._disposables.push(
+            this._previewService.onDidShowPreview(preview => this._acceptPreview(preview)),
+        );
+    }
 
-            // Push to history unless we're doing a back/forward navigate
-            if (!this._navigating) {
-                // Truncate forward history
-                if (this._historyIndex < this._history.length - 1) {
-                    this._history.splice(this._historyIndex + 1);
-                }
-                this._history.push({ preview });
-                this._historyIndex = this._history.length - 1;
+    private _acceptPreview(preview: PreviewItem): void {
+        const replacesCurrentOutput = !!preview.outputId &&
+            preview.outputId === this._lastPreview?.outputId &&
+            preview.sessionId === this._lastPreview.sessionId;
+        this._lastPreview = preview;
+
+        if (replacesCurrentOutput && this._historyIndex >= 0) {
+            this._history[this._historyIndex] = { preview };
+        } else if (!this._navigating) {
+            if (this._historyIndex < this._history.length - 1) {
+                this._history.splice(this._historyIndex + 1);
             }
+            this._history.push({ preview });
+            this._historyIndex = this._history.length - 1;
+        }
 
-            this._sendPreview(preview);
-            this._sendNavState();
-        });
+        this._attachPreviewSurface(preview);
+        this._sendPreview(preview);
+        this._sendNavState();
+    }
+
+    private _attachPreviewSurface(preview: PreviewItem): void {
+        this._surfaceAttachment?.dispose();
+        this._surfaceAttachment = this._previewService.attachPreview?.(
+            preview,
+            'viewer:main',
+            undefined,
+            'viewer-view-provider',
+        );
     }
 
     protected _registerRpcHandlers(_connection: MessageConnection): void {
@@ -76,6 +103,7 @@ export class ViewerViewProvider extends BaseWebviewProvider {
                 this._navigating = true;
                 const entry = this._history[this._historyIndex];
                 this._lastPreview = entry.preview;
+                this._attachPreviewSurface(entry.preview);
                 this._sendPreview(entry.preview);
                 this._sendNavState();
                 this._navigating = false;
@@ -88,6 +116,7 @@ export class ViewerViewProvider extends BaseWebviewProvider {
                 this._navigating = true;
                 const entry = this._history[this._historyIndex];
                 this._lastPreview = entry.preview;
+                this._attachPreviewSurface(entry.preview);
                 this._sendPreview(entry.preview);
                 this._sendNavState();
                 this._navigating = false;
@@ -102,6 +131,8 @@ export class ViewerViewProvider extends BaseWebviewProvider {
         });
 
         _connection.onNotification('viewer/clear', () => {
+            this._surfaceAttachment?.dispose();
+            this._surfaceAttachment = undefined;
             this._lastPreview = undefined;
             this._history = [];
             this._historyIndex = -1;
@@ -126,11 +157,32 @@ export class ViewerViewProvider extends BaseWebviewProvider {
         });
 
         _connection.onNotification('viewer/interrupt', async () => {
-            const sessionId = this._lastPreview?.sessionId;
+            const preview = this._lastPreview;
+            const sessionId = preview?.sessionId;
             if (!sessionId) {
                 this.log('[ViewerViewProvider] Interrupt: no session ID in current preview');
                 return;
             }
+
+            if (preview && this._previewService.interruptPreview) {
+                try {
+                    if (await this._previewService.interruptPreview(preview)) {
+                        this.log(
+                            `[ViewerViewProvider] Interrupted source for Viewer model ${preview.modelId ?? '<legacy>'}`,
+                        );
+                        return;
+                    }
+                    this.log(
+                        `[ViewerViewProvider] Interrupt is unsupported for Viewer source ${preview.modelId ?? '<legacy>'}`,
+                        vscode.LogLevel.Warning,
+                    );
+                    return;
+                } catch (err) {
+                    this.log(`[ViewerViewProvider] Source interrupt failed: ${err}`, vscode.LogLevel.Warning);
+                    return;
+                }
+            }
+
             const instance = this._consoleService?.getConsoleInstance(sessionId);
             if (instance) {
                 try {
@@ -146,6 +198,7 @@ export class ViewerViewProvider extends BaseWebviewProvider {
 
         // Send current preview if one exists
         if (this._lastPreview) {
+            this._attachPreviewSurface(this._lastPreview);
             this._sendPreview(this._lastPreview);
             this._sendNavState();
         }
@@ -294,5 +347,17 @@ export class ViewerViewProvider extends BaseWebviewProvider {
             sessionId: preview.sessionId,
             kind: preview.type
         });
+    }
+
+    protected override _onDidDisposeWebviewView(): void {
+        this._surfaceAttachment?.dispose();
+        this._surfaceAttachment = undefined;
+    }
+
+    dispose(): void {
+        this._surfaceAttachment?.dispose();
+        this._surfaceAttachment = undefined;
+        this._disposables.forEach(disposable => disposable.dispose());
+        this._connection?.dispose();
     }
 }

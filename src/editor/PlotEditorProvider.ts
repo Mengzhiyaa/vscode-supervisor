@@ -13,6 +13,11 @@ import { PositronPlotsService } from '../runtime/positronPlotsService';
 import * as RpcProtocol from '../rpc/webview/plotEditor';
 import { WebviewMessageReader, WebviewMessageWriter } from '../rpc/webview/transport';
 import { StaticPlotClient } from '../runtime/staticPlotClient';
+import {
+    SurfaceKind,
+    SurfaceLifecycleService,
+    SurfaceModelKind,
+} from '../services/surfaces/surfaceLifecycleService';
 
 /**
  * Manages plot editor panels for viewing individual plots in VS Code editor tabs.
@@ -28,6 +33,7 @@ export class PlotEditorProvider implements vscode.Disposable {
         private readonly _extensionUri: vscode.Uri,
         private readonly _outputChannel: vscode.LogOutputChannel,
         private readonly _plotsService?: PositronPlotsService,
+        private readonly _surfaceLifecycle?: SurfaceLifecycleService,
     ) { }
 
     /**
@@ -65,6 +71,16 @@ export class PlotEditorProvider implements vscode.Disposable {
         );
 
         const connection = this._setupRpcConnection(panel.webview);
+        const surfaceAttachment = this._surfaceLifecycle
+            ?.findModelByResource(SurfaceModelKind.Plot, plotId);
+        const attachmentLease = surfaceAttachment
+            ? this._surfaceLifecycle!.attach(surfaceAttachment.id, {
+                surfaceId: `plot-editor:${plotId}`,
+                kind: SurfaceKind.PlotEditor,
+                ownerId: 'plot-editor-provider',
+                metadata: { plotId },
+            })
+            : undefined;
         this._connections.set(plotId, connection);
         this._registerRpcHandlers(plotId, panel, connection);
         connection.listen();
@@ -73,6 +89,7 @@ export class PlotEditorProvider implements vscode.Disposable {
         this._sendSetImage(plotId, plotData);
 
         panel.onDidDispose(() => {
+            attachmentLease?.dispose();
             connection.dispose();
             this._connections.delete(plotId);
             this._panels.delete(plotId);
