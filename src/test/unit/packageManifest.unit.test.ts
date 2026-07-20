@@ -23,6 +23,17 @@ interface PackageJsonShape {
         languages?: Array<{ id?: string }>;
         grammars?: Array<{ language?: string }>;
         commands?: Array<{ command?: string }>;
+        notebookRenderer?: Array<{
+            id?: string;
+            entrypoint?: string;
+            requiresMessaging?: string;
+            mimeTypes?: string[];
+        }>;
+        configuration?: {
+            properties?: Record<string, { default?: unknown; enum?: unknown[] }>;
+        };
+        views?: Record<string, Array<{ id?: string; name?: string }>>;
+        viewsWelcome?: Array<{ view?: string; contents?: string }>;
     };
 }
 
@@ -63,6 +74,11 @@ suite('[Unit] Supervisor package manifest', () => {
         assert.strictEqual(packageJson.scripts?.['install:binaries'], 'node scripts/install-binaries.mjs');
         assert.strictEqual(packageJson.scripts?.['sync:kallichore-api'], 'node scripts/sync-kallichore-api.mjs');
         assert.strictEqual(packageJson.scripts?.['verify:kallichore-api'], 'node scripts/sync-kallichore-api.mjs --check');
+        assert.strictEqual(packageJson.scripts?.['sync:webview-rpc-contracts'], 'node scripts/sync-webview-rpc-contracts.mjs');
+        assert.strictEqual(packageJson.scripts?.['verify:webview-rpc-contracts'], 'node scripts/sync-webview-rpc-contracts.mjs --check');
+        assert.strictEqual(packageJson.scripts?.['sync:positron-contracts'], 'node scripts/sync-positron-contracts.mjs');
+        assert.strictEqual(packageJson.scripts?.['verify:positron-contracts'], 'node scripts/sync-positron-contracts.mjs --check');
+        assert.strictEqual(packageJson.scripts?.['verify:contracts'], 'npm run verify:api-dts && npm run verify:webview-rpc-contracts');
         assert.strictEqual(packageJson.scripts?.['build:webview'], 'npm --prefix webview run build');
         assert.strictEqual(packageJson.scripts?.['build'], 'npm run check:webview && npm run build:webview && npm run copy:duckdb && npm run compile');
         assert.strictEqual(
@@ -111,5 +127,47 @@ suite('[Unit] Supervisor package manifest', () => {
         assert.ok(fs.existsSync(path.join(path.resolve(__dirname, '../../..'), 'scripts/run-vscode-tests.mjs')));
         assert.ok(fs.existsSync(path.join(path.resolve(__dirname, '../../..'), '.github/workflows/ci.yml')));
         assert.ok(fs.existsSync(path.join(path.resolve(__dirname, '../../..'), '.github/workflows/release.yml')));
+    });
+
+    test('contributes the P0 plots contract and runtime diagnostics view', () => {
+        const packageJson = readPackageJson();
+        const properties = packageJson.contributes?.configuration?.properties ?? {};
+        assert.strictEqual(properties['plots.defaultSizingPolicy']?.default, 'auto');
+        assert.deepStrictEqual(properties['plots.historyPolicy']?.enum, ['auto', 'always', 'never']);
+        assert.deepStrictEqual(properties['plots.darkFilter']?.enum, ['auto', 'on', 'off']);
+        assert.strictEqual(properties['plots.darkFilterMode'], undefined);
+
+        const commands = new Set((packageJson.contributes?.commands ?? []).map(entry => entry.command));
+        assert.ok(commands.has('supervisor.runtimeSessions.refresh'));
+        const sessionViews = packageJson.contributes?.views?.['supervisor-sidebar-session'] ?? [];
+        assert.ok(sessionViews.some(view => view.id === 'supervisor.runtimeSessions'));
+    });
+
+    test('contributes notebook inline Data Explorer and Connections surfaces', () => {
+        const packageJson = readPackageJson();
+        const renderer = packageJson.contributes?.notebookRenderer?.find(
+            candidate => candidate.id === 'supervisor.inlineDataExplorerRenderer',
+        );
+        assert.strictEqual(renderer?.entrypoint, './notebook/inlineDataExplorerRenderer.js');
+        assert.strictEqual(renderer?.requiresMessaging, 'always');
+        assert.ok(renderer?.mimeTypes?.some(mime =>
+            mime.toLowerCase() === 'application/vnd.positron.dataexplorer+json',
+        ));
+        assert.ok(fs.existsSync(path.join(
+            path.resolve(__dirname, '../../..'),
+            'notebook/inlineDataExplorerRenderer.js',
+        )));
+
+        const commands = new Set((packageJson.contributes?.commands ?? []).map(entry => entry.command));
+        assert.ok(commands.has('supervisor.connections.refresh'));
+        assert.ok(commands.has('supervisor.connections.disconnect'));
+        assert.ok(commands.has('supervisor.connections.preview'));
+        const explorationViews = packageJson.contributes?.views?.['supervisor-sidebar-exploration'] ?? [];
+        assert.ok(explorationViews.some(view => view.id === 'supervisor.connections'));
+        const connectionsWelcome = packageJson.contributes?.viewsWelcome?.find(
+            welcome => welcome.view === 'supervisor.connections',
+        );
+        assert.match(connectionsWelcome?.contents ?? '', /No database connections are currently active/);
+        assert.match(connectionsWelcome?.contents ?? '', /supervisor\.connections\.refresh/);
     });
 });

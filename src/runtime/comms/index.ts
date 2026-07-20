@@ -6,3 +6,4 @@ export { PositronPlotCommProxy } from "./positronPlotCommProxy";
 export * as PositronUiCommModule from "./positronUiComm";
 export * as PositronVariablesCommModule from "./positronVariablesComm";
 export * as PositronDataExplorerCommModule from "./positronDataExplorerComm";
+export * as PositronConnectionsCommModule from "./positronConnectionsComm";

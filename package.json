@@ -73,6 +73,18 @@
   "contributes": {
     "languages": [],
     "grammars": [],
+    "notebookRenderer": [
+      {
+        "id": "supervisor.inlineDataExplorerRenderer",
+        "displayName": "Supervisor Inline Data Explorer",
+        "entrypoint": "./notebook/inlineDataExplorerRenderer.js",
+        "requiresMessaging": "always",
+        "mimeTypes": [
+          "application/vnd.positron.dataExplorer+json",
+          "application/vnd.positron.dataexplorer+json"
+        ]
+      }
+    ],
     "commands": [
       {
         "command": "supervisor.newSession",
@@ -108,6 +120,12 @@
         "command": "supervisor.showSupervisorLog",
         "title": "Show Kernel Supervisor Log",
         "category": "Ark"
+      },
+      {
+        "command": "supervisor.runtimeSessions.refresh",
+        "title": "Refresh Runtime Sessions",
+        "category": "Ark",
+        "icon": "$(refresh)"
       },
       {
         "command": "positron.supervisor.showRunningSupervisors",
@@ -313,6 +331,24 @@
         "title": "Open in Data Explorer",
         "category": "Ark Data Explorer",
         "icon": "$(table)"
+      },
+      {
+        "command": "supervisor.connections.refresh",
+        "title": "Refresh Connections",
+        "category": "Ark Connections",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "supervisor.connections.disconnect",
+        "title": "Disconnect",
+        "category": "Ark Connections",
+        "icon": "$(debug-disconnect)"
+      },
+      {
+        "command": "supervisor.connections.preview",
+        "title": "Preview Data",
+        "category": "Ark Connections",
+        "icon": "$(preview)"
       }
     ],
     "keybindings": [
@@ -385,6 +421,33 @@
         {
           "command": "supervisor.packages.updateAll",
           "when": "view == supervisor.packages && supervisor.packages.hasActiveSession && !supervisor.packages.isBusy",
+          "group": "navigation@2"
+        },
+        {
+          "command": "supervisor.runtimeSessions.refresh",
+          "when": "view == supervisor.runtimeSessions",
+          "group": "navigation@1"
+        },
+        {
+          "command": "supervisor.connections.refresh",
+          "when": "view == supervisor.connections",
+          "group": "navigation@1"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "supervisor.connections.preview",
+          "when": "view == supervisor.connections && viewItem == supervisor.connectionObject.previewable",
+          "group": "inline@1"
+        },
+        {
+          "command": "supervisor.connections.refresh",
+          "when": "view == supervisor.connections && viewItem == supervisor.connection.active",
+          "group": "navigation@1"
+        },
+        {
+          "command": "supervisor.connections.disconnect",
+          "when": "view == supervisor.connections && viewItem == supervisor.connection.active",
           "group": "navigation@2"
         }
       ],
@@ -574,9 +637,19 @@
           "id": "supervisor.packages",
           "contextualOnly": true,
           "icon": "$(package)"
+        },
+        {
+          "name": "Runtime Sessions",
+          "id": "supervisor.runtimeSessions",
+          "icon": "$(server-process)"
         }
       ],
       "supervisor-sidebar-exploration": [
+        {
+          "name": "Connections",
+          "id": "supervisor.connections",
+          "icon": "$(database)"
+        },
         {
           "type": "webview",
           "id": "supervisor.help",
@@ -592,6 +665,12 @@
         }
       ]
     },
+    "viewsWelcome": [
+      {
+        "view": "supervisor.connections",
+        "contents": "No database connections are currently active.\n\nConnections created by a running Python or R session appear here automatically.\n\n[Refresh Connections](command:supervisor.connections.refresh)"
+      }
+    ],
     "configuration": {
       "title": "Ark",
       "properties": {

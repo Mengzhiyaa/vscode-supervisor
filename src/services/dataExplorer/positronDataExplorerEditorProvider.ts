@@ -5,6 +5,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
+import { CoreCommandIds } from '../../coreCommandIds';
 import { createMessageConnection, MessageConnection } from 'vscode-jsonrpc';
 import { WebviewMessageReader, WebviewMessageWriter } from '../../rpc/webview/transport';
 import {
@@ -47,6 +48,12 @@ import {
     DataExplorerShowCellContextMenuNotification,
     DataExplorerLoadingNotification,
 } from '../../rpc/webview/dataExplorer';
+import {
+    createSurfaceModelId,
+    SurfaceKind,
+    SurfaceLifecycleService,
+    SurfaceModelKind,
+} from '../surfaces/surfaceLifecycleService';
 
 /**
  * Manages Data Explorer panels in the editor area
@@ -63,6 +70,7 @@ export class PositronDataExplorerEditorProvider implements vscode.Disposable {
     private readonly _foregroundLoadingCounts = new Map<string, number>();
     private readonly _uiState = new Map<string, DataExplorerUiState>();
     private readonly _skipInstanceCloseOnNextPanelDispose = new Set<string>();
+    private readonly _instanceFocusDisposables = new Map<string, vscode.Disposable>();
     /** Instance IDs being opened by an external panel provider (e.g. Custom Editor). */
     private readonly _externalPanelInstances = new Set<string>();
     private _isDisposing = false;
@@ -77,12 +85,18 @@ export class PositronDataExplorerEditorProvider implements vscode.Disposable {
         private readonly _getLanguageTextMateGrammarDefinitions: (
             webview: vscode.Webview,
         ) => Readonly<Record<string, { scopeName: string; grammarUrl: string }>> = () => ({}),
+        private readonly _surfaceLifecycle?: SurfaceLifecycleService,
     ) {
         this._resetContexts();
 
         // Listen for new instances and open them in editor
         this._disposables.push(
             this._dataExplorerService.onDidCreateInstance(instance => {
+                this._instanceFocusDisposables.get(instance.identifier)?.dispose();
+                this._instanceFocusDisposables.set(
+                    instance.identifier,
+                    instance.onDidRequestFocus(() => this.openInstance(instance, true)),
+                );
                 // Skip if the custom editor provider is handling this instance
                 if (this._externalPanelInstances.has(instance.identifier)) {
                     return;
@@ -96,6 +110,8 @@ export class PositronDataExplorerEditorProvider implements vscode.Disposable {
         // Listen for instance close
         this._disposables.push(
             this._dataExplorerService.onDidCloseInstance(instanceId => {
+                this._instanceFocusDisposables.get(instanceId)?.dispose();
+                this._instanceFocusDisposables.delete(instanceId);
                 this._lastRequests.delete(instanceId);
                 this._focusedState.delete(instanceId);
                 this._newWindowState.delete(instanceId);
@@ -114,6 +130,15 @@ export class PositronDataExplorerEditorProvider implements vscode.Disposable {
 
     private _registerCommands(): void {
         this._disposables.push(
+            vscode.commands.registerCommand(CoreCommandIds.dataExplorerOpenInline, (identifier?: string) => {
+                if (!identifier) {
+                    return;
+                }
+                const instance = this._dataExplorerService.getInstance(identifier);
+                if (instance) {
+                    this.openInstance(instance, true);
+                }
+            }),
             vscode.commands.registerCommand(PositronDataExplorerCommandId.Copy, async () => {
                 await this._sendToActiveWebview(DataExplorerCopyNotification.type.method);
             })
@@ -514,8 +539,8 @@ export class PositronDataExplorerEditorProvider implements vscode.Disposable {
     /**
      * Opens a Data Explorer instance in the editor area
      */
-    public openInstance(instance: IPositronDataExplorerInstance): void {
-        if (instance.inlineOnly) {
+    public openInstance(instance: IPositronDataExplorerInstance, allowInline: boolean = false): void {
+        if (instance.inlineOnly && !allowInline) {
             return;
         }
 
@@ -578,6 +603,33 @@ export class PositronDataExplorerEditorProvider implements vscode.Disposable {
 
         // Store panel
         this._panels.set(instance.identifier, panel);
+
+        const modelId = createSurfaceModelId(SurfaceModelKind.DataExplorer, instance.identifier);
+        let surfaceAttachment: vscode.Disposable | undefined;
+        const attachSurfaceModel = () => {
+            if (surfaceAttachment || !this._surfaceLifecycle?.getModel(modelId)) {
+                return false;
+            }
+            surfaceAttachment = this._surfaceLifecycle.attach(modelId, {
+                surfaceId: `data-explorer-editor:${instance.identifier}`,
+                kind: SurfaceKind.DataExplorerEditor,
+                ownerId: 'data-explorer-editor-provider',
+                metadata: { identifier: instance.identifier },
+            });
+            return true;
+        };
+        if (!attachSurfaceModel() && this._surfaceLifecycle) {
+            // The editor provider subscribes to instance creation before the
+            // lifecycle coordinator is initialized. Wait for the matching
+            // model so the first panel cannot miss its attachment lease.
+            let modelRegistrationListener: vscode.Disposable | undefined;
+            modelRegistrationListener = this._surfaceLifecycle.onDidChange(event => {
+                if (event.model.id === modelId && attachSurfaceModel()) {
+                    modelRegistrationListener?.dispose();
+                }
+            });
+            panelDisposables.push(new vscode.Disposable(() => modelRegistrationListener?.dispose()));
+        }
 
         // Custom editor panels provided by VS Code do not inherit the webview
         // options we set when creating our own panels, so ensure scripts and
@@ -669,6 +721,7 @@ export class PositronDataExplorerEditorProvider implements vscode.Disposable {
                 this._isDisposing ||
                 this._skipInstanceCloseOnNextPanelDispose.delete(instance.identifier);
 
+            surfaceAttachment?.dispose();
             disposePanelListeners();
             connection.dispose();
             this._connections.delete(instance.identifier);
@@ -679,9 +732,17 @@ export class PositronDataExplorerEditorProvider implements vscode.Disposable {
             this._foregroundLoadingCounts.delete(instance.identifier);
 
             if (!shouldKeepInstanceOpen) {
-                const dataExplorerInstance = this._dataExplorerService.getInstance(instance.identifier);
-                if (dataExplorerInstance) {
-                    dataExplorerInstance.dispose();
+                const model = this._surfaceLifecycle?.getModel(modelId);
+                if (model && model.attachments.length === 0) {
+                    this._surfaceLifecycle!.disposeModel(modelId, 'data-explorer-surface-closed');
+                } else if (model) {
+                    this._logChannel.debug(
+                        `[DataExplorer] Kept backend ${instance.identifier}; ` +
+                        `${model.attachments.length} other surface attachment(s) remain.`,
+                    );
+                } else {
+                    // Preserve legacy behavior when no lifecycle registry is supplied.
+                    this._dataExplorerService.getInstance(instance.identifier)?.dispose();
                 }
             }
 
@@ -860,6 +921,8 @@ export class PositronDataExplorerEditorProvider implements vscode.Disposable {
         this._lastRequests.clear();
         this._newWindowState.clear();
         this._uiState.clear();
+        this._instanceFocusDisposables.forEach(disposable => disposable.dispose());
+        this._instanceFocusDisposables.clear();
         this._skipInstanceCloseOnNextPanelDispose.clear();
         this._resetContexts();
         this._disposables.forEach(d => d.dispose());

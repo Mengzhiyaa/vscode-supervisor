@@ -5,6 +5,7 @@ export const CoreCommandIds = {
     interruptExecution: 'supervisor.interruptExecution',
     clearOutput: 'supervisor.clearOutput',
     showSupervisorLog: 'supervisor.showSupervisorLog',
+    refreshRuntimeSessions: 'supervisor.runtimeSessions.refresh',
     openPlotsGallery: 'supervisor.openPlotsGallery',
     openPlotInEditor: 'supervisor.openPlotInEditor',
     closeAuxiliaryPlotsPanel: 'supervisor.closeAuxiliaryPlotsPanel',
@@ -37,6 +38,10 @@ export const CoreCommandIds = {
     dataExplorerShowRowContextMenu: 'supervisor.dataExplorer.showRowContextMenu',
     dataExplorerShowCellContextMenu: 'supervisor.dataExplorer.showCellContextMenu',
     dataExplorerOpenFile: 'supervisor.dataExplorer.openFile',
+    dataExplorerOpenInline: 'supervisor.dataExplorer.openInline',
+    connectionsRefresh: 'supervisor.connections.refresh',
+    connectionsDisconnect: 'supervisor.connections.disconnect',
+    connectionsPreview: 'supervisor.connections.preview',
     supervisorReconnectSession: 'positron.supervisor.reconnectSession',
     supervisorRestartSupervisor: 'positron.supervisor.restartSupervisor',
 } as const;
@@ -66,6 +71,8 @@ export const ViewIds = {
     packages: 'supervisor.packages',
     viewer: 'supervisor.viewer',
     help: 'supervisor.help',
+    runtimeSessions: 'supervisor.runtimeSessions',
+    connections: 'supervisor.connections',
 } as const;
 
 export const ViewCommands = {

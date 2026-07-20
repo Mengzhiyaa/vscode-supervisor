@@ -34,6 +34,9 @@ export interface IPositronDataExplorerInstance extends vscode.Disposable {
      */
     readonly languageName: string;
 
+    /** Runtime session that owns the backend, if this is runtime-backed. */
+    readonly sessionId: string | undefined;
+
     /**
      * Gets the data explorer client instance
      */
@@ -74,6 +77,7 @@ export interface IPositronDataExplorerInstance extends vscode.Disposable {
      */
     readonly onDidClose: vscode.Event<void>;
     readonly onDidUpdateBackendState: vscode.Event<BackendState>;
+    readonly onDidRequestFocus: vscode.Event<void>;
 
     /**
      * Request focus on this instance
@@ -195,7 +199,8 @@ class PositronDataExplorerInstance implements IPositronDataExplorerInstance {
     constructor(
         private readonly _clientInstance: DataExplorerClientInstance,
         private readonly _languageName: string,
-        private readonly _inlineOnly: boolean = false
+        private readonly _inlineOnly: boolean = false,
+        private readonly _sessionId?: string,
     ) {
         this._disposables.push(this._onDidClose);
         this._disposables.push(this._onDidUpdateBackendState);
@@ -260,6 +265,10 @@ class PositronDataExplorerInstance implements IPositronDataExplorerInstance {
 
     get languageName(): string {
         return this._languageName;
+    }
+
+    get sessionId(): string | undefined {
+        return this._sessionId;
     }
 
     readonly onDidClose = this._onDidClose.event;
@@ -416,7 +425,12 @@ export class PositronDataExplorerService implements IPositronDataExplorerService
         this._logChannel.info(`PositronDataExplorerService: Creating instance for ${clientInstance.clientId}`);
 
         // Create instance
-        const instance = new PositronDataExplorerInstance(clientInstance, languageName, options?.inlineOnly === true);
+        const instance = new PositronDataExplorerInstance(
+            clientInstance,
+            languageName,
+            options?.inlineOnly === true,
+            options?.sessionId,
+        );
 
         // Store the replacement first so a late close from the previous
         // instance cannot remove this one from the registry.
