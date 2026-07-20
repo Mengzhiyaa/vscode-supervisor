@@ -119,6 +119,8 @@ export interface IPositronVariablesInstance extends vscode.Disposable {
     readonly onDidChangeState: vscode.Event<RuntimeClientState>;
     readonly onDidChangeStatus: vscode.Event<RuntimeClientStatus>;
     readonly onFocusElement: vscode.Event<void>;
+    /** Current root variables, independent of grouping/filter presentation. */
+    readonly variableItems: readonly VariablesTreeItem[];
 
     requestRefresh(): void;
     requestClear(includeHiddenVariables: boolean): void;

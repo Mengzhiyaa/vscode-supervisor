@@ -108,6 +108,26 @@ suite('[Unit] surface-neutral model lifecycle', () => {
         assert.strictEqual(disposeCount, 1);
     });
 
+    test('can replace a transient model lease on the same surface without disposing the model', () => {
+        service.upsertModel(model('transient-rebind', { retention: 'transient' }));
+        const first = service.attach('transient-rebind', {
+            surfaceId: 'fallback:rebind',
+            kind: SurfaceKind.Fallback,
+            ownerId: 'first-owner',
+        });
+        const second = service.attach('transient-rebind', {
+            surfaceId: 'fallback:rebind',
+            kind: SurfaceKind.Fallback,
+            ownerId: 'second-owner',
+        });
+
+        first.dispose();
+        assert.strictEqual(service.getModel('transient-rebind')?.state, 'attached');
+        assert.strictEqual(service.getAttachments()[0]?.id, second.id);
+        second.dispose();
+        assert.strictEqual(service.getModel('transient-rebind'), undefined);
+    });
+
     test('keeps a shared model alive when one of multiple surfaces closes', () => {
         service.upsertModel(model('shared-data-explorer'));
         const inline = service.attach('shared-data-explorer', {
@@ -152,6 +172,80 @@ suite('[Unit] surface-neutral model lifecycle', () => {
         assert.strictEqual(snapshot?.attachments.length, 0);
         assert.strictEqual(snapshot?.canStop, false);
         assert.strictEqual(snapshot?.outputId, 'output-1');
+        assert.deepStrictEqual(snapshot?.restore, {
+            descriptor: 'ready',
+            backend: 'pending',
+            surface: 'pending',
+            errors: {},
+        });
+        restored.dispose();
+    });
+
+    test('tracks descriptor, backend, and surface restore independently', () => {
+        service.upsertModel(model('three-layer'));
+        assert.deepStrictEqual(service.getModel('three-layer')?.restore, {
+            descriptor: 'ready',
+            backend: 'ready',
+            surface: 'pending',
+            errors: {},
+        });
+
+        service.setRestoreState('three-layer', 'backend', 'failed', new Error('backend unavailable'));
+        const lease = service.attach('three-layer', {
+            surfaceId: 'viewer:three-layer',
+            kind: SurfaceKind.ViewerPane,
+            ownerId: 'viewer',
+        });
+        const failed = service.getModel('three-layer');
+        assert.strictEqual(failed?.restore.backend, 'failed');
+        assert.strictEqual(failed?.restore.surface, 'ready');
+        assert.strictEqual(failed?.restore.errors.backend, 'backend unavailable');
+
+        service.setRestoreState('three-layer', 'backend', 'ready');
+        assert.deepStrictEqual(service.getConsistencyIssues(), []);
+        lease.dispose();
+        assert.strictEqual(service.getModel('three-layer')?.restore.surface, 'pending');
+        service.assertConsistency();
+    });
+
+    test('validates restore layers independently for each persisted surface family', async () => {
+        const cases = [
+            [SurfaceModelKind.Viewer, SurfaceKind.ViewerPane],
+            [SurfaceModelKind.Plot, SurfaceKind.PlotsPane],
+            [SurfaceModelKind.DataExplorer, SurfaceKind.DataExplorerEditor],
+            [SurfaceModelKind.Connection, SurfaceKind.ConnectionsPane],
+        ] as const;
+        for (const [kind] of cases) {
+            const id = createSurfaceModelId(kind, 'persistent');
+            service.upsertModel({
+                id,
+                kind,
+                resourceId: `${kind}-resource`,
+                title: kind,
+                source: { kind: SurfaceSourceKind.Extension, id: kind },
+                retention: 'persistent',
+            });
+        }
+        await service.whenPersisted();
+
+        const restored = new SurfaceLifecycleService(memento, output, 'test.surfaceModels');
+        await restored.initialize();
+        for (const [kind, surfaceKind] of cases) {
+            const id = createSurfaceModelId(kind, 'persistent');
+            assert.deepStrictEqual(restored.getModel(id)?.restore, {
+                descriptor: 'ready', backend: 'pending', surface: 'pending', errors: {},
+            });
+            restored.setRestoreState(id, 'backend', 'ready');
+            restored.attach(id, {
+                surfaceId: `${surfaceKind}:restored`,
+                kind: surfaceKind,
+                ownerId: 'restore-test',
+            });
+            assert.deepStrictEqual(restored.getModel(id)?.restore, {
+                descriptor: 'ready', backend: 'ready', surface: 'ready', errors: {},
+            });
+        }
+        restored.assertConsistency();
         restored.dispose();
     });
 

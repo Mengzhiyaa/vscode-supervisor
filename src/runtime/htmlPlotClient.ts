@@ -36,6 +36,8 @@ export class HtmlPlotClient implements IPositronPlotClient, vscode.Disposable {
 
     /** Event emitter for metadata updates */
     private readonly _onDidUpdateMetadata = new vscode.EventEmitter<PlotMetadata>();
+    private readonly _onDidActivate = new vscode.EventEmitter<void>();
+    private readonly _onDidDeactivate = new vscode.EventEmitter<void>();
 
     /** Disposables */
     private readonly _disposables: vscode.Disposable[] = [];
@@ -111,7 +113,7 @@ export class HtmlPlotClient implements IPositronPlotClient, vscode.Disposable {
             html_uri: event.uri.toString()
         };
 
-        this._disposables.push(this._onDidUpdateMetadata);
+        this._disposables.push(this._onDidUpdateMetadata, this._onDidActivate, this._onDidDeactivate);
     }
 
     /** Gets the unique ID of the plot */
@@ -129,6 +131,13 @@ export class HtmlPlotClient implements IPositronPlotClient, vscode.Disposable {
         return this._onDidUpdateMetadata.event;
     }
 
+    readonly onDidActivate = this._onDidActivate.event;
+    readonly onDidDeactivate = this._onDidDeactivate.event;
+
+    get isActive(): boolean {
+        return this._isActive;
+    }
+
     /**
      * Last known claimed layout dimensions.
      */
@@ -140,7 +149,12 @@ export class HtmlPlotClient implements IPositronPlotClient, vscode.Disposable {
      * Deactivates the plot lifecycle.
      */
     deactivate(): void {
+        if (!this._isActive) {
+            return;
+        }
         this._isActive = false;
+        this._claimants.clear();
+        this._onDidDeactivate.fire();
     }
 
     /**
@@ -154,6 +168,7 @@ export class HtmlPlotClient implements IPositronPlotClient, vscode.Disposable {
         this._claimants.add(claimant);
         if (!this._isActive) {
             this._isActive = true;
+            this._onDidActivate.fire();
         }
     }
 

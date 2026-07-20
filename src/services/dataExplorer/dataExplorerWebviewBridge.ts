@@ -61,7 +61,7 @@ import {
     DataExplorerBackendStateNotification,
     DataExplorerErrorNotification,
 } from '../../rpc/webview/dataExplorer';
-import { isPlaintextDataExplorerIdentifier } from './dataExplorerUri';
+import { supportsDataExplorerFileOptions } from './dataExplorerUri';
 import type { IPositronDataExplorerInstance } from './positronDataExplorerService';
 
 const MAX_CLIPBOARD_CELLS = 10_000;
@@ -1079,6 +1079,7 @@ export class DataExplorerWebviewBridge {
                     }
                     const options: DatasetImportOptions = {
                         has_header_row: params.hasHeaderRow,
+                        sheet_name: params.sheetName,
                     };
                     await this._options.runWithForegroundLoading(async () => {
                         const result = await instance.setDatasetImportOptions(
@@ -1151,6 +1152,7 @@ export class DataExplorerWebviewBridge {
         startRow: number = 0,
         endRow?: number,
         columnIndices?: number[],
+        shouldPublish: () => boolean = () => true,
     ): Promise<void> {
         const { connection, instance, logChannel } = this._options;
         try {
@@ -1168,6 +1170,9 @@ export class DataExplorerWebviewBridge {
             const displayEndRow = Math.min(endRow ?? numRows, numRows);
 
             if (columns.length === 0 || numRows === 0) {
+                if (!shouldPublish()) {
+                    return;
+                }
                 connection.sendNotification(DataExplorerDataNotification.type, {
                     columns: [],
                     schema: [],
@@ -1179,6 +1184,9 @@ export class DataExplorerWebviewBridge {
             }
 
             const schema = await instance.getSchema(columns);
+            if (!shouldPublish()) {
+                return;
+            }
             connection.sendNotification(DataExplorerSchemaNotification.type, {
                 columns: schema.columns,
             });
@@ -1192,6 +1200,9 @@ export class DataExplorerWebviewBridge {
             }));
             const tableData =
                 await instance.clientInstance.getDataValues(columnSelections);
+            if (!shouldPublish()) {
+                return;
+            }
 
             let rowLabels: string[] | undefined;
             if (backendState.has_row_labels && displayEndRow > startRow) {
@@ -1199,6 +1210,9 @@ export class DataExplorerWebviewBridge {
                     first_index: startRow,
                     last_index: displayEndRow - 1,
                 });
+                if (!shouldPublish()) {
+                    return;
+                }
                 rowLabels = rowLabelResult.row_labels?.[0] ?? [];
             }
 
@@ -1218,18 +1232,19 @@ export class DataExplorerWebviewBridge {
         }
     }
 
-    async sendDataFromLastRequest(): Promise<void> {
+    async sendDataFromLastRequest(shouldPublish: () => boolean = () => true): Promise<void> {
         const lastRequest = this._options.getLastRequest();
         if (lastRequest) {
             await this.sendData(
                 lastRequest.startRow,
                 lastRequest.endRow,
                 lastRequest.columns,
+                shouldPublish,
             );
             return;
         }
 
-        await this.sendData();
+        await this.sendData(0, undefined, undefined, shouldPublish);
     }
 
     private _buildAugmentedBackendState() {
@@ -1244,8 +1259,10 @@ export class DataExplorerWebviewBridge {
             __ark_file_options: {
                 supportsFileOptions:
                     instance.supportsFileOptions &&
-                    isPlaintextDataExplorerIdentifier(instance.identifier),
+                    supportsDataExplorerFileOptions(instance.identifier),
                 fileHasHeaderRow: instance.fileHasHeaderRow,
+                availableSheets: instance.fileAvailableSheets,
+                selectedSheet: instance.fileSelectedSheet,
             },
             __ark_window_state: {
                 inNewWindow: this._options.isInstanceInNewWindow(),

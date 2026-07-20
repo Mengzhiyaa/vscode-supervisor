@@ -16,6 +16,7 @@ import { PlotRenderFormat, PlotUnit } from './comms/positronPlotComm';
 import { DeferredRender, IRenderedPlot, RenderRequest } from './positronPlotRenderQueue';
 import { PlotSizingPolicyAuto } from './sizingPolicyAuto';
 import { PlotSizingPolicyCustom } from './sizingPolicyCustom';
+import { PlotsConfiguration } from './plotsConfiguration';
 import { PositronPlotCommProxy } from './comms/positronPlotCommProxy';
 import { PlotClientState, ZoomLevel } from '../shared/plots';
 export { PlotClientState, ZoomLevel } from '../shared/plots';
@@ -33,6 +34,14 @@ export interface RenderedPlot {
     pixel_ratio: number;
     /** Time taken to render in milliseconds */
     renderTimeMs: number;
+}
+
+export function shouldFreezeSlowPlot(
+    isFirstRender: boolean,
+    rendered: Pick<IRenderedPlot, 'renderTimeMs' | 'size'>,
+    freezeSlowPlots: boolean,
+): rendered is Pick<IRenderedPlot, 'renderTimeMs'> & { size: IPlotSize } {
+    return isFirstRender && rendered.renderTimeMs > 3000 && !!rendered.size && freezeSlowPlots;
 }
 
 /**
@@ -446,6 +455,15 @@ export class PlotClientInstance extends RuntimeClientInstance {
         this._commProxy.render(request);
 
         return request.promise.then((rendered) => {
+            const isFirstRender = !this._lastRender;
+            const freezeSlowPlots = vscode.workspace
+                .getConfiguration()
+                .get<boolean>(PlotsConfiguration.freezeSlowPlots, true);
+            if (shouldFreezeSlowPlot(isFirstRender, rendered, freezeSlowPlots)) {
+                // Freeze the first expensive render at its actual dimensions so
+                // viewport changes do not repeatedly trigger the same work.
+                this.sizingPolicy = new PlotSizingPolicyCustom(rendered.size, true);
+            }
             this._lastRender = rendered;
             this._lastRenderTimeMs = rendered.renderTimeMs;
             if (!suppressCompleteEvent) {

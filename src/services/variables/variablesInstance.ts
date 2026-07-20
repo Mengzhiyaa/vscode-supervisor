@@ -133,6 +133,9 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
     private _state: RuntimeClientState = RuntimeClientState.Uninitialized;
     private _status: RuntimeClientStatus = RuntimeClientStatus.Disconnected;
     private _variableItems = new Map<string, VariableItem>();
+    get variableItems(): readonly VariablesTreeItem[] {
+        return Array.from(this._variableItems.values());
+    }
     private _grouping: PositronVariablesGrouping = PositronVariablesGrouping.Kind;
     private _sorting: PositronVariablesSorting = PositronVariablesSorting.Name;
     private _filterText = '';
@@ -156,7 +159,7 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
     //#endregion
 
     constructor(
-        private readonly _session: RuntimeSession,
+        private _session: RuntimeSession,
         private readonly _outputChannel: vscode.LogOutputChannel
     ) {
         this._outputChannel.debug(`[VariablesInstance] Created for session ${_session.sessionId}`);
@@ -350,6 +353,21 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
     //#endregion
 
     //#region Public Methods for Service Integration
+    /**
+     * Rebind this surface model to the latest runtime session object after a
+     * restart. Runtime client managers are session-scoped and must never be
+     * retained across that boundary.
+     */
+    setRuntimeSession(session: RuntimeSession): void {
+        this._outputChannel.debug(
+            `[VariablesInstance] Rebinding session ${this._session.sessionId} to ${session.sessionId}`
+        );
+        this.detachFromSession();
+        this._disposeRuntimeDisposables();
+        this._session = session;
+        this.attachToSession();
+    }
+
     updateVariables(variables: Variable[]): void {
         this._variableItems.forEach(item => { item.isRecent = false; });
 

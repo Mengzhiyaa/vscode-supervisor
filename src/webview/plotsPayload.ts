@@ -10,6 +10,7 @@ export interface SerializedPlotRecord {
     sessionId?: string;
     kind?: 'static' | 'dynamic' | 'html';
     htmlUri?: string;
+    htmlActive?: boolean;
     originUri?: string;
     name?: string;
     code?: string;
@@ -57,6 +58,7 @@ export function toPlotAddedParams(
         sessionId: plot.sessionId,
         kind: plot.kind,
         htmlUri: plot.htmlUri,
+        htmlActive: plot.htmlActive,
         originUri: plot.originUri,
         name: plot.name,
         code: plot.code,

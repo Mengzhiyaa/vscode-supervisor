@@ -6,11 +6,13 @@
 import * as vscode from 'vscode';
 import {
     IPositronVariablesService,
-    IPositronVariablesInstance
+    IPositronVariablesInstance,
+    RuntimeClientState,
 } from './interfaces/variablesService';
 import { PositronVariablesInstance } from './variablesInstance';
 import { RuntimeSessionService } from '../../runtime/runtimeSession';
 import { RuntimeSession } from '../../runtime/session';
+import { LanguageRuntimeSessionMode } from '../../api';
 
 /**
  * PositronVariablesService class (1:1 Positron).
@@ -102,6 +104,9 @@ export class PositronVariablesService implements IPositronVariablesService {
         if (visible) {
             // Create instances for all active sessions
             for (const session of this._sessionManager.sessions) {
+                if (session.sessionMetadata.sessionMode === LanguageRuntimeSessionMode.Background) {
+                    continue;
+                }
                 const activate = session.sessionId === this._sessionManager.activeSessionId;
                 this.createOrAssignPositronVariablesInstance(session, activate);
             }
@@ -139,7 +144,10 @@ export class PositronVariablesService implements IPositronVariablesService {
 
     //#region Private Methods
     private createOrAssignPositronVariablesInstance(session: RuntimeSession, activate: boolean): void {
-        if (!this._viewVisible) {
+        if (
+            !this._viewVisible ||
+            session.sessionMetadata.sessionMode === LanguageRuntimeSessionMode.Background
+        ) {
             return;
         }
 
@@ -150,6 +158,14 @@ export class PositronVariablesService implements IPositronVariablesService {
             this._outputChannel.debug(`[PositronVariablesService] Creating variables instance for: ${session.sessionId}`);
             instance = this.startPositronVariablesInstance(session, activate);
             return;
+        }
+
+        if (
+            instance.session !== session ||
+            instance.state === RuntimeClientState.Closed ||
+            instance.state === RuntimeClientState.Uninitialized
+        ) {
+            instance.setRuntimeSession(session);
         }
 
         if (activate) {

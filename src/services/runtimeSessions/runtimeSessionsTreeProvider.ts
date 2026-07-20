@@ -31,6 +31,11 @@ type DiagnosticNode =
 
 function routeIcon(status: RichOutputRouteRecord['status']): vscode.ThemeIcon {
     switch (status) {
+        case 'accepted':
+            return new vscode.ThemeIcon('clock');
+        case 'instance-created':
+            return new vscode.ThemeIcon('sync');
+        case 'surface-opened':
         case 'routed':
             return new vscode.ThemeIcon('pass', new vscode.ThemeColor('testing.iconPassed'));
         case 'fallback':

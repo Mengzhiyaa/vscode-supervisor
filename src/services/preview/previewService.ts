@@ -15,6 +15,8 @@ import {
     UiFrontendEvent,
 } from '../../runtime/comms/positronUiComm';
 import type { ILanguageRuntimeGlobalEvent } from '../../runtime/runtimeEvents';
+import { RuntimeState } from '../../internal/runtimeTypes';
+import { shouldOpenUrlInViewer } from './previewUrlPolicy';
 import {
     createSurfaceModelId,
     SurfaceKind,
@@ -41,6 +43,15 @@ export interface PreviewItem {
     sourceIdentity?: PreviewSource;
 }
 
+export interface PreviewInterruptState {
+    readonly interruptible: boolean;
+    readonly interrupting: boolean;
+}
+
+export type PreviewOpenTarget = 'browser' | 'editorTab' | 'newWindow';
+
+const DefaultOpenTargetStorageKey = 'positronPreview.defaultOpenTarget';
+
 /**
  * PositronPreviewService class (aligned with Positron pattern).
  * Manages preview routing for runtime UI events.
@@ -48,18 +59,31 @@ export interface PreviewItem {
 export class PositronPreviewService implements vscode.Disposable {
     private readonly _disposables: vscode.Disposable[] = [];
     private readonly _proxyService: HtmlProxyService;
+    private readonly _executingTerminals = new Set<vscode.Terminal>();
 
     private readonly _onDidShowPreviewEmitter = new vscode.EventEmitter<PreviewItem>();
+    private readonly _onDidChangePreviewInterruptStateEmitter = new vscode.EventEmitter<void>();
     private _nextPreviewId = 0;
     readonly onDidShowPreview = this._onDidShowPreviewEmitter.event;
+    readonly onDidChangePreviewInterruptState = this._onDidChangePreviewInterruptStateEmitter.event;
 
     constructor(
         private readonly _sessionManager: RuntimeSessionService,
         private readonly _plotsService: PositronPlotsService,
         private readonly _outputChannel: vscode.LogOutputChannel,
         private readonly _surfaceLifecycle?: SurfaceLifecycleService,
+        private readonly _workspaceState?: vscode.Memento,
     ) {
         this._proxyService = new HtmlProxyService(_outputChannel);
+    }
+
+    getDefaultOpenTarget(): PreviewOpenTarget {
+        const target = this._workspaceState?.get<PreviewOpenTarget>(DefaultOpenTargetStorageKey);
+        return target === 'editorTab' || target === 'newWindow' ? target : 'browser';
+    }
+
+    async setDefaultOpenTarget(target: PreviewOpenTarget): Promise<void> {
+        await this._workspaceState?.update(DefaultOpenTargetStorageKey, target);
     }
 
     initialize(): void {
@@ -68,7 +92,25 @@ export class PositronPreviewService implements vscode.Disposable {
         this._disposables.push(
             this._sessionManager.onDidReceiveRuntimeEvent((runtimeEvent) => {
                 void this._handleRuntimeEvent(runtimeEvent);
-            })
+            }),
+            this._sessionManager.onDidChangeRuntimeState(() => {
+                this._onDidChangePreviewInterruptStateEmitter.fire();
+            }),
+            vscode.window.onDidOpenTerminal(() => {
+                this._onDidChangePreviewInterruptStateEmitter.fire();
+            }),
+            vscode.window.onDidCloseTerminal(terminal => {
+                this._executingTerminals.delete(terminal);
+                this._onDidChangePreviewInterruptStateEmitter.fire();
+            }),
+            vscode.window.onDidStartTerminalShellExecution(event => {
+                this._executingTerminals.add(event.terminal);
+                this._onDidChangePreviewInterruptStateEmitter.fire();
+            }),
+            vscode.window.onDidEndTerminalShellExecution(event => {
+                this._executingTerminals.delete(event.terminal);
+                this._onDidChangePreviewInterruptStateEmitter.fire();
+            }),
         );
 
         this._outputChannel.debug('[PositronPreviewService] Initialized');
@@ -77,6 +119,7 @@ export class PositronPreviewService implements vscode.Disposable {
     dispose(): void {
         this._proxyService.dispose();
         this._onDidShowPreviewEmitter.dispose();
+        this._onDidChangePreviewInterruptStateEmitter.dispose();
         this._disposables.forEach(d => d.dispose());
     }
 
@@ -204,6 +247,25 @@ export class PositronPreviewService implements vscode.Disposable {
         ) {
             uri = await this._proxyService.resolvePath(event.url);
         } else if (uri.scheme === 'http' || uri.scheme === 'https') {
+            const openLocalhostUrls = vscode.workspace.getConfiguration().get<boolean>(
+                'supervisor.viewer.openLocalhostUrls',
+                true,
+            );
+            if (!shouldOpenUrlInViewer(uri.toString(true), openLocalhostUrls)) {
+                let externalUri = uri;
+                try {
+                    externalUri = await vscode.env.asExternalUri(uri);
+                } catch (error) {
+                    this._outputChannel.debug(
+                        `[PositronPreviewService] Failed to resolve external URI for ${event.url}: ${error}`
+                    );
+                }
+                await vscode.env.openExternal(externalUri);
+                this._outputChannel.debug(
+                    `[PositronPreviewService] Opened non-local URL in the external browser: ${event.url}`
+                );
+                return;
+            }
             try {
                 uri = await vscode.env.asExternalUri(uri);
             } catch (error) {
@@ -316,6 +378,32 @@ export class PositronPreviewService implements vscode.Disposable {
         return true;
     }
 
+    async isPreviewInterruptible(preview: PreviewItem): Promise<boolean> {
+        return (await this.getPreviewInterruptState(preview)).interruptible;
+    }
+
+    async getPreviewInterruptState(preview: PreviewItem): Promise<PreviewInterruptState> {
+        const sourceIdentity = preview.sourceIdentity;
+        if (sourceIdentity?.type === 'terminal') {
+            return {
+                interruptible: await this._hasExecutingTerminalProcess(sourceIdentity.id),
+                interrupting: false,
+            };
+        }
+
+        const runtimeSessionId = sourceIdentity?.type === 'runtime'
+            ? sourceIdentity.id
+            : preview.sessionId;
+        if (!runtimeSessionId) {
+            return { interruptible: false, interrupting: false };
+        }
+        const session = this._sessionManager.getSession(runtimeSessionId);
+        return {
+            interruptible: session?.state === RuntimeState.Busy || session?.state === RuntimeState.Interrupting,
+            interrupting: session?.state === RuntimeState.Interrupting,
+        };
+    }
+
     /** Rehydrates the most recently updated persistent Viewer model. */
     async restoreLastPreview(): Promise<PreviewItem | undefined> {
         // Viewer providers are constructed before application activation. Make
@@ -341,14 +429,20 @@ export class PositronPreviewService implements vscode.Disposable {
 
         const restoreUri = vscode.Uri.parse(preview.uri);
         let uri = restoreUri;
-        if (restoreUri.scheme === 'file') {
-            uri = await this._proxyService.resolvePath(restoreUri.fsPath);
-        } else if (restoreUri.scheme === 'http' || restoreUri.scheme === 'https') {
-            try {
-                uri = await vscode.env.asExternalUri(restoreUri);
-            } catch {
-                uri = restoreUri;
+        try {
+            if (restoreUri.scheme === 'file') {
+                uri = await this._proxyService.resolvePath(restoreUri.fsPath);
+            } else if (restoreUri.scheme === 'http' || restoreUri.scheme === 'https') {
+                try {
+                    uri = await vscode.env.asExternalUri(restoreUri);
+                } catch {
+                    uri = restoreUri;
+                }
             }
+            this._surfaceLifecycle.setRestoreState(restored.id, 'backend', 'ready');
+        } catch (error) {
+            this._surfaceLifecycle.setRestoreState(restored.id, 'backend', 'failed', error);
+            throw error;
         }
 
         return {
@@ -444,6 +538,15 @@ export class PositronPreviewService implements vscode.Disposable {
             }
         }
         throw new Error(`Terminal process '${processId}' is no longer available`);
+    }
+
+    private async _hasExecutingTerminalProcess(processId: string): Promise<boolean> {
+        for (const terminal of this._executingTerminals) {
+            if (String(await terminal.processId) === processId) {
+                return true;
+            }
+        }
+        return false;
     }
 }
 

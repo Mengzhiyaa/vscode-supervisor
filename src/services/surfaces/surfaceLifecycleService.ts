@@ -36,6 +36,29 @@ export enum SurfaceSourceKind {
 export type SurfaceModelRetention = 'transient' | 'retain-on-detach' | 'persistent';
 export type SurfaceModelState = 'created' | 'restored' | 'attached' | 'detached';
 export type SurfaceDetachReason = 'replaced' | 'surface-disposed' | 'model-disposed' | 'owner-disposed';
+export type SurfaceRestoreLayer = 'descriptor' | 'backend' | 'surface';
+export type SurfaceRestoreLayerState = 'pending' | 'ready' | 'failed';
+
+export interface SurfaceRestoreStatus {
+    readonly descriptor: SurfaceRestoreLayerState;
+    readonly backend: SurfaceRestoreLayerState;
+    readonly surface: SurfaceRestoreLayerState;
+    readonly errors: Readonly<Partial<Record<SurfaceRestoreLayer, string>>>;
+}
+
+export interface SurfaceLifecycleConsistencyIssue {
+    readonly code:
+        | 'attachment-without-model'
+        | 'model-attachment-not-indexed'
+        | 'surface-index-not-found'
+        | 'surface-index-mismatch'
+        | 'model-state-mismatch'
+        | 'surface-restore-state-mismatch';
+    readonly modelId?: string;
+    readonly attachmentId?: string;
+    readonly surfaceId?: string;
+    readonly message: string;
+}
 
 export interface SurfaceModelSource {
     readonly kind: SurfaceSourceKind;
@@ -53,6 +76,8 @@ export interface SurfaceModelDescriptor {
     readonly outputId?: string;
     readonly retention?: SurfaceModelRetention;
     readonly payload?: Readonly<Record<string, unknown>>;
+    /** Backend readiness. Live model registrations default to ready. */
+    readonly backendState?: SurfaceRestoreLayerState;
     /** Optional resource owned by the model, disposed exactly once with it. */
     readonly ownedResource?: vscode.Disposable;
 }
@@ -85,6 +110,7 @@ export interface SurfaceModelSnapshot {
     readonly retention: SurfaceModelRetention;
     readonly payload: Readonly<Record<string, unknown>>;
     readonly state: SurfaceModelState;
+    readonly restore: SurfaceRestoreStatus;
     readonly version: number;
     readonly createdAt: number;
     readonly updatedAt: number;
@@ -92,7 +118,7 @@ export interface SurfaceModelSnapshot {
 }
 
 export interface SurfaceLifecycleEvent {
-    readonly type: 'created' | 'restored' | 'updated' | 'attached' | 'detached' | 'disposed' | 'stop-requested';
+    readonly type: 'created' | 'restored' | 'updated' | 'attached' | 'detached' | 'disposed' | 'stop-requested' | 'restore-state-changed';
     readonly model: SurfaceModelSnapshot;
     readonly attachment?: SurfaceAttachmentSnapshot;
     readonly reason?: string;
@@ -122,6 +148,12 @@ interface MutableSurfaceModel {
     payload: Readonly<Record<string, unknown>>;
     ownedResource?: vscode.Disposable;
     state: SurfaceModelState;
+    restore: {
+        descriptor: SurfaceRestoreLayerState;
+        backend: SurfaceRestoreLayerState;
+        surface: SurfaceRestoreLayerState;
+        errors: Partial<Record<SurfaceRestoreLayer, string>>;
+    };
     version: number;
     createdAt: number;
     updatedAt: number;
@@ -200,6 +232,12 @@ export class SurfaceLifecycleService implements vscode.Disposable {
                 retention: 'persistent',
                 payload: token.payload,
                 state: 'restored',
+                restore: {
+                    descriptor: 'ready',
+                    backend: 'pending',
+                    surface: 'pending',
+                    errors: {},
+                },
                 version: token.modelVersion,
                 createdAt: token.createdAt,
                 updatedAt: token.updatedAt,
@@ -209,6 +247,7 @@ export class SurfaceLifecycleService implements vscode.Disposable {
             this._models.set(model.id, model);
             this._emit('restored', model);
         }
+        this.assertConsistency();
     }
 
     upsertModel(descriptor: SurfaceModelDescriptor): SurfaceModelSnapshot {
@@ -224,6 +263,18 @@ export class SurfaceLifecycleService implements vscode.Disposable {
             existing.outputId = descriptor.outputId;
             existing.retention = descriptor.retention ?? existing.retention;
             existing.payload = payload;
+            existing.restore.descriptor = 'ready';
+            delete existing.restore.errors.descriptor;
+            if (descriptor.backendState) {
+                existing.restore.backend = descriptor.backendState;
+                if (descriptor.backendState !== 'failed') {
+                    delete existing.restore.errors.backend;
+                }
+            } else if (existing.restore.backend === 'pending') {
+                // A live service re-registering a restored descriptor proves that
+                // its backend has been rebound unless it explicitly says otherwise.
+                existing.restore.backend = 'ready';
+            }
             if (descriptor.ownedResource && descriptor.ownedResource !== existing.ownedResource) {
                 existing.ownedResource?.dispose();
                 existing.ownedResource = descriptor.ownedResource;
@@ -234,6 +285,7 @@ export class SurfaceLifecycleService implements vscode.Disposable {
                 existing.state = existing.attachments.size > 0 ? 'attached' : 'detached';
             }
             this._emit('updated', existing);
+            this.assertConsistency();
             this._schedulePersist();
             return this._snapshot(existing);
         }
@@ -249,6 +301,12 @@ export class SurfaceLifecycleService implements vscode.Disposable {
             payload,
             ownedResource: descriptor.ownedResource,
             state: 'created',
+            restore: {
+                descriptor: 'ready',
+                backend: descriptor.backendState ?? 'ready',
+                surface: 'pending',
+                errors: {},
+            },
             version: 1,
             createdAt: now,
             updatedAt: now,
@@ -257,6 +315,7 @@ export class SurfaceLifecycleService implements vscode.Disposable {
         };
         this._models.set(model.id, model);
         this._emit('created', model);
+        this.assertConsistency();
         this._schedulePersist();
         return this._snapshot(model);
     }
@@ -278,6 +337,7 @@ export class SurfaceLifecycleService implements vscode.Disposable {
             outputId: patch.outputId ?? model.outputId,
             retention: patch.retention ?? model.retention,
             payload: patch.payload ?? model.payload,
+            backendState: model.restore.backend,
             ownedResource: model.ownedResource,
         });
     }
@@ -289,7 +349,15 @@ export class SurfaceLifecycleService implements vscode.Disposable {
             throw new Error(`Surface model '${modelId}' does not exist`);
         }
 
-        this.detachSurface(descriptor.surfaceId, 'replaced');
+        const replacedAttachmentId = this._surfaceAttachments.get(descriptor.surfaceId);
+        if (replacedAttachmentId) {
+            const replacedAttachment = this._attachments.get(replacedAttachmentId);
+            this._detachAttachment(
+                replacedAttachmentId,
+                'replaced',
+                replacedAttachment?.modelId !== modelId,
+            );
+        }
         const id = `${descriptor.surfaceId}#${++this._attachmentSequence}`;
         const attachment: SurfaceAttachmentSnapshot = {
             id,
@@ -305,8 +373,11 @@ export class SurfaceLifecycleService implements vscode.Disposable {
         model.attachments.set(id, attachment);
         model.hasEverAttached = true;
         model.state = 'attached';
+        model.restore.surface = 'ready';
+        delete model.restore.errors.surface;
         model.updatedAt = Date.now();
         this._emit('attached', model, attachment);
+        this.assertConsistency();
 
         let active = true;
         return {
@@ -360,6 +431,7 @@ export class SurfaceLifecycleService implements vscode.Disposable {
             timestamp: Date.now(),
         });
         this._schedulePersist();
+        this.assertConsistency();
         return true;
     }
 
@@ -410,6 +482,121 @@ export class SurfaceLifecycleService implements vscode.Disposable {
         return [...this._attachments.values()];
     }
 
+    /**
+     * Updates one restore layer without claiming readiness for the other layers.
+     * Descriptor readiness is owned by this registry, backend readiness by the
+     * feature service, and surface readiness by attachment leases.
+     */
+    setRestoreState(
+        modelId: string,
+        layer: SurfaceRestoreLayer,
+        state: SurfaceRestoreLayerState,
+        error?: unknown,
+    ): SurfaceModelSnapshot | undefined {
+        const model = this._models.get(modelId);
+        if (!model) {
+            return undefined;
+        }
+        if (layer === 'descriptor' && state !== 'ready') {
+            throw new Error(`Registered surface model '${modelId}' must have a ready descriptor`);
+        }
+        if (layer === 'surface' && state === 'ready' && model.attachments.size === 0) {
+            throw new Error(`Surface model '${modelId}' cannot be surface-ready without an attachment`);
+        }
+        if (layer === 'surface' && state !== 'ready' && model.attachments.size > 0) {
+            throw new Error(`Attached surface model '${modelId}' must remain surface-ready`);
+        }
+        model.restore[layer] = state;
+        if (state === 'failed') {
+            model.restore.errors[layer] = error instanceof Error ? error.message : String(error ?? 'Unknown error');
+        } else {
+            delete model.restore.errors[layer];
+        }
+        model.updatedAt = Date.now();
+        model.version += 1;
+        this._emit('restore-state-changed', model, undefined, layer);
+        this._schedulePersist();
+        this.assertConsistency();
+        return this._snapshot(model);
+    }
+
+    getConsistencyIssues(): readonly SurfaceLifecycleConsistencyIssue[] {
+        const issues: SurfaceLifecycleConsistencyIssue[] = [];
+        for (const attachment of this._attachments.values()) {
+            const model = this._models.get(attachment.modelId);
+            if (!model) {
+                issues.push({
+                    code: 'attachment-without-model',
+                    attachmentId: attachment.id,
+                    surfaceId: attachment.surfaceId,
+                    message: `Attachment '${attachment.id}' references missing model '${attachment.modelId}'.`,
+                });
+                continue;
+            }
+            if (!model.attachments.has(attachment.id)) {
+                issues.push({
+                    code: 'model-attachment-not-indexed',
+                    modelId: model.id,
+                    attachmentId: attachment.id,
+                    message: `Attachment '${attachment.id}' is absent from model '${model.id}'.`,
+                });
+            }
+        }
+        for (const [surfaceId, attachmentId] of this._surfaceAttachments) {
+            const attachment = this._attachments.get(attachmentId);
+            if (!attachment) {
+                issues.push({
+                    code: 'surface-index-not-found',
+                    attachmentId,
+                    surfaceId,
+                    message: `Surface '${surfaceId}' references missing attachment '${attachmentId}'.`,
+                });
+            } else if (attachment.surfaceId !== surfaceId) {
+                issues.push({
+                    code: 'surface-index-mismatch',
+                    attachmentId,
+                    surfaceId,
+                    message: `Surface '${surfaceId}' references attachment for '${attachment.surfaceId}'.`,
+                });
+            }
+        }
+        for (const model of this._models.values()) {
+            for (const attachmentId of model.attachments.keys()) {
+                if (!this._attachments.has(attachmentId)) {
+                    issues.push({
+                        code: 'model-attachment-not-indexed',
+                        modelId: model.id,
+                        attachmentId,
+                        message: `Model '${model.id}' references missing attachment '${attachmentId}'.`,
+                    });
+                }
+            }
+            const shouldBeAttached = model.attachments.size > 0;
+            if ((model.state === 'attached') !== shouldBeAttached) {
+                issues.push({
+                    code: 'model-state-mismatch',
+                    modelId: model.id,
+                    message: `Model '${model.id}' state '${model.state}' disagrees with ${model.attachments.size} attachment(s).`,
+                });
+            }
+            if ((model.restore.surface === 'ready') !== shouldBeAttached) {
+                issues.push({
+                    code: 'surface-restore-state-mismatch',
+                    modelId: model.id,
+                    message: `Model '${model.id}' surface restore state '${model.restore.surface}' disagrees with its attachments.`,
+                });
+            }
+        }
+        return issues;
+    }
+
+    assertConsistency(): void {
+        const issues = this.getConsistencyIssues();
+        if (issues.length > 0) {
+            throw new Error(`Surface lifecycle consistency assertion failed: ${issues.map(issue => issue.message).join(' ')}`);
+        }
+    }
+
     async whenPersisted(): Promise<void> {
         await this._persistChain;
     }
@@ -436,6 +623,7 @@ export class SurfaceLifecycleService implements vscode.Disposable {
         model.updatedAt = Date.now();
         if (model.attachments.size === 0) {
             model.state = 'detached';
+            model.restore.surface = 'pending';
         }
         this._emit('detached', model, attachment, reason);
         if (
@@ -445,7 +633,9 @@ export class SurfaceLifecycleService implements vscode.Disposable {
             model.attachments.size === 0
         ) {
             this.disposeModel(model.id, 'last-surface-detached');
+            return;
         }
+        this.assertConsistency();
     }
 
     private _snapshot(model: MutableSurfaceModel): SurfaceModelSnapshot {
@@ -464,6 +654,12 @@ export class SurfaceLifecycleService implements vscode.Disposable {
             retention: model.retention,
             payload: model.payload,
             state: model.state,
+            restore: {
+                descriptor: model.restore.descriptor,
+                backend: model.restore.backend,
+                surface: model.restore.surface,
+                errors: { ...model.restore.errors },
+            },
             version: model.version,
             createdAt: model.createdAt,
             updatedAt: model.updatedAt,
