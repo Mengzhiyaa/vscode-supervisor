@@ -9,6 +9,7 @@ import {
     type ILanguageWebviewAssets,
     type IRuntimeSessionMetadata,
     type ISupervisorFrameworkApi,
+    type ISupervisorEnvironmentVariableAction,
     type JupyterKernelSpec,
     type LanguageRuntimeDynState,
     type LanguageRuntimeMetadata,
@@ -30,6 +31,16 @@ import { PositronHelpService } from './services/help';
 import { MemoryUsageService } from './services/memory';
 import { PositronPackagesService } from './services/packages';
 import { PositronPlotsService } from './runtime/positronPlotsService';
+import { RichOutputRouter } from './runtime/richOutputRouter';
+import { migrateLegacyPlotsConfiguration } from './runtime/plotsConfiguration';
+import { RuntimeSessionsTreeProvider } from './services/runtimeSessions/runtimeSessionsTreeProvider';
+import {
+    DataScienceSurfaceLifecycle,
+    InlineDataExplorerNotebookService,
+    NotebookSurfaceLifecycle,
+    SurfaceLifecycleService,
+} from './services/surfaces';
+import { ConnectionsTreeProvider, PositronConnectionsService } from './services/connections';
 import { PlotEditorProvider, PlotsGalleryEditorProvider } from './editor';
 import { registerConsoleActions } from './services/console/consoleActions';
 import {
@@ -39,13 +50,15 @@ import {
 } from './services/dataExplorer';
 import { DuckDBInstance } from './services/duckdb/duckdbInstance';
 import { PositronDataExplorerCommandId } from './services/dataExplorer/positronDataExplorerActions';
-import { CoreCommandIds, ContextKeys, InternalCommandIds, TestCommandIds } from './coreCommandIds';
+import { CoreCommandIds, ContextKeys, InternalCommandIds, TestCommandIds, ViewIds } from './coreCommandIds';
 import { UiFrontendEvent } from './runtime/comms/positronUiComm';
 import {
     initializePositronCompatibility,
     LanguageRuntimeMessageType,
     type LanguageRuntimeSession,
     RuntimeExitReason,
+    registerEnvironmentContributions as registerCompatEnvironmentContributions,
+    setConsoleWidthSource,
     setForegroundSessionProvider,
 } from './supervisor/positron';
 import { ensureBinaries } from './binaryManager';
@@ -153,6 +166,14 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
     private readonly _memoryUsageService: MemoryUsageService;
     private readonly _plotsService: PositronPlotsService;
     private readonly _packagesService: PositronPackagesService;
+    private readonly _richOutputRouter: RichOutputRouter;
+    private readonly _runtimeSessionsTreeProvider: RuntimeSessionsTreeProvider;
+    private readonly _surfaceLifecycle: SurfaceLifecycleService;
+    private readonly _dataScienceSurfaceLifecycle: DataScienceSurfaceLifecycle;
+    private readonly _notebookSurfaceLifecycle: NotebookSurfaceLifecycle;
+    private readonly _inlineDataExplorerNotebookService: InlineDataExplorerNotebookService;
+    private readonly _connectionsService: PositronConnectionsService;
+    private readonly _connectionsTreeProvider: ConnectionsTreeProvider;
 
     // Editor providers for plots
     private readonly _plotEditorProvider: PlotEditorProvider;
@@ -180,6 +201,11 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
                 this._sessionManager.activeSession?.kernelSession as unknown as
                     LanguageRuntimeSession | undefined
             )
+        );
+
+        this._surfaceLifecycle = new SurfaceLifecycleService(
+            _context.workspaceState,
+            this._outputChannel,
         );
 
         this._runtimeFrontendEventService = new RuntimeFrontendEventService(
@@ -219,6 +245,10 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
             this._runtimeStartupService,
         );
         this._disposables.push(this._consoleService);
+        this._disposables.push(setConsoleWidthSource(
+            this._consoleService.onDidChangeConsoleWidth,
+            () => this._consoleService.getConsoleWidth(),
+        ));
 
         this._variablesService = new PositronVariablesService(this._sessionManager, this._outputChannel);
         this._disposables.push(this._variablesService);
@@ -236,8 +266,36 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
         );
         this._disposables.push(this._packagesService);
 
-        this._previewService = new PositronPreviewService(this._sessionManager, this._plotsService, this._outputChannel);
+        this._previewService = new PositronPreviewService(
+            this._sessionManager,
+            this._plotsService,
+            this._outputChannel,
+            this._surfaceLifecycle,
+        );
         this._disposables.push(this._previewService);
+
+        this._richOutputRouter = new RichOutputRouter(
+            this._context,
+            this._sessionManager,
+            this._plotsService,
+            this._previewService,
+            this._outputChannel,
+            this._surfaceLifecycle,
+        );
+        this._disposables.push(this._richOutputRouter);
+
+        this._runtimeSessionsTreeProvider = new RuntimeSessionsTreeProvider(
+            this._sessionManager,
+            this._richOutputRouter,
+            this._surfaceLifecycle,
+        );
+        this._disposables.push(
+            this._runtimeSessionsTreeProvider,
+            vscode.window.createTreeView(ViewIds.runtimeSessions, {
+                treeDataProvider: this._runtimeSessionsTreeProvider,
+                showCollapseAll: true,
+            }),
+        );
 
         this._helpService = new PositronHelpService(this._sessionManager, this._outputChannel, this._context.extensionUri);
         this._disposables.push(this._helpService);
@@ -247,12 +305,28 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
             this._context.extensionUri,
             this._outputChannel,
             this._plotsService,
+            this._surfaceLifecycle,
         );
         this._disposables.push(this._plotEditorProvider);
 
         // Initialize Data Explorer service and editor provider
         this._positronDataExplorerService = new PositronDataExplorerService(this._sessionManager, this._outputChannel);
         this._disposables.push(this._positronDataExplorerService);
+
+        this._dataScienceSurfaceLifecycle = new DataScienceSurfaceLifecycle(
+            this._surfaceLifecycle,
+            this._sessionManager,
+            this._plotsService,
+            this._positronDataExplorerService,
+            this._outputChannel,
+        );
+        this._disposables.push(this._dataScienceSurfaceLifecycle);
+
+        this._notebookSurfaceLifecycle = new NotebookSurfaceLifecycle(
+            this._surfaceLifecycle,
+            this._sessionManager,
+        );
+        this._disposables.push(this._notebookSurfaceLifecycle);
 
         // Data Explorer editor provider (opens in editor area as tabs)
         this._positronDataExplorerEditorProvider = new PositronDataExplorerEditorProvider(
@@ -262,8 +336,36 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
             () => this._getLanguageWebviewLocalResourceRoots(),
             (webview) => this._getLanguageMonacoSupportModuleUris(webview),
             (webview) => this._getLanguageTextMateGrammarDefinitions(webview),
+            this._surfaceLifecycle,
         );
         this._disposables.push(this._positronDataExplorerEditorProvider);
+
+        this._inlineDataExplorerNotebookService = new InlineDataExplorerNotebookService(
+            this._positronDataExplorerService,
+            this._surfaceLifecycle,
+            this._outputChannel,
+        );
+        this._disposables.push(this._inlineDataExplorerNotebookService);
+
+        this._connectionsService = new PositronConnectionsService(
+            this._sessionManager,
+            this._surfaceLifecycle,
+            this._outputChannel,
+        );
+        this._connectionsTreeProvider = new ConnectionsTreeProvider(
+            this._connectionsService,
+            this._surfaceLifecycle,
+        );
+        const connectionsTreeView = vscode.window.createTreeView(ViewIds.connections, {
+            treeDataProvider: this._connectionsTreeProvider,
+            showCollapseAll: true,
+        });
+        this._connectionsTreeProvider.bindTreeView(connectionsTreeView);
+        this._disposables.push(
+            this._connectionsService,
+            this._connectionsTreeProvider,
+            connectionsTreeView,
+        );
 
         // Custom editor provider (enables "Reopen With → Data Explorer" for data files)
         const dataExplorerCustomEditorProvider = new PositronDataExplorerCustomEditorProvider(
@@ -305,6 +407,9 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
         );
         this._disposables.push(this._plotsGalleryEditorProvider);
 
+        // Registry is disposed last so providers/services can release leases first.
+        this._disposables.push(this._surfaceLifecycle);
+
         this._updateGlobalContexts();
         this._outputChannel.debug('[Ark] Application initialized');
     }
@@ -345,6 +450,8 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
             ) => this.registerLanguageRuntime(registration),
             registerLspFactory: (factory: ILanguageLspFactory) => this.registerLspFactory(factory),
             registerBinaryProvider: (provider: IBinaryProvider) => this.registerBinaryProvider(provider),
+            registerEnvironmentContributions: (extensionId, actions) =>
+                this.registerEnvironmentContributions(extensionId, actions),
         };
     }
 
@@ -484,6 +591,15 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
         }
     }
 
+    registerEnvironmentContributions(
+        extensionId: string,
+        actions: readonly ISupervisorEnvironmentVariableAction[],
+    ): vscode.Disposable {
+        const registration = registerCompatEnvironmentContributions(extensionId, actions);
+        this._disposables.push(registration);
+        return registration;
+    }
+
     private _getLanguageContributionServices(): ILanguageContributionServices {
         return {
             logChannel: this._outputChannel,
@@ -511,6 +627,8 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
             },
             positronHelpService: this._helpService,
             positronPackagesService: this._packagesService,
+            registerEnvironmentContributions: (extensionId, actions) =>
+                this.registerEnvironmentContributions(extensionId, actions),
         };
     }
 
@@ -1006,16 +1124,27 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
     async activate(): Promise<void> {
         this._outputChannel.info('[Ark] Activating extension...');
 
+        try {
+            await migrateLegacyPlotsConfiguration(this._outputChannel);
+        } catch (error) {
+            this._outputChannel.warn(`[Plots] Failed to migrate legacy configuration: ${error}`);
+        }
+
         // Ensure binaries are available (downloads on first run for universal VSIX)
         await this._ensureRegisteredBinaries();
 
         // Initialize service-class services before session restore so they can
         // observe reconnect events fired during session manager initialization.
+        await this._surfaceLifecycle.initialize();
+        this._dataScienceSurfaceLifecycle.initialize();
+        this._notebookSurfaceLifecycle.initialize();
+        this._connectionsService.initialize();
         this._consoleService.initialize();
         this._variablesService.initialize();
         this._plotsService.initialize(this._sessionManager);
         this._packagesService.initialize();
         this._previewService.initialize();
+        this._richOutputRouter.initialize();
         this._helpService.initialize();
         this._positronDataExplorerService.initialize();
         this._runtimeFrontendEventService.initialize();
@@ -1264,6 +1393,12 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
         this._disposables.push(
             vscode.commands.registerCommand(CoreCommandIds.showSupervisorLog, () => {
                 this._sessionManager.showSupervisorLog();
+            })
+        );
+
+        this._disposables.push(
+            vscode.commands.registerCommand(CoreCommandIds.refreshRuntimeSessions, () => {
+                this._runtimeSessionsTreeProvider.refresh();
             })
         );
 
@@ -1641,6 +1776,7 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
         await this._consoleService.flushPersistedState();
         await this._runtimeStartupService.prepareForExtensionHostShutdown();
         await this._sessionManager.detachForExtensionHostShutdown();
+        await this._surfaceLifecycle.whenPersisted();
 
         this._disposables.forEach(d => {
             if (d !== this._sessionManager) {
