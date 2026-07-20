@@ -143,10 +143,13 @@ export enum LanguageRuntimeMessageType {
 export interface LanguageRuntimeOutput extends LanguageRuntimeMessage {
     kind: RuntimeOutputKind;
     data: Record<string, unknown>;
+    /** MIME-keyed metadata for the output bundle, distinct from message metadata. */
+    outputMetadata?: Record<string, unknown>;
     output_id?: string;
 }
 
 export interface LanguageRuntimeResult extends LanguageRuntimeOutput {
+    execution_count: number;
 }
 
 export enum PositronOutputLocation {

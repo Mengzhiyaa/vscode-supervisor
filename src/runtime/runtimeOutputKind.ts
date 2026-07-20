@@ -6,6 +6,10 @@ import {
     RuntimeOutputKind,
 } from '../internal/runtimeTypes';
 export { RuntimeOutputKind } from '../internal/runtimeTypes';
+import {
+    RuntimeOutputMime,
+    RuntimeOutputWebviewReplayMimeTypes,
+} from './runtimeOutputContract';
 
 /**
  * Message shape needed to infer output kind.
@@ -25,28 +29,6 @@ const PreloadRules = [
         ],
     },
 ];
-
-const MIME_TYPE_TEXT_PLAIN = 'text/plain';
-const MIME_TYPE_TEXT_HTML = 'text/html';
-const MIME_TYPE_TEXT_MARKDOWN = 'text/markdown';
-const MIME_TYPE_POSITRON_PLOT = 'application/vnd.positron.plot+json';
-const MIME_TYPE_POSITRON_VIEWER = 'application/vnd.positron.viewer+json';
-const MIME_TYPE_POSITRON_DATA_EXPLORER = 'application/vnd.positron.dataExplorer+json';
-const MIME_TYPE_WIDGET_STATE = 'application/vnd.jupyter.widget-state+json';
-const MIME_TYPE_WIDGET_VIEW = 'application/vnd.jupyter.widget-view+json';
-const MIME_TYPE_HOLOVIEWS_LOAD = 'application/vnd.holoviews_load.v0+json';
-const MIME_TYPE_HOLOVIEWS_EXEC = 'application/vnd.holoviews_exec.v0+json';
-const MIME_TYPE_BOKEH_EXEC = 'application/vnd.bokehjs_exec.v0+json';
-const MIME_TYPE_BOKEH_LOAD = 'application/vnd.bokehjs_load.v0+json';
-const MIME_TYPE_POSITRON_WEBVIEW_FLAG = 'application/positron-webview-load.v0+json';
-
-const WebviewReplayMimeTypes = new Set<string>([
-    MIME_TYPE_HOLOVIEWS_LOAD,
-    MIME_TYPE_HOLOVIEWS_EXEC,
-    MIME_TYPE_BOKEH_EXEC,
-    MIME_TYPE_BOKEH_LOAD,
-    MIME_TYPE_POSITRON_WEBVIEW_FLAG,
-]);
 
 const HtmlDocumentLikePattern = /<(script|html|body|iframe|!DOCTYPE)/;
 
@@ -85,7 +67,7 @@ function isWebviewReplayMessage(mimeTypesOrMsg: RuntimeOutputMessageLike | strin
     const mimeTypes = Array.isArray(mimeTypesOrMsg)
         ? mimeTypesOrMsg
         : Object.keys(getMessageData(mimeTypesOrMsg));
-    return mimeTypes.some((mimeType) => WebviewReplayMimeTypes.has(mimeType));
+    return mimeTypes.some((mimeType) => RuntimeOutputWebviewReplayMimeTypes.has(mimeType));
 }
 
 /**
@@ -102,7 +84,7 @@ export function inferPositronOutputKind(message: RuntimeOutputMessageLike): Runt
     }
 
     // Fast-path for the most common plain text output.
-    if (mimeTypes.length === 1 && mimeTypes[0] === MIME_TYPE_TEXT_PLAIN) {
+    if (mimeTypes.length === 1 && mimeTypes[0] === RuntimeOutputMime.textPlain) {
         return RuntimeOutputKind.Text;
     }
 
@@ -124,19 +106,19 @@ export function inferPositronOutputKind(message: RuntimeOutputMessageLike): Runt
     }
 
     // Explicit Positron/Jupyter rich-output MIME kinds.
-    if (mimeTypes.includes(MIME_TYPE_POSITRON_VIEWER)) {
+    if (mimeTypes.includes(RuntimeOutputMime.positronViewer)) {
         return RuntimeOutputKind.ViewerWidget;
     }
 
-    if (mimeTypes.includes(MIME_TYPE_POSITRON_DATA_EXPLORER)) {
+    if (mimeTypes.includes(RuntimeOutputMime.positronDataExplorer)) {
         return RuntimeOutputKind.ViewerWidget;
     }
 
-    if (mimeTypes.includes(MIME_TYPE_POSITRON_PLOT)) {
+    if (mimeTypes.includes(RuntimeOutputMime.positronPlot)) {
         return RuntimeOutputKind.PlotWidget;
     }
 
-    if (mimeTypes.includes(MIME_TYPE_WIDGET_STATE) || mimeTypes.includes(MIME_TYPE_WIDGET_VIEW)) {
+    if (mimeTypes.includes(RuntimeOutputMime.widgetState) || mimeTypes.includes(RuntimeOutputMime.widgetView)) {
         return RuntimeOutputKind.IPyWidget;
     }
 
@@ -145,7 +127,7 @@ export function inferPositronOutputKind(message: RuntimeOutputMessageLike): Runt
     for (const mimeType of mimeTypes) {
         if (
             mimeType.startsWith('application/vnd.') ||
-            mimeType === MIME_TYPE_TEXT_MARKDOWN ||
+            mimeType === RuntimeOutputMime.textMarkdown ||
             mimeType.startsWith('text/x-')
         ) {
             if (mimeType.indexOf('table') >= 0 || mimeType.startsWith('text/')) {
@@ -158,8 +140,8 @@ export function inferPositronOutputKind(message: RuntimeOutputMessageLike): Runt
     // Heuristic HTML routing (same idea as Positron):
     // - full documents/tables go to Viewer/Plots
     // - fragments stay inline in Console.
-    if (mimeTypes.includes(MIME_TYPE_TEXT_HTML)) {
-        const htmlContent = asString(data[MIME_TYPE_TEXT_HTML]);
+    if (mimeTypes.includes(RuntimeOutputMime.textHtml)) {
+        const htmlContent = asString(data[RuntimeOutputMime.textHtml]);
         if (isWebviewPreloadMessage(htmlContent)) {
             return RuntimeOutputKind.WebviewPreload;
         }
@@ -180,7 +162,7 @@ export function inferPositronOutputKind(message: RuntimeOutputMessageLike): Runt
     }
 
     // Last fallback to plain text if present.
-    if (mimeTypes.includes(MIME_TYPE_TEXT_PLAIN)) {
+    if (mimeTypes.includes(RuntimeOutputMime.textPlain)) {
         return RuntimeOutputKind.Text;
     }
 

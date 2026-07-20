@@ -48,21 +48,13 @@ import {
     DarkFilter,
     PlotsDisplayLocation,
 } from './positronPlots';
+import { PlotsConfiguration, readPlotsDarkFilter } from './plotsConfiguration';
 
 /** The maximum number of recent executions to store. */
 const MaxRecentExecutions = 10;
 
 /** The maximum number of plots with an active webview. */
 const MaxActiveWebviewPlots = 5;
-
-/** The config key used to store the default sizing policy setting */
-const DefaultSizingPolicyConfigKey = 'plots.defaultSizingPolicy';
-
-/** The config key used to store the history policy setting */
-const HistoryPolicyConfigKey = 'plots.historyPolicy';
-
-/** The config key used to store the dark filter mode setting */
-const DarkFilterModeConfigKey = 'plots.darkFilterMode';
 
 const PlotMetadataStorageKeyPrefix = 'vscode-supervisor.plot.metadata.';
 const CachedPlotThumbnailDescriptorsStorageKey = 'vscode-supervisor.plots.cachedPlotThumbnailDescriptors';
@@ -294,9 +286,10 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
         // Listen for configuration changes
         this._disposables.push(
             vscode.workspace.onDidChangeConfiguration((e) => {
-                if (e.affectsConfiguration(DefaultSizingPolicyConfigKey) ||
-                    e.affectsConfiguration(HistoryPolicyConfigKey) ||
-                    e.affectsConfiguration(DarkFilterModeConfigKey)) {
+                if (e.affectsConfiguration(PlotsConfiguration.defaultSizingPolicy) ||
+                    e.affectsConfiguration(PlotsConfiguration.historyPolicy) ||
+                    e.affectsConfiguration(PlotsConfiguration.darkFilter) ||
+                    e.affectsConfiguration(PlotsConfiguration.legacyDarkFilterMode)) {
                     this._loadConfiguration();
                 }
             })
@@ -324,15 +317,15 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
         const config = vscode.workspace.getConfiguration();
 
         // Load history policy
-        const historyPolicySetting = config.get<string>(HistoryPolicyConfigKey, HistoryPolicy.Automatic);
+        const historyPolicySetting = config.get<string>(PlotsConfiguration.historyPolicy, HistoryPolicy.Automatic);
         this._historyPolicy = parseHistoryPolicy(historyPolicySetting);
 
         // Load dark filter mode
-        const darkFilterSetting = config.get<string>(DarkFilterModeConfigKey, 'auto');
+        const darkFilterSetting = readPlotsDarkFilter('auto');
         this._darkFilterMode = parseDarkFilter(darkFilterSetting);
 
         // Load default sizing policy
-        const sizingPolicySetting = config.get<string>(DefaultSizingPolicyConfigKey, 'auto');
+        const sizingPolicySetting = config.get<string>(PlotsConfiguration.defaultSizingPolicy, 'auto');
         const policy = this._sizingPolicies.find(p => p.id === sizingPolicySetting);
         if (policy) {
             this._selectedSizingPolicy = policy;
@@ -1899,6 +1892,40 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
 
         const plotClient = new HtmlPlotClient(sessionId, event, executionId, code);
         plotClient.metadata.html_uri = plotClient.uri.toString();
+        this.registerNewPlotClient(plotClient);
+    }
+
+    /**
+     * Adds or updates an HTML plot produced by a runtime output message.
+     * Unlike UI-client HTML plots, runtime outputs carry stable message and
+     * output IDs that must be preserved for `update_display_data` semantics.
+     */
+    addHtmlOutputPlot(
+        sessionId: string,
+        event: IShowHtmlUriEvent,
+        message: LanguageRuntimeOutputWithKind | LanguageRuntimeResultWithKind | LanguageRuntimeUpdateOutputWithKind,
+    ): void {
+        const plotClient = new HtmlPlotClient(
+            sessionId,
+            event,
+            message.parent_id,
+            this._recentExecutions.get(message.parent_id),
+        );
+        plotClient.metadata.id = message.id || plotClient.metadata.id;
+        plotClient.metadata.output_id = message.output_id;
+        plotClient.metadata.execution_id = message.parent_id;
+        plotClient.metadata.html_uri = plotClient.uri.toString();
+
+        const existingPlot = message.output_id
+            ? this.getPlotForOutput(sessionId, message.output_id)
+            : this._plots.find(plot =>
+                plot.metadata.session_id === sessionId && plot.id === plotClient.id
+            );
+        if (existingPlot) {
+            this.replacePlot(existingPlot.id, plotClient);
+            return;
+        }
+
         this.registerNewPlotClient(plotClient);
     }
 

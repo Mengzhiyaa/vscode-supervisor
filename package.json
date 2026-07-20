@@ -720,6 +720,39 @@
           "default": true,
           "description": "Show a one-time notification when the system enters a low-memory state."
         },
+        "plots.defaultSizingPolicy": {
+          "type": "string",
+          "default": "auto",
+          "enum": [
+            "auto",
+            "fill",
+            "intrinsic",
+            "square",
+            "landscape",
+            "portrait"
+          ],
+          "description": "Default sizing policy for runtime plots."
+        },
+        "plots.historyPolicy": {
+          "type": "string",
+          "default": "auto",
+          "enum": [
+            "auto",
+            "always",
+            "never"
+          ],
+          "description": "Controls when the plot history filmstrip is visible."
+        },
+        "plots.darkFilter": {
+          "type": "string",
+          "default": "auto",
+          "enum": [
+            "auto",
+            "on",
+            "off"
+          ],
+          "description": "Controls dark-theme filtering for plots."
+        },
         "supervisor.console.fontSize": {
           "type": "number",
           "default": 14,

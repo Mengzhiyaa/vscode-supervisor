@@ -1,0 +1,486 @@
+import * as vscode from 'vscode';
+import { RuntimeOutputKind } from '../internal/runtimeTypes';
+import type {
+    LanguageRuntimeOutputWithKind,
+    LanguageRuntimeResultWithKind,
+    LanguageRuntimeUpdateOutputWithKind,
+} from './runtimeOutputKind';
+import type { RuntimeSession } from './session';
+import type { RuntimeSessionService } from './runtimeSession';
+import type { PositronPlotsService } from './positronPlotsService';
+import type { PositronPreviewService } from '../services/preview';
+import {
+    createSurfaceModelId,
+    SurfaceLifecycleService,
+    SurfaceModelKind,
+    SurfaceSourceKind,
+} from '../services/surfaces/surfaceLifecycleService';
+import {
+    RoutedRichOutputKinds,
+    RuntimeOutputConsumers,
+    RuntimeOutputMime,
+    type RuntimeOutputConsumerId,
+} from './runtimeOutputContract';
+export {
+    RuntimeOutputConsumers,
+    type RuntimeOutputConsumerId,
+} from './runtimeOutputContract';
+
+const MaxRouteRecords = 200;
+
+export type RichOutputMessage =
+    | LanguageRuntimeOutputWithKind
+    | LanguageRuntimeResultWithKind
+    | LanguageRuntimeUpdateOutputWithKind;
+
+export interface RichOutputRouteRecord {
+    readonly sessionId: string;
+    readonly messageId: string;
+    readonly outputId?: string;
+    readonly kind: RuntimeOutputKind;
+    readonly consumer: RuntimeOutputConsumerId;
+    readonly status: 'routed' | 'fallback' | 'failed';
+    readonly detail?: string;
+    readonly timestamp: number;
+}
+
+interface RichPayload {
+    readonly url?: string;
+    readonly path?: string;
+    readonly html?: string;
+    readonly title?: string;
+}
+
+function asString(value: unknown): string | undefined {
+    if (typeof value === 'string') {
+        return value;
+    }
+    if (value === undefined || value === null) {
+        return undefined;
+    }
+    try {
+        return JSON.stringify(value, undefined, 2);
+    } catch {
+        return String(value);
+    }
+}
+
+function parseRichPayload(value: unknown): RichPayload | undefined {
+    let candidate = value;
+    if (typeof candidate === 'string') {
+        try {
+            candidate = JSON.parse(candidate);
+        } catch {
+            return undefined;
+        }
+    }
+    if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
+        return undefined;
+    }
+
+    const record = candidate as Record<string, unknown>;
+    return {
+        url: typeof record.url === 'string' ? record.url : undefined,
+        path: typeof record.path === 'string' ? record.path : undefined,
+        html: typeof record.html === 'string' ? record.html : undefined,
+        title: typeof record.title === 'string' ? record.title : undefined,
+    };
+}
+
+function parseJsonRecord(value: unknown): Record<string, unknown> | undefined {
+    let candidate = value;
+    if (typeof candidate === 'string') {
+        try {
+            candidate = JSON.parse(candidate);
+        } catch {
+            return undefined;
+        }
+    }
+    return candidate && typeof candidate === 'object' && !Array.isArray(candidate)
+        ? candidate as Record<string, unknown>
+        : undefined;
+}
+
+function escapeHtml(value: string): string {
+    return value
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+function safePathSegment(value: string): string {
+    const sanitized = value.replace(/[^A-Za-z0-9._-]/g, '_');
+    return sanitized || 'output';
+}
+
+/** Routes rich runtime outputs that are intentionally omitted from Console. */
+export class RichOutputRouter implements vscode.Disposable {
+    private readonly _disposables: vscode.Disposable[] = [];
+    private readonly _sessionDisposables = new Map<string, vscode.Disposable[]>();
+    private readonly _routeRecords: RichOutputRouteRecord[] = [];
+    private readonly _routeChains = new Map<string, Promise<void>>();
+    private readonly _reportedFailures = new Set<string>();
+    private readonly _onDidRouteOutputEmitter = new vscode.EventEmitter<RichOutputRouteRecord>();
+
+    readonly onDidRouteOutput = this._onDidRouteOutputEmitter.event;
+
+    constructor(
+        private readonly _context: vscode.ExtensionContext,
+        private readonly _sessionManager: RuntimeSessionService,
+        private readonly _plotsService: PositronPlotsService,
+        private readonly _previewService: PositronPreviewService,
+        private readonly _outputChannel: vscode.LogOutputChannel,
+        private readonly _surfaceLifecycle?: SurfaceLifecycleService,
+    ) {
+        this._disposables.push(this._onDidRouteOutputEmitter);
+    }
+
+    initialize(): void {
+        for (const session of this._sessionManager.sessions) {
+            this._attachSession(session);
+        }
+
+        this._disposables.push(
+            this._sessionManager.onDidCreateSession(session => this._attachSession(session)),
+            this._sessionManager.onDidDeleteRuntimeSession(sessionId => {
+                this._detachSession(sessionId);
+                const outputDirectory = vscode.Uri.joinPath(
+                    this._context.globalStorageUri,
+                    'rich-output',
+                    safePathSegment(sessionId),
+                );
+                void vscode.workspace.fs.delete(outputDirectory, { recursive: true, useTrash: false }).then(
+                    () => undefined,
+                    () => undefined,
+                );
+            }),
+        );
+    }
+
+    getRouteRecords(sessionId?: string): readonly RichOutputRouteRecord[] {
+        return sessionId
+            ? this._routeRecords.filter(record => record.sessionId === sessionId)
+            : [...this._routeRecords];
+    }
+
+    getConsumers(kind: RuntimeOutputKind): readonly RuntimeOutputConsumerId[] {
+        return RuntimeOutputConsumers[kind];
+    }
+
+    private _attachSession(session: RuntimeSession): void {
+        if (this._sessionDisposables.has(session.sessionId)) {
+            return;
+        }
+
+        const disposables = [
+            session.onDidReceiveRuntimeMessageOutput(message => this._enqueue(session, message)),
+            session.onDidReceiveRuntimeMessageResult(message => this._enqueue(session, message)),
+            session.onDidReceiveRuntimeMessageUpdateOutput(message => this._enqueue(session, message)),
+        ];
+        this._sessionDisposables.set(session.sessionId, disposables);
+    }
+
+    private _detachSession(sessionId: string): void {
+        this._sessionDisposables.get(sessionId)?.forEach(disposable => disposable.dispose());
+        this._sessionDisposables.delete(sessionId);
+        for (const key of this._routeChains.keys()) {
+            if (key.startsWith(`${sessionId}:`)) {
+                this._routeChains.delete(key);
+            }
+        }
+    }
+
+    private _enqueue(session: RuntimeSession, message: RichOutputMessage): void {
+        if (!RoutedRichOutputKinds.has(message.kind)) {
+            return;
+        }
+
+        const outputKey = message.output_id ?? message.id;
+        const key = `${session.sessionId}:${outputKey}`;
+        const previous = this._routeChains.get(key) ?? Promise.resolve();
+        const current = previous
+            .catch(() => undefined)
+            .then(() => this._routeOutput(session, message))
+            .catch(error => this._handleRouteFailure(session, message, error))
+            .finally(() => {
+                if (this._routeChains.get(key) === current) {
+                    this._routeChains.delete(key);
+                }
+            });
+        this._routeChains.set(key, current);
+    }
+
+    private async _routeOutput(session: RuntimeSession, message: RichOutputMessage): Promise<void> {
+        switch (message.kind) {
+            case RuntimeOutputKind.ViewerWidget:
+                await this._routeViewerOutput(session, message);
+                return;
+            case RuntimeOutputKind.PlotWidget:
+                await this._routePlotOutput(session, message);
+                return;
+            case RuntimeOutputKind.IPyWidget:
+                this._registerWidgetModel(session, message);
+                await this._routeFallback(
+                    session,
+                    message,
+                    'IPyWidget rendering is not available in the extension host; the original output bundle is shown below.',
+                );
+                return;
+            case RuntimeOutputKind.WebviewPreload:
+                this._registerWidgetModel(session, message);
+                await this._routeFallback(
+                    session,
+                    message,
+                    'This output requires a notebook webview preload that is unavailable in the extension host.',
+                );
+                return;
+        }
+    }
+
+    private async _routeViewerOutput(session: RuntimeSession, message: RichOutputMessage): Promise<void> {
+        if (message.data[RuntimeOutputMime.positronDataExplorer] !== undefined) {
+            const dataExplorerPayload = parseJsonRecord(message.data[RuntimeOutputMime.positronDataExplorer]);
+            const commId = dataExplorerPayload?.comm_id;
+            if (typeof commId === 'string' && commId.length > 0) {
+                const isNotebook = session.sessionMetadata.sessionMode === 'notebook';
+                this._record(
+                    session,
+                    message,
+                    isNotebook ? 'notebook-inline-data-explorer' : 'data-explorer',
+                    'routed',
+                    commId,
+                );
+                return;
+            }
+        }
+
+        const viewerPayload = parseRichPayload(message.data[RuntimeOutputMime.positronViewer]);
+        if (viewerPayload?.url) {
+            await this._previewService.showRuntimeOutputUrl(
+                session.sessionId,
+                viewerPayload.url,
+                message.output_id,
+            );
+            this._record(session, message, 'viewer', 'routed', viewerPayload.url);
+            return;
+        }
+
+        const html = viewerPayload?.html ?? asString(message.data[RuntimeOutputMime.textHtml]);
+        if (html) {
+            const fileUri = await this._writeHtmlOutput(
+                session.sessionId,
+                message,
+                html,
+                undefined,
+            );
+            await this._previewService.showRuntimeOutputHtml(session.sessionId, fileUri, {
+                title: viewerPayload?.title ?? 'Runtime Viewer Output',
+                outputId: message.output_id,
+            });
+            this._record(session, message, 'viewer', 'routed');
+            return;
+        }
+
+        if (viewerPayload?.path) {
+            const fileUri = vscode.Uri.file(viewerPayload.path);
+            await this._previewService.showRuntimeOutputHtml(session.sessionId, fileUri, {
+                title: viewerPayload.title ?? 'Runtime Viewer Output',
+                outputId: message.output_id,
+            });
+            this._record(session, message, 'viewer', 'routed', viewerPayload.path);
+            return;
+        }
+
+        const reason = message.data[RuntimeOutputMime.positronDataExplorer] !== undefined
+            ? 'Inline Data Explorer output requires a dedicated inline surface; the payload is preserved here.'
+            : 'No supported URL or HTML representation was present in the Viewer output.';
+        await this._routeFallback(session, message, reason);
+    }
+
+    private async _routePlotOutput(session: RuntimeSession, message: RichOutputMessage): Promise<void> {
+        const plotPayload = parseRichPayload(message.data[RuntimeOutputMime.positronPlot]);
+        let uri: vscode.Uri | undefined;
+        if (plotPayload?.url) {
+            uri = vscode.Uri.parse(plotPayload.url);
+        } else {
+            const html = plotPayload?.html ?? asString(message.data[RuntimeOutputMime.textHtml]);
+            if (html) {
+                const fileUri = await this._writeHtmlOutput(session.sessionId, message, html, undefined);
+                uri = await this._previewService.resolveRuntimeOutputHtmlUri(fileUri);
+            }
+        }
+
+        if (uri) {
+            this._plotsService.addHtmlOutputPlot(session.sessionId, {
+                uri,
+                title: plotPayload?.title ?? 'Runtime Plot',
+            }, message);
+            this._record(session, message, 'plots', 'routed', uri.toString());
+            return;
+        }
+
+        await this._routeFallback(
+            session,
+            message,
+            'This plot requires a notebook renderer that is unavailable in the extension host; the original output bundle is preserved here.',
+        );
+    }
+
+    private async _routeFallback(
+        session: RuntimeSession,
+        message: RichOutputMessage,
+        reason: string,
+    ): Promise<void> {
+        const html = this._buildFallbackHtml(message, reason);
+        const fileUri = await this._writeHtmlOutput(session.sessionId, message, html, reason);
+        await this._previewService.showRuntimeOutputHtml(session.sessionId, fileUri, {
+            title: `${message.kind} output (fallback)`,
+            outputId: message.output_id,
+            fallbackReason: reason,
+        });
+        this._record(session, message, 'viewer-fallback', 'fallback', reason);
+        this._outputChannel.warn(
+            `[RichOutputRouter] ${message.kind} output ${message.output_id ?? message.id} used fallback: ${reason}`
+        );
+    }
+
+    private _registerWidgetModel(session: RuntimeSession, message: RichOutputMessage): void {
+        if (!this._surfaceLifecycle) {
+            return;
+        }
+        const identity = message.output_id ?? message.id;
+        this._surfaceLifecycle.upsertModel({
+            id: createSurfaceModelId(SurfaceModelKind.Widget, session.sessionId, identity),
+            kind: SurfaceModelKind.Widget,
+            resourceId: identity,
+            title: message.kind === RuntimeOutputKind.IPyWidget ? 'Notebook Widget' : 'Notebook Webview Output',
+            source: {
+                kind: SurfaceSourceKind.Runtime,
+                id: session.sessionId,
+                sessionId: session.sessionId,
+                stop: async () => this._sessionManager.interruptSession(session.sessionId),
+            },
+            outputId: message.output_id,
+            retention: 'retain-on-detach',
+            payload: {
+                messageId: message.id,
+                executionId: message.parent_id,
+                mimeTypes: Object.keys(message.data),
+                rendererAvailable: false,
+            },
+        });
+    }
+
+    private async _writeHtmlOutput(
+        sessionId: string,
+        message: RichOutputMessage,
+        content: string,
+        fallbackReason: string | undefined,
+    ): Promise<vscode.Uri> {
+        const directory = vscode.Uri.joinPath(
+            this._context.globalStorageUri,
+            'rich-output',
+            safePathSegment(sessionId),
+        );
+        await vscode.workspace.fs.createDirectory(directory);
+        const fileUri = vscode.Uri.joinPath(
+            directory,
+            `${safePathSegment(message.output_id ?? message.id)}.html`,
+        );
+        const document = fallbackReason
+            ? content
+            : this._asHtmlDocument(content, message.kind);
+        await vscode.workspace.fs.writeFile(fileUri, new TextEncoder().encode(document));
+        return fileUri;
+    }
+
+    private _asHtmlDocument(content: string, kind: RuntimeOutputKind): string {
+        if (/<!doctype|<html[\s>]/i.test(content)) {
+            return content;
+        }
+        return `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>${escapeHtml(kind)}</title></head>
+<body>${content}</body>
+</html>`;
+    }
+
+    private _buildFallbackHtml(message: RichOutputMessage, reason: string): string {
+        const plainText = asString(message.data[RuntimeOutputMime.textPlain]);
+        const entries = Object.entries(message.data).map(([mime, value]) => {
+            const serialized = asString(value) ?? '';
+            return `<details><summary>${escapeHtml(mime)}</summary><pre>${escapeHtml(serialized)}</pre></details>`;
+        }).join('\n');
+
+        return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>${escapeHtml(message.kind)} output fallback</title>
+<style>
+body{font:13px system-ui,sans-serif;margin:0;padding:20px;color:#222;background:#fff}.notice{border-left:4px solid #b87900;background:#fff7df;padding:12px 16px;margin-bottom:16px}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f3f3f3;padding:12px}details{margin:8px 0}summary{cursor:pointer;font-weight:600}@media(prefers-color-scheme:dark){body{color:#ddd;background:#1e1e1e}.notice{background:#332b16}pre{background:#2b2b2b}}
+</style>
+</head>
+<body>
+<div class="notice"><strong>Rich output fallback</strong><div>${escapeHtml(reason)}</div></div>
+${plainText ? `<pre>${escapeHtml(plainText)}</pre>` : ''}
+<h3>Original MIME bundle</h3>${entries || '<p>The runtime sent an empty output bundle.</p>'}
+</body>
+</html>`;
+    }
+
+    private _record(
+        session: RuntimeSession,
+        message: RichOutputMessage,
+        consumer: RuntimeOutputConsumerId,
+        status: RichOutputRouteRecord['status'],
+        detail?: string,
+    ): void {
+        const record: RichOutputRouteRecord = {
+            sessionId: session.sessionId,
+            messageId: message.id,
+            outputId: message.output_id,
+            kind: message.kind,
+            consumer,
+            status,
+            detail,
+            timestamp: Date.now(),
+        };
+        this._routeRecords.push(record);
+        if (this._routeRecords.length > MaxRouteRecords) {
+            this._routeRecords.splice(0, this._routeRecords.length - MaxRouteRecords);
+        }
+        this._onDidRouteOutputEmitter.fire(record);
+    }
+
+    private async _handleRouteFailure(
+        session: RuntimeSession,
+        message: RichOutputMessage,
+        error: unknown,
+    ): Promise<void> {
+        const detail = error instanceof Error ? error.message : String(error);
+        this._record(session, message, 'rich-output-router', 'failed', detail);
+        this._outputChannel.error(
+            `[RichOutputRouter] Failed to route ${message.kind} output ${message.output_id ?? message.id}: ${detail}`
+        );
+
+        const failureKey = `${session.sessionId}:${message.kind}`;
+        if (!this._reportedFailures.has(failureKey)) {
+            this._reportedFailures.add(failureKey);
+            await vscode.window.showWarningMessage(
+                `A ${message.kind} runtime output could not be displayed. See the Ark output log for details.`
+            );
+        }
+    }
+
+    dispose(): void {
+        for (const disposables of this._sessionDisposables.values()) {
+            disposables.forEach(disposable => disposable.dispose());
+        }
+        this._sessionDisposables.clear();
+        this._routeChains.clear();
+        this._disposables.forEach(disposable => disposable.dispose());
+    }
+}

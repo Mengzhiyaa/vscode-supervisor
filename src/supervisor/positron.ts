@@ -20,8 +20,47 @@ let foregroundSessionProvider:
     (() => LanguageRuntimeSession | undefined | Promise<LanguageRuntimeSession | undefined>)
     | undefined;
 
-export function initializePositronCompatibility(_context: vscode.ExtensionContext): void {
-    return;
+let compatibilityContext: vscode.ExtensionContext | undefined;
+let consoleWidthSourceDisposable: vscode.Disposable | undefined;
+let consoleWidthProvider: (() => number | Promise<number>) | undefined;
+let consoleWidthSourceBound = false;
+const consoleWidthEmitter = new vscode.EventEmitter<number>();
+const registeredEnvironmentContributions = new Map<string, EnvironmentVariableAction[]>();
+
+export function initializePositronCompatibility(context: vscode.ExtensionContext): void {
+    compatibilityContext = context;
+    context.subscriptions.push(new vscode.Disposable(() => {
+        if (compatibilityContext === context) {
+            compatibilityContext = undefined;
+        }
+        consoleWidthSourceDisposable?.dispose();
+        consoleWidthSourceDisposable = undefined;
+        consoleWidthProvider = undefined;
+        consoleWidthSourceBound = false;
+        registeredEnvironmentContributions.clear();
+    }));
+}
+
+/** Connects the compatibility API to the real Console width event. */
+export function setConsoleWidthSource(
+    event: vscode.Event<number>,
+    getWidth?: () => number | Promise<number>,
+): vscode.Disposable {
+    consoleWidthSourceDisposable?.dispose();
+    const registration = event(width => consoleWidthEmitter.fire(width));
+    consoleWidthSourceDisposable = registration;
+    consoleWidthProvider = getWidth;
+    consoleWidthSourceBound = true;
+
+    return new vscode.Disposable(() => {
+        // A stale owner must not dispose a newer source registration.
+        if (consoleWidthSourceDisposable === registration) {
+            registration.dispose();
+            consoleWidthSourceDisposable = undefined;
+            consoleWidthProvider = undefined;
+            consoleWidthSourceBound = false;
+        }
+    });
 }
 
 export function setForegroundSessionProvider(
@@ -120,7 +159,10 @@ function readWhenClauseIdentifier(identifier: string): unknown {
         return readConfigurationValue(identifier.slice('config.'.length));
     }
 
-    return undefined;
+    throw new Error(
+        `Context key '${identifier}' is unavailable through the VS Code extension API; ` +
+        'only config.* identifiers are supported'
+    );
 }
 
 function compareWhenClauseValues(left: unknown, operator: string, right: unknown): boolean {
@@ -441,41 +483,75 @@ export const methods = {
 };
 
 // ============================================================================
-// Positron Window API (stubs)
+// Positron Window API compatibility bridge
 // ============================================================================
 
 export const window = {
-    createRawLogOutputChannel(name: string): vscode.OutputChannel {
-        return vscode.window.createOutputChannel(name);
+    createRawLogOutputChannel(name: string): vscode.LogOutputChannel {
+        // VS Code cannot disable log-channel prefixes, but returning a real
+        // LogOutputChannel preserves the public API shape and log methods.
+        return vscode.window.createOutputChannel(name, { log: true });
     },
 
-    onDidChangeConsoleWidth: new vscode.EventEmitter<number>().event,
+    onDidChangeConsoleWidth: consoleWidthEmitter.event,
+
+    async getConsoleWidth(): Promise<number> {
+        if (!consoleWidthProvider) {
+            throw new PositronCompatibilityError(
+                'Console width is unavailable before the Console service is initialized',
+                RuntimeMethodErrorCode.InternalError,
+            );
+        }
+        return consoleWidthProvider();
+    },
 
     async showSimpleModalDialogMessage(
-        _title: string,
-        _message: string,
-        _okButtonTitle?: string
+        title: string,
+        message: string,
+        okButtonTitle?: string
     ): Promise<null> {
-        // Show as VS Code info message instead
+        await vscode.window.showInformationMessage(
+            title,
+            { modal: true, detail: message },
+            okButtonTitle ?? vscode.l10n.t('OK'),
+        );
         return null;
     },
 
     async showSimpleModalDialogPrompt(
         title: string,
         message: string,
-        _okButtonTitle?: string,
-        _cancelButtonTitle?: string
+        okButtonTitle?: string,
+        cancelButtonTitle?: string
     ): Promise<boolean> {
+        const ok = okButtonTitle ?? vscode.l10n.t('OK');
+        const cancel = cancelButtonTitle ?? vscode.l10n.t('Cancel');
         const result = await vscode.window.showWarningMessage(
-            `${title}: ${message}`,
-            'OK', 'Cancel'
+            title,
+            { modal: true, detail: message },
+            ok,
+            cancel,
         );
-        return result === 'OK';
+        return result === ok;
+    },
+
+    async showSimpleModalDialogInputPrompt(
+        title: string,
+        message: string,
+        placeholder?: string,
+    ): Promise<string | undefined> {
+        // VS Code has no modal input API. showInputBox is the closest public,
+        // cancellable equivalent and is reported as a fallback capability.
+        return vscode.window.showInputBox({
+            title,
+            prompt: message,
+            placeHolder: placeholder,
+        });
     },
 };
 
 // ============================================================================
-// Positron Runtime API (stubs)
+// Positron Runtime API compatibility bridge
 // ============================================================================
 
 export const runtime = {
@@ -489,7 +565,7 @@ export const runtime = {
 };
 
 // ============================================================================
-// Positron Environment API (stubs)
+// Positron Environment API compatibility bridge
 // ============================================================================
 
 export interface EnvironmentVariableAction {
@@ -498,15 +574,76 @@ export interface EnvironmentVariableAction {
     value: string;
 }
 
+/**
+ * Registers environment mutations owned by another extension. VS Code's
+ * public API only exposes an extension's own collection, so language
+ * extensions use this explicit bridge to provide Positron-equivalent data.
+ */
+export function registerEnvironmentContributions(
+    extensionId: string,
+    actions: readonly EnvironmentVariableAction[],
+): vscode.Disposable {
+    const registration = actions.map(action => ({ ...action }));
+    registeredEnvironmentContributions.set(extensionId, registration);
+    return new vscode.Disposable(() => {
+        const current = registeredEnvironmentContributions.get(extensionId);
+        if (current === registration) {
+            registeredEnvironmentContributions.delete(extensionId);
+        }
+    });
+}
+
 export const environment = {
     async getEnvironmentContributions(): Promise<Record<string, EnvironmentVariableAction[]>> {
-        return {};
+        const result: Record<string, EnvironmentVariableAction[]> = Object.create(null);
+        for (const [extensionId, actions] of registeredEnvironmentContributions) {
+            result[extensionId] = actions.map(action => ({ ...action }));
+        }
+
+        const context = compatibilityContext;
+        if (context) {
+            const ownActions: EnvironmentVariableAction[] = [];
+            context.environmentVariableCollection.forEach((name, mutator) => {
+                ownActions.push({
+                    action: mutator.type,
+                    name,
+                    value: mutator.value,
+                });
+            });
+            if (ownActions.length > 0) {
+                result[context.extension.id] = ownActions;
+            }
+        }
+
+        return result;
     },
 };
+
+export interface PositronCompatibilityCapabilities {
+    readonly consoleWidthEvents: boolean;
+    readonly consoleWidthValue: boolean;
+    readonly modalDialogs: true;
+    readonly modalInput: 'quick-input-fallback';
+    readonly rawLogOutput: 'vscode-log-output-fallback';
+    readonly environmentContributions: 'registered-and-own-extension';
+    readonly whenClauseEvaluation: 'configuration-subset';
+}
+
+export function getPositronCompatibilityCapabilities(): PositronCompatibilityCapabilities {
+    return {
+        consoleWidthEvents: consoleWidthSourceBound,
+        consoleWidthValue: consoleWidthProvider !== undefined,
+        modalDialogs: true,
+        modalInput: 'quick-input-fallback',
+        rawLogOutput: 'vscode-log-output-fallback',
+        environmentContributions: 'registered-and-own-extension',
+        whenClauseEvaluation: 'configuration-subset',
+    };
+}
 
 // ============================================================================
 // Version info
 // ============================================================================
 
 export const version = '1.0.0';
-export const buildNumber = '1';
+export const buildNumber = 1;

@@ -3,12 +3,13 @@ import {
     inferPositronOutputKind,
     RuntimeOutputKind,
 } from '../../runtime/runtimeOutputKind';
+import { RuntimeOutputMime } from '../../runtime/runtimeOutputContract';
 
 suite('[Unit] runtime output kind data explorer diagnostics', () => {
     test('classifies Positron viewer mime as a viewer widget', () => {
         const kind = inferPositronOutputKind({
             data: {
-                'application/vnd.positron.viewer+json': '{"url":"https://example.com"}',
+                [RuntimeOutputMime.positronViewer]: '{"url":"https://example.com"}',
             },
         });
 
@@ -18,7 +19,7 @@ suite('[Unit] runtime output kind data explorer diagnostics', () => {
     test('classifies Positron inline data explorer mime as a viewer widget', () => {
         const kind = inferPositronOutputKind({
             data: {
-                'application/vnd.positron.dataExplorer+json': JSON.stringify({
+                [RuntimeOutputMime.positronDataExplorer]: JSON.stringify({
                     version: 1,
                     comm_id: 'de-inline-1',
                     title: 'db preview',
