@@ -84,8 +84,12 @@
 <div class="plot-thumbnail" class:selected>
     <button
         bind:this={thumbnailButtonRef}
+        type="button"
         data-plot-id={plotId}
         class="plot-thumbnail-button"
+        tabindex={selected ? 0 : -1}
+        aria-label={plotName ? `Select plot: ${plotName}` : "Select plot"}
+        aria-current={selected ? "true" : undefined}
         onclick={selectPlot}
         onkeydown={handleKeyDown}
     >
@@ -103,8 +107,10 @@
     <button
         bind:this={removeButtonRef}
         class="plot-close codicon codicon-close"
+        type="button"
         tabindex={selected ? 0 : -1}
         title={removePlotTitle}
+        aria-label={plotName ? `Remove plot: ${plotName}` : removePlotTitle}
         onclick={removePlot}
     ></button>
 </div>
@@ -229,5 +235,12 @@
     .plot-close:focus {
         outline: 1px solid var(--vscode-focusBorder);
         opacity: 1;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .plot-thumbnail,
+        .plot-close {
+            transition: none;
+        }
     }
 </style>

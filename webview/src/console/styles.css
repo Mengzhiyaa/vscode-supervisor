@@ -40,6 +40,24 @@ body {
     height: 100%;
 }
 
+button,
+input,
+select,
+textarea {
+    font: inherit;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        scroll-behavior: auto !important;
+        transition-duration: 0.01ms !important;
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+    }
+}
+
 /* Tooltip styles - aligns with VS Code hover widget */
 .ark-tooltip {
     position: fixed;

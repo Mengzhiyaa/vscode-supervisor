@@ -31,7 +31,11 @@
 </script>
 
 <div class="action-bar">
-    <div class="positron-action-bar border-bottom data-explorer-action-bar">
+    <div
+        class="positron-action-bar border-bottom data-explorer-action-bar"
+        role="toolbar"
+        aria-label="Data Explorer actions"
+    >
         <div class="action-bar-region left">
             <ActionBarButton
                 icon="positron-clear-sorting"

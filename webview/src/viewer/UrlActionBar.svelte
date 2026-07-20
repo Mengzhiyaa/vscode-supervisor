@@ -7,6 +7,7 @@
     import '../shared/actionBar.css';
     import './actionBars.css';
     import ActionBarButton from '../shared/ActionBarButton.svelte';
+    import ActionBarMenuButton from '../shared/ActionBarMenuButton.svelte';
     import ActionBarSeparator from '../shared/ActionBarSeparator.svelte';
 
     interface Props {
@@ -56,11 +57,43 @@
             onnavigate?.(urlInput.trim());
         }
     }
+
+    function resetUrlInput(event: KeyboardEvent) {
+        if (event.key === 'Escape') {
+            urlInput = url;
+            (event.currentTarget as HTMLInputElement).select();
+        }
+    }
+
+    function openActions() {
+        return [
+            {
+                id: 'open-browser',
+                label: 'Open in Browser',
+                icon: 'link-external',
+                onSelected: () => onopenInBrowser?.(),
+            },
+            {
+                id: 'open-editor',
+                label: 'Open in Editor Tab',
+                icon: 'positron-open-in-editor',
+                onSelected: () => onopenInEditor?.(),
+            },
+            {
+                id: 'open-window',
+                label: 'Open in New Window',
+                icon: 'positron-open-in-new-window',
+                onSelected: () => onopenInNewWindow?.(),
+            },
+        ];
+    }
 </script>
 
 <div class="preview-action-bar">
     <div
         class="url-action-bar positron-action-bar border-top border-bottom"
+        role="toolbar"
+        aria-label="Viewer actions"
         style="padding-left: 8px; padding-right: 8px;"
     >
         <div class="action-bar-region left">
@@ -81,13 +114,17 @@
         </div>
 
         <div class="action-bar-region center">
-            <form onsubmit={handleSubmit}>
+            <form onsubmit={handleSubmit} aria-label="Navigate to URL">
                 <input
                     type="text"
                     class="text-input url-bar"
                     bind:value={urlInput}
                     title={url}
                     aria-label="The current URL"
+                    autocomplete="off"
+                    autocapitalize="off"
+                    spellcheck="false"
+                    onkeydown={resetUrlInput}
                 />
             </form>
         </div>
@@ -109,24 +146,12 @@
                 tooltip="Reload the current URL"
                 onclick={onreload}
             />
-            <ActionBarButton
-                icon="link-external"
-                ariaLabel="Open the current URL in the default browser"
-                tooltip="Open the current URL in the default browser"
-                onclick={onopenInBrowser}
-            />
-            <ActionBarSeparator />
-            <ActionBarButton
-                icon="positron-open-in-editor"
-                ariaLabel="Open the content in an editor tab"
-                tooltip="Open the content in an editor tab"
-                onclick={onopenInEditor}
-            />
-            <ActionBarButton
+            <ActionBarMenuButton
                 icon="positron-open-in-new-window"
-                ariaLabel="Open the content in a new window"
-                tooltip="Open the content in a new window"
-                onclick={onopenInNewWindow}
+                ariaLabel="Select where to open"
+                tooltip="Select where to open"
+                align="right"
+                actions={openActions}
             />
             <ActionBarSeparator />
             <ActionBarButton

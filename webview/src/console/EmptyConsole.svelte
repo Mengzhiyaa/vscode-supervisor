@@ -11,7 +11,7 @@
     const toStartOne = "to start one.";
 </script>
 
-<div class="empty-console">
+<div class="empty-console" role="status">
     <div class="title">
         <span>{noSessionRunning} {useWord} </span>
         <button class="link" type="button" onclick={onStartSession}>
@@ -45,5 +45,15 @@
         border: none;
         background: transparent;
         font: inherit;
+    }
+
+    .link:hover {
+        color: var(--vscode-textLink-activeForeground);
+    }
+
+    .link:focus-visible {
+        outline: 1px solid var(--vscode-focusBorder);
+        outline-offset: 2px;
+        border-radius: 2px;
     }
 </style>

@@ -14,4 +14,14 @@ body,
     font-size: var(--vscode-font-size);
     font-weight: var(--vscode-font-weight);
     color: var(--vscode-foreground);
+    background: var(--vscode-editor-background);
+}
+
+* {
+    box-sizing: border-box;
+}
+
+button,
+input {
+    font: inherit;
 }

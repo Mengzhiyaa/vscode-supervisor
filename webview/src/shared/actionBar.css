@@ -22,6 +22,8 @@
     box-sizing: border-box;
     height: var(--positron-action-bar-height);
     background-color: var(--positron-action-bar-bg);
+    color: var(--vscode-positronActionBar-foreground, var(--vscode-foreground));
+    min-width: 0;
 }
 
 .positron-action-bar.border-top {
@@ -52,6 +54,8 @@
     grid-auto-columns: min-content;
     height: var(--positron-action-bar-height);
     background-color: var(--positron-action-bar-bg);
+    color: var(--vscode-positronActionBar-foreground, var(--vscode-foreground));
+    min-width: 0;
 }
 
 .positron-dynamic-action-bar .container {
@@ -87,21 +91,29 @@
     box-sizing: border-box;
     background: transparent;
     height: var(--positron-action-bar-icon-size);
-    color: var(--vscode-positronActionBar-foreground);
+    color: var(--vscode-positronActionBar-foreground, var(--vscode-foreground));
+    flex-shrink: 0;
 }
 
 .action-bar-button.checked {
-    background: var(--vscode-positronActionBar-hoverBackground);
+    background: var(--vscode-positronActionBar-hoverBackground, var(--vscode-toolbar-hoverBackground));
 }
 
 .action-bar-button:hover:not(:disabled) {
-    background: var(--vscode-positronActionBar-hoverBackground);
+    background: var(--vscode-positronActionBar-hoverBackground, var(--vscode-toolbar-hoverBackground));
+}
+
+.action-bar-button:active:not(:disabled) {
+    background: var(--vscode-toolbar-activeBackground, var(--vscode-positronActionBar-hoverBackground, var(--vscode-toolbar-hoverBackground)));
 }
 
 .action-bar-button:disabled {
     cursor: default;
+    opacity: 0.55;
 }
 
+body.vscode-high-contrast .action-bar-button:hover:not(:disabled),
+body.vscode-high-contrast-light .action-bar-button:hover:not(:disabled),
 .hc-black .action-bar-button:hover:not(:disabled),
 .hc-light .action-bar-button:hover:not(:disabled) {
     border: 1px dashed var(--vscode-focusBorder);
@@ -114,6 +126,7 @@
 .action-bar-button:focus-visible {
     border-radius: 4px;
     outline: 1px solid var(--vscode-focusBorder) !important;
+    outline-offset: -1px;
 }
 
 .action-bar-button.interrupt .codicon {
@@ -134,11 +147,11 @@
 }
 
 .action-bar-button .action-bar-button-icon::before {
-    color: var(--vscode-positronActionBar-foreground);
+    color: var(--vscode-positronActionBar-foreground, var(--vscode-foreground));
 }
 
 .action-bar-button:disabled .action-bar-button-icon::before {
-    color: var(--vscode-positronActionBar-disabledForeground);
+    color: var(--vscode-positronActionBar-disabledForeground, var(--vscode-disabledForeground));
 }
 
 .action-bar-button .action-bar-button-label {
@@ -151,7 +164,7 @@
 }
 
 .action-bar-button:disabled .action-bar-button-label {
-    color: var(--vscode-positronActionBar-disabledForeground);
+    color: var(--vscode-positronActionBar-disabledForeground, var(--vscode-disabledForeground));
 }
 
 /* ==============================
@@ -251,16 +264,18 @@
 .action-bar-menu-button .action-bar-button-icon::before,
 .action-bar-menu-button .action-bar-menu-drop-down-arrow::before,
 .action-bar-menu-button .action-bar-button-drop-down-arrow::before {
-    color: var(--vscode-positronActionBar-foreground);
+    color: var(--vscode-positronActionBar-foreground, var(--vscode-foreground));
 }
 
 .action-bar-menu-button:disabled .action-bar-menu-icon::before,
 .action-bar-menu-button:disabled .action-bar-button-icon::before,
 .action-bar-menu-button:disabled .action-bar-menu-drop-down-arrow::before,
 .action-bar-menu-button:disabled .action-bar-button-drop-down-arrow::before {
-    color: var(--vscode-positronActionBar-disabledForeground);
+    color: var(--vscode-positronActionBar-disabledForeground, var(--vscode-disabledForeground));
 }
 
+body.vscode-high-contrast .action-bar-menu-button:hover:not(:disabled),
+body.vscode-high-contrast-light .action-bar-menu-button:hover:not(:disabled),
 .hc-black .action-bar-menu-button:hover:not(:disabled),
 .hc-light .action-bar-menu-button:hover:not(:disabled) {
     border: 1px dashed var(--vscode-focusBorder);
@@ -272,6 +287,7 @@
 .action-bar-region {
     display: flex;
     align-items: center;
+    min-width: 0;
 }
 
 .action-bar-region.left {
@@ -417,4 +433,12 @@
         --vscode-positronContextMenu-separatorBackground,
         var(--vscode-menu-separatorBackground)
     );
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .action-bar-button,
+    .action-bar-context-menu {
+        animation: none !important;
+        transition: none !important;
+    }
 }

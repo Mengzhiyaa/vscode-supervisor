@@ -111,6 +111,14 @@
                   plots[plots.length - 1])
             : plots[plots.length - 1],
     );
+    const selectedPlotPosition = $derived(
+        selectedPlot ? plots.findIndex((plot) => plot.id === selectedPlot.id) + 1 : 0,
+    );
+    const plotStatus = $derived(
+        plots.length === 0
+            ? "No plots available"
+            : `Plot ${selectedPlotPosition} of ${plots.length}${selectedPlot?.name ? `: ${selectedPlot.name}` : ""}`,
+    );
 
     const plotInfoHeaderPx = 30;
 
@@ -176,10 +184,14 @@
     class:history-bottom={historyBottom}
     class:history-right={!historyBottom}
     tabindex="0"
-    role="application"
+    role="region"
     aria-label="Plot viewer"
+    aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown"
     onkeydown={oncontainerKeydown}
 >
+    <div class="screen-reader-status" role="status" aria-live="polite" aria-atomic="true">
+        {plotStatus}
+    </div>
     <div class="plot-content">
         {#if selectedPlot}
             <div class="plot-info-header" style="height: {plotInfoHeaderPx}px;">
@@ -261,6 +273,8 @@
         <div
             bind:this={historyScrollerElement}
             class="plot-history-scroller"
+            role="group"
+            aria-label="Plot history"
             onwheel={onhistoryWheel}
         >
             <div class="plot-history">
@@ -315,6 +329,11 @@
 
     .plots-container:focus {
         outline: none;
+    }
+
+    .plots-container:focus-visible {
+        outline: 1px solid var(--vscode-focusBorder);
+        outline-offset: -1px;
     }
 
     .plots-container.history-right {
@@ -420,6 +439,18 @@
         align-items: center;
         justify-content: center;
         height: 100%;
+    }
+
+    .screen-reader-status {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
     }
 
     .plot-history-scroller {

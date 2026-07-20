@@ -206,7 +206,7 @@
 {/snippet}
 
 {#snippet stateLabelSnippet()}
-    <div class="state-label">{stateLabel}</div>
+    <div class="state-label" role="status" aria-live="polite">{stateLabel}</div>
 {/snippet}
 
 {#snippet interruptSnippet()}

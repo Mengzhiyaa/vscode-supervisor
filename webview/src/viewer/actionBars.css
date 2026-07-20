@@ -30,6 +30,11 @@
     outline: none;
 }
 
+.preview-action-bar .url-bar:focus-visible {
+    outline: 1px solid var(--vscode-focusBorder);
+    outline-offset: -1px;
+}
+
 .preview-action-bar .preview-title {
     flex-grow: 1;
     min-width: 0;
@@ -37,4 +42,16 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     font-size: 12px;
+}
+
+@media (max-width: 420px) {
+    .preview-action-bar .url-bar {
+        margin-left: 4px;
+        padding-left: 6px;
+        padding-right: 6px;
+    }
+
+    .preview-action-bar .preview-title {
+        padding-left: 4px;
+    }
 }

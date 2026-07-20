@@ -22,10 +22,12 @@
 <div class="preview-action-bar">
     <div
         class="basic-action-bar positron-action-bar border-top border-bottom"
+        role="toolbar"
+        aria-label="Viewer actions"
         style="padding-left: 8px; padding-right: 8px;"
     >
         <div class="action-bar-region left">
-            <span class="codicon codicon-file"></span>
+            <span class="codicon codicon-file" aria-hidden="true"></span>
         </div>
         <div class="action-bar-region center">
             <span class="preview-title" {title}>{title}</span>

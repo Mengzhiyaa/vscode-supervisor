@@ -35,6 +35,7 @@
     const instance = new PositronDataExplorerInstance(postMessage);
     const stores = instance.stores;
     const { state: explorerState } = stores;
+    const { isLoading, errorMessage } = stores;
     const tableDataDataGridInstance = instance.tableDataDataGridInstance;
     const tableSchemaDataGridInstance = instance.tableSchemaDataGridInstance;
 
@@ -185,6 +186,10 @@
 
     function handleClose() {
         postMessage({ type: "close" });
+    }
+
+    function dismissError() {
+        stores.state.update((state) => ({ ...state, error: null }));
     }
 
     function openConvertToCodeModalDialog(params?: {
@@ -463,10 +468,27 @@
 <div
     class="positron-data-explorer"
     bind:this={rootElement}
+    aria-busy={$isLoading}
+    aria-label="Data Explorer"
     onfocusin={handleRootFocusIn}
     onfocusout={handleRootFocusOut}
 >
     <ActionBar />
+    {#if $isLoading && !closedReason}
+        <div class="data-explorer-progress" aria-hidden="true"><span></span></div>
+        <div class="screen-reader-status" role="status" aria-live="polite">
+            Loading Data Explorer
+        </div>
+    {/if}
+    {#if $errorMessage && !closedReason}
+        <div class="data-explorer-error" role="alert">
+            <span class="codicon codicon-error" aria-hidden="true"></span>
+            <span>{$errorMessage}</span>
+            <button type="button" aria-label="Dismiss error" title="Dismiss" onclick={dismissError}>
+                <span class="codicon codicon-close" aria-hidden="true"></span>
+            </button>
+        </div>
+    {/if}
     <DataExplorerPanel />
     {#if closedReason}
         <DataExplorerClosed
@@ -517,5 +539,96 @@
             --vscode-positronDataExplorer-background,
             var(--vscode-editor-background)
         );
+    }
+
+    .data-explorer-progress {
+        position: absolute;
+        z-index: 25;
+        top: var(--vscode-positronActionBar-height, 28px);
+        left: 0;
+        width: 100%;
+        height: 2px;
+        overflow: hidden;
+        pointer-events: none;
+        background: color-mix(in srgb, var(--vscode-progressBar-background) 24%, transparent);
+    }
+
+    .data-explorer-progress span {
+        display: block;
+        width: 35%;
+        height: 100%;
+        background: var(--vscode-progressBar-background);
+        animation: data-explorer-progress 1.2s ease-in-out infinite;
+    }
+
+    .data-explorer-error {
+        position: absolute;
+        z-index: 26;
+        top: calc(var(--vscode-positronActionBar-height, 28px) + 6px);
+        right: 8px;
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        max-width: min(480px, calc(100% - 16px));
+        padding: 6px 7px 6px 9px;
+        border: 1px solid var(--vscode-inputValidation-errorBorder, var(--vscode-errorForeground));
+        border-radius: 4px;
+        box-shadow: 0 2px 8px var(--vscode-widget-shadow);
+        color: var(--vscode-inputValidation-errorForeground, var(--vscode-foreground));
+        background: var(--vscode-inputValidation-errorBackground, var(--vscode-editorWidget-background));
+    }
+
+    .data-explorer-error > span:nth-child(2) {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .data-explorer-error button {
+        display: flex;
+        flex-shrink: 0;
+        width: 22px;
+        height: 22px;
+        padding: 0;
+        border: 0;
+        border-radius: 3px;
+        align-items: center;
+        justify-content: center;
+        color: inherit;
+        background: transparent;
+        cursor: pointer;
+    }
+
+    .data-explorer-error button:hover {
+        background: var(--vscode-toolbar-hoverBackground);
+    }
+
+    .data-explorer-error button:focus-visible {
+        outline: 1px solid var(--vscode-focusBorder);
+        outline-offset: -1px;
+    }
+
+    .screen-reader-status {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+    }
+
+    @keyframes data-explorer-progress {
+        from { transform: translateX(-110%); }
+        to { transform: translateX(320%); }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .data-explorer-progress span {
+            width: 100%;
+            animation: none;
+        }
     }
 </style>
