@@ -21,6 +21,17 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
 
+      - name: Checkout watched Positron contracts
+        uses: actions/checkout@v5
+        with:
+          repository: posit-dev/positron
+          path: .positron-upstream
+          sparse-checkout: |
+            /src/positron-dts/positron.d.ts
+            /src/vs/workbench/services/languageRuntime/common/languageRuntimeService.ts
+            /src/vs/workbench/api/browser/positron/mainThreadLanguageRuntime.ts
+          sparse-checkout-cone-mode: false
+
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
@@ -30,6 +41,14 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Verify generated contracts
+        run: npm run verify:contracts
+
+      - name: Verify watched Positron contracts
+        env:
+          POSITRON_ROOT: .positron-upstream
+        run: npm run verify:positron-contracts
 
       - name: Run unit tests
         run: npm run test:unit:ext

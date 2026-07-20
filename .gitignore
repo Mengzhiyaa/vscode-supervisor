@@ -2,7 +2,11 @@ node_modules/
 dist/
 out/
 .vscode-test/
+.positron-upstream/
 coverage/
 *.vsix
 webview/node_modules/
 webview/dist/
+webview/test-results/
+webview/playwright-report/
+docs/*

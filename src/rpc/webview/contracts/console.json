@@ -702,6 +702,28 @@
     },
     {
       "kind": "notification",
+      "name": "LanguageSupportAssetsChangedNotification",
+      "method": "console/languageSupportAssetsChanged",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "modules",
+              "type": "Record<string, string>"
+            },
+            {
+              "name": "grammars",
+              "type": "Record<string, { scopeName: string; grammarUrl: string }>"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
       "name": "HistoryAddNotification",
       "method": "console/historyAdd",
       "paramsType": "Params",

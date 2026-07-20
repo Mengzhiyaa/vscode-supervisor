@@ -3,11 +3,11 @@
  *--------------------------------------------------------------------------------------------*/
 
 export * from './console';
-export * from './variables';
-export * from './plots';
-export * from './viewer';
-export * from './help';
-export * from './session';
-export * from './plotEditor';
-export * from './lsp';
 export * from './dataExplorer';
+export * from './help';
+export * from './lsp';
+export * from './plotEditor';
+export * from './plots';
+export * from './session';
+export * from './variables';
+export * from './viewer';

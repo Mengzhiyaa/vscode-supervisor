@@ -1,0 +1,43 @@
+{
+  "description": "Watched Positron contracts used by the VS Code compatibility and rich-output bridges.",
+  "sources": [
+    "src/positron-dts/positron.d.ts",
+    "src/vs/workbench/services/languageRuntime/common/languageRuntimeService.ts",
+    "src/vs/workbench/api/browser/positron/mainThreadLanguageRuntime.ts"
+  ],
+  "publicApi": {
+    "declarations": {
+      "LanguageRuntimeMessageType": "export enum LanguageRuntimeMessageType { ClearOutput = 'clear_output', Output = 'output', Result = 'result', Stream = 'stream', Input = 'input', Error = 'error', Prompt = 'prompt', State = 'state', Event = 'event', CommOpen = 'comm_open', CommData = 'comm_data', CommClosed = 'comm_closed', DebugEvent = 'debug_event', DebugReply = 'debug_reply', IPyWidget = 'ipywidget', UpdateOutput = 'update_output' }",
+      "LanguageRuntimeMessage": "export interface LanguageRuntimeMessage { id: string; parent_id: string; when: string; type: LanguageRuntimeMessageType; metadata?: Record<string, unknown>; buffers?: Array<Uint8Array>; }",
+      "LanguageRuntimeOutput": "export interface LanguageRuntimeOutput extends LanguageRuntimeMessage { data: Record<string, unknown>; outputMetadata?: Record<string, unknown>; output_id?: string; }",
+      "LanguageRuntimeResult": "export interface LanguageRuntimeResult extends LanguageRuntimeOutput { execution_count: number; }",
+      "LanguageRuntimeUpdateOutput": "export interface LanguageRuntimeUpdateOutput extends LanguageRuntimeMessage { data: Record<string, unknown>; output_id: string; }",
+      "EnvironmentVariableAction": "export interface EnvironmentVariableAction { action: vscode.EnvironmentVariableMutatorType; name: string; value: string; }"
+    },
+    "namespaces": {
+      "window": {
+        "createRawLogOutputChannel": "export function createRawLogOutputChannel(name: string): vscode.LogOutputChannel;",
+        "showSimpleModalDialogPrompt": "export function showSimpleModalDialogPrompt(title: string, message: string, okButtonTitle?: string, cancelButtonTitle?: string): Thenable<boolean>;",
+        "showSimpleModalDialogInputPrompt": "export function showSimpleModalDialogInputPrompt(title: string, message: string, placeholder?: string): Thenable<string | undefined>;",
+        "showSimpleModalDialogMessage": "export function showSimpleModalDialogMessage(title: string, message: string, okButtonTitle?: string): Thenable<null>;",
+        "onDidChangeConsoleWidth": "export const onDidChangeConsoleWidth: vscode.Event<number>;",
+        "getConsoleWidth": "export function getConsoleWidth(): Thenable<number>;"
+      },
+      "runtime": {
+        "getForegroundSession": "export function getForegroundSession(): Thenable<BaseLanguageRuntimeSession | undefined>;",
+        "registerClientInstance": "export function registerClientInstance(clientInstanceId: string): vscode.Disposable;"
+      },
+      "methods": {
+        "call": "export function call(method: string, params: Record<string, any>): Thenable<any>;"
+      },
+      "environment": {
+        "getEnvironmentContributions": "export function getEnvironmentContributions(): Thenable<Record<string, EnvironmentVariableAction[]>>;"
+      }
+    }
+  },
+  "runtimeInternals": {
+    "RuntimeOutputKind": "export enum RuntimeOutputKind { Text = 'text', StaticImage = 'static_image', InlineHtml = 'inline_html', ViewerWidget = 'viewer_widget', PlotWidget = 'plot', IPyWidget = 'ipywidget', WebviewPreload = 'webview_preload', Unknown = 'unknown' }",
+    "PositronOutputLocation": "export enum PositronOutputLocation { Console = 'console', Viewer = 'viewer', Plot = 'plot' }",
+    "inferPositronOutputKind": "private inferPositronOutputKind(message: ILanguageRuntimeMessageOutput): RuntimeOutputKind { const mimeTypes = Object.keys(message.data); if (isWebviewReplayMessage(message)) { return RuntimeOutputKind.WebviewPreload; } if (mimeTypes.length === 1 && mimeTypes[0] === 'text/plain') { return RuntimeOutputKind.Text; } if (mimeTypes.length === 1 && mimeTypes[0].startsWith('image/')) { return RuntimeOutputKind.StaticImage; } if (Object.keys(message).includes('output_location')) { const webOutput = message as ILanguageRuntimeMessageWebOutput; switch (webOutput.output_location) { case PositronOutputLocation.Console: return RuntimeOutputKind.InlineHtml; case PositronOutputLocation.Viewer: return RuntimeOutputKind.ViewerWidget; case PositronOutputLocation.Plot: return RuntimeOutputKind.PlotWidget; } } for (const mimeType of mimeTypes) { if (mimeType === MIME_TYPE_WIDGET_STATE || mimeType === MIME_TYPE_WIDGET_VIEW) { return RuntimeOutputKind.IPyWidget; } if (mimeType.startsWith('application/') || mimeType === 'text/markdown' || mimeType.startsWith('text/x-')) { const renderer = this._notebookService.getPreferredRenderer(mimeType); if (renderer) { if (mimeType.indexOf('table') >= 0 || mimeType.startsWith('text/')) { return RuntimeOutputKind.ViewerWidget; } else { return RuntimeOutputKind.PlotWidget; } } } } if (mimeTypes.includes('text/html')) { const htmlContent = message.data['text/html']!; if (isWebviewPreloadMessage(htmlContent)) { return RuntimeOutputKind.WebviewPreload; } else if (/<(script|html|body|iframe|!DOCTYPE)/.test(htmlContent)) { if (htmlContent.includes('<table') || htmlContent.includes('<!DOCTYPE')) { return RuntimeOutputKind.ViewerWidget; } else { return RuntimeOutputKind.PlotWidget; } } else { return RuntimeOutputKind.InlineHtml; } } for (const mimeType of mimeTypes) { if (mimeType.startsWith('image/')) { return RuntimeOutputKind.StaticImage; } } if (mimeTypes.includes('text/plain')) { return RuntimeOutputKind.Text; } return RuntimeOutputKind.Unknown; }"
+  }
+}
