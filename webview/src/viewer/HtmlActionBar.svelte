@@ -7,41 +7,33 @@
     import '../shared/actionBar.css';
     import './actionBars.css';
     import ActionBarButton from '../shared/ActionBarButton.svelte';
-    import ActionBarMenuButton from '../shared/ActionBarMenuButton.svelte';
+    import ViewerOpenMenuButton, { type ViewerOpenTarget } from './ViewerOpenMenuButton.svelte';
     import ActionBarSeparator from '../shared/ActionBarSeparator.svelte';
+    import { localize } from '../lib/localization';
 
     interface Props {
         title?: string;
         onreload?: () => void;
         onclear?: () => void;
-        onopenInBrowser?: () => void;
-        onopenInEditor?: () => void;
-        onopenInNewWindow?: () => void;
+        defaultOpenTarget?: ViewerOpenTarget;
+        onopen?: (target: ViewerOpenTarget) => void;
     }
 
     let {
         title = '',
         onreload,
         onclear,
-        onopenInBrowser,
-        onopenInEditor,
-        onopenInNewWindow,
+        defaultOpenTarget = 'browser',
+        onopen,
     }: Props = $props();
 
-    function openActions() {
-        return [
-            { id: 'open-browser', label: 'Open in Browser', icon: 'link-external', onSelected: () => onopenInBrowser?.() },
-            { id: 'open-editor', label: 'Open in Editor Tab', icon: 'positron-open-in-editor', onSelected: () => onopenInEditor?.() },
-            { id: 'open-window', label: 'Open in New Window', icon: 'positron-open-in-new-window', onSelected: () => onopenInNewWindow?.() },
-        ];
-    }
 </script>
 
 <div class="preview-action-bar">
     <div
         class="html-action-bar positron-action-bar border-top border-bottom"
         role="toolbar"
-        aria-label="Viewer actions"
+        aria-label={localize('viewer.actions', 'Viewer actions')}
         style="padding-left: 8px; padding-right: 8px;"
     >
         <div class="action-bar-region left">
@@ -53,22 +45,16 @@
         <div class="action-bar-region right">
             <ActionBarButton
                 icon="positron-refresh"
-                ariaLabel="Reload the content"
-                tooltip="Reload the content"
+                ariaLabel={localize('viewer.reloadContent', 'Reload the content')}
+                tooltip={localize('viewer.reloadContent', 'Reload the content')}
                 onclick={onreload}
             />
-            <ActionBarMenuButton
-                icon="positron-open-in-new-window"
-                ariaLabel="Select where to open"
-                tooltip="Select where to open"
-                align="right"
-                actions={openActions}
-            />
+            <ViewerOpenMenuButton defaultTarget={defaultOpenTarget} {onopen} />
             <ActionBarSeparator />
             <ActionBarButton
                 icon="clear-all"
-                ariaLabel="Clear the content"
-                tooltip="Clear the content"
+                ariaLabel={localize('viewer.clearContent', 'Clear the content')}
+                tooltip={localize('viewer.clearContent', 'Clear the content')}
                 onclick={onclear}
             />
         </div>

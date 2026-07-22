@@ -28,7 +28,7 @@ test('plots loads initial history and renders a static plot', async ({ page }) =
 
     await expect(page.locator('img.plot')).toBeVisible();
     await expect(page.getByText('Exploration')).toBeVisible();
-    await expect(page.getByText('Cars Plot')).toBeVisible();
+    await expect(page.getByText('Cars Plot', { exact: true })).toBeVisible();
 });
 
 test('plots emits HTML lifecycle events and clear requests for HTML plots', async ({ page }) => {
@@ -62,6 +62,18 @@ test('plots emits HTML lifecycle events and clear requests for HTML plots', asyn
     expect(layoutNotification.params).toMatchObject({
         plotId: 'plot-html',
     });
+
+    await backend.notify(PlotsMethods.htmlPlotStateChanged, {
+        plotId: 'plot-html',
+        active: true,
+    });
+    await expect(page.locator('iframe.plot-html-frame')).toBeVisible();
+    await backend.notify(PlotsMethods.htmlPlotStateChanged, {
+        plotId: 'plot-html',
+        active: false,
+    });
+    await expect(page.locator('iframe.plot-html-frame')).toHaveCount(0);
+    await expect(page.getByText('Activating interactive plot…')).toBeVisible();
 
     const clearRequest = backend.waitForNextRequest(PlotsMethods.clear);
     await page.getByLabel('Clear all plots').click();
@@ -266,7 +278,7 @@ test('plots keeps notification-driven state in sync for selection, history, rend
         sessions: [createSession({ name: 'Exploration' })],
         activeSessionId: 'session-1',
     });
-    await expect(page.getByText('Static Plot')).toBeVisible();
+    await expect(page.getByText('Static Plot', { exact: true })).toBeVisible();
 
     await backend.notify(PlotsMethods.added, {
         plotId: 'plot-dynamic',
@@ -672,4 +684,3 @@ test('plots routes code actions to the correct session for cross-session plots',
         executionId: 'exec-r2',
     });
 });
-

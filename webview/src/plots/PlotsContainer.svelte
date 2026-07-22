@@ -30,6 +30,7 @@
             pixelRatio: number;
         };
         htmlUri?: string;
+        htmlActive?: boolean;
         name?: string;
         parentId?: string;
     }
@@ -235,6 +236,7 @@
                         width={viewportWidth}
                         height={viewportHeight}
                         htmlUri={selectedPlot.htmlUri}
+                        active={selectedPlot.htmlActive ?? false}
                         onclaim={(payload) => onclaimHtmlPlot?.(payload)}
                         onrelease={(payload) => onreleaseHtmlPlot?.(payload)}
                         onlayout={(payload) => onlayoutHtmlPlot?.(payload)}

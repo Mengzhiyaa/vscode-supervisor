@@ -20,6 +20,7 @@
     import DarkFilterMenuButton from "./DarkFilterMenuButton.svelte";
     import OpenInEditorMenuButton from "./OpenInEditorMenuButton.svelte";
     import PlotCodeMenuButton from "./PlotCodeMenuButton.svelte";
+    import { localize } from "../lib/localization";
 
     type OpenInEditorTarget = "editorTab" | "editorTabSide" | "newWindow";
 
@@ -84,13 +85,13 @@
         openDarkFilterSettings: void;
     }>();
 
-    const showPreviousPlot = "Show previous plot";
-    const showNextPlot = "Show next plot";
-    const savePlot = "Save plot";
-    const copyPlotToClipboard = "Copy plot to clipboard";
+    const showPreviousPlot = localize('plots.previous', 'Show previous plot');
+    const showNextPlot = localize('plots.next', 'Show next plot');
+    const savePlot = localize('plots.save', 'Save plot');
+    const copyPlotToClipboard = localize('plots.copyPlot', 'Copy plot to clipboard');
     const openPlotInNewWindow = "Open plot in new window";
     const openPlotsGalleryInNewWindow = "Open plots gallery in new window";
-    const clearAllPlots = "Clear all plots";
+    const clearAllPlots = localize('plots.clearAll', 'Clear all plots');
     const plotIconButtonWidth = 18;
     const plotSeparatorWidth = 5;
 
@@ -184,10 +185,10 @@
 
     function getOpenInEditorTooltip(target: EditorTarget): string {
         switch (target) {
-            case "sideGroup": return "Open in editor tab to the Side";
-            case "newWindow": return "Open in new window";
+            case "sideGroup": return localize('plots.openInEditorSide', 'Open in editor tab to the Side');
+            case "newWindow": return localize('plots.openNewWindow', 'Open in new window');
             case "activeGroup":
-            default: return "Open in editor tab";
+            default: return localize('plots.openEditorTab', 'Open in editor tab');
         }
     }
 

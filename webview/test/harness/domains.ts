@@ -129,6 +129,7 @@ export interface PlotListItem {
     renderVersion?: number;
     kind?: 'static' | 'dynamic' | 'html';
     htmlUri?: string;
+    htmlActive?: boolean;
     name?: string;
     originUri?: string;
     code?: string;
@@ -165,6 +166,7 @@ export function registerConsoleDefaults(
         fontFamily: 'var(--vscode-editor-font-family)',
         fontSize: 13,
         lineHeight: 1.4,
+        showResourceMonitor: true,
         ...options.settings,
     }));
     backend.onRequest(SessionMethods.switch, async (request) => {
@@ -199,6 +201,7 @@ export function registerConsoleDefaults(
         );
         return undefined;
     });
+    backend.onRequest(ConsoleMethods.runErrorSuggestion, () => undefined);
 }
 
 export function registerVariablesDefaults(

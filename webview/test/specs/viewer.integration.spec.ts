@@ -22,7 +22,8 @@ test('viewer renders placeholder content and then shows URL previews', async ({ 
         createPreviewFixtureUrl(),
     );
     await expect(page.getByLabel('Navigate back to the previous URL')).toBeEnabled();
-    await expect(page.getByLabel('Navigate back to the next URL')).toBeDisabled();
+    await expect(page.getByLabel('Navigate forward to the next URL')).toBeDisabled();
+    await expect(page.getByLabel('Interrupt execution')).toHaveCount(0);
 });
 
 test('viewer sends navigation and open/clear actions back to the extension host', async ({ page }) => {
@@ -38,6 +39,10 @@ test('viewer sends navigation and open/clear actions back to the extension host'
         canNavigateBack: true,
         canNavigateForward: true,
     });
+    await backend.notify(ViewerMethods.updateInterruptState, {
+        interruptible: true,
+        interrupting: false,
+    });
 
     const navigateBack = backend.waitForNextNotification(ViewerMethods.navigateBack);
     await page.getByLabel('Navigate back to the previous URL').click();
@@ -47,13 +52,15 @@ test('viewer sends navigation and open/clear actions back to the extension host'
     await page.getByLabel('Reload the current URL').click();
     await reload;
 
-    const openInBrowser = backend.waitForNextNotification(ViewerMethods.openInBrowser);
-    await page.getByLabel('Open the current URL in the default browser').click();
-    await openInBrowser;
+    const openInBrowser = backend.waitForNextRequest(ViewerMethods.open);
+    await page.getByLabel('Select where to open').click();
+    await page.getByRole('menuitemcheckbox', { name: 'Open in Browser' }).click();
+    expect((await openInBrowser).params).toEqual({ target: 'browser' });
 
-    const openInEditor = backend.waitForNextNotification(ViewerMethods.openInEditor);
-    await page.getByLabel('Open the content in an editor tab').click();
-    await openInEditor;
+    const openInEditor = backend.waitForNextRequest(ViewerMethods.open);
+    await page.getByLabel('Select where to open').click();
+    await page.getByRole('menuitemcheckbox', { name: 'Open in Editor Tab' }).click();
+    expect((await openInEditor).params).toEqual({ target: 'editorTab' });
 
     const interrupt = backend.waitForNextNotification(ViewerMethods.interrupt);
     await page.getByLabel('Interrupt execution').click();
@@ -83,9 +90,10 @@ test('viewer supports html and basic preview action bars', async ({ page }) => {
         kind: 'html',
     });
 
-    const openInNewWindow = backend.waitForNextNotification(ViewerMethods.openInNewWindow);
-    await page.getByLabel('Open the content in a new window').click();
-    await openInNewWindow;
+    const openInNewWindow = backend.waitForNextRequest(ViewerMethods.open);
+    await page.getByLabel('Select where to open').click();
+    await page.getByRole('menuitemcheckbox', { name: 'Open in New Window' }).click();
+    expect((await openInNewWindow).params).toEqual({ target: 'newWindow' });
 
     const clearHtml = backend.waitForNextNotification(ViewerMethods.clear);
     await page.getByLabel('Clear the content').click();
@@ -106,6 +114,24 @@ test('viewer supports html and basic preview action bars', async ({ page }) => {
     await clearBasic;
 });
 
+test('viewer remembers a successful open target for the split-button primary action', async ({ page }) => {
+    const backend = await openWebviewPage(page, 'viewer');
+    await backend.notify(ViewerMethods.show, {
+        url: createPreviewFixtureUrl(),
+        title: 'Preview',
+        kind: 'url',
+    });
+
+    let request = backend.waitForNextRequest(ViewerMethods.open);
+    await page.getByLabel('Select where to open').click();
+    await page.getByRole('menuitemcheckbox', { name: 'Open in Editor Tab' }).click();
+    expect((await request).params).toEqual({ target: 'editorTab' });
+
+    request = backend.waitForNextRequest(ViewerMethods.open);
+    await page.getByLabel('Open in Editor Tab').click();
+    expect((await request).params).toEqual({ target: 'editorTab' });
+});
+
 test('viewer resets interrupt state and applies iframe title and height on new previews', async ({ page }) => {
     const backend = await openWebviewPage(page, 'viewer');
 
@@ -118,6 +144,10 @@ test('viewer resets interrupt state and applies iframe title and height on new p
         canNavigateBack: true,
         canNavigateForward: true,
     });
+    await backend.notify(ViewerMethods.updateInterruptState, {
+        interruptible: true,
+        interrupting: false,
+    });
 
     const interrupt = backend.waitForNextNotification(ViewerMethods.interrupt);
     await page.getByLabel('Interrupt execution').click();
@@ -129,6 +159,10 @@ test('viewer resets interrupt state and applies iframe title and height on new p
         title: 'Sized Preview',
         kind: 'url',
         height: 420,
+    });
+    await backend.notify(ViewerMethods.updateInterruptState, {
+        interruptible: true,
+        interrupting: false,
     });
 
     await expect(page.getByLabel('Interrupt execution')).toBeEnabled();
@@ -150,11 +184,13 @@ test('viewer routes html preview browser and editor actions through the backend'
     await page.getByLabel('Reload the content').click();
     await reload;
 
-    const openInBrowser = backend.waitForNextNotification(ViewerMethods.openInBrowser);
-    await page.getByLabel('Open the content in the default browser').click();
-    await openInBrowser;
+    const openInBrowser = backend.waitForNextRequest(ViewerMethods.open);
+    await page.getByLabel('Select where to open').click();
+    await page.getByRole('menuitemcheckbox', { name: 'Open in Browser' }).click();
+    expect((await openInBrowser).params).toEqual({ target: 'browser' });
 
-    const openInEditor = backend.waitForNextNotification(ViewerMethods.openInEditor);
-    await page.getByLabel('Open the content in an editor tab').click();
-    await openInEditor;
+    const openInEditor = backend.waitForNextRequest(ViewerMethods.open);
+    await page.getByLabel('Select where to open').click();
+    await page.getByRole('menuitemcheckbox', { name: 'Open in Editor Tab' }).click();
+    expect((await openInEditor).params).toEqual({ target: 'editorTab' });
 });

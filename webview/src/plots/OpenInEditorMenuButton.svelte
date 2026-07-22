@@ -5,6 +5,7 @@
 <script lang="ts">
     import ContextMenu from "../shared/ContextMenu.svelte";
     import type { EditorTarget } from "./types";
+    import { localize } from "../lib/localization";
 
     // Props using Svelte 5 runes
     interface Props {
@@ -16,16 +17,16 @@
 
     let {
         defaultTarget = "newWindow",
-        tooltip = "Open in editor",
-        ariaLabel = "Open in editor",
+        tooltip = localize('plots.openInEditor', 'Open in editor'),
+        ariaLabel = localize('plots.openInEditor', 'Open in editor'),
         onopenInEditor,
     }: Props = $props();
 
     // Labels matching Positron
     const targetLabels: Record<EditorTarget, string> = {
-        newWindow: "Open in new window",
-        activeGroup: "Open in editor tab",
-        sideGroup: "Open in editor tab to the Side",
+        newWindow: localize('plots.openNewWindow', 'Open in new window'),
+        activeGroup: localize('plots.openEditorTab', 'Open in editor tab'),
+        sideGroup: localize('plots.openInEditorSide', 'Open in editor tab to the Side'),
     };
 
     const targets: EditorTarget[] = ["newWindow", "activeGroup", "sideGroup"];
@@ -70,7 +71,8 @@
             bind:this={dropdownButtonElement}
             type="button"
             class="dropdown-button"
-            title="Select where to open plot"
+            title={localize('plots.selectWhereToOpen', 'Select where to open plot')}
+            aria-label={localize('plots.selectWhereToOpen', 'Select where to open plot')}
             aria-haspopup="menu"
             aria-expanded={menuOpen ? "true" : "false"}
             onclick={(e) => {

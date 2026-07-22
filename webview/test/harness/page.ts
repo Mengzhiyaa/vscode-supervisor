@@ -19,6 +19,10 @@ export async function openWebviewPage(
     } = {},
 ): Promise<MockWebviewBackend> {
     const backend = await MockWebviewBackend.attach(page, options.initialState);
+    if (domain === 'viewer') {
+        backend.onRequest('viewer/getDefaultOpenTarget', () => ({ target: 'browser' }));
+        backend.onRequest('viewer/open', () => ({ success: true }));
+    }
     options.configure?.(backend);
     await page.goto(`${TEST_BASE_URL}/test-pages/${domain}.html`);
     return backend;

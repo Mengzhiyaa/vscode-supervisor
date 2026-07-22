@@ -10,6 +10,7 @@
         width: number;
         height: number;
         htmlUri?: string;
+        active?: boolean;
         visible?: boolean;
         onclaim?: (payload: { plotId: string }) => void;
         onrelease?: (payload: { plotId: string }) => void;
@@ -25,6 +26,7 @@
         width,
         height,
         htmlUri,
+        active = false,
         visible = true,
         onclaim,
         onrelease,
@@ -131,8 +133,10 @@
     style="width: {width}px; height: {height}px;"
     data-plot-id={plotId}
 >
-    {#if htmlUri}
+    {#if htmlUri && active}
         <iframe class="plot-html-frame" src={htmlUri} title="HTML Plot"></iframe>
+    {:else}
+        <div class="plot-html-placeholder" aria-live="polite">Activating interactive plot…</div>
     {/if}
 </div>
 
@@ -151,5 +155,10 @@
         width: 100%;
         height: 100%;
         background: white;
+    }
+
+    .plot-html-placeholder {
+        color: var(--vscode-descriptionForeground);
+        font-size: 12px;
     }
 </style>

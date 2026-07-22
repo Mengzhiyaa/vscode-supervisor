@@ -37,6 +37,7 @@ interface PlotData {
     pixelRatio: number;
     thumbnail?: string;          // Base64 encoded thumbnail
     htmlUri?: string;            // HTML preview URI for webview plots
+    htmlActive?: boolean;        // Whether the iframe resource is currently awake
     originUri?: string;          // Source file URI for plot origin metadata
     originRange?: {
         startLine: number;
@@ -242,6 +243,7 @@ export class PlotsViewProvider extends BaseWebviewProvider {
             return { success: false, error: 'HTML plot not found' };
         }
 
+        this._plotsService.markHtmlPlotSelected(plotId);
         htmlClient.claim(connection);
 
         let claims = this._htmlClaimsByConnection.get(connection);
@@ -449,7 +451,17 @@ export class PlotsViewProvider extends BaseWebviewProvider {
             }),
             this._plotsService.onDidChangeDarkFilterMode((mode) => {
                 this._notifyConnections(PlotsProtocol.DarkFilterModeChangedNotification.type, { mode });
-            })
+            }),
+            this._plotsService.onDidChangeHtmlPlotState(({ plotId, active }) => {
+                const plot = this._plots.get(plotId);
+                if (plot) {
+                    plot.htmlActive = active;
+                }
+                this._notifyConnections(
+                    PlotsProtocol.HtmlPlotStateChangedNotification.type,
+                    { plotId, active },
+                );
+            }),
         );
     }
 
@@ -729,6 +741,7 @@ export class PlotsViewProvider extends BaseWebviewProvider {
                 sessionId: plot.sessionId,
                 kind: plot.kind,
                 htmlUri: plot.htmlUri,
+                htmlActive: plot.htmlActive,
                 originUri: plot.originUri,
                 name: plot.name,
                 code: plot.code,
@@ -819,6 +832,7 @@ export class PlotsViewProvider extends BaseWebviewProvider {
         let pixelRatio = 1;
         let thumbnail: string | undefined;
         let htmlUri: string | undefined;
+        let htmlActive: boolean | undefined;
 
         // Positron pattern: start from cached thumbnail when available.
         thumbnail = this._plotsService.getCachedPlotThumbnailURI(plot.id);
@@ -843,6 +857,7 @@ export class PlotsViewProvider extends BaseWebviewProvider {
         } else if (plot instanceof HtmlPlotClient) {
             kind = 'html';
             htmlUri = plot.uri.toString();
+            htmlActive = plot.isActive;
             mimeType = 'text/html';
         }
 
@@ -865,6 +880,7 @@ export class PlotsViewProvider extends BaseWebviewProvider {
             pixelRatio,
             thumbnail,
             htmlUri,
+            htmlActive,
             originUri: metadata.origin?.uri,
             originRange: metadata.origin?.range
                 ? {
@@ -1394,17 +1410,13 @@ export class PlotsViewProvider extends BaseWebviewProvider {
                 return { success: false, error: 'HTML plot copy not supported' };
             }
 
-            try {
-                // Write plot data URI to clipboard as text
-                // Note: VS Code clipboard API supports text, for image copy we use the data URI
-                await vscode.env.clipboard.writeText(plot.data);
-                this.log(`Copied plot ${params.plotId} to clipboard (data URI)`, vscode.LogLevel.Debug);
-                vscode.window.showInformationMessage('Plot copied to clipboard');
-                return { success: true };
-            } catch (e) {
-                this.log(`Failed to copy plot: ${e}`, vscode.LogLevel.Warning);
-                return { success: false, error: String(e) };
-            }
+            // The extension clipboard API is text-only. Copying a data URI here
+            // looks successful but does not put an image on the clipboard. The
+            // webview uses ClipboardItem when the host supports image MIME data;
+            // otherwise report the unsupported capability honestly.
+            const error = vscode.l10n.t('Image clipboard is not available in this environment.');
+            this.log(`Cannot copy plot ${params.plotId}: ${error}`, vscode.LogLevel.Warning);
+            return { success: false, error };
         });
 
         // ============================================================
@@ -1961,6 +1973,7 @@ export class PlotsViewProvider extends BaseWebviewProvider {
 </head>
 <body>
     <div id="app"></div>
+    ${this._getLocalizationInlineScript(nonce)}
     <script type="module" nonce="${nonce}" src="${scriptUri}"></script>
 </body>
 </html>`;

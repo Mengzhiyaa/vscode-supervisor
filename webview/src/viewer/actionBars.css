@@ -1,6 +1,6 @@
 .preview-action-bar .action-bar-region.left,
 .preview-action-bar .action-bar-region.right {
-    flex: 0;
+    flex: 0 0 auto;
 }
 
 .preview-action-bar .action-bar-region.center {

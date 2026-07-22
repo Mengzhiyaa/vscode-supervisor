@@ -78,6 +78,7 @@ export namespace PlotAddedNotification {
         sessionId?: string;
         kind?: 'static' | 'dynamic' | 'html';
         htmlUri?: string;
+        htmlActive?: boolean;
         originUri?: string;
         name?: string;
         code?: string;
@@ -335,6 +336,16 @@ export namespace PlotUpdatedNotification {
     }
 
     export const type = new NotificationType<Params>('plots/updated');
+}
+
+export namespace HtmlPlotStateChangedNotification {
+
+    export interface Params {
+        plotId: string;
+        active: boolean;
+    }
+
+    export const type = new NotificationType<Params>('plots/htmlPlotStateChanged');
 }
 
 export namespace PlotsReadyNotification {

@@ -3,7 +3,7 @@ import { MessageConnection } from 'vscode-jsonrpc';
 import { ViewIds, WorkbenchViewContainerCommands } from '../coreCommandIds';
 import { BaseWebviewProvider } from './baseProvider';
 import * as ViewerProtocol from '../rpc/webview/viewer';
-import { PositronPreviewService, PreviewItem } from '../services/preview';
+import { PositronPreviewService, PreviewItem, type PreviewOpenTarget } from '../services/preview';
 import { IPositronConsoleService } from '../services/console';
 
 /**
@@ -53,6 +53,9 @@ export class ViewerViewProvider extends BaseWebviewProvider {
     private _subscribeToPreviewService(): void {
         this._disposables.push(
             this._previewService.onDidShowPreview(preview => this._acceptPreview(preview)),
+            this._previewService.onDidChangePreviewInterruptState?.(() => {
+                void this._sendInterruptState();
+            }),
         );
     }
 
@@ -75,6 +78,7 @@ export class ViewerViewProvider extends BaseWebviewProvider {
         this._attachPreviewSurface(preview);
         this._sendPreview(preview);
         this._sendNavState();
+        void this._sendInterruptState();
     }
 
     private _attachPreviewSurface(preview: PreviewItem): void {
@@ -88,6 +92,22 @@ export class ViewerViewProvider extends BaseWebviewProvider {
     }
 
     protected _registerRpcHandlers(_connection: MessageConnection): void {
+        _connection.onRequest('viewer/getDefaultOpenTarget', () => ({
+            target: this._previewService.getDefaultOpenTarget(),
+        }));
+        _connection.onRequest('viewer/open', async (params: { target: PreviewOpenTarget }) => {
+            if (!this._lastPreview) {
+                return { success: false, error: vscode.l10n.t('No preview to open.') };
+            }
+            const success = await this._openPreview(this._lastPreview, params.target);
+            if (success) {
+                await this._previewService.setDefaultOpenTarget(params.target);
+            }
+            return success ? { success: true } : {
+                success: false,
+                error: vscode.l10n.t('The preview could not be opened in the selected location.'),
+            };
+        });
         // --- Navigation ---
         _connection.onNotification('viewer/navigate', (params: { url: string }) => {
             this.log(`[ViewerViewProvider] Navigate to: ${params.url}`);
@@ -136,6 +156,7 @@ export class ViewerViewProvider extends BaseWebviewProvider {
             this._lastPreview = undefined;
             this._history = [];
             this._historyIndex = -1;
+            this._sendInterruptStateNotification(false, false);
         });
 
         _connection.onNotification('viewer/openInBrowser', () => {
@@ -159,12 +180,21 @@ export class ViewerViewProvider extends BaseWebviewProvider {
         _connection.onNotification('viewer/interrupt', async () => {
             const preview = this._lastPreview;
             const sessionId = preview?.sessionId;
-            if (!sessionId) {
-                this.log('[ViewerViewProvider] Interrupt: no session ID in current preview');
+            if (!preview) {
+                this.log('[ViewerViewProvider] Interrupt: no current preview');
                 return;
             }
 
-            if (preview && this._previewService.interruptPreview) {
+            this._sendInterruptStateNotification(true, true);
+            if (typeof this._previewService.interruptPreview !== 'function') {
+                const instance = sessionId
+                    ? this._consoleService?.getConsoleInstance(sessionId)
+                    : undefined;
+                instance?.interrupt();
+                void this._sendInterruptState();
+                return;
+            }
+            try {
                 try {
                     if (await this._previewService.interruptPreview(preview)) {
                         this.log(
@@ -181,18 +211,8 @@ export class ViewerViewProvider extends BaseWebviewProvider {
                     this.log(`[ViewerViewProvider] Source interrupt failed: ${err}`, vscode.LogLevel.Warning);
                     return;
                 }
-            }
-
-            const instance = this._consoleService?.getConsoleInstance(sessionId);
-            if (instance) {
-                try {
-                    instance.interrupt();
-                    this.log(`[ViewerViewProvider] Interrupted session ${sessionId} via console instance`);
-                } catch (err) {
-                    this.log(`[ViewerViewProvider] Interrupt via console instance failed: ${err}`, vscode.LogLevel.Warning);
-                }
-            } else {
-                this.log(`[ViewerViewProvider] Interrupt: no console instance for session ${sessionId}`, vscode.LogLevel.Warning);
+            } finally {
+                void this._sendInterruptState();
             }
         });
 
@@ -201,7 +221,41 @@ export class ViewerViewProvider extends BaseWebviewProvider {
             this._attachPreviewSurface(this._lastPreview);
             this._sendPreview(this._lastPreview);
             this._sendNavState();
+            void this._sendInterruptState();
         }
+    }
+
+    private async _sendInterruptState(): Promise<void> {
+        const preview = this._lastPreview;
+        if (!preview) {
+            this._sendInterruptStateNotification(false, false);
+            return;
+        }
+        try {
+            const state = typeof this._previewService.getPreviewInterruptState === 'function'
+                ? await this._previewService.getPreviewInterruptState(preview)
+                : {
+                    interruptible: typeof this._previewService.isPreviewInterruptible === 'function'
+                        ? await this._previewService.isPreviewInterruptible(preview)
+                        : Boolean(preview.sessionId && this._consoleService?.getConsoleInstance(preview.sessionId)),
+                    interrupting: false,
+                };
+            if (preview === this._lastPreview) {
+                this._sendInterruptStateNotification(state.interruptible, state.interrupting);
+            }
+        } catch (error) {
+            this.log(`[ViewerViewProvider] Failed to resolve interrupt state: ${error}`, vscode.LogLevel.Warning);
+            if (preview === this._lastPreview) {
+                this._sendInterruptStateNotification(false, false);
+            }
+        }
+    }
+
+    private _sendInterruptStateNotification(interruptible: boolean, interrupting: boolean): void {
+        this._connection?.sendNotification(
+            ViewerProtocol.ViewerUpdateInterruptStateNotification.type,
+            { interruptible, interrupting },
+        );
     }
 
     /** Sends the current navigation state (back/forward availability) to the webview. */
@@ -231,6 +285,7 @@ export class ViewerViewProvider extends BaseWebviewProvider {
 </head>
 <body>
     <div id="app"></div>
+    ${this._getLocalizationInlineScript(nonce)}
     <script type="module" nonce="${nonce}" src="${scriptUri}"></script>
 </body>
 </html>`;
@@ -270,10 +325,10 @@ export class ViewerViewProvider extends BaseWebviewProvider {
         }
     }
 
-    private async _openPreviewInEditor(preview: PreviewItem): Promise<void> {
+    private async _openPreviewInEditor(preview: PreviewItem): Promise<boolean> {
         const openedInSimpleBrowser = await this._openPreviewInSimpleBrowser(preview);
         if (openedInSimpleBrowser) {
-            return;
+            return true;
         }
 
         try {
@@ -282,25 +337,45 @@ export class ViewerViewProvider extends BaseWebviewProvider {
                 preserveFocus: false,
                 viewColumn: vscode.ViewColumn.Active,
             });
+            return true;
         } catch (error) {
             this.log(`Failed to open preview in editor: ${error}`, vscode.LogLevel.Warning);
+            return false;
         }
     }
 
-    private async _openPreviewInNewWindow(preview: PreviewItem): Promise<void> {
+    private async _openPreview(preview: PreviewItem, target: PreviewOpenTarget): Promise<boolean> {
+        try {
+            if (target === 'browser') {
+                return await vscode.env.openExternal(preview.uri);
+            }
+            if (target === 'newWindow') {
+                return await this._openPreviewInNewWindow(preview);
+            } else {
+                return await this._openPreviewInEditor(preview);
+            }
+        } catch (error) {
+            this.log(`Failed to open preview in ${target}: ${error}`, vscode.LogLevel.Warning);
+            return false;
+        }
+    }
+
+    private async _openPreviewInNewWindow(preview: PreviewItem): Promise<boolean> {
         const openedInSimpleBrowser = await this._openPreviewInSimpleBrowser(preview);
         if (!openedInSimpleBrowser) {
             void vscode.window.showWarningMessage(
                 'Viewer preview could not be opened in a new window because no editor-backed browser is available.'
             );
-            return;
+            return false;
         }
 
         try {
             await this._waitForNextWorkbenchTurn();
             await vscode.commands.executeCommand('workbench.action.moveEditorToNewWindow');
+            return true;
         } catch (error) {
             this.log(`Failed to move preview to a new window: ${error}`, vscode.LogLevel.Warning);
+            return false;
         }
     }
 

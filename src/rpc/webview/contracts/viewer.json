@@ -3,6 +3,59 @@
   "domain": "viewer",
   "declarations": [
     {
+      "kind": "request",
+      "name": "ViewerGetDefaultOpenTargetRequest",
+      "method": "viewer/getDefaultOpenTarget",
+      "paramsType": "{}",
+      "resultType": "Result",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Result",
+          "fields": [
+            {
+              "name": "target",
+              "type": "'browser' | 'editorTab' | 'newWindow'"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "request",
+      "name": "ViewerOpenRequest",
+      "method": "viewer/open",
+      "paramsType": "Params",
+      "resultType": "Result",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "target",
+              "type": "'browser' | 'editorTab' | 'newWindow'"
+            }
+          ]
+        },
+        {
+          "kind": "interface",
+          "name": "Result",
+          "fields": [
+            {
+              "name": "success",
+              "type": "boolean"
+            },
+            {
+              "name": "error",
+              "optional": true,
+              "type": "string"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "kind": "notification",
       "name": "ViewerNavigateNotification",
       "method": "viewer/navigate",
@@ -122,6 +175,28 @@
             },
             {
               "name": "canNavigateForward",
+              "type": "boolean"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "ViewerUpdateInterruptStateNotification",
+      "method": "viewer/updateInterruptState",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "interruptible",
+              "type": "boolean"
+            },
+            {
+              "name": "interrupting",
               "type": "boolean"
             }
           ]

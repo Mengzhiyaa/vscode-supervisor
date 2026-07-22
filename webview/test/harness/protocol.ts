@@ -27,6 +27,7 @@ export interface ConsoleSettings {
     fontFamily: string;
     fontSize: number;
     lineHeight: number;
+    showResourceMonitor: boolean;
 }
 
 export interface VariablesInstanceInfo {
@@ -135,6 +136,8 @@ export interface DataExplorerBackendState {
     __ark_file_options?: {
         supportsFileOptions?: boolean;
         fileHasHeaderRow?: boolean;
+        availableSheets?: string[];
+        selectedSheet?: string;
     };
     __ark_window_state?: {
         inNewWindow?: boolean;
@@ -162,11 +165,13 @@ export const ConsoleMethods = {
     toggleTrace: 'console/toggleTrace',
     replyPrompt: 'console/replyPrompt',
     getSettings: 'console/getSettings',
+    setShowResourceMonitor: 'console/setShowResourceMonitor',
     requestFullState: 'console/requestFullState',
     revealExecution: 'console/revealExecution',
     clear: 'console/clear',
     restoreState: 'console/restoreState',
     runtimeChanges: 'console/runtimeChanges',
+    runErrorSuggestion: 'console/runErrorSuggestion',
     sessionMetadataChanged: 'console/sessionMetadataChanged',
     focusInput: 'console/focusInput',
     pasteText: 'console/pasteText',
@@ -246,6 +251,7 @@ export const PlotsMethods = {
     plotStateChanged: 'plots/plotStateChanged',
     renderCompleted: 'plots/renderCompleted',
     updated: 'plots/updated',
+    htmlPlotStateChanged: 'plots/htmlPlotStateChanged',
     zoomChanged: 'plots/zoomChanged',
     viewportChanged: 'plots/viewportChanged',
     cleared: 'plots/cleared',
@@ -253,6 +259,8 @@ export const PlotsMethods = {
 } as const;
 
 export const ViewerMethods = {
+    getDefaultOpenTarget: 'viewer/getDefaultOpenTarget',
+    open: 'viewer/open',
     navigate: 'viewer/navigate',
     navigateBack: 'viewer/navigateBack',
     navigateForward: 'viewer/navigateForward',
@@ -264,6 +272,7 @@ export const ViewerMethods = {
     interrupt: 'viewer/interrupt',
     show: 'viewer/show',
     updateNavState: 'viewer/updateNavState',
+    updateInterruptState: 'viewer/updateInterruptState',
 } as const;
 
 export const HelpMethods = {

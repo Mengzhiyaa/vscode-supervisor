@@ -7,8 +7,9 @@
     import '../shared/actionBar.css';
     import './actionBars.css';
     import ActionBarButton from '../shared/ActionBarButton.svelte';
-    import ActionBarMenuButton from '../shared/ActionBarMenuButton.svelte';
+    import ViewerOpenMenuButton, { type ViewerOpenTarget } from './ViewerOpenMenuButton.svelte';
     import ActionBarSeparator from '../shared/ActionBarSeparator.svelte';
+    import { localize } from '../lib/localization';
 
     interface Props {
         url: string;
@@ -21,9 +22,8 @@
         onforward?: () => void;
         onreload?: () => void;
         onclear?: () => void;
-        onopenInBrowser?: () => void;
-        onopenInEditor?: () => void;
-        onopenInNewWindow?: () => void;
+        defaultOpenTarget?: ViewerOpenTarget;
+        onopen?: (target: ViewerOpenTarget) => void;
         oninterrupt?: () => void;
     }
 
@@ -38,9 +38,8 @@
         onforward,
         onreload,
         onclear,
-        onopenInBrowser,
-        onopenInEditor,
-        onopenInNewWindow,
+        defaultOpenTarget = 'browser',
+        onopen,
         oninterrupt,
     }: Props = $props();
 
@@ -65,62 +64,40 @@
         }
     }
 
-    function openActions() {
-        return [
-            {
-                id: 'open-browser',
-                label: 'Open in Browser',
-                icon: 'link-external',
-                onSelected: () => onopenInBrowser?.(),
-            },
-            {
-                id: 'open-editor',
-                label: 'Open in Editor Tab',
-                icon: 'positron-open-in-editor',
-                onSelected: () => onopenInEditor?.(),
-            },
-            {
-                id: 'open-window',
-                label: 'Open in New Window',
-                icon: 'positron-open-in-new-window',
-                onSelected: () => onopenInNewWindow?.(),
-            },
-        ];
-    }
 </script>
 
 <div class="preview-action-bar">
     <div
         class="url-action-bar positron-action-bar border-top border-bottom"
         role="toolbar"
-        aria-label="Viewer actions"
+        aria-label={localize('viewer.actions', 'Viewer actions')}
         style="padding-left: 8px; padding-right: 8px;"
     >
         <div class="action-bar-region left">
             <ActionBarButton
                 icon="positron-left-arrow"
-                ariaLabel="Navigate back to the previous URL"
-                tooltip="Navigate back to the previous URL"
+                ariaLabel={localize('viewer.navigateBack', 'Navigate back to the previous URL')}
+                tooltip={localize('viewer.navigateBack', 'Navigate back to the previous URL')}
                 disabled={!canNavigateBack}
                 onclick={onback}
             />
             <ActionBarButton
                 icon="positron-right-arrow"
-                ariaLabel="Navigate back to the next URL"
-                tooltip="Navigate back to the next URL"
+                ariaLabel={localize('viewer.navigateForward', 'Navigate forward to the next URL')}
+                tooltip={localize('viewer.navigateForward', 'Navigate forward to the next URL')}
                 disabled={!canNavigateForward}
                 onclick={onforward}
             />
         </div>
 
         <div class="action-bar-region center">
-            <form onsubmit={handleSubmit} aria-label="Navigate to URL">
+            <form onsubmit={handleSubmit} aria-label={localize('viewer.navigateUrl', 'Navigate to URL')}>
                 <input
                     type="text"
                     class="text-input url-bar"
                     bind:value={urlInput}
                     title={url}
-                    aria-label="The current URL"
+                    aria-label={localize('viewer.currentUrl', 'The current URL')}
                     autocomplete="off"
                     autocapitalize="off"
                     spellcheck="false"
@@ -134,30 +111,24 @@
                 <ActionBarButton
                     icon="positron-interrupt-runtime"
                     buttonClass="interrupt"
-                    ariaLabel="Interrupt execution"
-                    tooltip="Interrupt execution"
+                    ariaLabel={localize('viewer.interrupt', 'Interrupt execution')}
+                    tooltip={localize('viewer.interrupt', 'Interrupt execution')}
                     disabled={interrupting}
                     onclick={oninterrupt}
                 />
             {/if}
             <ActionBarButton
                 icon="positron-refresh"
-                ariaLabel="Reload the current URL"
-                tooltip="Reload the current URL"
+                ariaLabel={localize('viewer.reloadUrl', 'Reload the current URL')}
+                tooltip={localize('viewer.reloadUrl', 'Reload the current URL')}
                 onclick={onreload}
             />
-            <ActionBarMenuButton
-                icon="positron-open-in-new-window"
-                ariaLabel="Select where to open"
-                tooltip="Select where to open"
-                align="right"
-                actions={openActions}
-            />
+            <ViewerOpenMenuButton defaultTarget={defaultOpenTarget} {onopen} />
             <ActionBarSeparator />
             <ActionBarButton
                 icon="clear-all"
-                ariaLabel="Clear the current URL"
-                tooltip="Clear the current URL"
+                ariaLabel={localize('viewer.clearUrl', 'Clear the current URL')}
+                tooltip={localize('viewer.clearUrl', 'Clear the current URL')}
                 onclick={onclear}
             />
         </div>

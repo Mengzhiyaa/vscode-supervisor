@@ -217,6 +217,11 @@
               "type": "string"
             },
             {
+              "name": "htmlActive",
+              "optional": true,
+              "type": "boolean"
+            },
+            {
               "name": "originUri",
               "optional": true,
               "type": "string"
@@ -853,6 +858,22 @@
               "optional": true,
               "type": "string"
             }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "HtmlPlotStateChangedNotification",
+      "method": "plots/htmlPlotStateChanged",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            { "name": "plotId", "type": "string" },
+            { "name": "active", "type": "boolean" }
           ]
         }
       ]

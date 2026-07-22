@@ -33,6 +33,7 @@
         };
         kind?: "static" | "dynamic" | "html";
         htmlUri?: string;
+        htmlActive?: boolean;
         originUri?: string;
         name?: string;
         code?: string;
@@ -89,6 +90,7 @@
         sessionId?: string;
         kind?: "static" | "dynamic" | "html";
         htmlUri?: string;
+        htmlActive?: boolean;
         originUri?: string;
         name?: string;
         code?: string;
@@ -362,6 +364,9 @@
                     existing?.initialRenderSettings,
                 kind: params.kind ?? existing?.kind,
                 htmlUri: params.htmlUri ?? existing?.htmlUri,
+                // Legacy producers did not send this field and should remain
+                // active; the P1 resource manager always sends it explicitly.
+                htmlActive: params.htmlActive ?? existing?.htmlActive ?? true,
                 originUri: params.originUri ?? existing?.originUri,
                 name: params.name ?? existing?.name,
                 code: params.code ?? existing?.code,
@@ -907,6 +912,13 @@
             },
         );
 
+        connection.onNotification(
+            "plots/htmlPlotStateChanged",
+            (params: { plotId: string; active: boolean }) => {
+                patchPlot(params.plotId, { htmlActive: params.active });
+            },
+        );
+
         // Listen for plot state changes
         connection.onNotification(
             "plots/plotStateChanged",
@@ -1118,15 +1130,16 @@
 
         try {
             if (connection) {
-                await connection.sendRequest("plots/copy", {
+                const result = await connection.sendRequest("plots/copy", {
                     plotId: selectedPlotId,
-                });
+                }) as { success: boolean; error?: string };
+                if (!result.success) {
+                    throw new Error(result.error ?? "Image clipboard is unavailable");
+                }
                 return;
             }
 
-            if (dataUri && navigator.clipboard) {
-                await navigator.clipboard.writeText(dataUri);
-            }
+            throw new Error("Image clipboard is unavailable");
         } catch (e) {
             console.error("Failed to copy plot:", e);
         }

@@ -4,6 +4,8 @@
     import UrlActionBar from "./UrlActionBar.svelte";
     import HtmlActionBar from "./HtmlActionBar.svelte";
     import BasicActionBar from "./BasicActionBar.svelte";
+    import type { ViewerOpenTarget } from "./ViewerOpenMenuButton.svelte";
+    import { localize } from "$lib/localization";
 
     interface ViewerShowParams {
         url: string;
@@ -23,17 +25,30 @@
     let interruptible = $state(false);
     let interrupting = $state(false);
     let loadState = $state<"idle" | "loading" | "ready" | "error">("idle");
+    let defaultOpenTarget = $state<ViewerOpenTarget>("browser");
 
     onMount(() => {
+        void connection.sendRequest("viewer/getDefaultOpenTarget", {}).then((result) => {
+            defaultOpenTarget = (result as { target: ViewerOpenTarget }).target;
+        });
         connection.onNotification("viewer/show", (params: ViewerShowParams) => {
             currentUrl = params.url;
             title = params.title || "";
             height = params.height;
             kind = params.kind || "basic";
             loadState = "loading";
-            // Reset navigation state on new preview
-            interruptible = kind === "url";
+            // The extension resolves interrupt capability from the source
+            // runtime/terminal state; URL previews are not inherently stoppable.
+            interruptible = false;
             interrupting = false;
+        });
+
+        connection.onNotification("viewer/updateInterruptState", (params: {
+            interruptible: boolean;
+            interrupting: boolean;
+        }) => {
+            interruptible = params.interruptible;
+            interrupting = params.interrupting;
         });
 
         connection.onNotification("viewer/updateNavState", (params: {
@@ -105,11 +120,11 @@
     function handleOpenInBrowser() {
         connection.sendNotification("viewer/openInBrowser", {});
     }
-    function handleOpenInEditor() {
-        connection.sendNotification("viewer/openInEditor", {});
-    }
-    function handleOpenInNewWindow() {
-        connection.sendNotification("viewer/openInNewWindow", {});
+    async function handleOpen(target: ViewerOpenTarget) {
+        const result = await connection.sendRequest("viewer/open", { target }) as { success: boolean };
+        if (result.success) {
+            defaultOpenTarget = target;
+        }
     }
     function handleInterrupt() {
         interrupting = true;
@@ -140,9 +155,8 @@
                 onforward={handleForward}
                 onreload={handleReload}
                 onclear={handleClear}
-                onopenInBrowser={handleOpenInBrowser}
-                onopenInEditor={handleOpenInEditor}
-                onopenInNewWindow={handleOpenInNewWindow}
+                {defaultOpenTarget}
+                onopen={handleOpen}
                 oninterrupt={handleInterrupt}
             />
         {:else if kind === "html"}
@@ -150,9 +164,8 @@
                 {title}
                 onreload={handleReload}
                 onclear={handleClear}
-                onopenInBrowser={handleOpenInBrowser}
-                onopenInEditor={handleOpenInEditor}
-                onopenInNewWindow={handleOpenInNewWindow}
+                {defaultOpenTarget}
+                onopen={handleOpen}
             />
         {:else}
             <BasicActionBar
@@ -173,14 +186,15 @@
             {#if loadState === "loading"}
                 <div class="viewer-progress" aria-hidden="true"><span></span></div>
                 <div class="screen-reader-status" role="status" aria-live="polite">
-                    Loading preview
+                    {localize('viewer.loading', 'Loading preview')}
                 </div>
             {:else if loadState === "error"}
                 <div class="viewer-error" role="alert">
                     <span class="codicon codicon-warning" aria-hidden="true"></span>
-                    <strong>Unable to load preview</strong>
-                    <span>The content may no longer be available.</span>
-                    <button type="button" onclick={handleReload}>Try Again</button>
+                    <strong>{localize('viewer.unableToLoad', 'Unable to load preview')}</strong>
+                    <span>{localize('viewer.unavailableHint', 'The content may no longer be available.')}</span>
+                    <button type="button" onclick={handleReload}>{localize('viewer.tryAgain', 'Try Again')}</button>
+                    <button type="button" onclick={handleOpenInBrowser}>{localize('common.openInBrowser', 'Open in Browser')}</button>
                 </div>
             {/if}
         </div>
@@ -190,9 +204,9 @@
             <div class="placeholder-icon">
                 <span class="codicon codicon-preview"></span>
             </div>
-            <div class="placeholder-text">No preview to display</div>
+            <div class="placeholder-text">{localize('viewer.noPreview', 'No preview to display')}</div>
             <div class="placeholder-hint">
-                Run code that produces HTML output to see it here
+                {localize('viewer.noPreviewHint', 'Run code that produces HTML output to see it here')}
             </div>
         </div>
     {/if}
