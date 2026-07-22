@@ -36,6 +36,14 @@
               "name": "columns",
               "optional": true,
               "type": "number[]"
+            },
+            {
+              "name": "requestId",
+              "type": "number"
+            },
+            {
+              "name": "generation",
+              "type": "number"
             }
           ]
         }
@@ -93,6 +101,24 @@
     },
     {
       "kind": "notification",
+      "name": "DataExplorerCancelColumnProfilesNotification",
+      "method": "dataExplorer/cancelColumnProfiles",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "requestIds",
+              "type": "number[]"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
       "name": "DataExplorerRequestColumnProfilesNotification",
       "method": "dataExplorer/requestColumnProfiles",
       "paramsType": "Params",
@@ -112,7 +138,10 @@
             },
             {
               "name": "requestId",
-              "optional": true,
+              "type": "number"
+            },
+            {
+              "name": "generation",
               "type": "number"
             }
           ]
@@ -309,6 +338,12 @@
     },
     {
       "kind": "notification",
+      "name": "DataExplorerOpenAsSpreadsheetNotification",
+      "method": "dataExplorer/openAsSpreadsheet",
+      "paramsType": "void"
+    },
+    {
+      "kind": "notification",
       "name": "DataExplorerToggleFileOptionsNotification",
       "method": "dataExplorer/toggleFileOptions",
       "paramsType": "Params",
@@ -442,6 +477,43 @@
     },
     {
       "kind": "notification",
+      "name": "DataExplorerSetSummaryWidthNotification",
+      "method": "dataExplorer/setSummaryWidth",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "summaryWidth",
+              "type": "number"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "DataExplorerSetSelectionNotification",
+      "method": "dataExplorer/setSelection",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            { "name": "selectionType", "type": "'cell' | 'cells' | 'columns' | 'rows'" },
+            { "name": "columnIndex", "optional": true, "type": "number" },
+            { "name": "rowIndex", "optional": true, "type": "number" },
+            { "name": "columnIndexes", "optional": true, "type": "number[]" },
+            { "name": "rowIndexes", "optional": true, "type": "number[]" }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
       "name": "DataExplorerFocusChangedNotification",
       "method": "dataExplorer/focusChanged",
       "paramsType": "Params",
@@ -457,6 +529,12 @@
           ]
         }
       ]
+    },
+    {
+      "kind": "notification",
+      "name": "DataExplorerFocusNotification",
+      "method": "dataExplorer/focus",
+      "paramsType": "void"
     },
     {
       "kind": "notification",
@@ -514,6 +592,43 @@
               "name": "collapsed",
               "type": "boolean"
             }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "DataExplorerSummaryWidthChangedNotification",
+      "method": "dataExplorer/summaryWidthChanged",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "summaryWidth",
+              "type": "number"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "DataExplorerSelectionChangedNotification",
+      "method": "dataExplorer/selectionChanged",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            { "name": "selectionType", "type": "'cell' | 'cells' | 'columns' | 'rows'" },
+            { "name": "columnIndex", "optional": true, "type": "number" },
+            { "name": "rowIndex", "optional": true, "type": "number" },
+            { "name": "columnIndexes", "optional": true, "type": "number[]" },
+            { "name": "rowIndexes", "optional": true, "type": "number[]" }
           ]
         }
       ]
@@ -676,8 +791,33 @@
             },
             {
               "name": "requestId",
-              "optional": true,
               "type": "number"
+            },
+            {
+              "name": "generation",
+              "type": "number"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "DataExplorerDataInvalidatedNotification",
+      "method": "dataExplorer/dataInvalidated",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "generation",
+              "type": "number"
+            },
+            {
+              "name": "schemaChanged",
+              "type": "boolean"
             }
           ]
         }
@@ -695,7 +835,7 @@
           "fields": [
             {
               "name": "columns",
-              "type": "unknown[][]"
+              "type": "Array<Array<number | string>>"
             },
             {
               "name": "schema",
@@ -728,6 +868,14 @@
             {
               "name": "totalColumns",
               "optional": true,
+              "type": "number"
+            },
+            {
+              "name": "requestId",
+              "type": "number"
+            },
+            {
+              "name": "generation",
               "type": "number"
             }
           ]

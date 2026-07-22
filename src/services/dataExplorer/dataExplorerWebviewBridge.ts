@@ -31,6 +31,7 @@ import {
     DataExplorerRequestSchemaNotification,
     DataExplorerSearchSchemaNotification,
     DataExplorerRequestColumnProfilesNotification,
+    DataExplorerCancelColumnProfilesNotification,
     DataExplorerRefreshNotification,
     DataExplorerSortNotification,
     DataExplorerClearSortNotification,
@@ -44,10 +45,13 @@ import {
     DataExplorerMoveToNewWindowNotification,
     DataExplorerRunConvertToCodeNotification,
     DataExplorerOpenAsPlaintextNotification,
+    DataExplorerOpenAsSpreadsheetNotification,
     DataExplorerApplyFileOptionsNotification,
     DataExplorerRequestConvertToCodePreviewNotification,
     DataExplorerSetLayoutNotification,
     DataExplorerSetSummaryCollapsedNotification,
+    DataExplorerSetSummaryWidthNotification,
+    DataExplorerSetSelectionNotification,
     DataExplorerFocusChangedNotification,
     DataExplorerLayoutChangedNotification,
     DataExplorerInitializeNotification,
@@ -56,13 +60,28 @@ import {
     DataExplorerSchemaNotification,
     DataExplorerSummarySchemaNotification,
     DataExplorerSummaryCollapsedChangedNotification,
+    DataExplorerSummaryWidthChangedNotification,
+    DataExplorerSelectionChangedNotification,
     DataExplorerColumnProfilesNotification,
+    DataExplorerDataInvalidatedNotification,
     DataExplorerDataNotification,
     DataExplorerBackendStateNotification,
+    DataExplorerLoadingNotification,
     DataExplorerErrorNotification,
 } from '../../rpc/webview/dataExplorer';
-import { supportsDataExplorerFileOptions } from './dataExplorerUri';
-import type { IPositronDataExplorerInstance } from './positronDataExplorerService';
+import {
+    isSpreadsheetDataExplorerIdentifier,
+    supportsDataExplorerFileOptions,
+} from './dataExplorerUri';
+import {
+    DATA_EXPLORER_DISCONNECTED_STATE,
+    DataExplorerClientStatus,
+} from './languageRuntimeDataExplorerClient';
+import type {
+    IPositronDataExplorerInstance,
+    PositronDataExplorerDataRequest,
+    PositronDataExplorerLayout,
+} from './interfaces/positronDataExplorerInstance';
 
 const MAX_CLIPBOARD_CELLS = 10_000;
 const SMALL_HISTOGRAM_NUM_BINS = 80;
@@ -71,36 +90,20 @@ const SMALL_FREQUENCY_TABLE_LIMIT = 8;
 const LARGE_FREQUENCY_TABLE_LIMIT = 16;
 const BOOLEAN_FREQUENCY_TABLE_LIMIT = 2;
 
-export type DataExplorerLayoutState = 'SummaryOnLeft' | 'SummaryOnRight';
-
-export interface DataExplorerUiState {
-    layout: DataExplorerLayoutState;
-    summaryCollapsed: boolean;
-}
-
-export interface DataExplorerDataRequest {
-    startRow: number;
-    endRow?: number;
-    columns?: number[];
-}
+export type DataExplorerLayoutState = PositronDataExplorerLayout;
+export type DataExplorerDataRequest = PositronDataExplorerDataRequest;
 
 export interface DataExplorerWebviewBridgeOptions {
     connection: MessageConnection;
     panel: vscode.WebviewPanel;
     instance: IPositronDataExplorerInstance;
     logChannel: vscode.LogOutputChannel;
-    getUiState: () => DataExplorerUiState;
     isInstanceActive: () => boolean;
     isInstanceInNewWindow: () => boolean;
-    getLastRequest: () => DataExplorerDataRequest | undefined;
-    setLastRequest: (request: DataExplorerDataRequest) => void;
-    runWithForegroundLoading: <T>(task: () => Promise<T>) => Promise<T>;
-    onFocusChanged: (focused: boolean) => void;
-    onSetLayout: (layout: DataExplorerLayoutState) => DataExplorerUiState;
-    onSetSummaryCollapsed: (collapsed: boolean) => DataExplorerUiState;
     onSyncActiveContexts: () => void;
     onMoveToNewWindow: () => Promise<void>;
     openAsPlaintext: () => Promise<void>;
+    openAsSpreadsheet: () => Promise<void>;
 }
 
 function normalizeColumnDisplayType(
@@ -215,14 +218,62 @@ function sortSchemaColumns(
 }
 
 export class DataExplorerWebviewBridge {
-    constructor(private readonly _options: DataExplorerWebviewBridgeOptions) {}
+    private readonly _disposables: vscode.Disposable[] = [];
+    private _surfaceVisible: boolean;
+    private _pendingInvalidation: { generation: number; schemaChanged: boolean } | undefined;
+    private readonly _profileRequestTokens = new Map<
+        number,
+        vscode.CancellationTokenSource
+    >();
+
+    constructor(private readonly _options: DataExplorerWebviewBridgeOptions) {
+        const { instance } = _options;
+        this._surfaceVisible = _options.panel.visible;
+        this._disposables.push(
+            instance.onDidChangeUiState(state => {
+                this._notifyLayoutChanged(state.layout);
+                this._notifySummaryCollapsedChanged(state.summaryCollapsed);
+                this._notifySummaryWidthChanged(state.summaryWidth);
+            }),
+            instance.onDidChangeForegroundLoading(isLoading => {
+                _options.connection.sendNotification(
+                    DataExplorerLoadingNotification.type,
+                    { isLoading },
+                );
+            }),
+            instance.onDidInvalidateData(event => {
+                if (this._surfaceVisible) {
+                    _options.connection.sendNotification(
+                        DataExplorerDataInvalidatedNotification.type,
+                        event,
+                    );
+                } else {
+                    this._pendingInvalidation = {
+                        generation: event.generation,
+                        schemaChanged:
+                            event.schemaChanged ||
+                            this._pendingInvalidation?.schemaChanged === true,
+                    };
+                }
+            }),
+            instance.onDidClose(() => this.sendBackendStateUpdate()),
+            instance.onDidChangeSelection(selection => {
+                if (selection) {
+                    _options.connection.sendNotification(
+                        DataExplorerSelectionChangedNotification.type,
+                        selection,
+                    );
+                }
+            }),
+        );
+    }
 
     registerNotificationHandlers(): void {
         const { connection, panel, instance, logChannel } = this._options;
 
         connection.onNotification(DataExplorerReadyNotification.type, async () => {
             logChannel.debug('[DataExplorerEditor] Received: dataExplorer/ready');
-            await this._options.runWithForegroundLoading(async () => {
+            await instance.runWithForegroundLoading(async () => {
                 try {
                     await instance.clientInstance.updateBackendState();
                 } catch (error) {
@@ -231,7 +282,6 @@ export class DataExplorerWebviewBridge {
                     );
                 }
                 await this.sendInitialize();
-                await this.sendData();
             });
         });
 
@@ -242,7 +292,10 @@ export class DataExplorerWebviewBridge {
 
         connection.onNotification(DataExplorerFocusChangedNotification.type, (params) => {
             logChannel.debug('[DataExplorerEditor] Received: dataExplorer/focusChanged');
-            this._options.onFocusChanged(params.focused === true);
+            instance.setFocused(params.focused === true);
+            if (panel.active) {
+                this._options.onSyncActiveContexts();
+            }
         });
 
         connection.onNotification(DataExplorerSetLayoutNotification.type, (params) => {
@@ -250,8 +303,7 @@ export class DataExplorerWebviewBridge {
             const layout = this._isLayoutState(params.layout)
                 ? params.layout
                 : 'SummaryOnLeft';
-            const uiState = this._options.onSetLayout(layout);
-            this._notifyLayoutChanged(uiState.layout);
+            instance.setLayout(layout);
             if (panel.active) {
                 this._options.onSyncActiveContexts();
             }
@@ -261,22 +313,39 @@ export class DataExplorerWebviewBridge {
             logChannel.debug(
                 '[DataExplorerEditor] Received: dataExplorer/setSummaryCollapsed',
             );
-            const uiState = this._options.onSetSummaryCollapsed(!!params.collapsed);
-            this._notifySummaryCollapsedChanged(uiState.summaryCollapsed);
+            instance.setSummaryCollapsed(!!params.collapsed);
             if (panel.active) {
                 this._options.onSyncActiveContexts();
             }
         });
 
+        connection.onNotification(DataExplorerSetSummaryWidthNotification.type, (params) => {
+            logChannel.debug('[DataExplorerEditor] Received: dataExplorer/setSummaryWidth');
+            instance.setSummaryWidth(params.summaryWidth);
+        });
+
+        connection.onNotification(DataExplorerSetSelectionNotification.type, (params) => {
+            instance.setSelection(params);
+        });
+
         connection.onNotification(DataExplorerRequestDataNotification.type, async (params) => {
             logChannel.debug('[DataExplorerEditor] Received: dataExplorer/requestData');
-            this._options.setLastRequest({
-                startRow: params.startRow,
-                endRow: params.endRow,
-                columns: params.columns,
-            });
-            await this._options.runWithForegroundLoading(async () => {
-                await this.sendData(params.startRow, params.endRow, params.columns);
+            if (!this._surfaceVisible || params.columns?.length === 0) {
+                return;
+            }
+            await instance.runWithForegroundLoading(async () => {
+                if (params.generation !== instance.dataGeneration) {
+                    return;
+                }
+                const request: DataExplorerDataRequest = {
+                    startRow: params.startRow,
+                    endRow: params.endRow,
+                    columns: params.columns ?? [],
+                    requestId: params.requestId,
+                    generation: params.generation,
+                };
+                instance.setLastDataRequest(request);
+                await this.sendData(request);
             });
         });
 
@@ -379,14 +448,36 @@ export class DataExplorerWebviewBridge {
         });
 
         connection.onNotification(
+            DataExplorerCancelColumnProfilesNotification.type,
+            (params) => {
+                for (const requestId of params.requestIds) {
+                    const tokenSource = this._profileRequestTokens.get(requestId);
+                    tokenSource?.cancel();
+                    tokenSource?.dispose();
+                    this._profileRequestTokens.delete(requestId);
+                }
+            },
+        );
+
+        connection.onNotification(
             DataExplorerRequestColumnProfilesNotification.type,
             async (params) => {
                 logChannel.debug(
                     '[DataExplorerEditor] Received: dataExplorer/requestColumnProfiles',
                 );
+                const tokenSource = new vscode.CancellationTokenSource();
+                this._profileRequestTokens.get(params.requestId)?.cancel();
+                this._profileRequestTokens.get(params.requestId)?.dispose();
+                this._profileRequestTokens.set(params.requestId, tokenSource);
                 try {
+                    if (!this._surfaceVisible) {
+                        return;
+                    }
                     const backendState =
                         await instance.clientInstance.getBackendState();
+                    if (tokenSource.token.isCancellationRequested) {
+                        return;
+                    }
                     const supportsProfiles =
                         backendState.supported_features.get_column_profiles
                             .support_status === SupportStatus.Supported;
@@ -401,6 +492,7 @@ export class DataExplorerWebviewBridge {
                                 error:
                                     'Column profiles are not supported by this backend.',
                                 requestId: params.requestId,
+                                generation: params.generation,
                             },
                         );
                         return;
@@ -430,6 +522,9 @@ export class DataExplorerWebviewBridge {
                     );
 
                     const schema = await instance.getSchema(params.columnIndices);
+                    if (tokenSource.token.isCancellationRequested) {
+                        return;
+                    }
                     const schemaByIndex = new Map(
                         schema.columns.map((column) => [
                             column.column_index,
@@ -570,15 +665,26 @@ export class DataExplorerWebviewBridge {
                                     }),
                                 ),
                                 requestId: params.requestId,
+                                generation: params.generation,
                             },
                         );
                         return;
                     }
 
-                    const results =
-                        await instance.clientInstance.requestColumnProfiles(
-                            requestsWithProfiles,
-                        );
+                    if (tokenSource.token.isCancellationRequested) {
+                        return;
+                    }
+                    const results = await instance.requestColumnProfiles(
+                        requestsWithProfiles,
+                        params.generation,
+                        tokenSource.token,
+                    );
+                    if (
+                        tokenSource.token.isCancellationRequested ||
+                        this._profileRequestTokens.get(params.requestId) !== tokenSource
+                    ) {
+                        return;
+                    }
                     const resultByIndex = new Map<number, unknown>();
                     requestsWithProfiles.forEach((request, index) => {
                         resultByIndex.set(request.column_index, results[index]);
@@ -592,9 +698,13 @@ export class DataExplorerWebviewBridge {
                         {
                             profiles,
                             requestId: params.requestId,
+                            generation: params.generation,
                         },
                     );
                 } catch (error) {
+                    if (!this._profileRequestTokens.has(params.requestId)) {
+                        return;
+                    }
                     connection.sendNotification(
                         DataExplorerColumnProfilesNotification.type,
                         {
@@ -604,33 +714,41 @@ export class DataExplorerWebviewBridge {
                             })),
                             error: String(error),
                             requestId: params.requestId,
+                            generation: params.generation,
                         },
                     );
+                } finally {
+                    if (
+                        this._profileRequestTokens.get(params.requestId) ===
+                        tokenSource
+                    ) {
+                        tokenSource.dispose();
+                        this._profileRequestTokens.delete(params.requestId);
+                    }
                 }
             },
         );
 
         connection.onNotification(DataExplorerRefreshNotification.type, async () => {
             logChannel.debug('[DataExplorerEditor] Received: dataExplorer/refresh');
-            await this._options.runWithForegroundLoading(async () => {
-                await instance.clientInstance.updateBackendState();
-                await this.sendInitialize();
-                await this.sendDataFromLastRequest();
+            await instance.runWithForegroundLoading(async () => {
+                await instance.runDataMutation(async () => {
+                    await instance.clientInstance.updateBackendState();
+                    await this.sendInitialize();
+                }, true);
             });
         });
 
         connection.onNotification(DataExplorerSortNotification.type, async (params) => {
             logChannel.debug('[DataExplorerEditor] Received: dataExplorer/sort');
             try {
-                await this._options.runWithForegroundLoading(async () => {
-                    await instance.clientInstance.setSortColumns(
+                await instance.runWithForegroundLoading(async () => {
+                    await instance.setSortColumns(
                         params.sortKeys.map((sortKey) => ({
                             column_index: sortKey.columnIndex,
                             ascending: sortKey.ascending,
                         })),
                     );
-                    await instance.clientInstance.updateBackendState();
-                    await this.sendDataFromLastRequest();
                 });
             } catch (error) {
                 this._sendError(String(error));
@@ -640,10 +758,8 @@ export class DataExplorerWebviewBridge {
         connection.onNotification(DataExplorerClearSortNotification.type, async () => {
             logChannel.debug('[DataExplorerEditor] Received: dataExplorer/clearSort');
             try {
-                await this._options.runWithForegroundLoading(async () => {
-                    await instance.clientInstance.setSortColumns([]);
-                    await instance.clientInstance.updateBackendState();
-                    await this.sendDataFromLastRequest();
+                await instance.runWithForegroundLoading(async () => {
+                    await instance.setSortColumns([]);
                 });
             } catch (error) {
                 this._sendError(String(error));
@@ -657,10 +773,11 @@ export class DataExplorerWebviewBridge {
                     '[DataExplorerEditor] Received: dataExplorer/clearFilters',
                 );
                 try {
-                    await this._options.runWithForegroundLoading(async () => {
-                        await instance.clientInstance.setRowFilters([]);
-                        await instance.clientInstance.updateBackendState();
-                        await this.sendDataFromLastRequest();
+                    await instance.runWithForegroundLoading(async () => {
+                        await instance.runDataMutation(async () => {
+                            await instance.clientInstance.setRowFilters([]);
+                            await instance.clientInstance.updateBackendState();
+                        });
                     });
                 } catch (error) {
                     this._sendError(String(error));
@@ -672,13 +789,14 @@ export class DataExplorerWebviewBridge {
             logChannel.debug('[DataExplorerEditor] Received: dataExplorer/addFilter');
             try {
                 const currentFilters = instance.backendState?.row_filters ?? [];
-                await this._options.runWithForegroundLoading(async () => {
-                    await instance.clientInstance.setRowFilters([
-                        ...currentFilters,
-                        params.filter as RowFilter,
-                    ]);
-                    await instance.clientInstance.updateBackendState();
-                    await this.sendDataFromLastRequest();
+                await instance.runWithForegroundLoading(async () => {
+                    await instance.runDataMutation(async () => {
+                        await instance.clientInstance.setRowFilters([
+                            ...currentFilters,
+                            params.filter as RowFilter,
+                        ]);
+                        await instance.clientInstance.updateBackendState();
+                    });
                 });
             } catch (error) {
                 this._sendError(String(error));
@@ -695,10 +813,11 @@ export class DataExplorerWebviewBridge {
                         ? (params.filter as RowFilter)
                         : filter,
                 );
-                await this._options.runWithForegroundLoading(async () => {
-                    await instance.clientInstance.setRowFilters(updatedFilters);
-                    await instance.clientInstance.updateBackendState();
-                    await this.sendDataFromLastRequest();
+                await instance.runWithForegroundLoading(async () => {
+                    await instance.runDataMutation(async () => {
+                        await instance.clientInstance.setRowFilters(updatedFilters);
+                        await instance.clientInstance.updateBackendState();
+                    });
                 });
             } catch (error) {
                 this._sendError(String(error));
@@ -712,10 +831,11 @@ export class DataExplorerWebviewBridge {
                 const updatedFilters = currentFilters.filter(
                     (filter) => filter.filter_id !== params.filterId,
                 );
-                await this._options.runWithForegroundLoading(async () => {
-                    await instance.clientInstance.setRowFilters(updatedFilters);
-                    await instance.clientInstance.updateBackendState();
-                    await this.sendDataFromLastRequest();
+                await instance.runWithForegroundLoading(async () => {
+                    await instance.runDataMutation(async () => {
+                        await instance.clientInstance.setRowFilters(updatedFilters);
+                        await instance.clientInstance.updateBackendState();
+                    });
                 });
             } catch (error) {
                 this._sendError(String(error));
@@ -834,22 +954,16 @@ export class DataExplorerWebviewBridge {
                 const supportStatus =
                     backendState.supported_features.export_data_selection
                         .support_status;
-                if (supportStatus !== SupportStatus.Supported) {
-                    vscode.window.showErrorMessage(
-                        'Copy table data is not supported by this backend.',
-                    );
-                    return;
-                }
-
                 await vscode.window.withProgress(
                     {
                         location: vscode.ProgressLocation.Notification,
                         title: 'Preparing table data',
-                        cancellable: false,
+                        cancellable: true,
                     },
-                    async (progress) => {
-                        const exported =
-                            await instance.clientInstance.exportDataSelection(
+                    async (progress, token) => {
+                        let tableData: string;
+                        if (supportStatus === SupportStatus.Supported) {
+                            const exported = await instance.clientInstance.exportDataSelection(
                                 {
                                     kind: TableSelectionKind.CellRange,
                                     selection: {
@@ -867,15 +981,27 @@ export class DataExplorerWebviewBridge {
                                 },
                                 ExportFormat.Tsv,
                             );
-
-                        if (!exported.data) {
-                            throw new Error('No data returned from export');
+                            tableData = exported.data;
+                        } else {
+                            let reportedProgress = 0;
+                            tableData = await instance.getTableDataTsv(
+                                token,
+                                (completedRows, totalRows) => {
+                                    const nextProgress = totalRows > 0
+                                        ? (completedRows / totalRows) * 100
+                                        : 100;
+                                    progress.report({
+                                        increment: nextProgress - reportedProgress,
+                                        message: `${completedRows} / ${totalRows} rows`,
+                                    });
+                                    reportedProgress = nextProgress;
+                                },
+                            );
                         }
-
                         progress.report({
                             message: 'Copying table data to the clipboard',
                         });
-                        await vscode.env.clipboard.writeText(exported.data);
+                        await vscode.env.clipboard.writeText(tableData);
                     },
                 );
 
@@ -1065,6 +1191,15 @@ export class DataExplorerWebviewBridge {
             }
         });
 
+        connection.onNotification(DataExplorerOpenAsSpreadsheetNotification.type, async () => {
+            logChannel.debug('[DataExplorerEditor] Received: dataExplorer/openAsSpreadsheet');
+            try {
+                await this._options.openAsSpreadsheet();
+            } catch (error) {
+                this._sendError(`Open as spreadsheet failed: ${String(error)}`);
+            }
+        });
+
         connection.onNotification(
             DataExplorerApplyFileOptionsNotification.type,
             async (params) => {
@@ -1081,16 +1216,13 @@ export class DataExplorerWebviewBridge {
                         has_header_row: params.hasHeaderRow,
                         sheet_name: params.sheetName,
                     };
-                    await this._options.runWithForegroundLoading(async () => {
-                        const result = await instance.setDatasetImportOptions(
-                            options,
-                        );
+                    await instance.runWithForegroundLoading(async () => {
+                        const result = await instance.setDatasetImportOptions(options);
                         if (result.error_message) {
                             throw new Error(result.error_message);
                         }
                         await instance.clientInstance.updateBackendState();
                         await this.sendInitialize();
-                        await this.sendDataFromLastRequest();
                     });
                 } catch (error) {
                     this._sendError(
@@ -1113,9 +1245,30 @@ export class DataExplorerWebviewBridge {
         );
     }
 
+    setSurfaceVisible(visible: boolean): void {
+        if (this._surfaceVisible === visible) {
+            return;
+        }
+        this._surfaceVisible = visible;
+        if (!visible) {
+            for (const tokenSource of this._profileRequestTokens.values()) {
+                tokenSource.cancel();
+            }
+            return;
+        }
+        if (this._pendingInvalidation) {
+            this._options.connection.sendNotification(
+                DataExplorerDataInvalidatedNotification.type,
+                this._pendingInvalidation,
+            );
+            this._pendingInvalidation = undefined;
+        }
+        this.sendBackendStateUpdate();
+    }
+
     async sendInitialize(): Promise<void> {
         const { connection, instance } = this._options;
-        const uiState = this._options.getUiState();
+        const uiState = instance.uiState;
 
         connection.sendNotification(DataExplorerInitializeNotification.type, {
             identifier: instance.identifier,
@@ -1132,8 +1285,24 @@ export class DataExplorerWebviewBridge {
                 collapsed: uiState.summaryCollapsed,
             },
         );
+        connection.sendNotification(DataExplorerSummaryWidthChangedNotification.type, {
+            summaryWidth: uiState.summaryWidth,
+        });
+        if (instance.selection) {
+            connection.sendNotification(
+                DataExplorerSelectionChangedNotification.type,
+                instance.selection,
+            );
+        }
+        connection.sendNotification(DataExplorerDataInvalidatedNotification.type, {
+            generation: instance.dataGeneration,
+            schemaChanged: true,
+        });
 
-        const backendState = instance.backendState;
+        const backendState = instance.backendState ??
+            (this._isBackendDisconnected()
+                ? DATA_EXPLORER_DISCONNECTED_STATE
+                : undefined);
         if (backendState) {
             connection.sendNotification(DataExplorerMetadataNotification.type, {
                 displayName: backendState.display_name,
@@ -1149,82 +1318,103 @@ export class DataExplorerWebviewBridge {
     }
 
     async sendData(
-        startRow: number = 0,
-        endRow?: number,
-        columnIndices?: number[],
+        request: DataExplorerDataRequest,
         shouldPublish: () => boolean = () => true,
     ): Promise<void> {
         const { connection, instance, logChannel } = this._options;
+        const canPublish = () =>
+            this._surfaceVisible &&
+            shouldPublish() &&
+            request.generation === instance.dataGeneration;
         try {
             const backendState = instance.backendState;
-            if (!backendState) {
+            if (!backendState || !canPublish()) {
                 return;
             }
 
             const numColumns = backendState.table_shape.num_columns;
             const numRows = backendState.table_shape.num_rows;
-            const columns =
-                columnIndices && columnIndices.length > 0
-                    ? columnIndices
-                    : Array.from({ length: numColumns }, (_, index) => index);
-            const displayEndRow = Math.min(endRow ?? numRows, numRows);
+            const columns = [...new Set(request.columns)].filter(
+                (columnIndex) =>
+                    Number.isInteger(columnIndex) &&
+                    columnIndex >= 0 &&
+                    columnIndex < numColumns,
+            );
+            const displayStartRow = Math.max(
+                0,
+                Math.min(request.startRow, numRows),
+            );
+            const displayEndRow = Math.max(
+                displayStartRow,
+                Math.min(request.endRow, numRows),
+            );
 
-            if (columns.length === 0 || numRows === 0) {
-                if (!shouldPublish()) {
-                    return;
-                }
+            if (columns.length === 0) {
                 connection.sendNotification(DataExplorerDataNotification.type, {
                     columns: [],
                     schema: [],
-                    startRow: 0,
-                    endRow: 0,
+                    startRow: displayStartRow,
+                    endRow: displayEndRow,
                     columnIndices: [],
+                    totalRows: numRows,
+                    totalColumns: numColumns,
+                    requestId: request.requestId,
+                    generation: request.generation,
                 });
                 return;
             }
 
             const schema = await instance.getSchema(columns);
-            if (!shouldPublish()) {
+            if (!canPublish()) {
                 return;
             }
             connection.sendNotification(DataExplorerSchemaNotification.type, {
                 columns: schema.columns,
             });
 
-            const columnSelections = columns.map((columnIndex) => ({
-                column_index: columnIndex,
-                spec: {
-                    first_index: startRow,
-                    last_index: displayEndRow - 1,
-                },
-            }));
-            const tableData =
-                await instance.clientInstance.getDataValues(columnSelections);
-            if (!shouldPublish()) {
-                return;
+            let dataColumns = columns.map(() => [] as Array<number | string>);
+            if (displayEndRow > displayStartRow) {
+                const columnSelections = columns.map((columnIndex) => ({
+                    column_index: columnIndex,
+                    spec: {
+                        first_index: displayStartRow,
+                        last_index: displayEndRow - 1,
+                    },
+                }));
+                const tableData =
+                    await instance.getDataValues(columnSelections, request.generation);
+                if (!canPublish()) {
+                    return;
+                }
+                dataColumns = tableData.columns;
             }
 
             let rowLabels: string[] | undefined;
-            if (backendState.has_row_labels && displayEndRow > startRow) {
+            if (
+                backendState.has_row_labels &&
+                displayEndRow > displayStartRow
+            ) {
                 const rowLabelResult = await instance.clientInstance.getRowLabels({
-                    first_index: startRow,
+                    first_index: displayStartRow,
                     last_index: displayEndRow - 1,
                 });
-                if (!shouldPublish()) {
+                if (!canPublish()) {
                     return;
                 }
                 rowLabels = rowLabelResult.row_labels?.[0] ?? [];
             }
 
             connection.sendNotification(DataExplorerDataNotification.type, {
-                columns: tableData.columns,
+                columns: dataColumns,
                 schema: schema.columns,
-                startRow,
+                startRow: displayStartRow,
                 endRow: displayEndRow,
                 columnIndices: columns,
                 rowLabels,
                 totalRows: numRows,
                 totalColumns: numColumns,
+                requestId: request.requestId,
+                generation: request.generation,
             });
         } catch (error) {
             logChannel.error(`[DataExplorerEditor] Error fetching data: ${error}`);
@@ -1233,29 +1423,52 @@ export class DataExplorerWebviewBridge {
     }
 
     async sendDataFromLastRequest(shouldPublish: () => boolean = () => true): Promise<void> {
-        const lastRequest = this._options.getLastRequest();
-        if (lastRequest) {
-            await this.sendData(
-                lastRequest.startRow,
-                lastRequest.endRow,
-                lastRequest.columns,
-                shouldPublish,
-            );
+        const lastRequest = this._options.instance.lastDataRequest;
+        if (
+            !lastRequest ||
+            lastRequest.generation !== this._options.instance.dataGeneration
+        ) {
             return;
         }
 
-        await this.sendData(0, undefined, undefined, shouldPublish);
+        await this.sendData(lastRequest, shouldPublish);
+    }
+
+    invalidateData(
+        schemaChanged: boolean,
+        shouldPublish: () => boolean = () => true,
+    ): number {
+        if (!shouldPublish()) {
+            return this._options.instance.dataGeneration;
+        }
+        return this._options.instance.invalidateData(schemaChanged);
+    }
+
+    dispose(): void {
+        for (const tokenSource of this._profileRequestTokens.values()) {
+            tokenSource.cancel();
+            tokenSource.dispose();
+        }
+        this._profileRequestTokens.clear();
+        this._disposables.forEach(disposable => disposable.dispose());
     }
 
     private _buildAugmentedBackendState() {
         const { instance } = this._options;
-        const backendState = instance.backendState;
+        const disconnected = this._isBackendDisconnected();
+        const backendState = instance.backendState ??
+            (disconnected ? DATA_EXPLORER_DISCONNECTED_STATE : undefined);
         if (!backendState) {
             return null;
         }
 
         return {
             ...backendState,
+            connected: !disconnected,
+            error_message:
+                disconnected
+                    ? backendState.error_message ?? 'The Data Explorer backend has closed.'
+                    : backendState.error_message,
             __ark_file_options: {
                 supportsFileOptions:
                     instance.supportsFileOptions &&
@@ -1263,11 +1476,20 @@ export class DataExplorerWebviewBridge {
                 fileHasHeaderRow: instance.fileHasHeaderRow,
                 availableSheets: instance.fileAvailableSheets,
                 selectedSheet: instance.fileSelectedSheet,
+                supportsOpenAsSpreadsheet:
+                    isSpreadsheetDataExplorerIdentifier(instance.identifier) &&
+                    vscode.env.uiKind === vscode.UIKind.Desktop &&
+                    !vscode.env.remoteName,
             },
             __ark_window_state: {
                 inNewWindow: this._options.isInstanceInNewWindow(),
             },
         };
+    }
+
+    private _isBackendDisconnected(): boolean {
+        return this._options.instance.clientInstance.status ===
+            DataExplorerClientStatus.Disconnected;
     }
 
     private _notifyLayoutChanged(layout: DataExplorerLayoutState): void {
@@ -1281,6 +1503,13 @@ export class DataExplorerWebviewBridge {
         this._options.connection.sendNotification(
             DataExplorerSummaryCollapsedChangedNotification.type,
             { collapsed },
+        );
+    }
+
+    private _notifySummaryWidthChanged(summaryWidth: number): void {
+        this._options.connection.sendNotification(
+            DataExplorerSummaryWidthChangedNotification.type,
+            { summaryWidth },
         );
     }
 

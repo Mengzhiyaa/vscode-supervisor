@@ -71,3 +71,7 @@ export function supportsDataExplorerFileOptions(identifier: string): boolean {
     const normalizedPath = backingUri.path.toLowerCase();
     return isPlaintextDataExplorerIdentifier(identifier) || normalizedPath.endsWith('.xlsx');
 }
+
+export function isSpreadsheetDataExplorerIdentifier(identifier: string): boolean {
+    return getDataExplorerBackingUri(identifier)?.path.toLowerCase().endsWith('.xlsx') ?? false;
+}

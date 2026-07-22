@@ -12,7 +12,6 @@ import { DataExplorerClientInstance } from './languageRuntimeDataExplorerClient'
 import { DataExplorerBackendRequest, PositronDataExplorerComm } from '../../runtime/comms/positronDataExplorerComm';
 import type {
     IPositronDataExplorerService,
-    IPositronDataExplorerInstance,
 } from './positronDataExplorerService';
 import { RuntimeClientType, RuntimeState } from '../../internal/runtimeTypes';
 import { shouldKeepDataExplorerInline } from './dataExplorerRouting';
@@ -32,23 +31,46 @@ export class DataExplorerRuntime implements vscode.Disposable {
     private readonly _disposables: vscode.Disposable[] = [];
     private readonly _runtimeDisposables: vscode.Disposable[] = [];
     private _clientHandlerRegistered = false;
-    private readonly _attachedClientIds = new Set<string>();
-
-    // Event emitter for when a data explorer is opened
-    private readonly _onDidOpenDataExplorer = new vscode.EventEmitter<IPositronDataExplorerInstance>();
-    readonly onDidOpenDataExplorer = this._onDidOpenDataExplorer.event;
+    private _attached = false;
+    private _clientManager: RuntimeClientManager | undefined;
+    private _clientManagerRegistration: vscode.Disposable | undefined;
+    private readonly _attachedClients = new Map<string, RuntimeClientInstance>();
 
     constructor(
         private readonly _session: RuntimeSession,
         private readonly _dataExplorerService: IPositronDataExplorerService,
         private readonly _logChannel: vscode.LogOutputChannel
     ) {
-        this._disposables.push(this._onDidOpenDataExplorer);
+        this._disposables.push(
+            this._session.onDidChangeRuntimeState(state => {
+                if (state === RuntimeState.Exited) {
+                    this._detachFromSession();
+                } else if (!this._attached) {
+                    this._attachToSession();
+                }
+            }),
+        );
         this._logChannel.debug(`[DataExplorerRuntime] Created for session ${_session.sessionId}`);
         this._attachToSession();
     }
 
+    get session(): RuntimeSession {
+        return this._session;
+    }
+
+    reattach(): void {
+        if (!this._attached) {
+            this._attachToSession();
+        } else if (this._session.clientManager) {
+            this._attachToClientManager(this._session.clientManager, 'reattach');
+        }
+    }
+
     private _attachToSession(): void {
+        if (this._attached) {
+            return;
+        }
+        this._attached = true;
         this._logChannel.debug(
             `[DataExplorerRuntime] Attaching to session ${this._session.sessionId} ` +
             `(clientManager=${this._session.clientManager ? 'yes' : 'no'})`
@@ -64,15 +86,18 @@ export class DataExplorerRuntime implements vscode.Disposable {
             this._session.onDidCreateClientManager(manager => {
                 this._attachToClientManager(manager, 'clientManagerCreated');
             }),
-            this._session.onDidChangeRuntimeState(state => {
-                if (state === RuntimeState.Exited) {
-                    this._detachFromSession();
-                }
-            })
         );
     }
 
     private _attachToClientManager(manager: RuntimeClientManager, reason: string): void {
+        if (this._clientManager !== manager) {
+            this._clientManagerRegistration?.dispose();
+            this._clientManagerRegistration = undefined;
+            this._clientManager = manager;
+            this._clientHandlerRegistered = false;
+            this._attachedClients.clear();
+        }
+
         if (!this._clientHandlerRegistered) {
             this._logChannel.debug(
                 `[DataExplorerRuntime] Registering DataExplorer client handler ` +
@@ -80,15 +105,13 @@ export class DataExplorerRuntime implements vscode.Disposable {
             );
 
             // Register handler for DataExplorer comm_open messages from the kernel
-            this._runtimeDisposables.push(
-                manager.registerClientHandler({
-                    clientType: RuntimeClientType.DataExplorer,
-                    callback: (client, params) => {
-                        this._handleDataExplorerClient(client, params as Record<string, unknown>);
-                        return true; // Take ownership
-                    }
-                })
-            );
+            this._clientManagerRegistration = manager.registerClientHandler({
+                clientType: RuntimeClientType.DataExplorer,
+                callback: (client, params) => {
+                    this._handleDataExplorerClient(client, params as Record<string, unknown>);
+                    return true; // Take ownership
+                }
+            });
 
             this._clientHandlerRegistered = true;
         }
@@ -108,10 +131,10 @@ export class DataExplorerRuntime implements vscode.Disposable {
         params: Record<string, unknown>
     ): Promise<void> {
         const clientId = client.getClientId();
-        if (this._attachedClientIds.has(clientId)) {
+        if (this._attachedClients.get(clientId) === client) {
             return;
         }
-        this._attachedClientIds.add(clientId);
+        this._attachedClients.set(clientId, client);
 
         this._logChannel.info(
             `[DataExplorerRuntime] DataExplorer comm opened: ${clientId}`
@@ -157,7 +180,9 @@ export class DataExplorerRuntime implements vscode.Disposable {
 
             this._runtimeDisposables.push(
                 dataExplorerClient.onDidClose(() => {
-                    this._attachedClientIds.delete(clientId);
+                    if (this._attachedClients.get(clientId) === client) {
+                        this._attachedClients.delete(clientId);
+                    }
                 })
             );
 
@@ -165,12 +190,6 @@ export class DataExplorerRuntime implements vscode.Disposable {
             const variableId = params['variable_id'] as string | undefined;
             if (variableId) {
                 this._dataExplorerService.setInstanceForVar(instance.identifier, variableId);
-            }
-
-            // Fire event - DataExplorerEditorProvider will open the panel
-            // Unless this is an inline-only instance (notebook inline display)
-            if (!inlineOnly) {
-                this._onDidOpenDataExplorer.fire(instance);
             }
 
             this._logChannel.info(
@@ -184,16 +203,22 @@ export class DataExplorerRuntime implements vscode.Disposable {
             this._logChannel.error(
                 `[DataExplorerRuntime] Failed to create DataExplorer instance: ${message}`
             );
-            this._attachedClientIds.delete(clientId);
+            if (this._attachedClients.get(clientId) === client) {
+                this._attachedClients.delete(clientId);
+            }
             dataExplorerClient.dispose();
         }
     }
 
     private _detachFromSession(): void {
+        this._attached = false;
+        this._clientManagerRegistration?.dispose();
+        this._clientManagerRegistration = undefined;
+        this._clientManager = undefined;
         this._runtimeDisposables.forEach(d => d.dispose());
         this._runtimeDisposables.length = 0;
         this._clientHandlerRegistered = false;
-        this._attachedClientIds.clear();
+        this._attachedClients.clear();
     }
 
     dispose(): void {

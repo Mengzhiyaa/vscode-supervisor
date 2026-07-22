@@ -765,6 +765,8 @@ export interface IDataExplorerBackendEvent {
 }
 
 export interface IDataExplorerBackendTransport extends vscode.Disposable {
+    readonly datasetId?: string;
+    readonly clientId?: string;
     readonly onDidEmitEvent?: vscode.Event<IDataExplorerBackendEvent>;
     handleRpc(request: IDataExplorerBackendRpcRequest): Promise<unknown>;
 }

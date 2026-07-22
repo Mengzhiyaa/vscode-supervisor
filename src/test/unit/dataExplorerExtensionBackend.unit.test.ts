@@ -59,6 +59,61 @@ suite('[Unit] Data Explorer extension backend', () => {
         await assert.rejects(() => registry.open(vscode.Uri.parse('file:/data.unknown')), /No Data Explorer backend/);
         registry.dispose();
     });
+
+    test('uses explicit dataset/client identity and unwraps RPC envelopes', async () => {
+        const requests: any[] = [];
+        const registry = new DataExplorerBackendRegistry();
+        registry.registerProvider({
+            id: 'identity-provider',
+            canHandle: () => true,
+            open: async () => ({
+                datasetId: 'dataset-42',
+                clientId: 'client-42',
+                handleRpc: async request => {
+                    requests.push(request);
+                    return { result: request.method === 'get_state' ? backendState() : undefined };
+                },
+                dispose: () => undefined,
+            }),
+        });
+
+        const backend = await registry.open(vscode.Uri.parse('identity:/table'));
+        const state = await backend.getState();
+        await backend.openDataExplorer();
+
+        assert.strictEqual(backend.providerId, 'identity-provider');
+        assert.strictEqual(backend.datasetId, 'dataset-42');
+        assert.strictEqual(backend.clientId, 'client-42');
+        assert.strictEqual(state.display_name, 'Extension table');
+        assert.deepStrictEqual(requests.map(request => request.method), [
+            'get_state',
+            'open_data_explorer',
+        ]);
+        backend.dispose();
+        registry.dispose();
+    });
+
+    test('rejects structured and legacy RPC errors instead of silently succeeding', async () => {
+        const registry = new DataExplorerBackendRegistry();
+        let useLegacyError = false;
+        registry.registerProvider({
+            id: 'error-provider',
+            canHandle: () => true,
+            open: async () => ({
+                handleRpc: async () => useLegacyError
+                    ? { error_message: 'legacy failure' }
+                    : { error: { code: 'E_DATA', message: 'structured failure' } },
+                dispose: () => undefined,
+            }),
+        });
+        const backend = await registry.open(vscode.Uri.parse('error:/table'));
+
+        await assert.rejects(() => backend.getState(), /E_DATA.*structured failure/);
+        useLegacyError = true;
+        await assert.rejects(() => backend.openDataExplorer(), /legacy failure/);
+        backend.dispose();
+        registry.dispose();
+    });
 });
 
 function backendState() {

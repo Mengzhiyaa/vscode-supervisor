@@ -20,6 +20,8 @@ export namespace DataExplorerRequestDataNotification {
         startRow: number;
         endRow: number;
         columns?: number[];
+        requestId: number;
+        generation: number;
     }
 
     export const type = new NotificationType<Params>('dataExplorer/requestData');
@@ -46,12 +48,22 @@ export namespace DataExplorerSearchSchemaNotification {
     export const type = new NotificationType<Params>('dataExplorer/searchSchema');
 }
 
+export namespace DataExplorerCancelColumnProfilesNotification {
+
+    export interface Params {
+        requestIds: number[];
+    }
+
+    export const type = new NotificationType<Params>('dataExplorer/cancelColumnProfiles');
+}
+
 export namespace DataExplorerRequestColumnProfilesNotification {
 
     export interface Params {
         columnIndices: number[];
         expandedColumnIndices?: number[];
-        requestId?: number;
+        requestId: number;
+        generation: number;
     }
 
     export const type = new NotificationType<Params>('dataExplorer/requestColumnProfiles');
@@ -155,6 +167,11 @@ export namespace DataExplorerOpenAsPlaintextNotification {
     export const type = new NotificationType<void>('dataExplorer/openAsPlaintext');
 }
 
+export namespace DataExplorerOpenAsSpreadsheetNotification {
+
+    export const type = new NotificationType<void>('dataExplorer/openAsSpreadsheet');
+}
+
 export namespace DataExplorerToggleFileOptionsNotification {
 
     export interface Params {
@@ -214,6 +231,28 @@ export namespace DataExplorerSetSummaryCollapsedNotification {
     export const type = new NotificationType<Params>('dataExplorer/setSummaryCollapsed');
 }
 
+export namespace DataExplorerSetSummaryWidthNotification {
+
+    export interface Params {
+        summaryWidth: number;
+    }
+
+    export const type = new NotificationType<Params>('dataExplorer/setSummaryWidth');
+}
+
+export namespace DataExplorerSetSelectionNotification {
+
+    export interface Params {
+        selectionType: 'cell' | 'cells' | 'columns' | 'rows';
+        columnIndex?: number;
+        rowIndex?: number;
+        columnIndexes?: number[];
+        rowIndexes?: number[];
+    }
+
+    export const type = new NotificationType<Params>('dataExplorer/setSelection');
+}
+
 export namespace DataExplorerFocusChangedNotification {
 
     export interface Params {
@@ -221,6 +260,11 @@ export namespace DataExplorerFocusChangedNotification {
     }
 
     export const type = new NotificationType<Params>('dataExplorer/focusChanged');
+}
+
+export namespace DataExplorerFocusNotification {
+
+    export const type = new NotificationType<void>('dataExplorer/focus');
 }
 
 export namespace DataExplorerCopyNotification {
@@ -259,6 +303,28 @@ export namespace DataExplorerSummaryCollapsedChangedNotification {
     }
 
     export const type = new NotificationType<Params>('dataExplorer/summaryCollapsedChanged');
+}
+
+export namespace DataExplorerSummaryWidthChangedNotification {
+
+    export interface Params {
+        summaryWidth: number;
+    }
+
+    export const type = new NotificationType<Params>('dataExplorer/summaryWidthChanged');
+}
+
+export namespace DataExplorerSelectionChangedNotification {
+
+    export interface Params {
+        selectionType: 'cell' | 'cells' | 'columns' | 'rows';
+        columnIndex?: number;
+        rowIndex?: number;
+        columnIndexes?: number[];
+        rowIndexes?: number[];
+    }
+
+    export const type = new NotificationType<Params>('dataExplorer/selectionChanged');
 }
 
 export namespace DataExplorerConvertToCodePreviewNotification {
@@ -322,16 +388,27 @@ export namespace DataExplorerColumnProfilesNotification {
     export interface Params {
         profiles: Array<{ columnIndex: number; profile: unknown }>;
         error?: string;
-        requestId?: number;
+        requestId: number;
+        generation: number;
     }
 
     export const type = new NotificationType<Params>('dataExplorer/columnProfiles');
 }
 
+export namespace DataExplorerDataInvalidatedNotification {
+
+    export interface Params {
+        generation: number;
+        schemaChanged: boolean;
+    }
+
+    export const type = new NotificationType<Params>('dataExplorer/dataInvalidated');
+}
+
 export namespace DataExplorerDataNotification {
 
     export interface Params {
-        columns: unknown[][];
+        columns: Array<Array<number | string>>;
         schema?: unknown[];
         startRow: number;
         endRow: number;
@@ -339,6 +416,8 @@ export namespace DataExplorerDataNotification {
         rowLabels?: string[];
         totalRows?: number;
         totalColumns?: number;
+        requestId: number;
+        generation: number;
     }
 
     export const type = new NotificationType<Params>('dataExplorer/data');

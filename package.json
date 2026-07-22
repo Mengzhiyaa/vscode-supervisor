@@ -815,6 +815,20 @@
           "default": false,
           "description": "Open Data Explorer editor tabs in preview mode."
         },
+        "dataExplorer.summaryCollapsed": {
+          "type": "boolean",
+          "default": false,
+          "description": "Collapse the Data Explorer Summary panel by default."
+        },
+        "dataExplorer.summaryLayout": {
+          "type": "string",
+          "default": "left",
+          "enum": [
+            "left",
+            "right"
+          ],
+          "description": "Select the default position of the Data Explorer Summary panel."
+        },
         "dataExplorer.enableClickToView": {
           "type": "boolean",
           "default": true,

@@ -23,7 +23,6 @@ import {
     ArraySelection,
     SchemaUpdateEvent,
     DataUpdateEvent,
-    ReturnColumnProfilesEvent,
     SupportedFeatures,
     SupportStatus,
     SearchSchemaResult,
@@ -130,6 +129,7 @@ export class DataExplorerClientInstance implements vscode.Disposable {
         resolve: (value: ColumnProfileResult[]) => void;
         reject: (reason: Error) => void;
         timeoutHandle: ReturnType<typeof setTimeout>;
+        cancellationDisposable?: vscode.Disposable;
     }>();
 
     // Event emitters
@@ -138,7 +138,6 @@ export class DataExplorerClientInstance implements vscode.Disposable {
     private readonly _onDidDataUpdate = new vscode.EventEmitter<DataUpdateEvent>();
     private readonly _onDidStatusUpdate = new vscode.EventEmitter<DataExplorerClientStatus>();
     private readonly _onDidUpdateBackendState = new vscode.EventEmitter<BackendState>();
-    private readonly _onDidReturnColumnProfiles = new vscode.EventEmitter<ReturnColumnProfilesEvent>();
 
     constructor(
         private readonly _comm: IDataExplorerComm,
@@ -149,7 +148,6 @@ export class DataExplorerClientInstance implements vscode.Disposable {
         this._disposables.push(this._onDidDataUpdate);
         this._disposables.push(this._onDidStatusUpdate);
         this._disposables.push(this._onDidUpdateBackendState);
-        this._disposables.push(this._onDidReturnColumnProfiles);
 
         // Typed backend events.
         this._disposables.push(
@@ -171,17 +169,17 @@ export class DataExplorerClientInstance implements vscode.Disposable {
         this._disposables.push(
             this._comm.onDidReturnColumnProfiles((event) => {
                 this._logChannel.debug('DataExplorerClientInstance: Column profiles returned');
-                this._onDidReturnColumnProfiles.fire(event);
 
                 const pending = this._asyncTasks.get(event.callback_id);
                 if (pending) {
                     clearTimeout(pending.timeoutHandle);
+                    pending.cancellationDisposable?.dispose();
+                    this._asyncTasks.delete(event.callback_id);
                     if (event.error_message) {
                         pending.reject(new Error(event.error_message));
                     } else {
                         pending.resolve(event.profiles || []);
                     }
-                    this._asyncTasks.delete(event.callback_id);
                 }
             })
         );
@@ -236,7 +234,6 @@ export class DataExplorerClientInstance implements vscode.Disposable {
     readonly onDidDataUpdate = this._onDidDataUpdate.event;
     readonly onDidStatusUpdate = this._onDidStatusUpdate.event;
     readonly onDidUpdateBackendState = this._onDidUpdateBackendState.event;
-    readonly onDidReturnColumnProfiles = this._onDidReturnColumnProfiles.event;
 
     // =========================================================================
     // Public Methods
@@ -382,32 +379,65 @@ export class DataExplorerClientInstance implements vscode.Disposable {
      * Request column profiles and await results
      */
     async requestColumnProfiles(
-        profiles: ColumnProfileRequest[]
+        profiles: ColumnProfileRequest[],
+        token?: vscode.CancellationToken,
     ): Promise<ColumnProfileResult[]> {
         if (profiles.length === 0) {
+            return [];
+        }
+        if (token?.isCancellationRequested) {
             return [];
         }
         const callbackId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
         const promise = new Promise<ColumnProfileResult[]>((resolve, reject) => {
             const timeoutMs = 60000;
             const timeoutHandle = setTimeout(() => {
-                if (!this._asyncTasks.has(callbackId)) {
+                const pendingTask = this._asyncTasks.get(callbackId);
+                if (!pendingTask) {
                     return;
                 }
 
+                pendingTask.cancellationDisposable?.dispose();
                 this._asyncTasks.delete(callbackId);
                 const timeoutSeconds = Math.round(timeoutMs / 100) / 10;
                 reject(new Error(`get_column_profiles timed out after ${timeoutSeconds} seconds`));
             }, timeoutMs);
 
-            this._asyncTasks.set(callbackId, { resolve, reject, timeoutHandle });
+            const pendingTask: {
+                resolve: (value: ColumnProfileResult[]) => void;
+                reject: (reason: Error) => void;
+                timeoutHandle: ReturnType<typeof setTimeout>;
+                cancellationDisposable?: vscode.Disposable;
+            } = { resolve, reject, timeoutHandle };
+            this._asyncTasks.set(callbackId, pendingTask);
+            pendingTask.cancellationDisposable =
+                token?.onCancellationRequested(() => {
+                    if (this._asyncTasks.get(callbackId) !== pendingTask) {
+                        return;
+                    }
+                    clearTimeout(timeoutHandle);
+                    pendingTask.cancellationDisposable?.dispose();
+                    this._asyncTasks.delete(callbackId);
+                    resolve([]);
+                });
+
+            if (token?.isCancellationRequested) {
+                clearTimeout(timeoutHandle);
+                pendingTask.cancellationDisposable?.dispose();
+                this._asyncTasks.delete(callbackId);
+                resolve([]);
+            }
         });
+        if (token?.isCancellationRequested) {
+            return promise;
+        }
         try {
             await this.getColumnProfiles(callbackId, profiles);
         } catch (error) {
             const pendingTask = this._asyncTasks.get(callbackId);
             if (pendingTask) {
                 clearTimeout(pendingTask.timeoutHandle);
+                pendingTask.cancellationDisposable?.dispose();
                 this._asyncTasks.delete(callbackId);
             }
             throw error;
@@ -501,6 +531,7 @@ export class DataExplorerClientInstance implements vscode.Disposable {
 
         for (const [callbackId, pendingTask] of this._asyncTasks) {
             clearTimeout(pendingTask.timeoutHandle);
+            pendingTask.cancellationDisposable?.dispose();
             pendingTask.reject(new Error('Data Explorer client disposed while waiting for column profiles.'));
             this._asyncTasks.delete(callbackId);
         }
@@ -586,5 +617,3 @@ export class DataExplorerClientInstance implements vscode.Disposable {
         }
     }
 }
-
-export { DataExplorerClientInstance as LanguageRuntimeDataExplorerClient };

@@ -357,7 +357,10 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
             this._surfaceLifecycle,
         );
         this._disposables.push(this._positronDataExplorerEditorProvider);
-        this._disposables.push(new PositronDataExplorerEditorContribution(this._variablesService));
+        this._disposables.push(new PositronDataExplorerEditorContribution(
+            this._variablesService,
+            this._sessionManager,
+        ));
 
         this._inlineDataExplorerNotebookService = new InlineDataExplorerNotebookService(
             this._positronDataExplorerService,

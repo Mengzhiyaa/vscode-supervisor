@@ -16,8 +16,6 @@ export const DATA_EXPLORER_ROW_FILTERING_CONTEXT =
     ContextKeys.dataExplorerIsRowFiltering;
 export const DATA_EXPLORER_IS_PLAINTEXT_CONTEXT =
     ContextKeys.dataExplorerIsPlaintext;
-export const DATA_EXPLORER_FILE_HAS_HEADER_ROW_CONTEXT =
-    ContextKeys.dataExplorerFileHasHeaderRow;
 export const DATA_EXPLORER_SUMMARY_COLLAPSED_CONTEXT =
     ContextKeys.dataExplorerSummaryCollapsed;
 export const DATA_EXPLORER_FOCUSED_CONTEXT = ContextKeys.dataExplorerFocused;

@@ -18,5 +18,3 @@ export enum PositronDataExplorerCommandId {
     ShowRowContextMenu = 'supervisor.dataExplorer._showRowContextMenuInternal',
     ShowCellContextMenu = 'supervisor.dataExplorer._showCellContextMenuInternal',
 }
-
-export { PositronDataExplorerCommandId as DataExplorerCommandId };

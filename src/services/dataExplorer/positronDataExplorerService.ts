@@ -6,7 +6,6 @@
 
 import * as vscode from 'vscode';
 import { DataExplorerClientInstance } from './languageRuntimeDataExplorerClient';
-import { BackendState, TableSchema, DatasetImportOptions, SetDatasetImportOptionsResult } from '../../runtime/comms/positronDataExplorerComm';
 import { RuntimeSessionService } from '../../runtime/runtimeSession';
 import { RuntimeSession } from '../../runtime/session';
 import { DataExplorerRuntime } from './dataExplorerRuntime';
@@ -17,112 +16,27 @@ import {
     DataExplorerBackendProvider,
     DataExplorerBackendRegistry,
 } from './positronDataExplorerExtensionBackend';
+import {
+    PositronDataExplorerInstance,
+    type IPositronDataExplorerInstance,
+} from './positronDataExplorerInstance';
 
-/**
- * Interface for a data explorer instance (matching Positron's IPositronDataExplorerInstance)
- */
-export interface IPositronDataExplorerInstance extends vscode.Disposable {
-    /**
-     * Gets the unique identifier for this instance
-     */
-    readonly identifier: string;
-
-    /**
-     * Gets the display name
-     */
-    readonly displayName: string;
-
-    /**
-     * Gets the runtime language name used for editor affordances like
-     * Convert to Code preview highlighting.
-     */
-    readonly languageName: string;
-
-    /** Runtime session that owns the backend, if this is runtime-backed. */
-    readonly sessionId: string | undefined;
-
-    /**
-     * Gets the data explorer client instance
-     */
-    readonly clientInstance: DataExplorerClientInstance;
-
-    /**
-     * Gets the cached backend state
-     */
-    readonly backendState: BackendState | undefined;
-
-    /**
-     * Gets the number of columns
-     */
-    readonly numColumns: number;
-
-    /**
-     * Gets the number of rows
-     */
-    readonly numRows: number;
-
-    /**
-     * Whether this instance supports file import options.
-     */
-    readonly supportsFileOptions: boolean;
-
-    /**
-     * Gets current "has header row" option state.
-     */
-    readonly fileHasHeaderRow: boolean;
-
-    readonly fileAvailableSheets: readonly string[];
-
-    readonly fileSelectedSheet: string | undefined;
-
-    /**
-     * Whether this instance is for inline-only display and should not auto-open an editor.
-     */
-    readonly inlineOnly: boolean;
-
-    /**
-     * Events
-     */
-    readonly onDidClose: vscode.Event<void>;
-    readonly onDidUpdateBackendState: vscode.Event<BackendState>;
-    readonly onDidRequestFocus: vscode.Event<void>;
-
-    /**
-     * Request focus on this instance
-     */
-    requestFocus(): void;
-
-    /**
-     * Get column schema for specified indices
-     */
-    getSchema(columnIndices: number[]): Promise<TableSchema>;
-
-    /**
-     * Set file import options for file-backed datasets.
-     */
-    setDatasetImportOptions(options: DatasetImportOptions): Promise<SetDatasetImportOptionsResult>;
-}
+export type { IPositronDataExplorerInstance } from './interfaces/positronDataExplorerInstance';
 
 /**
  * Manages all data explorer instances
  */
 export interface IPositronDataExplorerService extends vscode.Disposable {
     /**
-     * Gets all active instances
+     * Gets all registered instances
      */
     readonly instances: Map<string, IPositronDataExplorerInstance>;
-
-    /**
-     * Gets the active instance
-     */
-    readonly activeInstance: IPositronDataExplorerInstance | undefined;
 
     /**
      * Events
      */
     readonly onDidCreateInstance: vscode.Event<IPositronDataExplorerInstance>;
     readonly onDidCloseInstance: vscode.Event<string>;
-    readonly onDidChangeActiveInstance: vscode.Event<IPositronDataExplorerInstance | undefined>;
 
     /**
      * Event that fires when an instance is registered (after creation and state fetch).
@@ -176,11 +90,6 @@ export interface IPositronDataExplorerService extends vscode.Disposable {
     setInstanceForVariablePath(instanceId: string, sessionId: string, variablePath: string[]): void;
 
     /**
-     * Sets the active instance
-     */
-    setActiveInstance(instance: IPositronDataExplorerInstance | undefined): void;
-
-    /**
      * Opens a file (CSV/TSV/Parquet) in the Data Explorer using DuckDB-WASM.
      */
     openWithDuckDB(uri: vscode.Uri): Promise<IPositronDataExplorerInstance>;
@@ -197,159 +106,6 @@ export interface PositronDataExplorerCreateOptions {
 }
 
 /**
- * Data Explorer Instance Implementation
- */
-class PositronDataExplorerInstance implements IPositronDataExplorerInstance {
-    private readonly _disposables: vscode.Disposable[] = [];
-    private readonly _onDidClose = new vscode.EventEmitter<void>();
-    private readonly _onDidUpdateBackendState = new vscode.EventEmitter<BackendState>();
-    private readonly _onDidRequestFocus = new vscode.EventEmitter<void>();
-    private readonly _schemaCache = new Map<number, TableSchema['columns'][number]>();
-    private _fileHasHeaderRow = true;
-    private _fileSheetName: string | undefined;
-    private _disposed = false;
-
-    constructor(
-        private readonly _clientInstance: DataExplorerClientInstance,
-        private readonly _languageName: string,
-        private readonly _inlineOnly: boolean = false,
-        private readonly _sessionId?: string,
-    ) {
-        this._disposables.push(this._onDidClose);
-        this._disposables.push(this._onDidUpdateBackendState);
-        this._disposables.push(this._onDidRequestFocus);
-
-        // Forward events from client instance
-        this._disposables.push(
-            this._clientInstance.onDidClose(() => {
-                this._schemaCache.clear();
-                this._onDidClose.fire();
-            })
-        );
-
-        this._disposables.push(
-            this._clientInstance.onDidUpdateBackendState((state) => {
-                this._onDidUpdateBackendState.fire(state);
-            })
-        );
-
-        this._disposables.push(
-            this._clientInstance.onDidSchemaUpdate(() => {
-                this._schemaCache.clear();
-            })
-        );
-    }
-
-    get identifier(): string {
-        return this._clientInstance.clientId;
-    }
-
-    get displayName(): string {
-        return this._clientInstance.cachedBackendState?.display_name ?? 'Data';
-    }
-
-    get clientInstance(): DataExplorerClientInstance {
-        return this._clientInstance;
-    }
-
-    get backendState(): BackendState | undefined {
-        return this._clientInstance.cachedBackendState;
-    }
-
-    get numColumns(): number {
-        return this._clientInstance.cachedBackendState?.table_shape.num_columns ?? 0;
-    }
-
-    get numRows(): number {
-        return this._clientInstance.cachedBackendState?.table_shape.num_rows ?? 0;
-    }
-
-    get supportsFileOptions(): boolean {
-        return this._clientInstance.clientId.startsWith('duckdb:');
-    }
-
-    get fileHasHeaderRow(): boolean {
-        return this._fileHasHeaderRow;
-    }
-
-    get fileAvailableSheets(): readonly string[] {
-        return this.backendState?.available_sheets ?? [];
-    }
-
-    get fileSelectedSheet(): string | undefined {
-        return this._fileSheetName ?? this.fileAvailableSheets[0];
-    }
-
-    get inlineOnly(): boolean {
-        return this._inlineOnly;
-    }
-
-    get languageName(): string {
-        return this._languageName;
-    }
-
-    get sessionId(): string | undefined {
-        return this._sessionId;
-    }
-
-    readonly onDidClose = this._onDidClose.event;
-    readonly onDidUpdateBackendState = this._onDidUpdateBackendState.event;
-    readonly onDidRequestFocus = this._onDidRequestFocus.event;
-
-    requestFocus(): void {
-        this._onDidRequestFocus.fire();
-    }
-
-    async getSchema(columnIndices: number[]): Promise<TableSchema> {
-        if (columnIndices.length === 0) {
-            return { columns: [] };
-        }
-
-        const uniqueColumnIndices = Array.from(new Set(columnIndices));
-        const missingColumnIndices = uniqueColumnIndices.filter(
-            (columnIndex) => !this._schemaCache.has(columnIndex),
-        );
-
-        if (missingColumnIndices.length > 0) {
-            const schema = await this._clientInstance.getSchema(missingColumnIndices);
-            for (const column of schema.columns) {
-                this._schemaCache.set(column.column_index, column);
-            }
-        }
-
-        return {
-            columns: columnIndices
-                .map((columnIndex) => this._schemaCache.get(columnIndex))
-                .filter((column): column is TableSchema['columns'][number] => Boolean(column)),
-        };
-    }
-
-    async setDatasetImportOptions(options: DatasetImportOptions): Promise<SetDatasetImportOptionsResult> {
-        this._schemaCache.clear();
-        const result = await this._clientInstance.setDatasetImportOptions(options);
-        if (Object.prototype.hasOwnProperty.call(options, 'has_header_row') && options.has_header_row !== undefined) {
-            this._fileHasHeaderRow = options.has_header_row;
-        }
-        if (Object.prototype.hasOwnProperty.call(options, 'sheet_name')) {
-            this._fileSheetName = options.sheet_name;
-        }
-        return result;
-    }
-
-    dispose(): void {
-        if (this._disposed) {
-            return;
-        }
-        this._disposed = true;
-
-        // Keep the client close subscription alive until the client has emitted
-        // its close event so the service can remove this instance from its map.
-        this._clientInstance.dispose();
-        this._disposables.forEach(d => d.dispose());
-    }
-}
-
-/**
  * Data Explorer Service Implementation
  */
 export class PositronDataExplorerService implements IPositronDataExplorerService {
@@ -359,11 +115,8 @@ export class PositronDataExplorerService implements IPositronDataExplorerService
     private readonly _variableToInstanceMap = new Map<string, string>();
     private readonly _variablePathToInstanceMap = new Map<string, string>();
     private readonly _sessionInstances = new Map<string, DataExplorerRuntime>();
-    private _activeInstance: IPositronDataExplorerInstance | undefined;
-
     private readonly _onDidCreateInstance = new vscode.EventEmitter<IPositronDataExplorerInstance>();
     private readonly _onDidCloseInstance = new vscode.EventEmitter<string>();
-    private readonly _onDidChangeActiveInstance = new vscode.EventEmitter<IPositronDataExplorerInstance | undefined>();
     private readonly _onDidRegisterInstance = new vscode.EventEmitter<IPositronDataExplorerInstance>();
 
     constructor(
@@ -372,7 +125,6 @@ export class PositronDataExplorerService implements IPositronDataExplorerService
     ) {
         this._disposables.push(this._onDidCreateInstance);
         this._disposables.push(this._onDidCloseInstance);
-        this._disposables.push(this._onDidChangeActiveInstance);
         this._disposables.push(this._onDidRegisterInstance);
     }
 
@@ -380,13 +132,8 @@ export class PositronDataExplorerService implements IPositronDataExplorerService
         return this._instances;
     }
 
-    get activeInstance(): IPositronDataExplorerInstance | undefined {
-        return this._activeInstance;
-    }
-
     readonly onDidCreateInstance = this._onDidCreateInstance.event;
     readonly onDidCloseInstance = this._onDidCloseInstance.event;
-    readonly onDidChangeActiveInstance = this._onDidChangeActiveInstance.event;
     readonly onDidRegisterInstance = this._onDidRegisterInstance.event;
 
     private _variablePathKey(sessionId: string, variablePath: string[]): string {
@@ -421,9 +168,13 @@ export class PositronDataExplorerService implements IPositronDataExplorerService
     }
 
     private _createSessionInstance(session: RuntimeSession): void {
-        if (this._sessionInstances.has(session.sessionId)) {
+        const existingInstance = this._sessionInstances.get(session.sessionId);
+        if (existingInstance?.session === session) {
+            existingInstance.reattach();
             return;
         }
+
+        existingInstance?.dispose();
 
         const sessionInstance = new DataExplorerRuntime(
             session,
@@ -449,7 +200,20 @@ export class PositronDataExplorerService implements IPositronDataExplorerService
     ): Promise<IPositronDataExplorerInstance> {
         this._logChannel.info(`PositronDataExplorerService: Creating instance for ${clientInstance.clientId}`);
 
-        // Create instance
+        const existingInstance = this._instances.get(clientInstance.clientId);
+        if (existingInstance) {
+            existingInstance.rebindClientInstance(clientInstance);
+            if (options?.sessionId && options.variablePath && options.variablePath.length > 0) {
+                this.setInstanceForVariablePath(
+                    existingInstance.identifier,
+                    options.sessionId,
+                    options.variablePath,
+                );
+            }
+            this._onDidRegisterInstance.fire(existingInstance);
+            return existingInstance;
+        }
+
         const instance = new PositronDataExplorerInstance(
             clientInstance,
             languageName,
@@ -457,28 +221,23 @@ export class PositronDataExplorerService implements IPositronDataExplorerService
             options?.sessionId,
         );
 
-        // Store the replacement first so a late close from the previous
-        // instance cannot remove this one from the registry.
-        const replacedInstance = this._instances.get(instance.identifier);
         this._instances.set(instance.identifier, instance);
-        replacedInstance?.dispose();
 
-        // Handle instance close
+        // A backend close disconnects the client, but does not destroy model UI
+        // state or surface attachments. A later client with the same identity
+        // rebinds to this model.
         instance.onDidClose(() => {
-            // A newer instance can legitimately reuse the same identifier. Do
-            // not let a late close from the old instance remove its replacement.
             if (this._instances.get(instance.identifier) !== instance) {
                 return;
             }
+        });
 
+        instance.onDidDispose(() => {
+            if (this._instances.get(instance.identifier) !== instance) {
+                return;
+            }
             this._instances.delete(instance.identifier);
             this._onDidCloseInstance.fire(instance.identifier);
-
-            if (this._activeInstance === instance) {
-                this.setActiveInstance(undefined);
-            }
-
-            // Clean up variable mappings
             for (const [varId, instId] of this._variableToInstanceMap) {
                 if (instId === instance.identifier) {
                     this._variableToInstanceMap.delete(varId);
@@ -490,9 +249,6 @@ export class PositronDataExplorerService implements IPositronDataExplorerService
                     this._variablePathToInstanceMap.delete(key);
                 }
             }
-            // Backend-initiated closes also need to release the instance's
-            // remaining subscriptions and comm resources.
-            instance.dispose();
         });
 
         if (options?.sessionId && options.variablePath && options.variablePath.length > 0) {
@@ -504,10 +260,6 @@ export class PositronDataExplorerService implements IPositronDataExplorerService
 
         // Fire registration event (resolves getInstanceAsync waiters)
         this._onDidRegisterInstance.fire(instance);
-
-        if (!instance.inlineOnly) {
-            this.setActiveInstance(instance);
-        }
 
         return instance;
     }
@@ -569,13 +321,6 @@ export class PositronDataExplorerService implements IPositronDataExplorerService
             this._variablePathKey(sessionId, variablePath),
             instanceId
         );
-    }
-
-    setActiveInstance(instance: IPositronDataExplorerInstance | undefined): void {
-        if (this._activeInstance !== instance) {
-            this._activeInstance = instance;
-            this._onDidChangeActiveInstance.fire(instance);
-        }
     }
 
     /**
@@ -652,6 +397,10 @@ export class PositronDataExplorerService implements IPositronDataExplorerService
             instance.dispose();
         }
         this._instances.clear();
+        for (const sessionInstance of this._sessionInstances.values()) {
+            sessionInstance.dispose();
+        }
+        this._sessionInstances.clear();
         this._variableToInstanceMap.clear();
         this._variablePathToInstanceMap.clear();
         this._disposables.forEach(d => d.dispose());

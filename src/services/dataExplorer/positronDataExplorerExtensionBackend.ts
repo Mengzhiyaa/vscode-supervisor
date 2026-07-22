@@ -40,8 +40,24 @@ export interface DataExplorerBackendEvent {
 }
 
 export interface DataExplorerBackendTransport extends vscode.Disposable {
+    /** Stable provider-scoped dataset identity. Defaults to the requested URI. */
+    readonly datasetId?: string;
+    /** Stable client identity. Defaults to provider ID plus dataset identity. */
+    readonly clientId?: string;
     readonly onDidEmitEvent?: vscode.Event<DataExplorerBackendEvent>;
     handleRpc(request: DataExplorerRpcRequest): Promise<unknown>;
+}
+
+export interface DataExplorerRpcError {
+    readonly code?: string | number;
+    readonly message: string;
+    readonly data?: unknown;
+}
+
+export interface DataExplorerRpcResponse<T> {
+    readonly result?: T;
+    readonly error?: DataExplorerRpcError;
+    readonly error_message?: string;
 }
 
 export interface DataExplorerBackendProvider {
@@ -68,7 +84,8 @@ export class PositronDataExplorerExtensionBackend implements IDataExplorerComm {
         readonly providerId: string,
         readonly datasetUri: string,
         private readonly _transport: DataExplorerBackendTransport,
-        readonly clientId: string = `${providerId}:${datasetUri}`,
+        readonly datasetId: string = datasetUri,
+        readonly clientId: string = `${providerId}:${datasetId}`,
     ) {
         this._disposables = [
             this._onDidSchemaUpdate,
@@ -113,7 +130,9 @@ export class PositronDataExplorerExtensionBackend implements IDataExplorerComm {
     suggestCodeSyntax(): Promise<CodeSyntaxName | undefined> {
         return this._rpc(DataExplorerBackendRequest.SuggestCodeSyntax, {});
     }
-    openDataExplorer(): Promise<void> { return Promise.resolve(); }
+    openDataExplorer(): Promise<void> {
+        return this._rpc(DataExplorerBackendRequest.OpenDataExplorer, {});
+    }
     setColumnFilters(filters: ColumnFilter[]): Promise<void> {
         return this._rpc(DataExplorerBackendRequest.SetColumnFilters, { filters });
     }
@@ -150,11 +169,35 @@ export class PositronDataExplorerExtensionBackend implements IDataExplorerComm {
         this._disposables.forEach(disposable => disposable.dispose());
     }
 
-    private _rpc<T>(method: DataExplorerBackendRequest, params: Record<string, unknown>): Promise<T> {
+    private async _rpc<T>(method: DataExplorerBackendRequest, params: Record<string, unknown>): Promise<T> {
         if (this._disposed) {
-            return Promise.reject(new Error(`Data Explorer backend '${this.clientId}' is closed.`));
+            throw new Error(`Data Explorer backend '${this.clientId}' is closed.`);
         }
-        return this._transport.handleRpc({ method, uri: this.datasetUri, params }) as Promise<T>;
+        const response = await this._transport.handleRpc({
+            method,
+            uri: this.datasetUri,
+            params,
+        });
+        if (response && typeof response === 'object') {
+            const envelope = response as DataExplorerRpcResponse<T>;
+            if (envelope.error) {
+                const code = envelope.error.code === undefined ? '' : ` (${envelope.error.code})`;
+                throw new Error(
+                    `Data Explorer backend '${this.providerId}' RPC '${method}' failed${code}: ` +
+                    envelope.error.message,
+                );
+            }
+            if (envelope.error_message) {
+                throw new Error(
+                    `Data Explorer backend '${this.providerId}' RPC '${method}' failed: ` +
+                    envelope.error_message,
+                );
+            }
+            if (Object.prototype.hasOwnProperty.call(envelope, 'result')) {
+                return envelope.result as T;
+            }
+        }
+        return response as T;
     }
 
     private _handleEvent(event: DataExplorerBackendEvent): void {
@@ -194,7 +237,15 @@ export class DataExplorerBackendRegistry implements vscode.Disposable {
         for (const provider of candidates) {
             if (await provider.canHandle(uri)) {
                 const transport = await provider.open(uri);
-                return new PositronDataExplorerExtensionBackend(provider.id, uri.toString(), transport);
+                const datasetId = transport.datasetId ?? uri.toString();
+                const clientId = transport.clientId ?? `${provider.id}:${datasetId}`;
+                return new PositronDataExplorerExtensionBackend(
+                    provider.id,
+                    uri.toString(),
+                    transport,
+                    datasetId,
+                    clientId,
+                );
             }
         }
         throw new Error(providerId

@@ -107,7 +107,6 @@ export const ContextKeys = {
     dataExplorerCodeSyntaxesAvailable: 'supervisor.dataExplorerCodeSyntaxesAvailable',
     dataExplorerIsRowFiltering: 'supervisor.dataExplorerIsRowFiltering',
     dataExplorerIsPlaintext: 'supervisor.dataExplorerIsPlaintext',
-    dataExplorerFileHasHeaderRow: 'supervisor.dataExplorerFileHasHeaderRow',
     dataExplorerSummaryCollapsed: 'supervisor.dataExplorerSummaryCollapsed',
     dataExplorerFocused: 'supervisor.dataExplorerFocused',
     dataExplorerInNewWindow: 'supervisor.dataExplorerInNewWindow',
