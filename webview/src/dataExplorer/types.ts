@@ -20,6 +20,8 @@ export interface DataExplorerState {
     error: string | null;
     supportsFileOptions?: boolean;
     fileHasHeaderRow?: boolean;
+    fileAvailableSheets?: string[];
+    fileSelectedSheet?: string;
     supportsConvertToCode?: boolean;
     codeSyntaxes?: string[];
     layout?: PositronDataExplorerLayout;
@@ -68,7 +70,7 @@ export type WebviewMessage =
     | { type: 'moveToNewWindow' }
     | { type: 'openAsPlaintext' }
     | { type: 'runConvertToCode'; desiredSyntax: string }
-    | { type: 'applyFileOptions'; hasHeaderRow: boolean }
+    | { type: 'applyFileOptions'; hasHeaderRow: boolean; sheetName?: string }
     | { type: 'requestConvertToCodePreview'; desiredSyntax: string; requestId: number }
     | { type: 'setLayout'; layout: PositronDataExplorerLayout }
     | { type: 'setSummaryCollapsed'; collapsed: boolean }

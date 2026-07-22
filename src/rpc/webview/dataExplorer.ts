@@ -160,6 +160,8 @@ export namespace DataExplorerToggleFileOptionsNotification {
     export interface Params {
         hasHeaderRow?: boolean;
         supportsFileOptions?: boolean;
+        availableSheets?: string[];
+        selectedSheet?: string;
     }
 
     export const type = new NotificationType<Params>('dataExplorer/toggleFileOptions');
@@ -178,6 +180,7 @@ export namespace DataExplorerApplyFileOptionsNotification {
 
     export interface Params {
         hasHeaderRow: boolean;
+        sheetName?: string;
     }
 
     export const type = new NotificationType<Params>('dataExplorer/applyFileOptions');

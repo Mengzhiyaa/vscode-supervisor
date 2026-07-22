@@ -7,6 +7,7 @@
 import * as vscode from 'vscode';
 import type { IPositronDataExplorerService } from './positronDataExplorerService';
 import { PositronDataExplorerEditorProvider } from './positronDataExplorerEditorProvider';
+import { getDataExplorerIdentifier } from './dataExplorerUri';
 
 /**
  * A lightweight CustomReadonlyEditorProvider that delegates to the existing
@@ -42,7 +43,8 @@ export class PositronDataExplorerCustomEditorProvider implements vscode.CustomRe
         document: vscode.CustomDocument,
         webviewPanel: vscode.WebviewPanel
     ): Promise<void> {
-        const identifier = `duckdb:${document.uri.toString()}`;
+        const modelIdentifier = getDataExplorerIdentifier(document.uri);
+        const identifier = modelIdentifier ?? `duckdb:${document.uri.toString()}`;
 
         try {
             this._logChannel.info(
@@ -53,8 +55,14 @@ export class PositronDataExplorerCustomEditorProvider implements vscode.CustomRe
             // listener does NOT auto-create a duplicate panel.
             this._editorProvider.markExternalPanel(identifier);
 
-            // Open the file via DuckDB — creates the Data Explorer instance
-            const instance = await this._dataExplorerService.openWithDuckDB(document.uri);
+            // Internal model URIs reattach an existing runtime-backed instance;
+            // actual files continue through the DuckDB backend.
+            const instance = modelIdentifier
+                ? this._dataExplorerService.getInstance(modelIdentifier)
+                : await this._dataExplorerService.openWithDuckDB(document.uri);
+            if (!instance) {
+                throw new Error(`Data Explorer model is no longer available: ${identifier}`);
+            }
 
             // Remove the mark now that openWithDuckDB has returned
             this._editorProvider.unmarkExternalPanel(identifier);

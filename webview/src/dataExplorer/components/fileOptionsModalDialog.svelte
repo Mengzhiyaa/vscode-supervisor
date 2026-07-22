@@ -8,24 +8,30 @@
 
     interface Props {
         hasHeaderRow: boolean;
-        onApply: (hasHeaderRow: boolean) => void;
+        availableSheets?: string[];
+        selectedSheet?: string;
+        onApply: (hasHeaderRow: boolean, sheetName?: string) => void;
         onCancel: () => void;
     }
 
-    let { hasHeaderRow, onApply, onCancel }: Props = $props();
+    let { hasHeaderRow, availableSheets = [], selectedSheet, onApply, onCancel }: Props = $props();
 
     let nextHasHeaderRow = $state(false);
+    let nextSelectedSheet = $state<string | undefined>();
     let primaryActionRef = $state<HTMLButtonElement | null>(null);
 
-    const settingsChanged = $derived(nextHasHeaderRow !== hasHeaderRow);
+    const settingsChanged = $derived(
+        nextHasHeaderRow !== hasHeaderRow || nextSelectedSheet !== selectedSheet,
+    );
 
     $effect(() => {
         nextHasHeaderRow = hasHeaderRow;
+        nextSelectedSheet = selectedSheet ?? availableSheets[0];
     });
 
     function handleApply() {
         if (settingsChanged) {
-            onApply(nextHasHeaderRow);
+            onApply(nextHasHeaderRow, nextSelectedSheet);
             return;
         }
 
@@ -57,6 +63,16 @@
                     nextHasHeaderRow = checked;
                 }}
             />
+            {#if availableSheets.length > 0}
+                <label class="worksheet-field">
+                    <span>{localize("positron.fileOptions.worksheet", "Worksheet")}</span>
+                    <select bind:value={nextSelectedSheet}>
+                        {#each availableSheets as sheet}
+                            <option value={sheet}>{sheet}</option>
+                        {/each}
+                    </select>
+                </label>
+            {/if}
         </div>
     </ContentArea>
 
@@ -88,5 +104,18 @@
         gap: 12px;
         padding: 16px 0;
         white-space: normal;
+    }
+
+    .worksheet-field {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    select {
+        color: var(--vscode-dropdown-foreground);
+        background: var(--vscode-dropdown-background);
+        border: 1px solid var(--vscode-dropdown-border);
+        padding: 4px 6px;
     }
 </style>

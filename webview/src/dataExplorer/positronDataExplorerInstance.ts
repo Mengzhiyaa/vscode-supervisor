@@ -14,6 +14,8 @@ type AugmentedBackendState = BackendState & {
     __ark_file_options?: {
         supportsFileOptions?: boolean;
         fileHasHeaderRow?: boolean;
+        availableSheets?: string[];
+        selectedSheet?: string;
     };
     __ark_window_state?: {
         inNewWindow?: boolean;
@@ -276,6 +278,10 @@ export class PositronDataExplorerInstance {
                 fileOptions?.supportsFileOptions ?? state.supportsFileOptions,
             fileHasHeaderRow:
                 fileOptions?.fileHasHeaderRow ?? state.fileHasHeaderRow,
+            fileAvailableSheets:
+                fileOptions?.availableSheets ?? state.fileAvailableSheets,
+            fileSelectedSheet:
+                fileOptions?.selectedSheet ?? state.fileSelectedSheet,
             supportsConvertToCode: convertToCodeSupport,
             codeSyntaxes,
             inNewWindow: windowState?.inNewWindow ?? false,

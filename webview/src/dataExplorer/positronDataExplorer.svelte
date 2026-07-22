@@ -31,6 +31,8 @@
     let activeConvertToCodePreviewRequestId = $state(0);
     let showFileOptionsModalDialog = $state(false);
     let pendingHasHeaderRow = $state(true);
+    let pendingAvailableSheets = $state<string[]>([]);
+    let pendingSelectedSheet = $state<string | undefined>();
 
     const instance = new PositronDataExplorerInstance(postMessage);
     const stores = instance.stores;
@@ -240,6 +242,8 @@
     function openFileOptionsModalDialog(params?: {
         hasHeaderRow?: boolean;
         supportsFileOptions?: boolean;
+        availableSheets?: string[];
+        selectedSheet?: string;
     }) {
         const supportsFileOptions =
             params?.supportsFileOptions ??
@@ -258,6 +262,10 @@
             params?.hasHeaderRow ??
             $explorerState.fileHasHeaderRow ??
             true;
+        pendingAvailableSheets =
+            params?.availableSheets ?? $explorerState.fileAvailableSheets ?? [];
+        pendingSelectedSheet =
+            params?.selectedSheet ?? $explorerState.fileSelectedSheet ?? pendingAvailableSheets[0];
         showConvertToCodeModalDialog = false;
         showFileOptionsModalDialog = true;
     }
@@ -266,12 +274,13 @@
         showFileOptionsModalDialog = false;
     }
 
-    function applyFileOptions(hasHeaderRow: boolean) {
+    function applyFileOptions(hasHeaderRow: boolean, sheetName?: string) {
         showFileOptionsModalDialog = false;
         invalidateTableData();
         postMessage({
             type: "applyFileOptions",
             hasHeaderRow,
+            sheetName,
         });
     }
 
@@ -345,6 +354,8 @@
         connection.onNotification("dataExplorer/toggleFileOptions", (params?: {
             hasHeaderRow?: boolean;
             supportsFileOptions?: boolean;
+            availableSheets?: string[];
+            selectedSheet?: string;
         }) => {
             openFileOptionsModalDialog(params);
         });
@@ -515,6 +526,8 @@
     {#if showFileOptionsModalDialog}
         <FileOptionsModalDialog
             hasHeaderRow={pendingHasHeaderRow}
+            availableSheets={pendingAvailableSheets}
+            selectedSheet={pendingSelectedSheet}
             onApply={applyFileOptions}
             onCancel={closeFileOptionsModalDialog}
         />

@@ -326,6 +326,16 @@
               "name": "supportsFileOptions",
               "optional": true,
               "type": "boolean"
+            },
+            {
+              "name": "availableSheets",
+              "optional": true,
+              "type": "string[]"
+            },
+            {
+              "name": "selectedSheet",
+              "optional": true,
+              "type": "string"
             }
           ]
         }
@@ -362,6 +372,11 @@
             {
               "name": "hasHeaderRow",
               "type": "boolean"
+            },
+            {
+              "name": "sheetName",
+              "optional": true,
+              "type": "string"
             }
           ]
         }

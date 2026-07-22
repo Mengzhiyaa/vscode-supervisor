@@ -399,15 +399,19 @@ test('data explorer bridges convert-to-code, file options, and focus changes', a
     await backend.notify(DataExplorerMethods.toggleFileOptions, {
         hasHeaderRow: false,
         supportsFileOptions: true,
+        availableSheets: ['Summary', 'People'],
+        selectedSheet: 'Summary',
     });
     await expect(page.getByRole('dialog', { name: 'File Options' })).toBeVisible();
 
     const applyFileOptions = backend.waitForNextNotification(DataExplorerMethods.applyFileOptions);
     await page.getByRole('checkbox').click();
+    await page.getByLabel('Worksheet').selectOption('People');
     await page.getByRole('button', { name: 'Apply' }).click();
     expect((await applyFileOptions).params).toEqual({
         type: 'applyFileOptions',
         hasHeaderRow: true,
+        sheetName: 'People',
     });
 
     await page.evaluate(() => {
