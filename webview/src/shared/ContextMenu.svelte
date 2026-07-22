@@ -47,6 +47,8 @@
     let menuEl = $state<HTMLDivElement | null>(null);
     let menuStyle = $state('');
     let restoreFocus = $state(true);
+    let typeahead = '';
+    let typeaheadTimer: ReturnType<typeof setTimeout> | undefined;
 
     const directPositronIcons = new Set([
         'positron-add-filter',
@@ -225,6 +227,18 @@
             case 'Tab':
                 requestClose({ restoreFocus: false });
                 break;
+            default:
+                if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
+                    event.preventDefault();
+                    typeahead += event.key.toLocaleLowerCase();
+                    if (typeaheadTimer) { clearTimeout(typeaheadTimer); }
+                    typeaheadTimer = setTimeout(() => { typeahead = ''; }, 500);
+                    const items = getMenuItems();
+                    const match = items.find(item =>
+                        (item.textContent ?? '').trim().toLocaleLowerCase().startsWith(typeahead));
+                    match?.focus();
+                }
+                break;
         }
     }
 
@@ -239,6 +253,7 @@
         });
 
         return () => {
+            if (typeaheadTimer) { clearTimeout(typeaheadTimer); }
             if (menuEl?.parentElement) {
                 menuEl.parentElement.removeChild(menuEl);
             }
@@ -263,7 +278,7 @@
 >
     {#each entries as entry}
         {#if isSeparator(entry)}
-            <div class="menu-separator"></div>
+            <div class="menu-separator" role="separator"></div>
         {:else}
             {@const checkable = entry.checked !== undefined}
             <button
@@ -306,5 +321,11 @@
 <style>
     .action-bar-context-menu {
         position: fixed;
+    }
+
+    @media (forced-colors: active) {
+        .action-bar-context-menu { border: 1px solid CanvasText; }
+        .menu-item:focus { outline: 1px solid Highlight; outline-offset: -1px; }
+        .menu-separator { border-color: GrayText; }
     }
 </style>

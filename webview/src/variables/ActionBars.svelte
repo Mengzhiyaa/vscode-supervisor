@@ -95,7 +95,7 @@
             ? [
                   {
                       fixedWidth: 154,
-                      minWidth: 66,
+                      minWidth: 54,
                       separator: true,
                       component: memoryUsageSnippet,
                   },

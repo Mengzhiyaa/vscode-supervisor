@@ -7,6 +7,9 @@ import {
     type ILanguageRuntimeRegistration,
     type ILanguageSupportRegistration,
     type ILanguageWebviewAssets,
+    type IDataExplorerBackendProvider,
+    type IDataConnectionDriver,
+    type IDataConnectionProfile,
     type IRuntimeSessionMetadata,
     type ISupervisorFrameworkApi,
     type ISupervisorEnvironmentVariableAction,
@@ -24,7 +27,11 @@ import { RuntimeSession } from './runtime/session';
 import { RuntimeSessionService } from './runtime/runtimeSession';
 import { RuntimeFrontendEventService } from './runtime/runtimeFrontendEventService';
 import { RuntimeStartupService } from './runtime/runtimeStartup';
-import { PositronConsoleService } from './services/console';
+import {
+    ConsoleErrorFollowupService,
+    MissingPackageErrorProvider,
+    PositronConsoleService,
+} from './services/console';
 import { PositronVariablesService } from './services/variables';
 import { PositronPreviewService } from './services/preview';
 import { PositronHelpService } from './services/help';
@@ -47,6 +54,7 @@ import {
     PositronDataExplorerService,
     PositronDataExplorerEditorProvider,
     PositronDataExplorerCustomEditorProvider,
+    PositronDataExplorerEditorContribution,
 } from './services/dataExplorer';
 import { DuckDBInstance } from './services/duckdb/duckdbInstance';
 import { PositronDataExplorerCommandId } from './services/dataExplorer/positronDataExplorerActions';
@@ -160,6 +168,7 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
 
     // Service-class session management (1:1 Positron pattern)
     private readonly _consoleService: PositronConsoleService;
+    private readonly _consoleErrorFollowupService: ConsoleErrorFollowupService;
     private readonly _variablesService: PositronVariablesService;
     private readonly _previewService: PositronPreviewService;
     private readonly _helpService: PositronHelpService;
@@ -238,11 +247,14 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
         );
 
         // Initialize service-class services (1:1 Positron pattern)
+        this._consoleErrorFollowupService = new ConsoleErrorFollowupService();
+        this._disposables.push(this._consoleErrorFollowupService);
         this._consoleService = new PositronConsoleService(
             this._sessionManager,
             this._outputChannel,
             this._context,
             this._runtimeStartupService,
+            this._consoleErrorFollowupService,
         );
         this._disposables.push(this._consoleService);
         this._disposables.push(setConsoleWidthSource(
@@ -264,13 +276,19 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
             this._sessionManager,
             this._outputChannel,
         );
-        this._disposables.push(this._packagesService);
+        this._disposables.push(
+            this._packagesService,
+            this._consoleErrorFollowupService.registerProvider(
+                new MissingPackageErrorProvider(this._packagesService),
+            ),
+        );
 
         this._previewService = new PositronPreviewService(
             this._sessionManager,
             this._plotsService,
             this._outputChannel,
             this._surfaceLifecycle,
+            this._context.workspaceState,
         );
         this._disposables.push(this._previewService);
 
@@ -339,6 +357,7 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
             this._surfaceLifecycle,
         );
         this._disposables.push(this._positronDataExplorerEditorProvider);
+        this._disposables.push(new PositronDataExplorerEditorContribution(this._variablesService));
 
         this._inlineDataExplorerNotebookService = new InlineDataExplorerNotebookService(
             this._positronDataExplorerService,
@@ -351,6 +370,8 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
             this._sessionManager,
             this._surfaceLifecycle,
             this._outputChannel,
+            this._context.globalState,
+            this._context.secrets,
         );
         this._connectionsTreeProvider = new ConnectionsTreeProvider(
             this._connectionsService,
@@ -450,6 +471,19 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
             ) => this.registerLanguageRuntime(registration),
             registerLspFactory: (factory: ILanguageLspFactory) => this.registerLspFactory(factory),
             registerBinaryProvider: (provider: IBinaryProvider) => this.registerBinaryProvider(provider),
+            registerDataExplorerBackendProvider: (provider: IDataExplorerBackendProvider) =>
+                this._positronDataExplorerService.registerBackendProvider(provider),
+            openDataExplorer: async (uri, providerId) => {
+                await this._positronDataExplorerService.openWithBackend(uri, providerId);
+            },
+            registerDataConnectionDriver: (driver: IDataConnectionDriver) =>
+                this._connectionsService.registerDriver(driver),
+            addUpdateDataConnectionProfile: async (profile: IDataConnectionProfile, connect = true) => {
+                await this._connectionsService.addUpdateProfile(profile, connect);
+            },
+            connectDataConnectionProfile: async profileId => {
+                await this._connectionsService.connectProfile(profileId);
+            },
             registerEnvironmentContributions: (extensionId, actions) =>
                 this.registerEnvironmentContributions(extensionId, actions),
         };
@@ -589,6 +623,26 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
         if (this._activated) {
             await this._ensureRegisteredBinaries();
         }
+    }
+
+    registerDataExplorerBackendProvider(provider: IDataExplorerBackendProvider): vscode.Disposable {
+        return this._positronDataExplorerService.registerBackendProvider(provider);
+    }
+
+    async openDataExplorer(uri: vscode.Uri, providerId?: string): Promise<void> {
+        await this._positronDataExplorerService.openWithBackend(uri, providerId);
+    }
+
+    registerDataConnectionDriver(driver: IDataConnectionDriver): vscode.Disposable {
+        return this._connectionsService.registerDriver(driver);
+    }
+
+    async addUpdateDataConnectionProfile(profile: IDataConnectionProfile, connect = true): Promise<void> {
+        await this._connectionsService.addUpdateProfile(profile, connect);
+    }
+
+    async connectDataConnectionProfile(profileId: string): Promise<void> {
+        await this._connectionsService.connectProfile(profileId);
     }
 
     registerEnvironmentContributions(

@@ -208,6 +208,7 @@ export class PackagesViewProvider extends BaseWebviewProvider implements vscode.
 </head>
 <body>
     <div id="app"></div>
+    ${this._getLocalizationInlineScript(nonce)}
     <script type="module" nonce="${nonce}" src="${scriptUri}"></script>
 </body>
 </html>`;

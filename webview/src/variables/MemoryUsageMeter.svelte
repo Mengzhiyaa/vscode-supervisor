@@ -3,6 +3,7 @@
         MemorySessionUsage,
         MemoryUsageSnapshot,
     } from "../types/memory";
+    import { localize } from "$lib/localization";
 
     interface Segment {
         id: string;
@@ -35,7 +36,7 @@
     const supervisorBytes = $derived(
         snapshot
             ? snapshot.kernelTotalBytes +
-                  snapshot.positronOverheadBytes +
+                  (snapshot.supervisorOverheadBytes ?? 0) +
                   snapshot.extensionHostOverheadBytes
             : 0,
     );
@@ -54,13 +55,13 @@
     );
     const tooltip = $derived.by(() => {
         if (!snapshot) {
-            return "Computing memory usage...";
+            return localize('memory.computing', 'Computing memory usage...');
         }
 
         return [
-            `Supervisor + kernels: ${formatBytes(supervisorBytes)}`,
-            `Other: ${formatBytes(snapshot.otherProcessesBytes)}`,
-            `Free: ${formatBytes(snapshot.freeSystemMemory)}`,
+            `${localize('memory.extensionHostAndKernels', 'Extension Host + kernels')}: ${formatBytes(supervisorBytes)}`,
+            `${localize('memory.other', 'Other')}: ${formatBytes(snapshot.otherProcessesBytes)}`,
+            `${localize('memory.free', 'Free')}: ${formatBytes(snapshot.freeSystemMemory)}`,
         ].join(" | ");
     });
     const segments = $derived.by(() => {
@@ -79,10 +80,10 @@
             }
         });
 
-        if (snapshot.positronOverheadBytes > 0) {
+        if ((snapshot.supervisorOverheadBytes ?? 0) > 0) {
             nextSegments.push({
                 id: "overhead:platform",
-                bytes: snapshot.positronOverheadBytes,
+                bytes: snapshot.supervisorOverheadBytes ?? 0,
                 className: "overhead",
             });
         }
@@ -126,12 +127,14 @@
     const overheadRows = $derived.by(() =>
         snapshot
             ? [
-                  {
+                  ...(snapshot.supervisorOverheadBytes !== undefined
+                      ? [{
                       id: "overhead:platform",
-                      name: "Platform",
-                      bytes: snapshot.positronOverheadBytes,
+                      name: localize('memory.platform', 'Platform'),
+                      bytes: snapshot.supervisorOverheadBytes,
                       className: "overhead",
-                  },
+                  }]
+                      : []),
                   {
                       id: "overhead:extension-host",
                       name: "Extension Host",
@@ -146,13 +149,13 @@
             ? [
                   {
                       id: "system:other",
-                      name: "Other",
+                      name: localize('memory.other', 'Other'),
                       bytes: snapshot.otherProcessesBytes,
                       className: "other",
                   },
                   {
                       id: "system:free",
-                      name: "Free",
+                      name: localize('memory.free', 'Free'),
                       bytes: snapshot.freeSystemMemory,
                       className: "free",
                   },
@@ -398,15 +401,15 @@
             class:low-memory={!!lowMemory}
             style={dropdownStyle}
             role="dialog"
-            aria-label="Memory usage"
+            aria-label={localize('memory.memoryUsage', 'Memory usage')}
         >
             {#if loading || !snapshot}
-                <div class="memory-loading">Computing memory usage...</div>
+                <div class="memory-loading">{localize('memory.computing', 'Computing memory usage...')}</div>
             {:else}
                 <div class="memory-summary">
                     <div class="summary-title">
                         <span>{usedPercent}% of {formatBytes(snapshot.totalSystemMemory)}</span>
-                        <span>{formatBytes(usedSystemBytes)} used</span>
+                        <span>{localize('memory.used', '{0} used', formatBytes(usedSystemBytes))}</span>
                     </div>
                     {@render memoryBar(false)}
                     {#if lowMemory}
@@ -420,7 +423,7 @@
                 <div class="memory-breakdown">
                     {#if sessionRows.length > 0}
                         <div class="section-header">
-                            Sessions ({formatBytes(snapshot.kernelTotalBytes)})
+                            {localize('memory.sessions', 'Sessions')} ({formatBytes(snapshot.kernelTotalBytes)})
                         </div>
                         {#each sessionRows as row (row.id)}
                             {@render usageRow(row)}
@@ -428,16 +431,16 @@
                     {/if}
 
                     <div class="section-header">
-                        Overhead ({formatBytes(snapshot.positronOverheadBytes + snapshot.extensionHostOverheadBytes)})
+                        {localize('memory.overhead', 'Overhead')} ({formatBytes((snapshot.supervisorOverheadBytes ?? 0) + snapshot.extensionHostOverheadBytes)})
                     </div>
                     {#each overheadRows as row (row.id)}
                         {@render usageRow(row)}
                     {/each}
 
-                    <div class="section-header">Summary</div>
+                    <div class="section-header">{localize('memory.summary', 'Summary')}</div>
                     {@render usageRow({
                         id: "summary:supervisor",
-                        name: "Supervisor + kernels",
+                        name: localize('memory.extensionHostAndKernels', 'Extension Host + kernels'),
                         bytes: supervisorBytes,
                         className: "supervisor",
                     })}
@@ -709,13 +712,13 @@
         user-select: none;
     }
 
-    @container (max-width: 96px) {
+    @container (max-width: 95px) {
         .memory-bar.compact {
             display: none;
         }
     }
 
-    @container (max-width: 66px) {
+    @container (max-width: 54px) {
         .memory-warning {
             display: none;
         }

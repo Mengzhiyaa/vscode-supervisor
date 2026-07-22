@@ -237,7 +237,8 @@
           "type": "number"
         },
         {
-          "name": "positronOverheadBytes",
+          "name": "supervisorOverheadBytes",
+          "optional": true,
           "type": "number"
         },
         {
@@ -249,9 +250,32 @@
           "type": "number"
         },
         {
+          "name": "source",
+          "type": "MemoryUsageSource"
+        },
+        {
           "name": "lowMemory",
           "optional": true,
           "type": "LowMemoryStatus"
+        }
+      ]
+    },
+    {
+      "kind": "interface",
+      "name": "MemoryUsageSource",
+      "fields": [
+        {
+          "name": "providerKind",
+          "type": "'local' | 'remote'"
+        },
+        {
+          "name": "machineId",
+          "type": "string"
+        },
+        {
+          "name": "remoteName",
+          "optional": true,
+          "type": "string"
         }
       ]
     },

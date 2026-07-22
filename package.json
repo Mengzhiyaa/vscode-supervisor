@@ -339,6 +339,12 @@
         "icon": "$(refresh)"
       },
       {
+        "command": "supervisor.connections.new",
+        "title": "New Connection",
+        "category": "Ark Connections",
+        "icon": "$(add)"
+      },
+      {
         "command": "supervisor.connections.disconnect",
         "title": "Disconnect",
         "category": "Ark Connections",
@@ -427,6 +433,11 @@
           "command": "supervisor.runtimeSessions.refresh",
           "when": "view == supervisor.runtimeSessions",
           "group": "navigation@1"
+        },
+        {
+          "command": "supervisor.connections.new",
+          "when": "view == supervisor.connections",
+          "group": "navigation@0"
         },
         {
           "command": "supervisor.connections.refresh",
@@ -581,7 +592,7 @@
       "explorer/context": [
         {
           "command": "supervisor.dataExplorer.openFile",
-          "when": "resourceExtname =~ /^\\.(csv|tsv|parquet|parq)$/ || resourceFilename =~ /\\.(csv|tsv)\\.gz$/",
+          "when": "resourceExtname =~ /^\\.(csv|tsv|parquet|parq|xlsx)$/ || resourceFilename =~ /\\.(csv|tsv)\\.gz$/",
           "group": "navigation@100"
         }
       ]
@@ -668,7 +679,7 @@
     "viewsWelcome": [
       {
         "view": "supervisor.connections",
-        "contents": "No database connections are currently active.\n\nConnections created by a running Python or R session appear here automatically.\n\n[Refresh Connections](command:supervisor.connections.refresh)"
+        "contents": "No database connections are currently active.\n\nConnections created by a running Python or R session appear here automatically.\n\n[New Connection](command:supervisor.connections.new) · [Refresh Connections](command:supervisor.connections.refresh)"
       }
     ],
     "configuration": {
@@ -799,6 +810,21 @@
           "default": true,
           "description": "Show a one-time notification when the system enters a low-memory state."
         },
+        "dataExplorer.enablePreview": {
+          "type": "boolean",
+          "default": false,
+          "description": "Open Data Explorer editor tabs in preview mode."
+        },
+        "dataExplorer.enableClickToView": {
+          "type": "boolean",
+          "default": true,
+          "description": "Make viewable runtime variables available as editor links and Data Explorer code actions."
+        },
+        "packages.suggestInstallOnError": {
+          "type": "boolean",
+          "default": true,
+          "description": "Suggest installing a package when a console error identifies a missing Python or R package."
+        },
         "plots.defaultSizingPolicy": {
           "type": "string",
           "default": "auto",
@@ -831,6 +857,11 @@
             "off"
           ],
           "description": "Controls dark-theme filtering for plots."
+        },
+        "plots.freezeSlowPlots": {
+          "type": "boolean",
+          "default": true,
+          "description": "Freeze a plot at its first rendered size when generation takes more than three seconds."
         },
         "supervisor.console.fontSize": {
           "type": "number",
@@ -868,6 +899,11 @@
           "default": false,
           "description": "Create console clients for notebook runtime sessions."
         },
+        "supervisor.viewer.openLocalhostUrls": {
+          "type": "boolean",
+          "default": true,
+          "description": "Open localhost URLs in the Viewer. Other HTTP(S) URLs always open in the external browser."
+        },
         "supervisor.console.enableTrace": {
           "type": "boolean",
           "default": false,
@@ -901,6 +937,9 @@
           },
           {
             "filenamePattern": "*.tsv.gz"
+          },
+          {
+            "filenamePattern": "*.xlsx"
           }
         ]
       }

@@ -88,10 +88,17 @@ export interface MemoryUsageSnapshot {
     freeSystemMemory: number;
     kernelSessions: MemorySessionUsage[];
     kernelTotalBytes: number;
-    positronOverheadBytes: number;
+    supervisorOverheadBytes?: number;
     extensionHostOverheadBytes: number;
     otherProcessesBytes: number;
+    source: MemoryUsageSource;
     lowMemory?: LowMemoryStatus;
+}
+
+export interface MemoryUsageSource {
+    providerKind: 'local' | 'remote';
+    machineId: string;
+    remoteName?: string;
 }
 
 export namespace GetMemoryUsageRequest {
