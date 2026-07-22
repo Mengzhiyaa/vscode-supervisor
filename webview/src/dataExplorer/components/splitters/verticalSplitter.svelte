@@ -23,6 +23,7 @@
         onCollapsedChanged?: (collapsed: boolean) => void;
         onInvert?: (invert: boolean) => void;
         onResize: (newWidth: number) => void;
+        resizeAriaLabel?: string;
     }
 
     let {
@@ -37,6 +38,7 @@
         onCollapsedChanged,
         onInvert,
         onResize,
+        resizeAriaLabel = "Resize summary panel",
     }: Props = $props();
 
     let sashRef = $state<HTMLDivElement | undefined>(undefined);
@@ -51,6 +53,7 @@
     let sashWidth = $state(4);
     let sashIndicatorWidth = $state(4);
     let hoverDelay = $state(300);
+    const sashResizeParams = $derived.by(() => onBeginResize());
 
     let hoverTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -141,6 +144,41 @@
         event.preventDefault();
         event.stopPropagation();
         onInvert?.(!invert);
+    }
+
+    function handleSashKeyDown(event: KeyboardEvent) {
+        if (event.target !== sashRef) {
+            return;
+        }
+        const resizeParams = onBeginResize();
+        if (event.key === "Home") {
+            event.preventDefault();
+            setCollapsed(true);
+            return;
+        }
+        if (event.key === "End") {
+            event.preventDefault();
+            setCollapsed(false);
+            onResize(resizeParams.maximumWidth);
+            return;
+        }
+        if (event.key === "Enter") {
+            event.preventDefault();
+            onInvert?.(!invert);
+            return;
+        }
+        if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") {
+            return;
+        }
+        event.preventDefault();
+        const direction = event.key === "ArrowRight" ? 1 : -1;
+        const delta = direction * (event.shiftKey ? 50 : 10) * (invert ? -1 : 1);
+        const width = Math.max(
+            resizeParams.minimumWidth,
+            Math.min(resizeParams.maximumWidth, resizeParams.startingWidth + delta),
+        );
+        setCollapsed(false);
+        onResize(width);
     }
 
     function handleButtonPointerEnter() {
@@ -267,6 +305,8 @@
 <div class="vertical-splitter" style={`width: ${splitterWidth}px;`}>
     {#if showSash}
         <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+        <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
         <div
             bind:this={sashRef}
             class="sash"
@@ -278,6 +318,16 @@
             onpointerleave={handleSashPointerLeave}
             onpointerdown={handleSashPointerDown}
             ondblclick={handleSashDoubleClick}
+            onkeydown={handleSashKeyDown}
+            role="separator"
+            aria-orientation="vertical"
+            aria-label={resizeAriaLabel}
+            aria-valuemin={sashResizeParams.minimumWidth}
+            aria-valuemax={sashResizeParams.maximumWidth}
+            aria-valuenow={collapsed
+                ? sashResizeParams.minimumWidth
+                : sashResizeParams.startingWidth}
+            tabindex="0"
         >
             <div
                 class="sash-indicator"
@@ -334,7 +384,8 @@
     }
 
     .sash.hovering .sash-indicator,
-    .sash.resizing .sash-indicator {
+    .sash.resizing .sash-indicator,
+    .sash:focus-visible .sash-indicator {
         background: var(--vscode-sash-hoverBorder, var(--vscode-focusBorder));
     }
 
@@ -371,5 +422,16 @@
     .expand-collapse-button:focus-visible {
         outline-offset: 2px;
         outline: 1px solid var(--vscode-focusBorder);
+    }
+
+    @media (forced-colors: active) {
+        .sash:hover .sash-indicator,
+        .sash:focus-visible .sash-indicator,
+        .sash.resizing .sash-indicator {
+            background: Highlight;
+        }
+        .expand-collapse-button:focus-visible {
+            outline: 2px solid Highlight;
+        }
     }
 </style>

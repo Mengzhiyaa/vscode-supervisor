@@ -14,6 +14,7 @@
         WidthCalculator,
         getComputedFont,
     } from "../../../../dataGrid/classes/widthCalculator";
+    import { localize } from "../../../nls";
 
     const MIN_COLUMN_WIDTH = 300;
     const DEFAULT_SUMMARY_WIDTH = 350;
@@ -47,6 +48,22 @@
     let animateColumnsWidth = $state(false);
     let columnsCollapsed = $state(false);
     let initialLayoutFrame: number | undefined;
+    const collapseSummaryLabel = localize(
+        "dataExplorer.collapseSummary",
+        "Collapse summary",
+    );
+    const expandSummaryLabel = localize(
+        "dataExplorer.expandSummary",
+        "Expand summary",
+    );
+    const columnSummaryLabel = localize(
+        "dataExplorer.columnSummary",
+        "Column Summary",
+    );
+    const resizeSummaryLabel = localize(
+        "dataExplorer.resizeSummary",
+        "Resize summary panel",
+    );
 
     const motionReduced = () =>
         typeof window !== "undefined" &&
@@ -235,7 +252,7 @@
         <div class="data-grid-container">
             {#if layout === PositronDataExplorerLayout.SummaryOnLeft}
                 {#if tableSchemaDataGridInstance && !columnsCollapsed}
-                    <div class="summary-data-grid" role="region" aria-label="Column Summary">
+                    <div class="summary-data-grid" role="region" aria-label={columnSummaryLabel}>
                         <PositronDataGrid
                             instance={tableSchemaDataGridInstance}
                             gridRole="summary"
@@ -259,9 +276,10 @@
     <div class="splitter">
         <VerticalSplitter
             alwaysShowExpandCollapseButton={true}
-            collapseAriaLabel="Collapse summary"
+            collapseAriaLabel={collapseSummaryLabel}
             collapsible={true}
-            expandAriaLabel="Expand summary"
+            expandAriaLabel={expandSummaryLabel}
+            resizeAriaLabel={resizeSummaryLabel}
             invert={layout === PositronDataExplorerLayout.SummaryOnRight}
             isCollapsed={columnsCollapsed}
             showSash={true}
@@ -291,7 +309,7 @@
                 {/if}
             {:else}
                 {#if tableSchemaDataGridInstance && !columnsCollapsed}
-                    <div class="summary-data-grid" role="region" aria-label="Column Summary">
+                    <div class="summary-data-grid" role="region" aria-label={columnSummaryLabel}>
                         <PositronDataGrid
                             instance={tableSchemaDataGridInstance}
                             gridRole="summary"

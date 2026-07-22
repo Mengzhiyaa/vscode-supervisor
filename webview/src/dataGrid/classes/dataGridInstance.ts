@@ -2218,6 +2218,34 @@ export abstract class DataGridInstance {
         this._rowSelectionIndexes = undefined;
     }
 
+    restoreClipboardDataSelection(clipboardData: ClipboardData): void {
+        if (clipboardData instanceof ClipboardCell) {
+            this.selectCell(clipboardData.columnIndex, clipboardData.rowIndex);
+            return;
+        }
+        if (clipboardData instanceof ClipboardCellIndexes) {
+            this._cellSelectionIndexes = new CellSelectionIndexes(
+                clipboardData.columnIndexes,
+                clipboardData.rowIndexes,
+            );
+            this._columnSelectionIndexes = undefined;
+            this._rowSelectionIndexes = undefined;
+            this._cursorColumnIndex = clipboardData.columnIndexes.at(-1) ?? 0;
+            this._cursorRowIndex = clipboardData.rowIndexes.at(-1) ?? 0;
+        } else if (clipboardData instanceof ClipboardColumnIndexes) {
+            this._columnSelectionIndexes = new SelectionIndexes(clipboardData.indexes);
+            this._cellSelectionIndexes = undefined;
+            this._rowSelectionIndexes = undefined;
+            this._cursorColumnIndex = clipboardData.indexes.at(-1) ?? 0;
+        } else {
+            this._rowSelectionIndexes = new SelectionIndexes(clipboardData.indexes);
+            this._cellSelectionIndexes = undefined;
+            this._columnSelectionIndexes = undefined;
+            this._cursorRowIndex = clipboardData.indexes.at(-1) ?? 0;
+        }
+        this.fireOnDidUpdateEvent();
+    }
+
     /**
      * Gets the clipboard data based on current selection.
      * @returns The clipboard data, or undefined if nothing is selected.

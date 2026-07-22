@@ -4,6 +4,7 @@
 
 import type { SchemaColumn } from '../../dataGrid/types';
 import { WidthCalculator } from '../../dataGrid/classes/widthCalculator';
+import type { ColumnValue } from '../types';
 
 /**
  * WidthCalculators interface.
@@ -51,26 +52,35 @@ export interface DataCell {
 
 type UpdateListener = () => void;
 
-const SPECIAL_VALUE_MAP = new Map<string, DataCellKind>([
-    ['', DataCellKind.NULL],
-    ['NULL', DataCellKind.NULL],
-    ['NA', DataCellKind.NA],
-    ['<NA>', DataCellKind.NA],
-    ['NaN', DataCellKind.NaN],
-    ['NaT', DataCellKind.NotATime],
-    ['None', DataCellKind.None],
-    ['INF', DataCellKind.INFINITY],
-    ['-INF', DataCellKind.NEG_INFINITY],
-]);
+const SPECIAL_VALUES: Record<number, readonly [DataCellKind, string]> = {
+    0: [DataCellKind.NULL, 'NULL'],
+    1: [DataCellKind.NA, 'NA'],
+    2: [DataCellKind.NaN, 'NaN'],
+    3: [DataCellKind.NotATime, 'NaT'],
+    4: [DataCellKind.None, 'None'],
+    10: [DataCellKind.INFINITY, 'INF'],
+    11: [DataCellKind.NEG_INFINITY, '-INF'],
+};
 
-function inferDataCellKind(formatted: string): DataCellKind {
-    return SPECIAL_VALUE_MAP.get(formatted) ?? DataCellKind.NON_NULL;
-}
+export function decodeColumnValue(value: ColumnValue): DataCell {
+    if (typeof value === 'string') {
+        return {
+            formatted: value,
+            kind: DataCellKind.NON_NULL,
+        };
+    }
 
-function createDataCell(formatted: string): DataCell {
+    const specialValue = SPECIAL_VALUES[value];
+    if (specialValue) {
+        return {
+            kind: specialValue[0],
+            formatted: specialValue[1],
+        };
+    }
+
     return {
-        formatted,
-        kind: inferDataCellKind(formatted),
+        formatted: 'UNKNOWN',
+        kind: DataCellKind.UNKNOWN,
     };
 }
 
@@ -255,7 +265,7 @@ export class TableDataCache {
 
     applyDataUpdate(params: {
         startRow: number;
-        columns: string[][];
+        columns: ColumnValue[][];
         columnIndices?: number[];
         rowLabels?: string[];
     }): boolean {
@@ -278,9 +288,12 @@ export class TableDataCache {
 
                 let maxValueLength = this._columnValueLengths.get(columnIndex) ?? 0;
                 for (let rowOffset = 0; rowOffset < values.length; rowOffset++) {
-                    const formatted = values[rowOffset] ?? '';
-                    columnCache.set(startRow + rowOffset, createDataCell(formatted));
-                    maxValueLength = Math.max(maxValueLength, formatted.length);
+                    const dataCell = decodeColumnValue(values[rowOffset] ?? '');
+                    columnCache.set(startRow + rowOffset, dataCell);
+                    maxValueLength = Math.max(
+                        maxValueLength,
+                        dataCell.formatted.length,
+                    );
                 }
 
                 this._columnValueLengths.set(columnIndex, maxValueLength);

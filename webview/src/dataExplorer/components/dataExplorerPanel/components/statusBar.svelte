@@ -19,7 +19,7 @@
     });
 </script>
 
-<div class="status-bar">
+<div class="status-bar" role="status" aria-live="polite" aria-atomic="true">
     <StatusBarActivityIndicator />
     {#if hasFilters}
         <span class="label"

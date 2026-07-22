@@ -15,6 +15,9 @@
     const moveToNewWindowDisabled = $derived(
         $explorerState.inNewWindow ?? false,
     );
+    const supportsOpenAsSpreadsheet = $derived(
+        $explorerState.supportsOpenAsSpreadsheet ?? false,
+    );
 
     const clearSortButtonDescription = localize(
         "positron.clearSortButtonDescription",
@@ -28,13 +31,21 @@
         "positron.moveIntoNewWindowButtonDescription",
         "Move into New Window",
     );
+    const openAsSpreadsheetLabel = localize(
+        "dataExplorer.openAsSpreadsheet",
+        "Open as Spreadsheet",
+    );
+    const actionsAriaLabel = localize(
+        "dataExplorer.actions",
+        "Data Explorer actions",
+    );
 </script>
 
 <div class="action-bar">
     <div
         class="positron-action-bar border-bottom data-explorer-action-bar"
         role="toolbar"
-        aria-label="Data Explorer actions"
+        aria-label={actionsAriaLabel}
     >
         <div class="action-bar-region left">
             <ActionBarButton
@@ -46,6 +57,17 @@
                     void instance.clearColumnSorting();
                 }}
             />
+            {#if supportsOpenAsSpreadsheet}
+                <ActionBarButton
+                    icon="github-project"
+                    label={openAsSpreadsheetLabel}
+                    ariaLabel={openAsSpreadsheetLabel}
+                    tooltip={openAsSpreadsheetLabel}
+                    onclick={() => {
+                        postMessage({ type: "openAsSpreadsheet" });
+                    }}
+                />
+            {/if}
         </div>
         <div class="action-bar-region right">
             <LayoutMenuButton />

@@ -16,11 +16,15 @@
     import { DATA_EXPLORER_CONTEXT_KEY } from "./positronDataExplorerContext";
     import {
         PositronDataExplorerLayout,
+        type ColumnValue,
         type WebviewMessage,
     } from "./types";
+    import { localize } from "./nls";
+    import { MAX_ADVANCED_LAYOUT_ENTRY_COUNT } from "../dataGrid/classes/layoutManager";
 
     let connection = $state<MessageConnection | undefined>(undefined);
     let rootElement = $state<HTMLDivElement | undefined>(undefined);
+    let lastFocusedElement: HTMLElement | undefined;
     let dataExplorerFocused = $state(false);
     let showConvertToCodeModalDialog = $state(false);
     let convertToCodeSyntaxes = $state<string[]>([]);
@@ -40,6 +44,27 @@
     const { isLoading, errorMessage } = stores;
     const tableDataDataGridInstance = instance.tableDataDataGridInstance;
     const tableSchemaDataGridInstance = instance.tableSchemaDataGridInstance;
+    const largeColumnDataset = $derived(
+        ($explorerState.backendState?.table_shape.num_columns ?? 0) >=
+            MAX_ADVANCED_LAYOUT_ENTRY_COUNT,
+    );
+    const dataExplorerAriaLabel = localize(
+        "dataExplorer.ariaLabel",
+        "Data Explorer",
+    );
+    const loadingDataExplorerLabel = localize(
+        "dataExplorer.loading",
+        "Loading Data Explorer",
+    );
+    const dismissErrorLabel = localize(
+        "dataExplorer.dismissError",
+        "Dismiss error",
+    );
+    const dismissLabel = localize("dataExplorer.dismiss", "Dismiss");
+    const largeColumnWarning = localize(
+        "dataExplorer.largeColumnWarning",
+        "This dataset has too many columns for sorting, filtering, and column summary operations.",
+    );
 
     function postMessage(message: WebviewMessage) {
         connection?.sendNotification(`dataExplorer/${message.type}`, message);
@@ -70,8 +95,23 @@
         setTimeout(callback, 0);
     }
 
-    function handleRootFocusIn() {
+    function handleRootFocusIn(event: FocusEvent) {
+        if (event.target instanceof HTMLElement && event.target !== rootElement) {
+            lastFocusedElement = event.target;
+        }
         notifyFocusChanged(true);
+    }
+
+    function restoreFocus() {
+        requestAnimationFrame(() => {
+            const target =
+                (lastFocusedElement?.isConnected ? lastFocusedElement : undefined) ??
+                document.querySelector<HTMLElement>(
+                    '.data-grid[data-grid-role="table"]',
+                ) ??
+                rootElement;
+            target?.focus({ preventScroll: true });
+        });
     }
 
     function handleRootFocusOut(event: FocusEvent) {
@@ -303,6 +343,7 @@
         connection.onNotification("dataExplorer/copy", () => {
             tableDataDataGridInstance.copyCurrentSelection();
         });
+        connection.onNotification("dataExplorer/focus", restoreFocus);
         connection.onNotification("dataExplorer/copyTableData", () => {
             postMessage({ type: "copyTableData" });
         });
@@ -372,6 +413,24 @@
             },
         );
         connection.onNotification(
+            "dataExplorer/summaryWidthChanged",
+            (params: { summaryWidth: number }) => {
+                instance.handleSummaryWidthChanged(params.summaryWidth);
+            },
+        );
+        connection.onNotification(
+            "dataExplorer/selectionChanged",
+            (params: {
+                selectionType: "cell" | "cells" | "columns" | "rows";
+                columnIndex?: number;
+                rowIndex?: number;
+                columnIndexes?: number[];
+                rowIndexes?: number[];
+            }) => {
+                instance.handleSelectionChanged(params);
+            },
+        );
+        connection.onNotification(
             "dataExplorer/initialize",
             (params: {
                 identifier: string;
@@ -425,20 +484,29 @@
             (params: {
                 profiles: Array<{ columnIndex: number; profile: unknown }>;
                 error?: string;
-                requestId?: number;
+                requestId: number;
+                generation: number;
             }) => {
                 instance.handleColumnProfiles(params);
             },
         );
         connection.onNotification(
+            "dataExplorer/dataInvalidated",
+            (params: { generation: number; schemaChanged: boolean }) => {
+                instance.handleDataInvalidated(params);
+            },
+        );
+        connection.onNotification(
             "dataExplorer/data",
             (params: {
-                columns: string[][];
+                columns: ColumnValue[][];
                 startRow: number;
                 endRow: number;
                 columnIndices?: number[];
                 rowLabels?: string[];
                 schema?: unknown[];
+                requestId: number;
+                generation: number;
             }) => {
                 instance.handleData({
                     ...params,
@@ -480,7 +548,8 @@
     class="positron-data-explorer"
     bind:this={rootElement}
     aria-busy={$isLoading}
-    aria-label="Data Explorer"
+    aria-label={dataExplorerAriaLabel}
+    tabindex="-1"
     onfocusin={handleRootFocusIn}
     onfocusout={handleRootFocusOut}
 >
@@ -488,16 +557,22 @@
     {#if $isLoading && !closedReason}
         <div class="data-explorer-progress" aria-hidden="true"><span></span></div>
         <div class="screen-reader-status" role="status" aria-live="polite">
-            Loading Data Explorer
+            {loadingDataExplorerLabel}
         </div>
     {/if}
     {#if $errorMessage && !closedReason}
         <div class="data-explorer-error" role="alert">
             <span class="codicon codicon-error" aria-hidden="true"></span>
             <span>{$errorMessage}</span>
-            <button type="button" aria-label="Dismiss error" title="Dismiss" onclick={dismissError}>
+            <button type="button" aria-label={dismissErrorLabel} title={dismissLabel} onclick={dismissError}>
                 <span class="codicon codicon-close" aria-hidden="true"></span>
             </button>
+        </div>
+    {/if}
+    {#if largeColumnDataset && !closedReason}
+        <div class="data-explorer-warning" role="status" aria-live="polite">
+            <span class="codicon codicon-warning" aria-hidden="true"></span>
+            <span>{largeColumnWarning}</span>
         </div>
     {/if}
     <DataExplorerPanel />
@@ -591,6 +666,22 @@
         background: var(--vscode-inputValidation-errorBackground, var(--vscode-editorWidget-background));
     }
 
+    .data-explorer-warning {
+        position: absolute;
+        z-index: 24;
+        top: calc(var(--vscode-positronActionBar-height, 28px) + 6px);
+        left: 8px;
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        max-width: min(620px, calc(100% - 16px));
+        padding: 6px 9px;
+        border: 1px solid var(--vscode-inputValidation-warningBorder, var(--vscode-editorWarning-foreground));
+        border-radius: 4px;
+        color: var(--vscode-inputValidation-warningForeground, var(--vscode-foreground));
+        background: var(--vscode-inputValidation-warningBackground, var(--vscode-editorWidget-background));
+    }
+
     .data-explorer-error > span:nth-child(2) {
         min-width: 0;
         overflow: hidden;
@@ -642,6 +733,18 @@
         .data-explorer-progress span {
             width: 100%;
             animation: none;
+        }
+    }
+
+    @media (forced-colors: active) {
+        .data-explorer-progress,
+        .data-explorer-error,
+        .data-explorer-warning {
+            border: 1px solid CanvasText;
+            forced-color-adjust: none;
+        }
+        .data-explorer-progress span {
+            background: Highlight;
         }
     }
 </style>

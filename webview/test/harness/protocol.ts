@@ -138,6 +138,7 @@ export interface DataExplorerBackendState {
         fileHasHeaderRow?: boolean;
         availableSheets?: string[];
         selectedSheet?: string;
+        supportsOpenAsSpreadsheet?: boolean;
     };
     __ark_window_state?: {
         inNewWindow?: boolean;
@@ -306,17 +307,22 @@ export const DataExplorerMethods = {
     moveToNewWindow: 'dataExplorer/moveToNewWindow',
     convertToCode: 'dataExplorer/convertToCode',
     openAsPlaintext: 'dataExplorer/openAsPlaintext',
+    openAsSpreadsheet: 'dataExplorer/openAsSpreadsheet',
     toggleFileOptions: 'dataExplorer/toggleFileOptions',
     runConvertToCode: 'dataExplorer/runConvertToCode',
     applyFileOptions: 'dataExplorer/applyFileOptions',
     requestConvertToCodePreview: 'dataExplorer/requestConvertToCodePreview',
     setLayout: 'dataExplorer/setLayout',
     setSummaryCollapsed: 'dataExplorer/setSummaryCollapsed',
+    setSummaryWidth: 'dataExplorer/setSummaryWidth',
+    setSelection: 'dataExplorer/setSelection',
     focusChanged: 'dataExplorer/focusChanged',
+    focus: 'dataExplorer/focus',
     requestData: 'dataExplorer/requestData',
     requestSchema: 'dataExplorer/requestSchema',
     searchSchema: 'dataExplorer/searchSchema',
     requestColumnProfiles: 'dataExplorer/requestColumnProfiles',
+    cancelColumnProfiles: 'dataExplorer/cancelColumnProfiles',
     refresh: 'dataExplorer/refresh',
     sort: 'dataExplorer/sort',
     clearSort: 'dataExplorer/clearSort',
@@ -327,8 +333,11 @@ export const DataExplorerMethods = {
     copyToClipboard: 'dataExplorer/copyToClipboard',
     layoutChanged: 'dataExplorer/layoutChanged',
     summaryCollapsedChanged: 'dataExplorer/summaryCollapsedChanged',
+    summaryWidthChanged: 'dataExplorer/summaryWidthChanged',
+    selectionChanged: 'dataExplorer/selectionChanged',
     summarySchema: 'dataExplorer/summarySchema',
     columnProfiles: 'dataExplorer/columnProfiles',
+    dataInvalidated: 'dataExplorer/dataInvalidated',
     convertToCodePreview: 'dataExplorer/convertToCodePreview',
     showColumnContextMenu: 'dataExplorer/showColumnContextMenu',
     showRowContextMenu: 'dataExplorer/showRowContextMenu',

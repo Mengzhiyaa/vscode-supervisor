@@ -381,8 +381,14 @@ export class TableSummaryDataGridInstance extends DataGridInstance {
         profiles: Array<{ columnIndex: number; profile: unknown }>,
         error?: string,
         requestId?: number,
+        generation?: number,
     ): void {
-        this._summaryCache.handleColumnProfiles(profiles, error, requestId);
+        this._summaryCache.handleColumnProfiles(
+            profiles,
+            error,
+            requestId,
+            generation,
+        );
         if (this._expandedColumns.size > 0) {
             this._applyExpandedRowHeights();
         }
@@ -605,7 +611,6 @@ export class TableSummaryDataGridInstance extends DataGridInstance {
     private _applyVisibleColumns(columns: SchemaColumn[]): void {
         this._visibleColumns = columns;
         this._summaryCache.setSchema(columns);
-        this._stores.summaryColumns.set(columns);
         this._updateLayoutEntries();
         this._resetScrollOffset();
         if (this._visible) {

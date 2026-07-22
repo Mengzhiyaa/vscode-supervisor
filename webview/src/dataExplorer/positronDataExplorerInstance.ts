@@ -8,7 +8,11 @@ import { TableSummaryDataGridInstance } from './tableSummaryDataGridInstance';
 import { TableDataDataGridInstance } from './tableDataDataGridInstance';
 import { TableDataCache } from './common/tableDataCache';
 import type { BackendState, SchemaColumn } from '../dataGrid/types';
-import { PositronDataExplorerLayout, type WebviewMessage } from './types';
+import {
+    PositronDataExplorerLayout,
+    type ColumnValue,
+    type WebviewMessage,
+} from './types';
 
 type AugmentedBackendState = BackendState & {
     __ark_file_options?: {
@@ -16,6 +20,7 @@ type AugmentedBackendState = BackendState & {
         fileHasHeaderRow?: boolean;
         availableSheets?: string[];
         selectedSheet?: string;
+        supportsOpenAsSpreadsheet?: boolean;
     };
     __ark_window_state?: {
         inNewWindow?: boolean;
@@ -94,6 +99,7 @@ export class PositronDataExplorerInstance {
             ...state,
             summaryWidth,
         }));
+        this._postMessage({ type: 'setSummaryWidth', summaryWidth });
     }
 
     dispose(): void {
@@ -125,17 +131,27 @@ export class PositronDataExplorerInstance {
         this._setSummaryCollapsed(collapsed, false);
     }
 
+    handleSummaryWidthChanged(summaryWidth: number): void {
+        this.stores.state.update(state => ({ ...state, summaryWidth }));
+    }
+
+    handleSelectionChanged(selection: {
+        selectionType: 'cell' | 'cells' | 'columns' | 'rows';
+        columnIndex?: number;
+        rowIndex?: number;
+        columnIndexes?: number[];
+        rowIndexes?: number[];
+    }): void {
+        this.tableDataDataGridInstance.applySelection(selection);
+    }
+
     handleInitialize(params: {
         identifier: string;
         displayName: string;
         languageName?: string;
         backendState: AugmentedBackendState | null;
     }): void {
-        this._applyBackendState(params.backendState, {
-            identifier: params.identifier,
-            displayName: params.displayName,
-            languageName: params.languageName,
-        });
+        this._applyBackendState(params.backendState);
     }
 
     handleMetadata(params: {
@@ -146,7 +162,6 @@ export class PositronDataExplorerInstance {
     }): void {
         this.stores.state.update((state) => ({
             ...state,
-            displayName: params.displayName,
             schema:
                 state.backendState?.table_shape.num_columns !== params.numColumns
                     ? []
@@ -174,7 +189,7 @@ export class PositronDataExplorerInstance {
         this.tableDataDataGridInstance.handleSchemaUpdate(params.columns);
         this.stores.state.update((state) => ({
             ...state,
-            schema: mergeSchemaColumns(state.schema ?? [], params.columns),
+            schema: mergeSchemaColumns(state.schema, params.columns),
         }));
     }
 
@@ -189,12 +204,14 @@ export class PositronDataExplorerInstance {
     handleColumnProfiles(params: {
         profiles: Array<{ columnIndex: number; profile: unknown }>;
         error?: string;
-        requestId?: number;
+        requestId: number;
+        generation: number;
     }): void {
         this.tableSchemaDataGridInstance.handleColumnProfiles(
             params.profiles,
             params.error,
             params.requestId,
+            params.generation,
         );
         if (params.error) {
             this.stores.state.update((state) => ({
@@ -205,19 +222,36 @@ export class PositronDataExplorerInstance {
     }
 
     handleData(params: {
-        columns: string[][];
+        columns: ColumnValue[][];
         startRow: number;
         endRow: number;
         columnIndices?: number[];
         rowLabels?: string[];
         schema?: SchemaColumn[];
+        requestId: number;
+        generation: number;
     }): void {
         this.tableDataDataGridInstance.handleDataUpdate(params);
         if (params.schema && params.schema.length > 0) {
             this.stores.state.update((state) => ({
                 ...state,
-                schema: mergeSchemaColumns(state.schema ?? [], params.schema ?? []),
+                schema: mergeSchemaColumns(state.schema, params.schema ?? []),
             }));
+        }
+    }
+
+    handleDataInvalidated(params: {
+        generation: number;
+        schemaChanged: boolean;
+    }): void {
+        this.tableDataDataGridInstance.handleDataInvalidated(
+            params.generation,
+            params.schemaChanged,
+        );
+        if (params.schemaChanged) {
+            this.tableSchemaDataGridInstance.handleSchemaUpdated();
+        } else {
+            this.tableSchemaDataGridInstance.handleDataUpdated();
         }
     }
 
@@ -240,14 +274,7 @@ export class PositronDataExplorerInstance {
         }));
     }
 
-    private _applyBackendState(
-        backendState: AugmentedBackendState | null,
-        metadata?: {
-            identifier?: string;
-            displayName?: string;
-            languageName?: string;
-        },
-    ): void {
+    private _applyBackendState(backendState: AugmentedBackendState | null): void {
         const previousState = this._currentBackendState();
         const previousFileHasHeaderRow = this._currentFileHasHeaderRow();
         const fileOptions = backendState?.__ark_file_options;
@@ -257,9 +284,6 @@ export class PositronDataExplorerInstance {
                 backendState?.table_shape.num_columns ||
             (fileOptions?.fileHasHeaderRow !== undefined &&
                 fileOptions.fileHasHeaderRow !== previousFileHasHeaderRow);
-        const convertToCodeSupport =
-            backendState?.supported_features?.convert_to_code?.support_status ===
-            'supported';
         const codeSyntaxes =
             backendState?.supported_features?.convert_to_code?.code_syntaxes?.map(
                 (entry) => entry.code_syntax_name,
@@ -267,10 +291,6 @@ export class PositronDataExplorerInstance {
 
         this.stores.state.update((state) => ({
             ...state,
-            identifier: metadata?.identifier ?? state.identifier,
-            displayName:
-                metadata?.displayName ?? backendState?.display_name ?? state.displayName,
-            languageName: metadata?.languageName ?? state.languageName,
             backendState,
             schema: schemaInvalidated ? [] : state.schema,
             error: backendState?.error_message ?? null,
@@ -282,7 +302,9 @@ export class PositronDataExplorerInstance {
                 fileOptions?.availableSheets ?? state.fileAvailableSheets,
             fileSelectedSheet:
                 fileOptions?.selectedSheet ?? state.fileSelectedSheet,
-            supportsConvertToCode: convertToCodeSupport,
+            supportsOpenAsSpreadsheet:
+                fileOptions?.supportsOpenAsSpreadsheet ??
+                state.supportsOpenAsSpreadsheet,
             codeSyntaxes,
             inNewWindow: windowState?.inNewWindow ?? false,
         }));

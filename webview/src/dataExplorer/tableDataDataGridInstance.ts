@@ -33,7 +33,7 @@ import { SimpleHoverManager } from '../dataGrid/classes/simpleHoverManager';
 import { WidthCalculator } from '../dataGrid/classes/widthCalculator';
 import type { SchemaColumn } from '../dataGrid/types';
 import type { DataExplorerStores } from './stores';
-import type { WebviewMessage } from './types';
+import type { ColumnValue, WebviewMessage } from './types';
 import { localize } from './nls';
 import { PositronDataExplorerColumn } from './positronDataExplorerColumn';
 import {
@@ -112,14 +112,21 @@ function sortKeysSignature(
 export class TableDataDataGridInstance extends DataGridInstance {
     private readonly _tableDataCache: TableDataCache;
     private readonly _hoverManager = new SimpleHoverManager();
-    private readonly _pendingRequests = new Map<string, boolean>();
+    private readonly _pendingRequests = new Map<
+        string,
+        { requestId: number; generation: number }
+    >();
     private readonly _disposables: Array<{ dispose: () => void }> = [];
     private _widthCalculators: WidthCalculators | undefined;
     private _autoSizingEnabled = true;
     private _visible = true;
     private _lastSortKeysSignature = '';
+    private _dataGeneration = 0;
+    private _nextDataRequestId = 0;
     private _requestVisibleDataHandle: ReturnType<typeof setTimeout> | undefined;
     private _trimCacheHandle: ReturnType<typeof setTimeout> | undefined;
+    private _selectionSyncEnabled = false;
+    private _lastSelectionSignature = '';
 
     readonly viewport: Writable<ViewportState>;
     readonly columnsStore: Writable<number>;
@@ -204,6 +211,39 @@ export class TableDataDataGridInstance extends DataGridInstance {
                 }),
             },
         );
+        this._selectionSyncEnabled = true;
+    }
+
+    applySelection(selection: {
+        selectionType: 'cell' | 'cells' | 'columns' | 'rows';
+        columnIndex?: number;
+        rowIndex?: number;
+        columnIndexes?: number[];
+        rowIndexes?: number[];
+    }): void {
+        let clipboardData: ClipboardData | undefined;
+        if (
+            selection.selectionType === 'cell' &&
+            selection.columnIndex !== undefined &&
+            selection.rowIndex !== undefined
+        ) {
+            clipboardData = new ClipboardCell(selection.columnIndex, selection.rowIndex);
+        } else if (
+            selection.selectionType === 'cells' &&
+            selection.columnIndexes &&
+            selection.rowIndexes
+        ) {
+            clipboardData = new ClipboardCellIndexes(selection.columnIndexes, selection.rowIndexes);
+        } else if (selection.selectionType === 'columns' && selection.columnIndexes) {
+            clipboardData = new ClipboardColumnIndexes(selection.columnIndexes);
+        } else if (selection.selectionType === 'rows' && selection.rowIndexes) {
+            clipboardData = new ClipboardRowIndexes(selection.rowIndexes);
+        }
+        if (!clipboardData) {
+            return;
+        }
+        this._lastSelectionSignature = JSON.stringify(selection);
+        this.restoreClipboardDataSelection(clipboardData);
     }
 
     get columns(): number {
@@ -316,11 +356,26 @@ export class TableDataDataGridInstance extends DataGridInstance {
 
     handleDataUpdate(params: {
         startRow: number;
-        columns: string[][];
+        columns: ColumnValue[][];
         columnIndices?: number[];
         rowLabels?: string[];
         schema?: SchemaColumn[];
+        requestId: number;
+        generation: number;
     }): void {
+        const requestKey = this._getRequestKey(
+            params.startRow,
+            params.columnIndices,
+        );
+        const pendingRequest = this._pendingRequests.get(requestKey);
+        if (
+            params.generation !== this._dataGeneration ||
+            pendingRequest?.requestId !== params.requestId ||
+            pendingRequest.generation !== params.generation
+        ) {
+            return;
+        }
+
         if (params.schema && params.schema.length > 0) {
             this.handleSchemaUpdate(params.schema);
         }
@@ -332,9 +387,20 @@ export class TableDataDataGridInstance extends DataGridInstance {
             rowLabels: params.rowLabels,
         });
 
-        const requestKey = this._getRequestKey(params.startRow, params.columnIndices);
         this._pendingRequests.delete(requestKey);
         this._applyAutoColumnWidths(params.columnIndices);
+    }
+
+    handleDataInvalidated(generation: number, schemaChanged: boolean): void {
+        if (generation < this._dataGeneration) {
+            return;
+        }
+
+        this._dataGeneration = generation;
+        this.invalidateCache(
+            schemaChanged ? InvalidateCacheFlags.All : InvalidateCacheFlags.Data,
+        );
+        this._scheduleVisibleDataRequest();
     }
 
     handleBackendStateChanged(
@@ -924,7 +990,7 @@ export class TableDataDataGridInstance extends DataGridInstance {
     }
 
     private _requestVisibleData(): void {
-        if (this.columns === 0 || this.rows === 0) {
+        if (this.columns === 0) {
             return;
         }
 
@@ -935,6 +1001,9 @@ export class TableDataDataGridInstance extends DataGridInstance {
             VISIBLE_DATA_PAGE_SIZE;
         const endRow = Math.min(startRow + VISIBLE_DATA_PAGE_SIZE, this.rows);
         const columnIndices = visibleColumns.map((column) => column.columnIndex);
+        if (columnIndices.length === 0) {
+            return;
+        }
         const requestKey = this._getRequestKey(startRow, columnIndices);
 
         if (this._pendingRequests.has(requestKey)) {
@@ -954,12 +1023,18 @@ export class TableDataDataGridInstance extends DataGridInstance {
             return;
         }
 
-        this._pendingRequests.set(requestKey, true);
+        const requestId = ++this._nextDataRequestId;
+        this._pendingRequests.set(requestKey, {
+            requestId,
+            generation: this._dataGeneration,
+        });
         this._postMessage({
             type: 'requestData',
             startRow,
             endRow,
             columns: columnIndices,
+            requestId,
+            generation: this._dataGeneration,
         });
     }
 
@@ -1018,8 +1093,8 @@ export class TableDataDataGridInstance extends DataGridInstance {
     }
 
     private _getRequestKey(startRow: number, columnIndices?: number[]): string {
-        const columnKey = columnIndices?.length ? columnIndices.join(',') : 'all';
-        return `${startRow}:${columnKey}`;
+        const columnKey = columnIndices?.join(',') ?? '';
+        return `${this._dataGeneration}:${startRow}:${columnKey}`;
     }
 
     private _requestAddFilter(columnIndex: number): void {
@@ -1198,5 +1273,50 @@ export class TableDataDataGridInstance extends DataGridInstance {
         }
 
         this.fireOnDidUpdateEvent();
+    }
+
+    protected override fireOnDidUpdateEvent(): void {
+        super.fireOnDidUpdateEvent();
+        if (!this._selectionSyncEnabled) {
+            return;
+        }
+        const clipboardData = this.getClipboardData();
+        let selection: WebviewMessage | undefined;
+        if (clipboardData instanceof ClipboardCell) {
+            selection = {
+                type: 'setSelection',
+                selectionType: 'cell',
+                columnIndex: clipboardData.columnIndex,
+                rowIndex: clipboardData.rowIndex,
+            };
+        } else if (clipboardData instanceof ClipboardCellIndexes) {
+            selection = {
+                type: 'setSelection',
+                selectionType: 'cells',
+                columnIndexes: clipboardData.columnIndexes,
+                rowIndexes: clipboardData.rowIndexes,
+            };
+        } else if (clipboardData instanceof ClipboardColumnIndexes) {
+            selection = {
+                type: 'setSelection',
+                selectionType: 'columns',
+                columnIndexes: clipboardData.indexes,
+            };
+        } else if (clipboardData instanceof ClipboardRowIndexes) {
+            selection = {
+                type: 'setSelection',
+                selectionType: 'rows',
+                rowIndexes: clipboardData.indexes,
+            };
+        }
+        if (!selection) {
+            return;
+        }
+        const signature = JSON.stringify(selection);
+        if (signature === this._lastSelectionSignature) {
+            return;
+        }
+        this._lastSelectionSignature = signature;
+        this._postMessage(selection);
     }
 }

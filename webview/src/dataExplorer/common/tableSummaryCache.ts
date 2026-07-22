@@ -14,6 +14,7 @@ import {
 
 const BASIC_PROFILE_COVERAGE = 1;
 const EXPANDED_PROFILE_COVERAGE = 2;
+const PROFILE_CHUNK_SIZE = 8;
 const TRIM_CACHE_TIMEOUT = 3_000;
 
 type ProfileCoverage =
@@ -32,7 +33,9 @@ export class TableSummaryCache {
         number,
         Map<number, ProfileCoverage>
     >();
+    private readonly _pendingRequestGenerations = new Map<number, number>();
     private _nextRequestId = 0;
+    private _generation = 0;
 
     constructor(
         private readonly _stores: DataExplorerStores,
@@ -124,16 +127,16 @@ export class TableSummaryCache {
             }
         }
 
-        for (const [requestId, coverageByColumn] of this._pendingRequests) {
-            for (const columnIndex of [...coverageByColumn.keys()]) {
-                if (!keepColumns.has(columnIndex)) {
-                    coverageByColumn.delete(columnIndex);
-                    didChange = true;
-                }
-            }
-            if (coverageByColumn.size === 0) {
-                this._pendingRequests.delete(requestId);
-            }
+        const requestsToCancel = [...this._pendingRequests]
+            .filter(([, coverageByColumn]) =>
+                [...coverageByColumn.keys()].some(
+                    (columnIndex) => !keepColumns.has(columnIndex),
+                ),
+            )
+            .map(([requestId]) => requestId);
+        if (requestsToCancel.length > 0) {
+            this._cancelPendingRequests(requestsToCancel);
+            didChange = true;
         }
 
         if (didChange) {
@@ -146,15 +149,16 @@ export class TableSummaryCache {
     }
 
     invalidateProfiles(columnIndices?: Iterable<number>): void {
+        this._generation += 1;
         if (!columnIndices) {
             this._clearTrimCacheTimeout();
         }
 
         if (!columnIndices) {
+            this._cancelPendingRequests([...this._pendingRequests.keys()]);
             this._profiles.clear();
             this._profileCoverage.clear();
             this._pendingCoverage.clear();
-            this._pendingRequests.clear();
             this._stores.columnProfiles.set(new Map());
             return;
         }
@@ -167,14 +171,10 @@ export class TableSummaryCache {
             this._pendingCoverage.delete(columnIndex);
             nextProfiles.delete(columnIndex);
         }
-        for (const [requestId, coverageByColumn] of this._pendingRequests) {
-            for (const columnIndex of indices) {
-                coverageByColumn.delete(columnIndex);
-            }
-            if (coverageByColumn.size === 0) {
-                this._pendingRequests.delete(requestId);
-            }
-        }
+        // A generation applies to the full profile model. Cancel every older
+        // batch so no unaffected-looking column can publish a result computed
+        // against the previous row/filter state.
+        this._cancelPendingRequests([...this._pendingRequests.keys()]);
         this._stores.columnProfiles.set(nextProfiles);
     }
 
@@ -194,24 +194,36 @@ export class TableSummaryCache {
 
     dispose(): void {
         this._clearTrimCacheTimeout();
+        this._cancelPendingRequests([...this._pendingRequests.keys()]);
     }
 
     handleColumnProfiles(
         profiles: Array<{ columnIndex: number; profile: unknown }>,
         error?: string,
         requestId?: number,
+        generation?: number,
     ): void {
+        if (requestId === undefined || generation === undefined) {
+            return;
+        }
+
         const nextProfiles = new Map(get(this._stores.columnProfiles));
-        const requestCoverage = requestId !== undefined
-            ? this._pendingRequests.get(requestId)
-            : undefined;
-        const affectedColumns = requestCoverage
-            ? [...requestCoverage.keys()]
-            : profiles.map((entry) => entry.columnIndex);
+        const requestCoverage = this._pendingRequests.get(requestId);
+        if (
+            !requestCoverage ||
+            generation !== this._generation ||
+            this._pendingRequestGenerations.get(requestId) !== generation
+        ) {
+            return;
+        }
+        const affectedColumns = [...requestCoverage.keys()];
 
         for (const entry of profiles) {
+            if (!requestCoverage.has(entry.columnIndex)) {
+                continue;
+            }
             const pendingCoverage =
-                requestCoverage?.get(entry.columnIndex) ??
+                requestCoverage.get(entry.columnIndex) ??
                 this._pendingCoverage.get(entry.columnIndex);
             const simplified = simplifyColumnProfile(entry.profile);
             const merged = mergeColumnProfiles(
@@ -234,9 +246,8 @@ export class TableSummaryCache {
             }
         }
 
-        if (requestId !== undefined) {
-            this._pendingRequests.delete(requestId);
-        }
+        this._pendingRequests.delete(requestId);
+        this._pendingRequestGenerations.delete(requestId);
         this._recomputePendingCoverage(affectedColumns);
 
         if (error && requestCoverage) {
@@ -258,6 +269,16 @@ export class TableSummaryCache {
         if (!supportsColumnProfiles) {
             return;
         }
+
+        const visibleColumns = new Set(columnIndices);
+        const requestsToCancel = [...this._pendingRequests]
+            .filter(([, coverageByColumn]) =>
+                [...coverageByColumn.keys()].some(
+                    (columnIndex) => !visibleColumns.has(columnIndex),
+                ),
+            )
+            .map(([requestId]) => requestId);
+        this._cancelPendingRequests(requestsToCancel);
 
         const requestColumnIndices: number[] = [];
         const expandedColumnIndices: number[] = [];
@@ -300,22 +321,42 @@ export class TableSummaryCache {
             return;
         }
 
-        const requestId = ++this._nextRequestId;
-        this._pendingRequests.set(requestId, requestCoverage);
-        for (const [columnIndex, coverage] of requestCoverage) {
-            const currentPending = this._pendingCoverage.get(columnIndex) ?? 0;
-            this._pendingCoverage.set(
-                columnIndex,
-                Math.max(currentPending, coverage) as ProfileCoverage,
+        for (
+            let offset = 0;
+            offset < requestColumnIndices.length;
+            offset += PROFILE_CHUNK_SIZE
+        ) {
+            const chunkColumnIndices = requestColumnIndices.slice(
+                offset,
+                offset + PROFILE_CHUNK_SIZE,
             );
-        }
+            const chunkCoverage = new Map<number, ProfileCoverage>();
+            for (const columnIndex of chunkColumnIndices) {
+                const coverage = requestCoverage.get(columnIndex);
+                if (coverage !== undefined) {
+                    chunkCoverage.set(columnIndex, coverage);
+                    const currentPending =
+                        this._pendingCoverage.get(columnIndex) ?? 0;
+                    this._pendingCoverage.set(
+                        columnIndex,
+                        Math.max(currentPending, coverage) as ProfileCoverage,
+                    );
+                }
+            }
 
-        this._postMessage({
-            type: 'requestColumnProfiles',
-            columnIndices: requestColumnIndices,
-            expandedColumnIndices,
-            requestId,
-        });
+            const requestId = ++this._nextRequestId;
+            this._pendingRequests.set(requestId, chunkCoverage);
+            this._pendingRequestGenerations.set(requestId, this._generation);
+            this._postMessage({
+                type: 'requestColumnProfiles',
+                columnIndices: chunkColumnIndices,
+                expandedColumnIndices: expandedColumnIndices.filter(
+                    (columnIndex) => chunkCoverage.has(columnIndex),
+                ),
+                requestId,
+                generation: this._generation,
+            });
+        }
     }
 
     private _recomputePendingCoverage(columnIndices: Iterable<number>): void {
@@ -362,20 +403,44 @@ export class TableSummaryCache {
             didChange = true;
         }
 
-        for (const [requestId, coverageByColumn] of this._pendingRequests) {
-            for (const columnIndex of [...coverageByColumn.keys()]) {
-                if (!columnIndices.has(columnIndex)) {
-                    coverageByColumn.delete(columnIndex);
-                    didChange = true;
-                }
-            }
-            if (coverageByColumn.size === 0) {
-                this._pendingRequests.delete(requestId);
-            }
+        const requestsToCancel = [...this._pendingRequests]
+            .filter(([, coverageByColumn]) =>
+                [...coverageByColumn.keys()].some(
+                    (columnIndex) => !columnIndices.has(columnIndex),
+                ),
+            )
+            .map(([requestId]) => requestId);
+        if (requestsToCancel.length > 0) {
+            this._cancelPendingRequests(requestsToCancel);
+            didChange = true;
         }
 
         if (didChange) {
             this._stores.columnProfiles.set(nextProfiles);
         }
+    }
+
+    private _cancelPendingRequests(requestIds: number[]): void {
+        const activeRequestIds = requestIds.filter((requestId) =>
+            this._pendingRequests.has(requestId),
+        );
+        if (activeRequestIds.length === 0) {
+            return;
+        }
+
+        const affectedColumns = new Set<number>();
+        for (const requestId of activeRequestIds) {
+            const coverageByColumn = this._pendingRequests.get(requestId);
+            for (const columnIndex of coverageByColumn?.keys() ?? []) {
+                affectedColumns.add(columnIndex);
+            }
+            this._pendingRequests.delete(requestId);
+            this._pendingRequestGenerations.delete(requestId);
+        }
+        this._recomputePendingCoverage(affectedColumns);
+        this._postMessage({
+            type: 'cancelColumnProfiles',
+            requestIds: activeRequestIds,
+        });
     }
 }

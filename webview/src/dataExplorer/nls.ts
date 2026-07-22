@@ -20,16 +20,17 @@
  * @returns The localized string
  */
 export function localize(
-    _key: string,
+    key: string,
     message: string,
     ...args: (string | number | boolean | undefined | null)[]
 ): string {
+    const localizedMessage = globalThis.__arkLocalization?.[key] ?? message;
     if (args.length === 0) {
-        return message;
+        return localizedMessage;
     }
 
-    return message.replace(/\{(\d+)\}/g, (match, rest) => {
-        const index = rest[0];
+    return localizedMessage.replace(/\{(\d+)\}/g, (match, rest) => {
+        const index = Number(rest);
         const arg = args[index];
         if (typeof arg === 'string') {
             return arg;

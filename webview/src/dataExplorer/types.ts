@@ -7,36 +7,27 @@ import type { BackendState, RowFilter, SchemaColumn } from '../dataGrid/types';
 
 export type { SearchSchemaSortOrder };
 
+/** A formatted backend value or a numeric special-value sentinel. */
+export type ColumnValue = number | string;
+
 /**
  * Data Explorer instance state
  */
 export interface DataExplorerState {
-    identifier: string;
-    displayName: string;
-    languageName?: string;
     backendState: BackendState | null;
     schema: SchemaColumn[];
     isLoading: boolean;
     error: string | null;
     supportsFileOptions?: boolean;
+    supportsOpenAsSpreadsheet?: boolean;
     fileHasHeaderRow?: boolean;
     fileAvailableSheets?: string[];
     fileSelectedSheet?: string;
-    supportsConvertToCode?: boolean;
     codeSyntaxes?: string[];
     layout?: PositronDataExplorerLayout;
     summaryCollapsed?: boolean;
     summaryWidth?: number;
     inNewWindow?: boolean;
-}
-
-/**
- * Data request for fetching rows
- */
-export interface DataRequest {
-    startRow: number;
-    endRow: number;
-    columns: number[];
 }
 
 /**
@@ -53,10 +44,11 @@ export enum PositronDataExplorerLayout {
 export type WebviewMessage =
     | { type: 'ready' }
     | { type: 'close' }
-    | { type: 'requestData'; startRow: number; endRow: number; columns?: number[] }
+    | { type: 'requestData'; startRow: number; endRow: number; columns: number[]; requestId: number; generation: number }
     | { type: 'requestSchema'; columns: number[] }
     | { type: 'searchSchema'; text: string; sortOrder: SearchSchemaSortOrder; pinnedColumns?: number[]; requestId?: number }
-    | { type: 'requestColumnProfiles'; columnIndices: number[]; expandedColumnIndices?: number[]; requestId?: number }
+    | { type: 'requestColumnProfiles'; columnIndices: number[]; expandedColumnIndices?: number[]; requestId: number; generation: number }
+    | { type: 'cancelColumnProfiles'; requestIds: number[] }
     | { type: 'refresh' }
     | { type: 'sort'; sortKeys: Array<{ columnIndex: number; ascending: boolean }> }
     | { type: 'clearSort' }
@@ -69,30 +61,12 @@ export type WebviewMessage =
     | { type: 'exportData'; format: 'tsv' | 'csv' }
     | { type: 'moveToNewWindow' }
     | { type: 'openAsPlaintext' }
+    | { type: 'openAsSpreadsheet' }
     | { type: 'runConvertToCode'; desiredSyntax: string }
     | { type: 'applyFileOptions'; hasHeaderRow: boolean; sheetName?: string }
     | { type: 'requestConvertToCodePreview'; desiredSyntax: string; requestId: number }
     | { type: 'setLayout'; layout: PositronDataExplorerLayout }
     | { type: 'setSummaryCollapsed'; collapsed: boolean }
+    | { type: 'setSummaryWidth'; summaryWidth: number }
+    | { type: 'setSelection'; selectionType: 'cell' | 'cells' | 'columns' | 'rows'; columnIndex?: number; rowIndex?: number; columnIndexes?: number[]; rowIndexes?: number[] }
     | { type: 'focusChanged'; focused: boolean };
-
-/**
- * Message types from extension to webview
- */
-export type ExtensionMessage =
-    | { type: 'copy' }
-    | { type: 'showColumnContextMenu' }
-    | { type: 'showRowContextMenu' }
-    | { type: 'showCellContextMenu' }
-    | { type: 'layoutChanged'; layout: PositronDataExplorerLayout }
-    | { type: 'summaryCollapsedChanged'; collapsed: boolean }
-    | { type: 'convertToCodePreview'; desiredSyntax: string; requestId: number; code: string; error?: string }
-    | { type: 'initialize'; state: DataExplorerState }
-    | { type: 'metadata'; displayName: string; numRows: number; numColumns: number; hasRowLabels?: boolean }
-    | { type: 'schema'; columns: SchemaColumn[] }
-    | { type: 'data'; startRow: number; endRow: number; columns: string[][]; columnIndices?: number[]; rowLabels?: string[]; schema?: SchemaColumn[]; totalRows?: number; totalColumns?: number }
-    | { type: 'summarySchema'; columns: SchemaColumn[]; columnIndices: number[]; requestId?: number }
-    | { type: 'columnProfiles'; profiles: Array<{ columnIndex: number; profile: unknown }>; error?: string; requestId?: number }
-    | { type: 'backendState'; state: BackendState }
-    | { type: 'error'; message: string }
-    | { type: 'loading'; isLoading: boolean };
