@@ -54,9 +54,32 @@ function normalizeArch(arch) {
     }
 }
 
+function normalizePlatform(platform) {
+    const separator = platform.lastIndexOf('-');
+    if (separator === -1) {
+        return platform;
+    }
+
+    return `${normalizeOs(platform.slice(0, separator))}-${normalizeArch(platform.slice(separator + 1))}`;
+}
+
+function detectHostPlatform() {
+    return `${normalizeOs(os.platform())}-${normalizeArch(os.arch())}`;
+}
+
+function canExecuteTargetPlatform(targetPlatform, hostPlatform = detectHostPlatform()) {
+    const normalizedTarget = normalizePlatform(targetPlatform);
+    const normalizedHost = normalizePlatform(hostPlatform);
+    if (normalizedTarget === normalizedHost) {
+        return true;
+    }
+
+    return normalizedTarget === 'darwin-universal' && normalizedHost.startsWith('darwin-');
+}
+
 function detectPlatform(explicitPlatform) {
     if (explicitPlatform) {
-        return explicitPlatform;
+        return normalizePlatform(explicitPlatform);
     }
 
     const targetOs = process.env.TARGET_OS;
@@ -65,7 +88,7 @@ function detectPlatform(explicitPlatform) {
         return `${normalizeOs(targetOs)}-${normalizeArch(targetArch)}`;
     }
 
-    return `${normalizeOs(os.platform())}-${normalizeArch(os.arch())}`;
+    return detectHostPlatform();
 }
 
 function readKallichoreManifest(platform) {
@@ -202,37 +225,44 @@ async function installKallichore(platform) {
 
         fs.mkdirSync(installDir, { recursive: true });
         const destination = path.join(installDir, executableName);
-		const staged = path.join(
-			installDir,
-			`.install-${process.pid}-${Date.now()}-${executableName}`,
-		);
-		let reportedVersion;
-		try {
-			fs.copyFileSync(extractedBinary, staged);
-			if (process.platform !== 'win32') {
-				fs.chmodSync(staged, 0o755);
-			}
+        const staged = path.join(
+            installDir,
+            `.install-${process.pid}-${Date.now()}-${executableName}`,
+        );
+        let reportedVersion = version;
+        try {
+            fs.copyFileSync(extractedBinary, staged);
+            if (process.platform !== 'win32') {
+                fs.chmodSync(staged, 0o755);
+            }
 
-			reportedVersion = execFileSync(staged, ['--version'], {
-				encoding: 'utf8',
-				stdio: ['ignore', 'pipe', 'pipe'],
-			}).trim();
-			const parsedVersion = reportedVersion.match(
-				/\b(\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?)\b/,
-			)?.[1];
-			if (parsedVersion !== version) {
-				throw new Error(
-					`Downloaded binary reported '${reportedVersion || 'unknown'}'; expected ${version}`,
-				);
-			}
+            if (canExecuteTargetPlatform(platform)) {
+                reportedVersion = execFileSync(staged, ['--version'], {
+                    encoding: 'utf8',
+                    stdio: ['ignore', 'pipe', 'pipe'],
+                }).trim();
+                const parsedVersion = reportedVersion.match(
+                    /\b(\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?)\b/,
+                )?.[1];
+                if (parsedVersion !== version) {
+                    throw new Error(
+                        `Downloaded binary reported '${reportedVersion || 'unknown'}'; expected ${version}`,
+                    );
+                }
+            } else {
+                console.log(
+                    `Skipping runtime version check for cross-target ${platform} ` +
+                    `on ${detectHostPlatform()}; archive checksum is verified`,
+                );
+            }
 
-			if (process.platform === 'win32' && fs.existsSync(destination)) {
-				fs.unlinkSync(destination);
-			}
-			fs.renameSync(staged, destination);
-		} finally {
-			fs.rmSync(staged, { force: true });
-		}
+            if (process.platform === 'win32' && fs.existsSync(destination)) {
+                fs.unlinkSync(destination);
+            }
+            fs.renameSync(staged, destination);
+        } finally {
+            fs.rmSync(staged, { force: true });
+        }
 
         console.log(`Installed ${destination} (${reportedVersion})`);
     } finally {
@@ -258,4 +288,18 @@ async function main() {
     throw lastError;
 }
 
-await main();
+const isMainModule = process.argv[1] &&
+    path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+
+if (isMainModule) {
+    await main();
+}
+
+export {
+    canExecuteTargetPlatform,
+    detectHostPlatform,
+    detectPlatform,
+    normalizeArch,
+    normalizeOs,
+    normalizePlatform,
+};

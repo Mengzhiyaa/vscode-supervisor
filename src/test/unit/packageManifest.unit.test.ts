@@ -72,6 +72,7 @@ suite('[Unit] Supervisor package manifest', () => {
         assert.ok(packageJson.devDependencies?.ovsx);
         assert.strictEqual(packageJson.scripts?.['vsce:package'], 'vsce package');
         assert.strictEqual(packageJson.scripts?.['install:binaries'], 'node scripts/install-binaries.mjs');
+        assert.strictEqual(packageJson.scripts?.['test:binaries'], 'node --test scripts/install-binaries.test.mjs');
         assert.strictEqual(packageJson.scripts?.['sync:kallichore-api'], 'node scripts/sync-kallichore-api.mjs');
         assert.strictEqual(packageJson.scripts?.['verify:kallichore-api'], 'node scripts/sync-kallichore-api.mjs --check');
         assert.strictEqual(packageJson.scripts?.['sync:webview-rpc-contracts'], 'node scripts/sync-webview-rpc-contracts.mjs');

@@ -34,6 +34,7 @@
     "watch": "node esbuild.mjs --watch",
     "compile-tests": "node -e \"require('fs').rmSync('out', { recursive: true, force: true })\" && tsc -p . --outDir out",
     "install:binaries": "node scripts/install-binaries.mjs",
+    "test:binaries": "node --test scripts/install-binaries.test.mjs",
     "sync:kallichore-api": "node scripts/sync-kallichore-api.mjs",
     "verify:kallichore-api": "node scripts/sync-kallichore-api.mjs --check",
     "sync:api-dts": "node scripts/sync-api-dts.mjs",
