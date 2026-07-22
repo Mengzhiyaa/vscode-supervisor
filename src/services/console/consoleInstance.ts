@@ -41,6 +41,7 @@ import {
     ActivityItemStream,
     ActivityItemStreamType,
     ActivityItemErrorMessage,
+    ActivityItemErrorSuggestion,
     ActivityItemOutputMessage,
     ActivityItemOutputHtml,
     ActivityItemOutputPlot,
@@ -79,6 +80,7 @@ import {
     RuntimeState,
 } from '../../internal/runtimeTypes';
 import { runtimeStateToPositronConsoleState } from '../../runtime/runtimeStateMapping';
+import type { ConsoleErrorFollowupServiceLike } from './consoleErrorFollowup';
 export type {
     SerializedActivityItem,
     SerializedConsoleState,
@@ -145,6 +147,9 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
     private _startupFailureHandled = false;
     private _startupFailureFallbackHandle: ReturnType<typeof setTimeout> | undefined;
     private readonly _disposables: vscode.Disposable[] = [];
+    private readonly _errorFollowupTokenSources = new Set<vscode.CancellationTokenSource>();
+    private readonly _runningErrorSuggestions = new Set<string>();
+    private _isDisposed = false;
 
     // Pending code queue (Positron pattern)
     private _pendingCodeQueue: IPendingCodeFragment[] = [];
@@ -191,7 +196,8 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
     constructor(
         private readonly _sessionMetadata: IRuntimeSessionMetadata,
         private readonly _runtimeMetadata: LanguageRuntimeMetadata,
-        private readonly _outputChannel: vscode.LogOutputChannel
+        private readonly _outputChannel: vscode.LogOutputChannel,
+        private readonly _errorFollowupService?: ConsoleErrorFollowupServiceLike,
     ) {
         this._outputChannel.debug(`[ConsoleInstance] Created for session ${_sessionMetadata.sessionId}`);
     }
@@ -944,12 +950,13 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
     }
 
     handleError(message: LanguageRuntimeErrorMessage): void {
-        this.handleErrorMessage(
+        const errorItem = this.handleErrorMessage(
             message.parent_id,
             message.name,
             message.message,
             message.traceback || []
         );
+        void this._addErrorFollowupSuggestions(errorItem);
     }
 
     handleOutput(message: LanguageRuntimeOutputWithKind): void {
@@ -1475,6 +1482,21 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
             };
         }
 
+        if (item instanceof ActivityItemErrorSuggestion) {
+            return {
+                type: 'errorSuggestion',
+                id: item.id,
+                parentId: item.parentId,
+                when: item.when.getTime(),
+                available: item.available,
+                suggestions: item.suggestions.map(suggestion => ({
+                    id: suggestion.id,
+                    iconId: suggestion.iconId,
+                    label: suggestion.label,
+                })),
+            };
+        }
+
         if (item instanceof ActivityItemOutputHtml) {
             return {
                 type: 'outputHtml',
@@ -1580,6 +1602,19 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
                     item.message,
                     item.traceback
                 );
+            case 'errorSuggestion':
+                return new ActivityItemErrorSuggestion(
+                    item.id,
+                    item.parentId,
+                    new Date(item.when),
+                    item.suggestions.map(suggestion => ({
+                        ...suggestion,
+                        run: async () => {
+                            throw new Error('This restored Console suggestion is no longer available.');
+                        },
+                    })),
+                    false,
+                );
             case 'output':
                 return new ActivityItemOutputMessage(
                     item.id,
@@ -1629,6 +1664,12 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
     }
 
     dispose(): void {
+        this._isDisposed = true;
+        for (const tokenSource of this._errorFollowupTokenSources) {
+            tokenSource.cancel();
+            tokenSource.dispose();
+        }
+        this._errorFollowupTokenSources.clear();
         this.detachRuntimeSession();
         this._disposables.forEach(d => d.dispose());
         this._onFocusInputEmitter.dispose();
@@ -1660,9 +1701,68 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
         this.addOrUpdateRuntimeItemActivity(parentId, stream);
     }
 
-    handleErrorMessage(parentId: string, name: string, message: string, traceback: string[]): void {
+    handleErrorMessage(parentId: string, name: string, message: string, traceback: string[]): ActivityItemErrorMessage {
         const errorItem = new ActivityItemErrorMessage(this.generateId(), parentId, new Date(), name, message, traceback);
         this.addOrUpdateRuntimeItemActivity(parentId, errorItem);
+        return errorItem;
+    }
+
+    async runErrorSuggestion(itemId: string, suggestionId: string): Promise<void> {
+        const item = [...this._runtimeItemActivities.values()]
+            .flatMap(activity => activity.activityItems)
+            .find(candidate => candidate instanceof ActivityItemErrorSuggestion && candidate.id === itemId);
+        if (!(item instanceof ActivityItemErrorSuggestion) || !item.available) {
+            throw new Error('Console error suggestion is no longer available.');
+        }
+
+        const suggestion = item.suggestions.find(candidate => candidate.id === suggestionId);
+        const runningKey = `${itemId}:${suggestionId}`;
+        if (!suggestion || this._runningErrorSuggestions.has(runningKey)) {
+            return;
+        }
+
+        this._runningErrorSuggestions.add(runningKey);
+        try {
+            await suggestion.run();
+        } finally {
+            this._runningErrorSuggestions.delete(runningKey);
+        }
+    }
+
+    private async _addErrorFollowupSuggestions(errorItem: ActivityItemErrorMessage): Promise<void> {
+        if (!this._errorFollowupService || this._isDisposed) {
+            return;
+        }
+
+        const tokenSource = new vscode.CancellationTokenSource();
+        this._errorFollowupTokenSources.add(tokenSource);
+        try {
+            const suggestions = await this._errorFollowupService.getSuggestions({
+                sessionId: this.sessionId,
+                languageId: this._runtimeMetadata.languageId,
+                name: errorItem.name,
+                message: errorItem.message,
+                traceback: errorItem.traceback,
+            }, tokenSource.token);
+            if (this._isDisposed || tokenSource.token.isCancellationRequested || suggestions.length === 0) {
+                return;
+            }
+
+            this.addOrUpdateRuntimeItemActivity(
+                errorItem.parentId,
+                new ActivityItemErrorSuggestion(
+                    `${errorItem.id}-suggestion`,
+                    errorItem.parentId,
+                    new Date(),
+                    suggestions,
+                ),
+            );
+        } catch (error) {
+            this._outputChannel.debug(`[ConsoleInstance] Error follow-up provider failed: ${error}`);
+        } finally {
+            this._errorFollowupTokenSources.delete(tokenSource);
+            tokenSource.dispose();
+        }
     }
 
     handleDisplayData(parentId: string, data: ILanguageRuntimeMessageOutputData, outputId?: string): void {

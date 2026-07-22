@@ -280,6 +280,14 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
             return this._getConsoleSettings();
         });
 
+        connection.onRequest(ConsoleProtocol.SetConsoleShowResourceMonitorRequest.type, async params => {
+            await vscode.workspace.getConfiguration().update(
+                CoreConfigurationKeys.consoleShowResourceMonitor,
+                params.visible,
+                vscode.ConfigurationTarget.Global,
+            );
+        });
+
         connection.onRequest(ConsoleProtocol.ConsoleRequestFullStateRequest.type, async (params) => {
             this.log(
                 `[SyncSeq] Full state requested: session=${params.sessionId} reason=${params.reason}`,
@@ -382,6 +390,14 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
             if (instance) {
                 instance.interrupt();
             }
+        });
+
+        connection.onRequest(ConsoleProtocol.RunErrorSuggestionRequest.type, async (params) => {
+            const instance = this._consoleService?.getConsoleInstance(params.sessionId);
+            if (!instance) {
+                throw new Error(`Console session '${params.sessionId}' is no longer available.`);
+            }
+            await instance.runErrorSuggestion(params.itemId, params.suggestionId);
         });
 
         // Handle clear console request (user action)
@@ -926,6 +942,7 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
         globalThis.__arkLanguageMonacoSupportModules = ${languageMonacoSupportModules};
         globalThis.__arkLanguageTextMateGrammars = ${languageTextMateGrammars};
     </script>
+    ${this._getLocalizationInlineScript(nonce)}
     <script type="module" nonce="${nonce}" src="${scriptUri}"></script>
 </body>
 </html>`;
@@ -966,6 +983,7 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
             fontFamily: appearance.fontFamily,
             fontSize: appearance.fontSize,
             lineHeight: appearance.lineHeight,
+            showResourceMonitor: config.get<boolean>('console.showResourceMonitor', true),
         };
     }
 
@@ -1215,6 +1233,7 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
                     e.affectsConfiguration(CoreConfigurationKeys.consoleFontSize) ||
                     e.affectsConfiguration(CoreConfigurationKeys.consoleFontFamily) ||
                     e.affectsConfiguration(CoreConfigurationKeys.consoleLineHeight) ||
+                    e.affectsConfiguration(CoreConfigurationKeys.consoleShowResourceMonitor) ||
                     e.affectsConfiguration('editor.fontFamily') ||
                     e.affectsConfiguration('editor.fontSize') ||
                     e.affectsConfiguration('editor.lineHeight')

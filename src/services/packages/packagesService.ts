@@ -176,6 +176,10 @@ export class PositronPackagesService implements IPositronPackagesService {
         return Array.from(this._instancesBySessionId.values());
     }
 
+    getInstance(sessionId: string): PositronPackagesInstance | undefined {
+        return this._instancesBySessionId.get(sessionId);
+    }
+
     async refreshPackages(token?: vscode.CancellationToken): Promise<LanguageRuntimePackage[]> {
         return withTimeout(
             this._getActiveInstanceOrThrow().refreshPackages(token),

@@ -24,23 +24,26 @@
         width = 200,
         height = 400,
         resourceUsageBySession = new Map<string, any>(),
+        showResourceMonitor = true,
         onSelectSession,
         onDeleteSession,
         onRenameSession,
+        onToggleResourceMonitor,
     }: {
         sessions: SessionInfo[];
         activeSessionId: string | undefined;
         width: number;
         height: number;
         resourceUsageBySession: Map<string, any>;
+        showResourceMonitor: boolean;
         onSelectSession: (sessionId: string) => void;
         onDeleteSession: (sessionId: string) => void;
         onRenameSession: (sessionId: string, newName: string) => void;
+        onToggleResourceMonitor: () => void;
     } = $props();
 
     // Refs
     let tabListRef: HTMLDivElement;
-    let showResourceMonitor = $state(true);
 
     // Sort sessions by creation order (we use id as a proxy for now)
     // In practice, sessions should have a createdTimestamp
@@ -142,7 +145,7 @@
             onDelete={() => handleDeleteSession(session.id)}
             onRename={(newName) => handleRenameSession(session.id, newName)}
             onToggleResourceMonitor={() =>
-                (showResourceMonitor = !showResourceMonitor)}
+                onToggleResourceMonitor()}
         />
     {/each}
 

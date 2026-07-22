@@ -32,6 +32,7 @@ export {
     ActivityItemStream,
     ActivityItemStreamType,
     ActivityItemErrorMessage,
+    ActivityItemErrorSuggestion,
     ActivityItemOutputMessage,
     ActivityItemOutputHtml,
     ActivityItemOutputPlot,
@@ -39,3 +40,14 @@ export {
     ILanguageRuntimeMessageOutputData,
     ActivityItemOutput
 } from './classes/runtimeItem';
+
+export {
+    ConsoleErrorFollowupService,
+    MissingPackageErrorProvider,
+    extractMissingPackageName,
+} from './consoleErrorFollowup';
+export type {
+    ConsoleError,
+    ConsoleErrorSuggestion,
+    ConsoleErrorSuggestionProvider,
+} from './consoleErrorFollowup';

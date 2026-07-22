@@ -9,6 +9,7 @@ import { ActivityItem } from './activityItem';
 import { ActivityItemStream } from './activityItemStream';
 import { ActivityItemInput, ActivityItemInputState } from './activityItemInput';
 import { ActivityItemErrorMessage } from './activityItemErrorMessage';
+import { ActivityItemErrorSuggestion } from './activityItemErrorSuggestion';
 import { ActivityItemOutputHtml } from './activityItemOutputHtml';
 import { ActivityItemOutputPlot } from './activityItemOutputPlot';
 import { ActivityItemOutputMessage } from './activityItemOutputMessage';
@@ -19,6 +20,7 @@ export { ActivityItem };
 export { ActivityItemInput, ActivityItemInputState };
 export { ActivityItemStream, ActivityItemStreamType } from './activityItemStream';
 export { ActivityItemErrorMessage };
+export { ActivityItemErrorSuggestion };
 export { ActivityItemOutputHtml };
 export { ActivityItemOutputPlot };
 export { ActivityItemOutputMessage };
@@ -61,6 +63,7 @@ export class RuntimeItemActivity extends RuntimeItem {
         ActivityItem |
         ActivityItemStream |
         ActivityItemErrorMessage |
+        ActivityItemErrorSuggestion |
         ActivityItemInput |
         ActivityItemOutput
     )[] = [];
@@ -68,6 +71,7 @@ export class RuntimeItemActivity extends RuntimeItem {
         ActivityItem |
         ActivityItemStream |
         ActivityItemErrorMessage |
+        ActivityItemErrorSuggestion |
         ActivityItemInput |
         ActivityItemOutput
     )[]>([]);

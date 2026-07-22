@@ -7,6 +7,7 @@
 <script lang="ts">
     import { ActivityItemErrorMessage } from "./classes";
     import ConsoleOutputLines from "./ConsoleOutputLines.svelte";
+    import { localize } from "$lib/localization";
 
     interface Props {
         activityItemErrorMessage: ActivityItemErrorMessage;
@@ -58,12 +59,12 @@
                                 <div
                                     class="expansion-indicator codicon codicon-chevron-down"
                                 ></div>
-                                <div class="link-text">Hide Traceback</div>
+                                <div class="link-text">{localize('console.hideTraceback', 'Hide Traceback')}</div>
                             {:else}
                                 <div
                                     class="expansion-indicator codicon codicon-chevron-right"
                                 ></div>
-                                <div class="link-text">Show Traceback</div>
+                                <div class="link-text">{localize('console.showTraceback', 'Show Traceback')}</div>
                             {/if}
                         </button>
                     {/if}

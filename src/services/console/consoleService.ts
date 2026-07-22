@@ -29,6 +29,7 @@ import {
     WorkingDirectoryEvent,
 } from '../../runtime/comms/positronUiComm';
 import { LanguageRuntimeSessionMode } from '../../api';
+import type { ConsoleErrorFollowupServiceLike } from './consoleErrorFollowup';
 
 
 /**
@@ -65,6 +66,7 @@ export class PositronConsoleService implements IPositronConsoleService {
         private readonly _outputChannel: vscode.LogOutputChannel,
         context?: vscode.ExtensionContext,
         private readonly _runtimeStartupService?: RuntimeStartupService,
+        private readonly _errorFollowupService?: ConsoleErrorFollowupServiceLike,
     ) {
         this._outputChannel.debug('[PositronConsoleService] Created');
         if (context) {
@@ -625,7 +627,8 @@ export class PositronConsoleService implements IPositronConsoleService {
         const instance = new PositronConsoleInstance(
             sessionMetadata,
             runtimeMetadata,
-            this._outputChannel
+            this._outputChannel,
+            this._errorFollowupService,
         );
 
         instance.setWidthInChars(this._consoleWidth);

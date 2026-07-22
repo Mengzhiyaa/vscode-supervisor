@@ -87,6 +87,7 @@
                 {languageId}
                 {languageAssetsVersion}
                 {charWidth}
+                sessionId={consoleInstance.sessionId}
             />
         {:else if runtimeItem instanceof RuntimeItemStarted}
             <RuntimeStarted runtimeItemStarted={runtimeItem} />

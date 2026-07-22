@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { createMessageConnection, MessageConnection } from 'vscode-jsonrpc';
 import { WebviewMessageReader, WebviewMessageWriter } from '../rpc/webview/transport';
+import { serializeWebviewLocalizationMessages } from './webviewLocalization';
 
 /**
  * Base class for webview providers with JSON-RPC support.
@@ -172,6 +173,10 @@ export abstract class BaseWebviewProvider implements vscode.WebviewViewProvider 
 
     protected _serializeInlineScriptData(value: unknown): string {
         return JSON.stringify(value).replace(/</g, '\\u003c');
+    }
+
+    protected _getLocalizationInlineScript(nonce: string): string {
+        return `<script nonce="${nonce}">globalThis.__arkLocalization=${serializeWebviewLocalizationMessages()};</script>`;
     }
 
     protected _getWebviewLocalResourceRoots(): readonly vscode.Uri[] {

@@ -34,6 +34,7 @@ declare global {
     var __arkLanguageTextMateGrammars:
         | Record<string, { scopeName: string; grammarUrl: string }>
         | undefined;
+    var __arkLocalization: Record<string, string> | undefined;
 }
 
 export {};

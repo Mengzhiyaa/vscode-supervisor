@@ -266,6 +266,7 @@ export interface IPositronConsoleInstance extends vscode.Disposable {
     handleStream(message: LanguageRuntimeStream): void;
     handleInput(message: LanguageRuntimeInput): void;
     handleError(message: LanguageRuntimeErrorMessage): void;
+    runErrorSuggestion(itemId: string, suggestionId: string): Promise<void>;
     handleOutput(message: LanguageRuntimeOutputWithKind): void;
     handleResult(message: LanguageRuntimeResultWithKind): void;
     handleState(message: LanguageRuntimeState): void;

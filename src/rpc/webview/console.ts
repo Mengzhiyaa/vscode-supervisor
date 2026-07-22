@@ -37,6 +37,7 @@ export interface ConsoleSettings {
     fontFamily: string;
     fontSize: number;
     lineHeight: number;
+    showResourceMonitor: boolean;
 }
 
 export interface SerializedRuntimeItemPayload {
@@ -121,6 +122,17 @@ export namespace ClearConsoleRequest {
     export const type = new RequestType<Params | void, void, void>('console/clearConsole');
 }
 
+export namespace RunErrorSuggestionRequest {
+
+    export interface Params {
+        sessionId: string;
+        itemId: string;
+        suggestionId: string;
+    }
+
+    export const type = new RequestType<Params, void, void>('console/runErrorSuggestion');
+}
+
 export namespace ToggleWordWrapRequest {
 
     export interface Params {
@@ -160,6 +172,15 @@ export namespace AddHistoryRequest {
 export namespace GetConsoleSettingsRequest {
 
     export const type = new RequestType0<ConsoleSettings, void>('console/getSettings');
+}
+
+export namespace SetConsoleShowResourceMonitorRequest {
+
+    export interface Params {
+        visible: boolean;
+    }
+
+    export const type = new RequestType<Params, void, void>('console/setShowResourceMonitor');
 }
 
 export namespace ConsoleRequestFullStateRequest {

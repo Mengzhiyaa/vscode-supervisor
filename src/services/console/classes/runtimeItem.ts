@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { SessionAttachMode } from '../interfaces/consoleService';
+import type { ConsoleErrorSuggestion } from '../consoleErrorFollowup';
 import {
     ActivityItemInputState,
     ActivityItemPromptState,
@@ -522,6 +523,23 @@ export class ActivityItemErrorMessage extends ActivityItem {
 
         this._isHidden = outputLines > 0;
         return 0;
+    }
+}
+
+/** Interactive actions rendered directly below a runtime error. */
+export class ActivityItemErrorSuggestion extends ActivityItem {
+    constructor(
+        id: string,
+        parentId: string,
+        when: Date,
+        public readonly suggestions: readonly ConsoleErrorSuggestion[],
+        public readonly available: boolean = true,
+    ) {
+        super(id, parentId, when);
+    }
+
+    override getClipboardRepresentation(_commentPrefix: string): string[] {
+        return [];
     }
 }
 

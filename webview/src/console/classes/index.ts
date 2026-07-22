@@ -24,6 +24,10 @@ export { ActivityItemStream, ActivityItemStreamType } from './activityItemStream
 
 // Activity item classes - Error
 export { ActivityItemErrorMessage } from './activityItemErrorMessage';
+export {
+    ActivityItemErrorSuggestion,
+    type ConsoleErrorSuggestionDescriptor,
+} from './activityItemErrorSuggestion';
 
 // Activity item classes - Prompt (Positron-style)
 export { ActivityItemPrompt, ActivityItemPromptState } from './activityItemPrompt';

@@ -119,6 +119,10 @@
         {
           "name": "lineHeight",
           "type": "number"
+        },
+        {
+          "name": "showResourceMonitor",
+          "type": "boolean"
         }
       ]
     },
@@ -350,6 +354,34 @@
     },
     {
       "kind": "request",
+      "name": "RunErrorSuggestionRequest",
+      "method": "console/runErrorSuggestion",
+      "paramsType": "Params",
+      "resultType": "void",
+      "errorType": "void",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "sessionId",
+              "type": "string"
+            },
+            {
+              "name": "itemId",
+              "type": "string"
+            },
+            {
+              "name": "suggestionId",
+              "type": "string"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "request",
       "name": "ToggleWordWrapRequest",
       "method": "console/toggleWordWrap",
       "paramsType": "Params | void",
@@ -438,6 +470,26 @@
       "resultType": "ConsoleSettings",
       "errorType": "void",
       "declarations": []
+    },
+    {
+      "kind": "request",
+      "name": "SetConsoleShowResourceMonitorRequest",
+      "method": "console/setShowResourceMonitor",
+      "paramsType": "Params",
+      "resultType": "void",
+      "errorType": "void",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "visible",
+              "type": "boolean"
+            }
+          ]
+        }
+      ]
     },
     {
       "kind": "request",

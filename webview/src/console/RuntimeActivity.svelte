@@ -9,6 +9,7 @@
     import ActivityOutputStream from "./ActivityOutputStream.svelte";
     import ActivityErrorStream from "./ActivityErrorStream.svelte";
     import ActivityErrorMessage from "./ActivityErrorMessage.svelte";
+    import ActivityErrorSuggestion from "./ActivityErrorSuggestion.svelte";
     import ActivityOutputHtml from "./ActivityOutputHtml.svelte";
     import ActivityOutputMessage from "./ActivityOutputMessage.svelte";
     import ActivityOutputPlot from "./ActivityOutputPlot.svelte";
@@ -19,6 +20,7 @@
         ActivityItemStream,
         ActivityItemStreamType,
         ActivityItemErrorMessage,
+        ActivityItemErrorSuggestion,
         ActivityItemOutputHtml,
         ActivityItemOutputMessage,
         ActivityItemOutputPlot,
@@ -30,6 +32,7 @@
         languageId?: string;
         languageAssetsVersion?: number;
         charWidth?: number;
+        sessionId: string;
     }
 
     let {
@@ -37,6 +40,7 @@
         languageId = "plaintext",
         languageAssetsVersion = 0,
         charWidth = 0,
+        sessionId,
     }: Props = $props();
     let activityItemsStore = $derived(runtimeItemActivity.activityItemsStore);
 
@@ -63,6 +67,11 @@
             {/if}
         {:else if activityItem instanceof ActivityItemErrorMessage}
             <ActivityErrorMessage activityItemErrorMessage={activityItem} />
+        {:else if activityItem instanceof ActivityItemErrorSuggestion}
+            <ActivityErrorSuggestion
+                activityItemErrorSuggestion={activityItem}
+                {sessionId}
+            />
         {:else if activityItem instanceof ActivityItemOutputHtml}
             <ActivityOutputHtml activityItemOutputHtml={activityItem} />
         {:else if activityItem instanceof ActivityItemOutputMessage}

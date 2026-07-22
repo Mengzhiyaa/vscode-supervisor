@@ -13,6 +13,8 @@
     } from "../shared/DynamicActionBar.svelte";
     import CurrentWorkingDirectory from "./CurrentWorkingDirectory.svelte";
     import ConsoleInfoButton from "./ConsoleInfoButton.svelte";
+    import ConsoleResourceMonitor from "./ConsoleResourceMonitor.svelte";
+    import ContextMenu, { type ContextMenuEntry } from "../shared/ContextMenu.svelte";
     
     interface SessionInfo {
         id: string;
@@ -35,6 +37,8 @@
         readonly canStart: boolean;
         readonly traceEnabled: boolean;
         readonly session?: SessionInfo;
+        readonly resourceUsageHistory?: Array<{ cpu_percent: number; memory_bytes: number }>;
+        readonly showResourceMonitor?: boolean;
         readonly onInterrupt: () => void;
         readonly onRestart: () => void;
         readonly onClear: () => void;
@@ -42,6 +46,7 @@
         readonly onToggleTrace: () => void;
         readonly onDeleteSession: () => void;
         readonly onOpenInEditor: () => void;
+        readonly onToggleResourceMonitor?: () => void;
     }
 
     let {
@@ -55,6 +60,8 @@
         canStart,
         traceEnabled,
         session,
+        resourceUsageHistory = [],
+        showResourceMonitor = true,
         onInterrupt,
         onRestart,
         onClear,
@@ -62,7 +69,16 @@
         onToggleTrace,
         onDeleteSession,
         onOpenInEditor,
+        onToggleResourceMonitor,
     }: ActionBarProps = $props();
+
+    let actionBarElement = $state<HTMLDivElement | null>(null);
+    let contextMenuPoint = $state<{ x: number; y: number } | null>(null);
+    const contextMenuEntries = $derived.by((): ContextMenuEntry[] => [{
+        label: "Show Resource Monitor",
+        checked: showResourceMonitor,
+        onSelected: () => onToggleResourceMonitor?.(),
+    }]);
 
     // Localized strings (Positron pattern)
     const positronInterruptExecution = "Interrupt Execution";
@@ -74,15 +90,24 @@
     const positronOpenInEditor = "Open in Editor";
 
     // --- Build DynamicActionBar actions ---
-    const leftActions: DynamicAction[] = $derived.by(() => [
-        {
+    const leftActions: DynamicAction[] = $derived.by(() => {
+        const actions: DynamicAction[] = [{
             fixedWidth: 24,
             text: currentWorkingDirectory,
             minWidth: 84,
             separator: false,
             component: cwdSnippet,
-        },
-    ]);
+        }];
+        if (showResourceMonitor && resourceUsageHistory.length > 0 && session?.state !== "exited") {
+            actions.push({
+                fixedWidth: 126,
+                minWidth: 92,
+                separator: true,
+                component: resourceMonitorSnippet,
+            });
+        }
+        return actions;
+    });
 
     const rightActions: DynamicAction[] = $derived.by(() => {
         const actions: DynamicAction[] = [];
@@ -209,6 +234,10 @@
     <div class="state-label" role="status" aria-live="polite">{stateLabel}</div>
 {/snippet}
 
+{#snippet resourceMonitorSnippet()}
+    <ConsoleResourceMonitor {resourceUsageHistory} />
+{/snippet}
+
 {#snippet interruptSnippet()}
     <ActionBarButton
         icon="positron-interrupt-runtime"
@@ -280,7 +309,19 @@
     />
 {/snippet}
 
-<div class="console-action-bar" data-trace-enabled={traceEnabled}>
+<div
+    bind:this={actionBarElement}
+    class="console-action-bar"
+    role="toolbar"
+    aria-label="Console actions"
+    tabindex="-1"
+    data-trace-enabled={traceEnabled}
+    oncontextmenu={(event) => {
+        if (!onToggleResourceMonitor) return;
+        event.preventDefault();
+        contextMenuPoint = { x: event.clientX, y: event.clientY };
+    }}
+>
     <DynamicActionBar
         {leftActions}
         {rightActions}
@@ -290,6 +331,15 @@
         borderBottom={true}
     />
 </div>
+
+{#if contextMenuPoint && actionBarElement}
+    <ContextMenu
+        entries={contextMenuEntries}
+        anchorEl={actionBarElement}
+        anchorPoint={contextMenuPoint}
+        onclose={() => (contextMenuPoint = null)}
+    />
+{/if}
 
 <style>
     .console-action-bar {

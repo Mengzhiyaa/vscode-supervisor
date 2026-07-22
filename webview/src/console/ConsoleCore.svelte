@@ -47,6 +47,7 @@
         ActivityItemStream,
         ActivityItemStreamType,
         ActivityItemErrorMessage,
+        ActivityItemErrorSuggestion,
         ActivityItemOutputHtml,
         ActivityItemOutputMessage,
         ActivityItemOutputPlot,
@@ -90,6 +91,7 @@
         | ActivityItemInput
         | ActivityItemStream
         | ActivityItemErrorMessage
+        | ActivityItemErrorSuggestion
         | ActivityItemOutputHtml
         | ActivityItemOutputMessage
         | ActivityItemOutputPlot
@@ -164,6 +166,7 @@
         fontFamily: DEFAULT_CONSOLE_FONT_FAMILY,
         fontSize: DEFAULT_CONSOLE_FONT_SIZE,
         lineHeight: DEFAULT_CONSOLE_LINE_HEIGHT,
+        showResourceMonitor: true,
     });
     let consoleThemeData = $state<ConsoleThemeData | undefined>(undefined);
     // When true (default), permanently delete data beyond scrollback limit to free memory
@@ -632,6 +635,8 @@
         const normalizedLineHeight = normalizeConsoleLineHeight(
             nextSettings?.lineHeight ?? consoleSettings.lineHeight,
         );
+        const showResourceMonitor =
+            nextSettings?.showResourceMonitor ?? consoleSettings.showResourceMonitor;
 
         applyScrollbackSize(normalizedScrollbackSize);
 
@@ -639,7 +644,8 @@
             consoleSettings.scrollbackSize === normalizedScrollbackSize &&
             consoleSettings.fontFamily === normalizedFontFamily &&
             consoleSettings.fontSize === normalizedFontSize &&
-            consoleSettings.lineHeight === normalizedLineHeight
+            consoleSettings.lineHeight === normalizedLineHeight &&
+            consoleSettings.showResourceMonitor === showResourceMonitor
         ) {
             return;
         }
@@ -649,6 +655,7 @@
             fontFamily: normalizedFontFamily,
             fontSize: normalizedFontSize,
             lineHeight: normalizedLineHeight,
+            showResourceMonitor,
         };
     }
 
@@ -952,6 +959,7 @@
         | ActivityItemInput
         | ActivityItemStream
         | ActivityItemErrorMessage
+        | ActivityItemErrorSuggestion
         | ActivityItemOutputHtml
         | ActivityItemOutputMessage
         | ActivityItemOutputPlot
@@ -984,6 +992,14 @@
                     item.name,
                     item.message,
                     item.traceback ?? [],
+                );
+            case "errorSuggestion":
+                return new ActivityItemErrorSuggestion(
+                    item.id,
+                    item.parentId,
+                    new Date(item.when),
+                    item.suggestions,
+                    item.available,
                 );
             case "outputHtml":
                 return new ActivityItemOutputHtml(
@@ -2115,6 +2131,10 @@
                 canStart={canStartSession(activeSession)}
                 traceEnabled={activeConsoleInstance?.trace ?? false}
                 session={activeSession}
+                resourceUsageHistory={activeConsoleSessionId
+                    ? (resourceUsageBySession.get(activeConsoleSessionId) ?? [])
+                    : []}
+                showResourceMonitor={!showSessionTabs && consoleSettings.showResourceMonitor}
                 onInterrupt={handleInterrupt}
                 onRestart={restartCurrentSession}
                 onClear={clearOutput}
@@ -2146,6 +2166,13 @@
                 onOpenInEditor={() => {
                     if (activeConsoleSessionId) {
                         void handleOpenInEditor(activeConsoleSessionId);
+                    }
+                }}
+                onToggleResourceMonitor={() => {
+                    if (connection) {
+                        void connection.sendRequest("console/setShowResourceMonitor", {
+                            visible: !consoleSettings.showResourceMonitor,
+                        });
                     }
                 }}
             />
@@ -2226,9 +2253,17 @@
                 width={consoleTabListWidth}
                 height={containerHeight}
                 {resourceUsageBySession}
+                showResourceMonitor={consoleSettings.showResourceMonitor}
                 onSelectSession={handleSetForegroundSession}
                 onDeleteSession={handleDeleteSession}
                 onRenameSession={handleRenameSession}
+                onToggleResourceMonitor={() => {
+                    if (connection) {
+                        void connection.sendRequest("console/setShowResourceMonitor", {
+                            visible: !consoleSettings.showResourceMonitor,
+                        });
+                    }
+                }}
             />
         {/if}
     {/if}

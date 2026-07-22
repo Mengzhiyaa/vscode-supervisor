@@ -119,6 +119,7 @@ export type SerializedActivityItem =
     | SerializedActivityInput
     | SerializedActivityStream
     | SerializedActivityError
+    | SerializedActivityErrorSuggestion
     | SerializedActivityOutput
     | SerializedActivityOutputHtml
     | SerializedActivityOutputPlot
@@ -152,6 +153,21 @@ export interface SerializedActivityError {
     name: string;
     message: string;
     traceback: string[];
+}
+
+export interface SerializedConsoleErrorSuggestion {
+    id: string;
+    iconId: string;
+    label: string;
+}
+
+export interface SerializedActivityErrorSuggestion {
+    type: 'errorSuggestion';
+    id: string;
+    parentId: string;
+    when: number;
+    available: boolean;
+    suggestions: SerializedConsoleErrorSuggestion[];
 }
 
 export interface SerializedActivityOutput {

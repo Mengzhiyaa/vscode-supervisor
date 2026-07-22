@@ -314,6 +314,37 @@ test('console requests a full-state refresh when runtime change sync gaps appear
     await expect(page.getByText('recovered output')).toBeVisible();
 });
 
+test('console renders an actionable error follow-up and sends its stable identifiers', async ({ page }) => {
+    const backend = await openWebviewPage(page, 'console', {
+        configure: registerConsoleDefaults,
+    });
+    await expect.poll(() => backend.notificationCount(ConsoleMethods.ready)).toBeGreaterThan(0);
+    const state = createConsoleState('before error');
+    const activity = state.items[1];
+    if (activity.type !== 'activity') { throw new Error('Expected activity state'); }
+    activity.items.push({
+        type: 'errorSuggestion',
+        id: 'suggestion-item-1',
+        parentId: 'activity-1',
+        when: Date.now(),
+        available: true,
+        suggestions: [{ id: 'install-package:pandas', iconId: 'lightbulb', label: 'Install pandas' }],
+    });
+    await backend.notify(ConsoleMethods.restoreState, {
+        sessionId: 'session-1',
+        syncSeq: 1,
+        state,
+    });
+
+    const request = backend.waitForNextRequest(ConsoleMethods.runErrorSuggestion);
+    await page.getByRole('button', { name: 'Install pandas' }).click();
+    expect((await request).params).toEqual({
+        sessionId: 'session-1',
+        itemId: 'suggestion-item-1',
+        suggestionId: 'install-package:pandas',
+    });
+});
+
 test('console clear action sends the matching extension request', async ({ page }) => {
     const backend = await openWebviewPage(page, 'console', {
         configure: (mockBackend) => {
@@ -1480,6 +1511,58 @@ test('console updates pending input, resource usage, and language assets from ex
                 },
             },
         });
+});
+
+test('console shows single-session resource usage in the action bar and persists its context toggle', async ({ page }) => {
+    const session = createSession({ id: 'session-1', name: 'Primary' });
+    const backend = await openWebviewPage(page, 'console', {
+        configure: mockBackend => {
+            registerConsoleDefaults(mockBackend, {
+                sessions: [session],
+                activeSessionId: session.id,
+                settings: {
+                    scrollbackSize: 1000,
+                    fontFamily: 'var(--vscode-editor-font-family)',
+                    fontSize: 13,
+                    lineHeight: 1.4,
+                    showResourceMonitor: true,
+                },
+            });
+            mockBackend.onRequest(ConsoleMethods.setShowResourceMonitor, () => undefined);
+        },
+    });
+
+    await backend.notify(SessionMethods.info, {
+        sessions: [session],
+        activeSessionId: session.id,
+    });
+    await backend.notify(ConsoleMethods.restoreState, {
+        sessionId: session.id,
+        syncSeq: 1,
+        state: createConsoleState('primary output'),
+    });
+    await backend.notify(ConsoleMethods.resourceUsage, {
+        sessionId: session.id,
+        usage: { cpu_percent: 42, memory_bytes: 2_097_152 },
+    });
+
+    const monitor = page.locator('.console-resource-monitor');
+    await expect(monitor).toContainText('42%');
+    await expect(monitor).toContainText('2.00MB');
+
+    const toggleRequest = backend.waitForNextRequest(ConsoleMethods.setShowResourceMonitor);
+    await page.locator('.console-action-bar').click({ button: 'right' });
+    await page.getByText('Show Resource Monitor', { exact: true }).click();
+    await expect.poll(async () => (await toggleRequest).params).toEqual({ visible: false });
+
+    await backend.notify(ConsoleMethods.settingsChanged, {
+        scrollbackSize: 1000,
+        fontFamily: 'var(--vscode-editor-font-family)',
+        fontSize: 13,
+        lineHeight: 1.4,
+        showResourceMonitor: false,
+    });
+    await expect(monitor).toHaveCount(0);
 });
 
 test('console navigates input history with ArrowUp and ArrowDown keyboard events', async ({ page }) => {
