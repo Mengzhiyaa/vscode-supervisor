@@ -7,12 +7,22 @@
         memory_bytes: number;
     }
 
-    let { resourceUsageHistory = [] }: { resourceUsageHistory: ResourceUsage[] } = $props();
+    let {
+        busy = false,
+        resourceUsageHistory = [],
+    }: {
+        busy?: boolean;
+        resourceUsageHistory: ResourceUsage[];
+    } = $props();
     const latest = $derived(resourceUsageHistory.at(-1));
 </script>
 
 {#if latest}
-    <div class="console-resource-monitor" aria-label="Runtime resource usage">
+    <div
+        class:busy
+        class="console-resource-monitor"
+        aria-label="Runtime resource usage"
+    >
         <ResourceUsageGraph data={resourceUsageHistory} width={56} height={20} />
         <ResourceUsageStats
             cpuPercent={latest.cpu_percent}
@@ -23,18 +33,27 @@
 
 <style>
     .console-resource-monitor {
+        width: 100%;
+        min-width: 0;
+        height: 100%;
+        box-sizing: border-box;
         display: flex;
+        flex-direction: row;
         align-items: center;
+        justify-content: flex-end;
         gap: 6px;
-        height: 24px;
-        min-width: 118px;
-        max-width: 180px;
+        overflow: hidden;
         container-type: inline-size;
         color: var(--vscode-descriptionForeground);
+        white-space: nowrap;
+    }
+
+    .console-resource-monitor.busy {
+        padding-left: 2px;
     }
 
     .console-resource-monitor :global(.resource-usage-stats) {
-        flex: 1 1 auto;
+        flex: 0 1 auto;
         margin: 0;
         gap: 6px;
     }

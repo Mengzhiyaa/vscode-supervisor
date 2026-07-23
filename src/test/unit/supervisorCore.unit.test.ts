@@ -12,6 +12,7 @@ import {
     RuntimeErrorBehavior,
 } from '../../internal/runtimeTypes';
 import { RuntimeSession } from '../../runtime/session';
+import { DapComm } from '../../supervisor/DapComm';
 import { KCApi } from '../../supervisor/KallichoreAdapterApi';
 import { KallichoreSession } from '../../supervisor/KallichoreSession';
 import { AxiosError } from '../../supervisor/httpClient';
@@ -105,6 +106,31 @@ function createDeferred<T>(): {
 }
 
 suite('[Unit] supervisor core backports', () => {
+    test('internal DAP sessions do not save open editors before attaching', async () => {
+        const comm = {
+            id: 'dap-comm-1',
+            dispose: () => undefined,
+        };
+        const session = {
+            createServerComm: async () => [comm, 5678],
+            emitJupyterLog: () => undefined,
+        };
+
+        const dapComm = await DapComm.create(
+            session as any,
+            'ark_dap',
+            'ark',
+            'Ark VS Code R',
+        );
+
+        assert.strictEqual(
+            (dapComm as any).debugOptions.suppressSaveBeforeStart,
+            true,
+        );
+
+        dapComm.dispose();
+    });
+
     test('detached startup ignores successful terminal exits during startup', () => {
         const shouldIgnore = (KCApi.prototype as any)._shouldIgnoreTerminalCloseDuringStartup;
 

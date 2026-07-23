@@ -129,8 +129,8 @@ body.vscode-high-contrast-light .action-bar-button:hover:not(:disabled),
     outline-offset: -1px;
 }
 
-.action-bar-button.interrupt .codicon {
-    color: var(--vscode-testing-iconFailed, #f44747);
+.action-bar-button.interrupt .action-bar-button-icon::before {
+    color: var(--vscode-errorForeground, #f44747);
 }
 
 .action-bar-button .action-bar-button-face {

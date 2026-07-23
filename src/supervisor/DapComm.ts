@@ -95,6 +95,9 @@ export class DapComm {
 		};
 
 		const debugOptions: vscode.DebugSessionOptions = {
+			// This is an internal attach session and does not depend on editor contents.
+			// Avoid applying the user's save-before-debug policy to open editors.
+			suppressSaveBeforeStart: true,
 			suppressDebugToolbar: true,
 			suppressDebugStatusbar: true,
 			suppressDebugView: true,

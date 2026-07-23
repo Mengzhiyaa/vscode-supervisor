@@ -11,9 +11,13 @@ import * as os from 'os';
 import * as path from 'path';
 import * as https from 'https';
 import * as http from 'http';
-import { execFileSync, execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import * as vscode from 'vscode';
-import { type BinaryDefinition, type IBinaryProvider } from './api';
+import {
+    type BinaryArchiveType,
+    type BinaryDefinition,
+    type IBinaryProvider,
+} from './api';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -235,19 +239,49 @@ function download(
 }
 
 // ---------------------------------------------------------------------------
-// Extract zip
+// Extract archive
 // ---------------------------------------------------------------------------
 
-function extractZip(zipPath: string, destDir: string): void {
+function extractArchive(
+    archivePath: string,
+    archiveType: BinaryArchiveType,
+    destDir: string,
+): void {
     fs.mkdirSync(destDir, { recursive: true });
 
-    if (isWindows) {
-        execSync(
-            `powershell -NoProfile -Command "Expand-Archive -Path '${zipPath}' -DestinationPath '${destDir}' -Force"`,
-            { stdio: 'pipe' }
-        );
-    } else {
-        execSync(`unzip -o -q "${zipPath}" -d "${destDir}"`, { stdio: 'pipe' });
+    switch (archiveType) {
+        case 'zip':
+            if (isWindows) {
+                execFileSync(
+                    'powershell',
+                    [
+                        '-NoProfile',
+                        '-Command',
+                        'Expand-Archive',
+                        '-LiteralPath',
+                        archivePath,
+                        '-DestinationPath',
+                        destDir,
+                        '-Force',
+                    ],
+                    { stdio: 'pipe' },
+                );
+                return;
+            }
+
+            execFileSync(
+                'unzip',
+                ['-o', '-q', archivePath, '-d', destDir],
+                { stdio: 'pipe' },
+            );
+            return;
+        case 'tar.gz':
+            execFileSync(
+                'tar',
+                ['-xzf', archivePath, '-C', destDir],
+                { stdio: 'pipe' },
+            );
+            return;
     }
 }
 
@@ -294,6 +328,21 @@ function resolveInstalledVersion(binaryPath: string): string | undefined {
     }
 }
 
+export function getExpectedBinaryVersion(
+    def: BinaryDefinition,
+    releaseVersion: string,
+): string {
+    return def.reportedVersion ?? releaseVersion;
+}
+
+export function isBinaryVersionCompatible(
+    def: BinaryDefinition,
+    installedVersion: string | undefined,
+    releaseVersion: string,
+): boolean {
+    return installedVersion === getExpectedBinaryVersion(def, releaseVersion);
+}
+
 // ---------------------------------------------------------------------------
 // Install a single binary
 // ---------------------------------------------------------------------------
@@ -309,26 +358,27 @@ async function installBinary(
 ): Promise<void> {
     const downloadInfo = getDownloadInfo(def, version, basePlatform, extensionPath);
     const { platform, archiveFile, downloadUrl, installDir, destPath } = downloadInfo;
+    const expectedBinaryVersion = getExpectedBinaryVersion(def, version);
 
-    log.info(`[BinaryManager] Downloading ${name} v${version} (${platform})...`);
-    progress.report({ message: `Downloading ${name} v${version}...` });
+    log.info(`[BinaryManager] Downloading ${name} ${version} (${platform})...`);
+    progress.report({ message: `Downloading ${name} ${version}...` });
 
     fs.mkdirSync(installDir, { recursive: true });
 
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), `${name}-install-`));
 
     try {
-        const zipPath = path.join(tmpDir, archiveFile);
+        const archivePath = path.join(tmpDir, archiveFile);
 
         // Download
-        await download(downloadUrl, zipPath, DOWNLOAD_TIMEOUT_MS, (bytes) => {
+        await download(downloadUrl, archivePath, DOWNLOAD_TIMEOUT_MS, (bytes) => {
             progress.report({ message: `Downloading ${name}... ${(bytes / 1024 / 1024).toFixed(1)} MB` });
         });
 
         // Extract
         progress.report({ message: `Extracting ${name}...` });
         const extractDir = path.join(tmpDir, 'extracted');
-        extractZip(zipPath, extractDir);
+        extractArchive(archivePath, def.archiveType ?? 'zip', extractDir);
 
         // Find binary
         const binaryPath = findBinary(extractDir, def.binaryName);
@@ -349,9 +399,10 @@ async function installBinary(
 			}
 
 			const installedVersion = resolveInstalledVersion(stagedPath);
-			if (installedVersion !== version) {
+			if (!isBinaryVersionCompatible(def, installedVersion, version)) {
 				throw new Error(
-					`Downloaded ${name} reported version ${installedVersion ?? 'unknown'}; expected ${version}`,
+					`Downloaded ${name} reported version ${installedVersion ?? 'unknown'}; ` +
+                    `expected ${expectedBinaryVersion} (release ${version})`,
 				);
 			}
 
@@ -366,7 +417,7 @@ async function installBinary(
 		}
 
         const size = (fs.statSync(destPath).size / 1024 / 1024).toFixed(2);
-        log.info(`[BinaryManager] ✅ Installed ${name} v${version} (${size} MB) → ${destPath}`);
+        log.info(`[BinaryManager] ✅ Installed ${name} ${version} (${size} MB) → ${destPath}`);
 
     } finally {
         fs.rmSync(tmpDir, { recursive: true, force: true });
@@ -402,6 +453,9 @@ export async function ensureBinaries(
 
     for (const [name, resolvedDef] of Object.entries(defs)) {
         const { definition: def, version: expectedVersion } = resolvedDef;
+        const expectedBinaryVersion = expectedVersion
+            ? getExpectedBinaryVersion(def, expectedVersion)
+            : undefined;
         const binaryPath = path.join(
             resolveInstallDir(context.extensionPath, def.installDir),
             def.binaryName,
@@ -421,19 +475,26 @@ export async function ensureBinaries(
             installedVersionsChanged = true;
         }
 
-        if (!installedVersion && expectedVersion) {
+        if (!installedVersion && expectedBinaryVersion) {
             // Some environments may block spawning binaries during activation.
             // If the file exists but version probing fails, assume bundled version
             // to avoid a perpetual download loop.
-            installedVersion = expectedVersion;
-            installedVersions[name] = expectedVersion;
+            installedVersion = expectedBinaryVersion;
+            installedVersions[name] = expectedBinaryVersion;
             installedVersionsChanged = true;
-            log.debug(`[BinaryManager] ${name} version probe failed; assuming expected=${expectedVersion}`);
+            log.debug(`[BinaryManager] ${name} version probe failed; assuming expected=${expectedBinaryVersion}`);
         }
 
-        if (expectedVersion && installedVersion !== expectedVersion) {
+        if (
+            expectedVersion &&
+            !isBinaryVersionCompatible(def, installedVersion, expectedVersion)
+        ) {
 			needsInstall.push(name);
-			log.warn(`[BinaryManager] ${name} version mismatch: installed=${installedVersion ?? 'unknown'}, expected=${expectedVersion}; upgrading`);
+			log.warn(
+                `[BinaryManager] ${name} version mismatch: ` +
+                `installed=${installedVersion ?? 'unknown'}, ` +
+                `expected=${expectedBinaryVersion} (release ${expectedVersion}); upgrading`,
+            );
         }
     }
 
@@ -470,7 +531,7 @@ export async function ensureBinaries(
                     await installBinary(name, def, version, platform, context.extensionPath, log, progress);
 
                     // Update version cache
-                    installedVersions[name] = version;
+                    installedVersions[name] = getExpectedBinaryVersion(def, version);
                     installedVersionsChanged = true;
                 } catch (err) {
                     const message = err instanceof Error ? err.message : String(err);

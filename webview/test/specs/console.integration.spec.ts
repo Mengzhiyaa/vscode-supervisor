@@ -1607,8 +1607,12 @@ test('console updates pending input, resource usage, and language assets from ex
         });
 });
 
-test('console shows single-session resource usage in the action bar and persists its context toggle', async ({ page }) => {
-    const session = createSession({ id: 'session-1', name: 'Primary' });
+test('console aligns single-session resource usage with the red interrupt action and persists its context toggle', async ({ page }) => {
+    const session = createSession({
+        id: 'session-1',
+        name: 'Primary',
+        state: 'busy',
+    });
     const backend = await openWebviewPage(page, 'console', {
         configure: mockBackend => {
             registerConsoleDefaults(mockBackend, {
@@ -1641,8 +1645,56 @@ test('console shows single-session resource usage in the action bar and persists
     });
 
     const monitor = page.locator('.console-resource-monitor');
+    const interrupt = page.getByLabel('Interrupt Execution');
     await expect(monitor).toContainText('42%');
     await expect(monitor).toContainText('2.00MB');
+    await expect(interrupt).toBeVisible();
+
+    const actionPositions = await page.evaluate(() => {
+        const interruptElement = document.querySelector(
+            '[aria-label="Interrupt Execution"]',
+        );
+        const monitorElement = document.querySelector(
+            '.console-resource-monitor',
+        );
+        const restartElement = document.querySelector(
+            '[aria-label="Restart Session"]',
+        );
+        if (!interruptElement || !monitorElement || !restartElement) {
+            throw new Error('Expected console action bar controls');
+        }
+        const interruptRect = interruptElement.getBoundingClientRect();
+        const monitorRect = monitorElement.getBoundingClientRect();
+        const restartRect = restartElement.getBoundingClientRect();
+        return {
+            interruptRight: interruptRect.right,
+            monitorLeft: monitorRect.left,
+            monitorRight: monitorRect.right,
+            restartLeft: restartRect.left,
+        };
+    });
+    expect(actionPositions.monitorLeft).toBeGreaterThanOrEqual(
+        actionPositions.interruptRight,
+    );
+    expect(actionPositions.restartLeft).toBeGreaterThanOrEqual(
+        actionPositions.monitorRight,
+    );
+
+    const interruptColors = await interrupt
+        .locator('.action-bar-button-icon')
+        .evaluate(element => {
+            const expectedColorProbe = document.createElement('span');
+            expectedColorProbe.style.color =
+                'var(--vscode-errorForeground, #f44747)';
+            document.body.append(expectedColorProbe);
+            const colors = {
+                actual: getComputedStyle(element, '::before').color,
+                expected: getComputedStyle(expectedColorProbe).color,
+            };
+            expectedColorProbe.remove();
+            return colors;
+        });
+    expect(interruptColors.actual).toBe(interruptColors.expected);
 
     const toggleRequest = backend.waitForNextRequest(ConsoleMethods.setShowResourceMonitor);
     await page.locator('.console-action-bar').click({ button: 'right' });

@@ -88,26 +88,18 @@
     const positronToggleTrace = "Toggle Trace";
     const positronDeleteSession = "Delete Session";
     const positronOpenInEditor = "Open in Editor";
+    const RESOURCE_MONITOR_MAX_WIDTH = 180;
 
     // --- Build DynamicActionBar actions ---
-    const leftActions: DynamicAction[] = $derived.by(() => {
-        const actions: DynamicAction[] = [{
+    const leftActions: DynamicAction[] = $derived.by(() => [
+        {
             fixedWidth: 24,
             text: currentWorkingDirectory,
             minWidth: 84,
             separator: false,
             component: cwdSnippet,
-        }];
-        if (showResourceMonitor && resourceUsageHistory.length > 0 && session?.state !== "exited") {
-            actions.push({
-                fixedWidth: 126,
-                minWidth: 92,
-                separator: true,
-                component: resourceMonitorSnippet,
-            });
-        }
-        return actions;
-    });
+        },
+    ]);
 
     const rightActions: DynamicAction[] = $derived.by(() => {
         const actions: DynamicAction[] = [];
@@ -123,7 +115,7 @@
             });
         }
 
-        // Interrupt (conditional, separator after interrupt group)
+        // Interrupt (conditional).
         if (interruptible) {
             actions.push({
                 fixedWidth: 24,
@@ -135,6 +127,22 @@
                     disabled: interrupting,
                     onSelected: () => onInterrupt(),
                 },
+            });
+        }
+
+        // Match Positron's right-hand action group: the interrupt button is
+        // followed immediately by the resource monitor. The monitor remains
+        // shrinkable so the working directory yields space gracefully.
+        if (
+            showResourceMonitor &&
+            resourceUsageHistory.length > 0 &&
+            session?.state !== "exited"
+        ) {
+            actions.push({
+                fixedWidth: RESOURCE_MONITOR_MAX_WIDTH,
+                minWidth: 92,
+                separator: true,
+                component: resourceMonitorSnippet,
             });
         }
 
@@ -235,7 +243,10 @@
 {/snippet}
 
 {#snippet resourceMonitorSnippet()}
-    <ConsoleResourceMonitor {resourceUsageHistory} />
+    <ConsoleResourceMonitor
+        busy={interruptible}
+        {resourceUsageHistory}
+    />
 {/snippet}
 
 {#snippet interruptSnippet()}
@@ -388,8 +399,9 @@
         );
     }
 
-    .console-action-bar :global(.action-bar-button.interrupt .codicon) {
-        color: var(--vscode-errorForeground);
+    .console-action-bar
+        :global(.action-bar-button.interrupt .action-bar-button-icon::before) {
+        color: var(--vscode-errorForeground, #f44747);
     }
 
     .state-label {

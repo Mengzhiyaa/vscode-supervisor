@@ -231,8 +231,15 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
                 }
             }
 
-            if (this._defaultInstallationsByLanguageId.size === 0) {
+            if (
+                this._runtimeProviders.size > 0 &&
+                this._defaultInstallationsByLanguageId.size === 0
+            ) {
                 this._outputChannel.warn('[RuntimeSession] No language installations found during initialization');
+            } else if (this._runtimeProviders.size === 0) {
+                this._outputChannel.debug(
+                    '[RuntimeSession] No language providers registered during initialization; awaiting language extensions',
+                );
             }
 
             this._localSupervisor = new LocalSupervisorApi(this._context, this._outputChannel);
