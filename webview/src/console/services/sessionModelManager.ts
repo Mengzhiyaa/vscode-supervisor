@@ -1,4 +1,4 @@
-import type * as MonacoApi from "monaco-editor/esm/vs/editor/editor.api";
+import type * as MonacoApi from "monaco-editor/editor";
 import type { MessageConnection } from "vscode-jsonrpc/browser";
 import { loadLanguageMonacoSupportModule } from "$lib/monaco/languageSupport";
 import type { IInputHistoryEntry } from "../history";

@@ -1,5 +1,5 @@
 import type { MessageConnection } from "vscode-jsonrpc/browser";
-import type * as MonacoTypes from "monaco-editor";
+import type * as MonacoTypes from "monaco-editor/editor";
 import {
     type LanguageTextMateGrammarDefinition,
     ensureLanguageTextMateTokenizerReady,
@@ -8,7 +8,7 @@ import {
 } from "./textMateTokenization";
 import type { ConsoleThemeData } from "@shared/console";
 export type { ConsoleThemeData, ConsoleThemeRule } from "@shared/console";
-type MonacoApi = typeof import("monaco-editor");
+type MonacoApi = typeof import("monaco-editor/editor");
 
 export interface LanguageMonacoSupportModule {
     registerLanguage(monaco: MonacoApi): void;

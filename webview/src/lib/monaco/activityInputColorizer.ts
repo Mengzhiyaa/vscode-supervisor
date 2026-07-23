@@ -1,114 +1,41 @@
 /**
- * Activity input colorizer (Positron 1:1 approach).
+ * Colorizes console activity input through Monaco's public standalone API.
  *
- * This mirrors Positron's activity input rendering path:
- * - acquire tokenization support from TokenizationRegistry
- * - tokenize lines with carried state (multi-line aware)
- * - render each line with renderViewLine2
+ * `editor.colorize` preserves tokenization state across lines and delegates to
+ * the same renderer used by the standalone editor. Keeping this integration on
+ * the public API avoids depending on Monaco's internal services and rendering
+ * classes, whose module layout changed in Monaco 0.56.
  */
-import { TokenizationRegistry } from "monaco-editor/esm/vs/editor/common/languages.js";
-import { ILanguageService } from "monaco-editor/esm/vs/editor/common/languages/language.js";
-import { LineTokens } from "monaco-editor/esm/vs/editor/common/tokens/lineTokens.js";
-import {
-    RenderLineInput,
-    renderViewLine2,
-} from "monaco-editor/esm/vs/editor/common/viewLayout/viewLineRenderer.js";
-import { ViewLineRenderingData } from "monaco-editor/esm/vs/editor/common/viewModel.js";
-import { StandaloneServices } from "monaco-editor/esm/vs/editor/standalone/browser/standaloneServices.js";
 
-type EncodedTokenizeResult = {
-    tokens: Uint32Array;
-    endState: unknown;
-};
-
-type TokenizationSupport = {
-    getInitialState(): unknown;
-    tokenizeEncoded(
-        line: string,
-        hasEOL: boolean,
-        state: unknown,
-    ): EncodedTokenizeResult;
-};
+type MonacoApi = typeof import("monaco-editor/editor");
 
 /**
  * Colorizes plain code lines for activity input history.
- * Returns one HTML line per input line, or [] when colorization is unavailable.
+ * Returns one HTML fragment per input line, or [] when Monaco returns an
+ * unexpected result so the caller can fall back to plain text rendering.
  */
 export async function colorizeActivityInputLines(
+    monaco: MonacoApi,
     codeOutputLines: string[],
     languageId: string,
 ): Promise<string[]> {
-    const languageService = StandaloneServices.get(ILanguageService);
-
-    if (!languageService?.isRegisteredLanguageId(languageId)) {
+    if (codeOutputLines.length === 0) {
         return [];
     }
 
-    const tokenizationSupport =
-        (await TokenizationRegistry.getOrCreate(
-            languageId,
-        )) as TokenizationSupport | null;
+    const html = await monaco.editor.colorize(
+        codeOutputLines.join("\n"),
+        languageId,
+        { tabSize: 4 },
+    );
+    const colorizedLines = html.split(/<br\s*\/?>/iu);
 
-    if (!tokenizationSupport) {
-        return [];
+    // Monaco appends a final <br/> after every rendered line.
+    if (colorizedLines.at(-1) === "") {
+        colorizedLines.pop();
     }
 
-    const colorizedOutputLines: string[] = [];
-    let state = tokenizationSupport.getInitialState();
-
-    for (const codeOutputLine of codeOutputLines) {
-        const tokenizeResult = tokenizationSupport.tokenizeEncoded(
-            codeOutputLine,
-            true,
-            state,
-        );
-        LineTokens.convertToEndOffset(tokenizeResult.tokens, codeOutputLine.length);
-
-        const lineTokens = new LineTokens(
-            tokenizeResult.tokens,
-            codeOutputLine,
-            languageService.languageIdCodec,
-        );
-
-        const isBasicASCII = ViewLineRenderingData.isBasicASCII(
-            codeOutputLine,
-            true,
-        );
-        const containsRTL = ViewLineRenderingData.containsRTL(
-            codeOutputLine,
-            isBasicASCII,
-            true,
-        );
-
-        const renderLineOutput = renderViewLine2(
-            new RenderLineInput(
-                false,
-                true,
-                codeOutputLine,
-                false,
-                isBasicASCII,
-                containsRTL,
-                0,
-                lineTokens.inflate(),
-                [],
-                4,
-                0,
-                0,
-                0,
-                0,
-                -1,
-                "none",
-                false,
-                false,
-                null,
-                null,
-                0,
-            ),
-        );
-
-        colorizedOutputLines.push(renderLineOutput.html);
-        state = tokenizeResult.endState;
-    }
-
-    return colorizedOutputLines;
+    return colorizedLines.length === codeOutputLines.length
+        ? colorizedLines
+        : [];
 }

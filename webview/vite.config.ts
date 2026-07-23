@@ -53,7 +53,9 @@ export default defineConfig(({ mode }) => ({
     // Optimize deps for Monaco and TextMate integration
     optimizeDeps: {
         include: [
-            'monaco-editor/esm/vs/editor/edcore.main',
+            'monaco-editor/editor',
+            'monaco-editor/features/register.all',
+            'monaco-editor/languages/definitions/register.all',
             'vscode-textmate',
             'vscode-oniguruma'
         ]

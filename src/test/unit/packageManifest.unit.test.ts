@@ -275,6 +275,57 @@ suite('[Unit] Supervisor package manifest', () => {
         assert.doesNotMatch(consoleTypes, /--vscode-positronConsole-stateIcon/);
     });
 
+    test('uses Monaco 0.56 public entrypoints and loads its shared styles', () => {
+        const webviewPackageJson = JSON.parse(
+            readRepoFile('webview/package.json'),
+        ) as { dependencies?: Record<string, string> };
+        assert.strictEqual(
+            webviewPackageJson.dependencies?.['monaco-editor'],
+            '^0.56.0',
+        );
+
+        const setup = readRepoFile('webview/src/lib/monaco/setup.ts');
+        const colorizer = readRepoFile(
+            'webview/src/lib/monaco/activityInputColorizer.ts',
+        );
+        const consoleStyles = readRepoFile('webview/src/console/styles.css');
+        const viteConfig = readRepoFile('webview/vite.config.ts');
+        const consoleProvider = readRepoFile('src/webview/consoleProvider.ts');
+        const dataExplorerProvider = readRepoFile(
+            'src/services/dataExplorer/positronDataExplorerEditorProvider.ts',
+        );
+
+        assert.match(setup, /from "monaco-editor\/editor"/);
+        assert.match(setup, /"monaco-editor\/features\/register\.all"/);
+        assert.match(
+            setup,
+            /"monaco-editor\/languages\/definitions\/register\.all"/,
+        );
+        assert.match(
+            setup,
+            /"monaco-editor\/editor\/editor\.worker\?worker&url"/,
+        );
+        assert.match(colorizer, /monaco\.editor\.colorize/);
+
+        for (const source of [setup, consoleStyles, viteConfig]) {
+            assert.doesNotMatch(
+                source,
+                /monaco-editor\/(?:min|esm)\//,
+            );
+            assert.doesNotMatch(source, /edcore\.main/);
+        }
+
+        assert.match(consoleProvider, /'setup', 'index\.css'/);
+        assert.match(
+            dataExplorerProvider,
+            /'setup',[\s\S]{0,80}'index\.css'/,
+        );
+        assert.ok(fs.existsSync(path.join(
+            path.resolve(__dirname, '../../..'),
+            'webview/dist/setup/index.css',
+        )));
+    });
+
     test('contributes notebook inline Data Explorer and Connections surfaces', () => {
         const packageJson = readPackageJson();
         const renderer = packageJson.contributes?.notebookRenderer?.find(

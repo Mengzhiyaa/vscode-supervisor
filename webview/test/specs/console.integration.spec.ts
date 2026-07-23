@@ -214,6 +214,100 @@ test('console restores state and switches sessions through the sidebar', async (
     await expect(page.getByText('session-two output')).toBeVisible();
 });
 
+test('console loads shared Monaco styles and colorizes activity input through the public API', async ({ page }) => {
+    const sessions = [createSession()];
+    const backend = await openWebviewPage(page, 'console', {
+        configure: (mockBackend) => {
+            registerConsoleDefaults(mockBackend, {
+                sessions,
+                activeSessionId: 'session-1',
+            });
+        },
+    });
+    await expect.poll(() => backend.notificationCount(ConsoleMethods.ready)).toBeGreaterThan(0);
+
+    await backend.notify(SessionMethods.info, {
+        sessions,
+        activeSessionId: 'session-1',
+    });
+    await backend.notify('console/restoreState', {
+        sessionId: 'session-1',
+        syncSeq: 1,
+        state: createConsoleState('colorized output'),
+    });
+
+    await expect(page.locator('link[href="../dist/setup/index.css"]')).toHaveCount(1);
+    const colorizedInput = page.locator(
+        '[data-execution-id="activity-1"] .activity-input .code.colorized',
+    );
+    await expect(colorizedInput).toBeVisible();
+    await expect.poll(() => colorizedInput.innerHTML()).toMatch(/class="mtk\d+"/u);
+});
+
+test('console execution and runtime indicators keep semantic non-black colors', async ({ page }) => {
+    const sessions = [
+        createSession({ id: 'session-1', name: 'Primary', state: 'busy' }),
+        createSession({
+            id: 'session-2',
+            name: 'Secondary',
+            runtimeName: 'Python',
+            languageId: 'python',
+        }),
+    ];
+    const backend = await openWebviewPage(page, 'console', {
+        configure: (mockBackend) => {
+            registerConsoleDefaults(mockBackend, {
+                sessions,
+                activeSessionId: 'session-1',
+            });
+        },
+    });
+    await expect.poll(() => backend.notificationCount(ConsoleMethods.ready)).toBeGreaterThan(0);
+
+    await backend.notify(SessionMethods.info, {
+        sessions,
+        activeSessionId: 'session-1',
+    });
+    await backend.notify('console/restoreState', {
+        sessionId: 'session-1',
+        syncSeq: 1,
+        state: createConsoleStateWithItems([
+            {
+                type: 'activity',
+                parentId: 'activity-executing',
+                items: [
+                    {
+                        type: 'input',
+                        id: 'input-executing',
+                        parentId: 'activity-executing',
+                        when: Date.now(),
+                        state: 'executing',
+                        inputPrompt: '> ',
+                        continuationPrompt: '+ ',
+                        code: 'Sys.sleep(1)',
+                    },
+                ],
+            },
+        ]),
+    });
+
+    const executionIndicator = page.locator(
+        '[data-execution-id="activity-executing"] .activity-input.executing .progress-bar',
+    );
+    await expect(executionIndicator).toBeVisible();
+    await expect.poll(() => executionIndicator.evaluate(
+        element => getComputedStyle(element).backgroundColor,
+    )).toBe('rgb(46, 183, 124)');
+
+    const runtimeStatusIcon = page
+        .getByTestId('console-tab-session-1')
+        .locator('.runtime-status-icon');
+    await expect(runtimeStatusIcon).toBeVisible();
+    await expect.poll(() => runtimeStatusIcon.evaluate(
+        element => getComputedStyle(element).color,
+    )).toBe('rgb(58, 121, 178)');
+});
+
 test('console follows the backend foreground session when a new session is added', async ({ page }) => {
     const initialSessions = [
         createSession({ id: 'session-1', name: 'Primary' }),

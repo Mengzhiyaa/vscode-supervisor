@@ -1188,7 +1188,7 @@
                     tabCompletion: "on",
                     // Hover support
                     hover: {
-                        enabled: true,
+                        enabled: "on",
                         delay: 300,
                     },
                     // Parameter hints (signature help)

@@ -1,4 +1,4 @@
-import type * as MonacoApi from "monaco-editor/esm/vs/editor/editor.api";
+import type * as MonacoApi from "monaco-editor/editor";
 
 export interface EditorHost {
     setEditor(editor: MonacoApi.editor.IStandaloneCodeEditor): void;

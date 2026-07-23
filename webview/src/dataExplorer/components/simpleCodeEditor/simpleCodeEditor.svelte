@@ -5,11 +5,12 @@
         loadLanguageMonacoSupportModule,
     } from "$lib/monaco/languageSupport";
 
-    type MonacoApi = typeof import("monaco-editor");
-    type MonacoEditor = import("monaco-editor").editor.IStandaloneCodeEditor;
-    type MonacoModel = import("monaco-editor").editor.ITextModel;
+    type MonacoApi = typeof import("monaco-editor/editor");
+    type MonacoEditor =
+        import("monaco-editor/editor").editor.IStandaloneCodeEditor;
+    type MonacoModel = import("monaco-editor/editor").editor.ITextModel;
     type MonacoEditorOptions =
-        import("monaco-editor").editor.IStandaloneEditorConstructionOptions;
+        import("monaco-editor/editor").editor.IStandaloneEditorConstructionOptions;
 
     interface Props {
         code?: string;

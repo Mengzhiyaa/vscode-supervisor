@@ -919,6 +919,7 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
     protected _getHtmlContent(webview: vscode.Webview): string {
         const scriptUri = this._getWebviewUri(webview, 'webview', 'dist', 'console', 'index.js');
         const styleUri = this._getWebviewUri(webview, 'webview', 'dist', 'console', 'index.css');
+        const monacoStyleUri = this._getWebviewUri(webview, 'webview', 'dist', 'setup', 'index.css');
         const languageMonacoSupportModules = this._serializeInlineScriptData(
             this._getLanguageMonacoSupportModuleUris(webview)
         );
@@ -933,6 +934,7 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src ${webview.cspSource} 'nonce-${nonce}' 'wasm-unsafe-eval'; font-src ${webview.cspSource} data:; img-src ${webview.cspSource} data:; connect-src ${webview.cspSource}; worker-src blob:;">
+    <link href="${monacoStyleUri}" rel="stylesheet">
     <link href="${styleUri}" rel="stylesheet">
     <title>Console</title>
 </head>

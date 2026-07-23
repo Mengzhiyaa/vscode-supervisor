@@ -10,11 +10,11 @@ import {
     type IRawGrammar,
     type StateStack,
 } from "vscode-textmate";
-import type * as MonacoTypes from "monaco-editor";
+import type * as MonacoTypes from "monaco-editor/editor";
 import onigWasmUrl from "vscode-oniguruma/release/onig.wasm?url";
 import type { ConsoleThemeData } from "./languageSupport";
 
-type MonacoApi = typeof import("monaco-editor");
+type MonacoApi = typeof import("monaco-editor/editor");
 
 export interface LanguageTextMateGrammarDefinition {
     scopeName: string;

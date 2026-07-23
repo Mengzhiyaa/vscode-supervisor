@@ -2,12 +2,6 @@
 @import '$lib/codicons/positron-codicons.css';
 @import '../shared/actionBar.css';
 
-/* Monaco editor CSS — imported explicitly so it is always bundled with the
-   console entry point.  Without this, Vite may extract Monaco's JS into a
-   shared chunk while the accompanying side-effect CSS from the ESM modules
-   is silently dropped (the webview only loads console/index.css). */
-@import 'monaco-editor/min/vs/editor/editor.main.css';
-
 :root {
     --console-ui-font-family: var(--vscode-font-family, sans-serif);
     --console-ui-font-size: var(--vscode-font-size, 13px);

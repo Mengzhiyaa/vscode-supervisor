@@ -1,9 +1,8 @@
-import * as monaco from "monaco-editor/esm/vs/editor/edcore.main";
-// Note: We do NOT import "monaco-editor/min/vs/editor/editor.main.css" here.
-// The ESM modules imported below bring their own CSS through side-effect imports,
-// and importing the full min CSS would duplicate the codicon @font-face (~159 KB wasted).
+import * as monaco from "monaco-editor/editor";
+import "monaco-editor/features/register.all";
+import "monaco-editor/languages/definitions/register.all";
 
-import EditorWorkerUrl from "monaco-editor/esm/vs/editor/editor.worker?worker&url";
+import EditorWorkerUrl from "monaco-editor/editor/editor.worker?worker&url";
 
 type MonacoEnv = {
     MonacoEnvironment?: { getWorker: (id: string, label: string) => Worker };

@@ -120,6 +120,7 @@
             await ensureLanguageTextMateTokenizerReady(monaco, languageId);
 
             const result = await colorizeActivityInputLines(
+                monaco,
                 plainLines,
                 languageId,
             );

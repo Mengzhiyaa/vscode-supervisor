@@ -738,6 +738,13 @@ export class PositronDataExplorerEditorProvider implements vscode.Disposable {
         const webviewDistPath = vscode.Uri.joinPath(this._extensionUri, 'webview', 'dist', 'dataExplorer');
         const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(webviewDistPath, 'index.js'));
         const styleUri = webview.asWebviewUri(vscode.Uri.joinPath(webviewDistPath, 'index.css'));
+        const monacoStyleUri = webview.asWebviewUri(vscode.Uri.joinPath(
+            this._extensionUri,
+            'webview',
+            'dist',
+            'setup',
+            'index.css',
+        ));
         const languageMonacoSupportModules = this._serializeInlineScriptData(
             this._getLanguageMonacoSupportModuleUris(webview)
         );
@@ -755,6 +762,7 @@ export class PositronDataExplorerEditorProvider implements vscode.Disposable {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src ${webview.cspSource} 'nonce-${nonce}' 'wasm-unsafe-eval'; font-src ${webview.cspSource} data:; img-src ${webview.cspSource} data:; connect-src ${webview.cspSource}; worker-src blob:;">
     <title>Data Explorer</title>
+    <link rel="stylesheet" href="${monacoStyleUri}">
     <link rel="stylesheet" href="${styleUri}">
 </head>
 <body>
