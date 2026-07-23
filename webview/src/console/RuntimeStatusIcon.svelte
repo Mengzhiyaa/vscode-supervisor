@@ -21,18 +21,17 @@
     > = {
         active: {
             icon: "codicon-positron-status-active",
-            color: "var(--vscode-positronConsole-stateIconActive, #3a79b2)",
+            color: "var(--supervisor-runtime-state-icon-active)",
             animate: true,
         },
         idle: {
             icon: "codicon-positron-status-idle",
-            color: "var(--vscode-positronConsole-stateIconIdle, #2eb77c)",
+            color: "var(--supervisor-runtime-state-icon-idle)",
             animate: false,
         },
         disconnected: {
             icon: "codicon-positron-status-disconnected",
-            color:
-                "var(--vscode-positronConsole-stateIconDisconnected, #d93939)",
+            color: "var(--supervisor-runtime-state-icon-disconnected)",
             animate: false,
         },
     };

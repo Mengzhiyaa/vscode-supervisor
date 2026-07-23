@@ -15,6 +15,22 @@
     --console-content-font-family: var(--vscode-editor-font-family, 'Consolas', 'Courier New', monospace);
     --console-content-font-size: var(--vscode-editor-font-size, 14px);
     --console-line-height: var(--vscode-editor-line-height, 1.4);
+    --supervisor-console-executing-indicator: var(
+        --vscode-supervisor-console-executingIndicator,
+        var(--vscode-positronConsole-ansiGreen, #2eb77c)
+    );
+    --supervisor-runtime-state-icon-active: var(
+        --vscode-supervisor-runtime-stateIconActive,
+        var(--vscode-positronRuntime-stateIconActive, #3a79b2)
+    );
+    --supervisor-runtime-state-icon-disconnected: var(
+        --vscode-supervisor-runtime-stateIconDisconnected,
+        var(--vscode-positronRuntime-stateIconDisconnected, #d93939)
+    );
+    --supervisor-runtime-state-icon-idle: var(
+        --vscode-supervisor-runtime-stateIconIdle,
+        var(--vscode-positronRuntime-stateIconIdle, #2eb77c)
+    );
 }
 
 * {

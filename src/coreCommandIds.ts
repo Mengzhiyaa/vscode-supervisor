@@ -86,14 +86,22 @@ export const ViewCommands = {
 
 export const ViewContainerIds = {
     consolePanel: 'supervisor-console-panel',
-    sessionSidebar: 'supervisor-sidebar-session',
-    explorationSidebar: 'supervisor-sidebar-exploration',
+    session: 'supervisor-session',
+    packages: 'supervisor-packages',
+    connections: 'supervisor-connections',
+    help: 'supervisor-help',
+    viewer: 'supervisor-viewer',
+    runtimes: 'supervisor-runtimes',
 } as const;
 
 export const WorkbenchViewContainerCommands = {
     consolePanel: `workbench.view.extension.${ViewContainerIds.consolePanel}`,
-    sessionSidebar: `workbench.view.extension.${ViewContainerIds.sessionSidebar}`,
-    explorationSidebar: `workbench.view.extension.${ViewContainerIds.explorationSidebar}`,
+    session: `workbench.view.extension.${ViewContainerIds.session}`,
+    packages: `workbench.view.extension.${ViewContainerIds.packages}`,
+    connections: `workbench.view.extension.${ViewContainerIds.connections}`,
+    help: `workbench.view.extension.${ViewContainerIds.help}`,
+    viewer: `workbench.view.extension.${ViewContainerIds.viewer}`,
+    runtimes: `workbench.view.extension.${ViewContainerIds.runtimes}`,
 } as const;
 
 export const ContextKeys = {

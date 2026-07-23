@@ -316,7 +316,7 @@ export class ViewerViewProvider extends BaseWebviewProvider {
         } catch (err) {
             this.log(`Failed to reveal viewer view: ${err}`, vscode.LogLevel.Warning);
             try {
-                await vscode.commands.executeCommand(WorkbenchViewContainerCommands.explorationSidebar);
+                await vscode.commands.executeCommand(WorkbenchViewContainerCommands.viewer);
             } catch (fallbackErr) {
                 this.log(`Failed to reveal viewer container: ${fallbackErr}`, vscode.LogLevel.Warning);
             }

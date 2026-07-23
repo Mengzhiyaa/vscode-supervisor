@@ -229,10 +229,7 @@
     }
 
     .activity-input.executing .progress-bar {
-        background-color: var(
-            --vscode-positronConsole-ansiGreen,
-            var(--vscode-terminal-ansiGreen)
-        );
+        background-color: var(--supervisor-console-executing-indicator);
         opacity: 0;
         animation: positronActivityInput-fadeIn 0.25s ease-in 0.25s 1 forwards;
     }

@@ -22,6 +22,16 @@ interface PackageJsonShape {
     contributes?: {
         languages?: Array<{ id?: string }>;
         grammars?: Array<{ language?: string }>;
+        colors?: Array<{
+            id?: string;
+            description?: string;
+            defaults?: {
+                light?: string;
+                dark?: string;
+                highContrast?: string;
+                highContrastLight?: string;
+            };
+        }>;
         commands?: Array<{ command?: string }>;
         notebookRenderer?: Array<{
             id?: string;
@@ -30,9 +40,24 @@ interface PackageJsonShape {
             mimeTypes?: string[];
         }>;
         configuration?: {
-            properties?: Record<string, { default?: unknown; enum?: unknown[] }>;
+            properties?: Record<string, {
+                default?: unknown;
+                enum?: unknown[];
+                scope?: string;
+                description?: string;
+            }>;
         };
-        views?: Record<string, Array<{ id?: string; name?: string }>>;
+        viewsContainers?: Record<string, Array<{
+            id?: string;
+            title?: string;
+            icon?: string;
+            when?: string;
+        }>>;
+        views?: Record<string, Array<{
+            id?: string;
+            name?: string;
+            when?: string;
+        }>>;
         viewsWelcome?: Array<{ view?: string; contents?: string }>;
     };
 }
@@ -130,18 +155,124 @@ suite('[Unit] Supervisor package manifest', () => {
         assert.ok(fs.existsSync(path.join(path.resolve(__dirname, '../../..'), '.github/workflows/release.yml')));
     });
 
-    test('contributes the P0 plots contract and runtime diagnostics view', () => {
+    test('contributes the P0 plots contract and opt-in runtime diagnostics view', () => {
         const packageJson = readPackageJson();
         const properties = packageJson.contributes?.configuration?.properties ?? {};
         assert.strictEqual(properties['plots.defaultSizingPolicy']?.default, 'auto');
         assert.deepStrictEqual(properties['plots.historyPolicy']?.enum, ['auto', 'always', 'never']);
         assert.deepStrictEqual(properties['plots.darkFilter']?.enum, ['auto', 'on', 'off']);
         assert.strictEqual(properties['plots.darkFilterMode'], undefined);
+        assert.strictEqual(properties['interpreters.showSessions']?.default, false);
+        assert.strictEqual(properties['interpreters.showSessions']?.scope, 'machine');
 
         const commands = new Set((packageJson.contributes?.commands ?? []).map(entry => entry.command));
         assert.ok(commands.has('supervisor.runtimeSessions.refresh'));
-        const sessionViews = packageJson.contributes?.views?.['supervisor-sidebar-session'] ?? [];
-        assert.ok(sessionViews.some(view => view.id === 'supervisor.runtimeSessions'));
+        const runtimeContainers = packageJson.contributes?.viewsContainers?.activitybar ?? [];
+        assert.deepStrictEqual(
+            runtimeContainers.find(container => container.id === 'supervisor-runtimes'),
+            {
+                id: 'supervisor-runtimes',
+                title: 'Runtimes',
+                icon: '$(versions)',
+                when: 'config.interpreters.showSessions',
+            },
+        );
+        const runtimeViews = packageJson.contributes?.views?.['supervisor-runtimes'] ?? [];
+        assert.deepStrictEqual(
+            runtimeViews.find(view => view.id === 'supervisor.runtimeSessions'),
+            {
+                name: 'Sessions',
+                id: 'supervisor.runtimeSessions',
+                icon: '$(versions)',
+                when: 'config.interpreters.showSessions',
+            },
+        );
+        const sessionViews = packageJson.contributes?.views?.['supervisor-session'] ?? [];
+        assert.ok(!sessionViews.some(view => view.id === 'supervisor.runtimeSessions'));
+    });
+
+    test('projects the Positron view-container boundaries onto standard VS Code', () => {
+        const packageJson = readPackageJson();
+        const containers = packageJson.contributes?.viewsContainers ?? {};
+
+        assert.deepStrictEqual(
+            (containers.panel ?? []).map(container => container.id),
+            ['supervisor-console-panel'],
+        );
+        assert.deepStrictEqual(
+            (containers.activitybar ?? []).map(container => container.id),
+            [
+                'supervisor-packages',
+                'supervisor-session',
+                'supervisor-connections',
+                'supervisor-help',
+                'supervisor-viewer',
+                'supervisor-runtimes',
+            ],
+        );
+        assert.strictEqual(
+            containers.auxiliarybar,
+            undefined,
+            'Standard VS Code does not support extension-contributed auxiliary bar containers',
+        );
+
+        assert.deepStrictEqual(
+            (packageJson.contributes?.views?.['supervisor-session'] ?? []).map(view => view.id),
+            ['supervisor.variables', 'supervisor.plots'],
+        );
+        assert.deepStrictEqual(
+            (packageJson.contributes?.views?.['supervisor-packages'] ?? []).map(view => view.id),
+            ['supervisor.packages'],
+        );
+        assert.deepStrictEqual(
+            (packageJson.contributes?.views?.['supervisor-connections'] ?? []).map(view => view.id),
+            ['supervisor.connections'],
+        );
+        assert.deepStrictEqual(
+            (packageJson.contributes?.views?.['supervisor-help'] ?? []).map(view => view.id),
+            ['supervisor.help'],
+        );
+        assert.deepStrictEqual(
+            (packageJson.contributes?.views?.['supervisor-viewer'] ?? []).map(view => view.id),
+            ['supervisor.viewer'],
+        );
+    });
+
+    test('contributes surface-neutral console and runtime status colors', () => {
+        const packageJson = readPackageJson();
+        const colors = new Map(
+            (packageJson.contributes?.colors ?? []).map(color => [color.id, color]),
+        );
+
+        assert.deepStrictEqual(
+            colors.get('supervisor.console.executingIndicator')?.defaults,
+            {
+                light: '#2EB77C',
+                dark: '#2EB77C',
+                highContrast: '#2EB77C',
+                highContrastLight: '#2EB77C',
+            },
+        );
+        assert.deepStrictEqual(
+            colors.get('supervisor.runtime.stateIconActive')?.defaults,
+            {
+                light: '#3A79B2',
+                dark: '#AFCBE9',
+                highContrast: '#AFCBE9',
+                highContrastLight: '#3A79B2',
+            },
+        );
+        assert.ok(colors.has('supervisor.runtime.stateIconDisconnected'));
+        assert.ok(colors.has('supervisor.runtime.stateIconIdle'));
+
+        const consoleStyles = readRepoFile('webview/src/console/styles.css');
+        const activityInput = readRepoFile('webview/src/console/ActivityInput.svelte');
+        const consoleTypes = readRepoFile('webview/src/types/console.ts');
+        assert.match(consoleStyles, /--vscode-supervisor-console-executingIndicator/);
+        assert.match(consoleStyles, /--vscode-positronRuntime-stateIconActive/);
+        assert.match(activityInput, /--supervisor-console-executing-indicator/);
+        assert.match(consoleTypes, /--supervisor-runtime-state-icon-active/);
+        assert.doesNotMatch(consoleTypes, /--vscode-positronConsole-stateIcon/);
     });
 
     test('contributes notebook inline Data Explorer and Connections surfaces', () => {
@@ -163,8 +294,8 @@ suite('[Unit] Supervisor package manifest', () => {
         assert.ok(commands.has('supervisor.connections.refresh'));
         assert.ok(commands.has('supervisor.connections.disconnect'));
         assert.ok(commands.has('supervisor.connections.preview'));
-        const explorationViews = packageJson.contributes?.views?.['supervisor-sidebar-exploration'] ?? [];
-        assert.ok(explorationViews.some(view => view.id === 'supervisor.connections'));
+        const connectionViews = packageJson.contributes?.views?.['supervisor-connections'] ?? [];
+        assert.ok(connectionViews.some(view => view.id === 'supervisor.connections'));
         const connectionsWelcome = packageJson.contributes?.viewsWelcome?.find(
             welcome => welcome.view === 'supervisor.connections',
         );

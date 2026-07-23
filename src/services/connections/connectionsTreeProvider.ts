@@ -168,7 +168,7 @@ export class ConnectionsTreeProvider implements vscode.TreeDataProvider<Connecti
     }
 
     private async revealConnection(connection: IConnectionInstance): Promise<void> {
-        await vscode.commands.executeCommand(`workbench.view.extension.${ViewContainerIds.explorationSidebar}`);
+        await vscode.commands.executeCommand(`workbench.view.extension.${ViewContainerIds.connections}`);
         await this._treeView?.reveal({ kind: 'connection', connection }, { focus: true, select: true, expand: true });
     }
 

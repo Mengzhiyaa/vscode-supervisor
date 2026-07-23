@@ -2029,7 +2029,7 @@ export class PlotsViewProvider extends BaseWebviewProvider {
         } catch (err) {
             this.log(`Failed to reveal plots view: ${err}`, vscode.LogLevel.Warning);
             try {
-                await vscode.commands.executeCommand(WorkbenchViewContainerCommands.sessionSidebar);
+                await vscode.commands.executeCommand(WorkbenchViewContainerCommands.session);
             } catch (fallbackErr) {
                 this.log(`Failed to reveal plots container: ${fallbackErr}`, vscode.LogLevel.Warning);
             }

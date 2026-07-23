@@ -52,7 +52,7 @@ export const runtimeStatusToIcon: Record<RuntimeStatusType, string> = {
  * Mapping from RuntimeStatusType to CSS color variable.
  */
 export const runtimeStatusToColor: Record<RuntimeStatusType, string> = {
-    'Active': 'var(--vscode-positronConsole-stateIconActive, #3a79b2)',
-    'Disconnected': 'var(--vscode-positronConsole-stateIconDisconnected, #d93939)',
-    'Idle': 'var(--vscode-positronConsole-stateIconIdle, #2eb77c)'
+    'Active': 'var(--supervisor-runtime-state-icon-active)',
+    'Disconnected': 'var(--supervisor-runtime-state-icon-disconnected)',
+    'Idle': 'var(--supervisor-runtime-state-icon-idle)'
 };

@@ -74,6 +74,48 @@
   "contributes": {
     "languages": [],
     "grammars": [],
+    "colors": [
+      {
+        "id": "supervisor.console.executingIndicator",
+        "description": "Foreground color of the indicator shown beside executing console input.",
+        "defaults": {
+          "light": "#2EB77C",
+          "dark": "#2EB77C",
+          "highContrast": "#2EB77C",
+          "highContrastLight": "#2EB77C"
+        }
+      },
+      {
+        "id": "supervisor.runtime.stateIconActive",
+        "description": "Foreground color of an active runtime status icon.",
+        "defaults": {
+          "light": "#3A79B2",
+          "dark": "#AFCBE9",
+          "highContrast": "#AFCBE9",
+          "highContrastLight": "#3A79B2"
+        }
+      },
+      {
+        "id": "supervisor.runtime.stateIconDisconnected",
+        "description": "Foreground color of a disconnected runtime status icon.",
+        "defaults": {
+          "light": "#D93939",
+          "dark": "#EA8B8B",
+          "highContrast": "#EA8B8B",
+          "highContrastLight": "#D93939"
+        }
+      },
+      {
+        "id": "supervisor.runtime.stateIconIdle",
+        "description": "Foreground color of an idle runtime status icon.",
+        "defaults": {
+          "light": "#2EB77C",
+          "dark": "#2EB77C",
+          "highContrast": "#2EB77C",
+          "highContrastLight": "#2EB77C"
+        }
+      }
+    ],
     "notebookRenderer": [
       {
         "id": "supervisor.inlineDataExplorerRenderer",
@@ -608,14 +650,35 @@
       ],
       "activitybar": [
         {
-          "id": "supervisor-sidebar-session",
+          "id": "supervisor-packages",
+          "title": "Packages",
+          "icon": "$(package)"
+        },
+        {
+          "id": "supervisor-session",
           "title": "Session",
           "icon": "$(symbol-variable)"
         },
         {
-          "id": "supervisor-sidebar-exploration",
-          "title": "Exploration",
+          "id": "supervisor-connections",
+          "title": "Connections",
+          "icon": "$(database)"
+        },
+        {
+          "id": "supervisor-help",
+          "title": "Help",
           "icon": "$(book)"
+        },
+        {
+          "id": "supervisor-viewer",
+          "title": "Viewer",
+          "icon": "$(preview)"
+        },
+        {
+          "id": "supervisor-runtimes",
+          "title": "Runtimes",
+          "icon": "$(versions)",
+          "when": "config.interpreters.showSessions"
         }
       ]
     },
@@ -628,7 +691,7 @@
           "icon": "$(terminal)"
         }
       ],
-      "supervisor-sidebar-session": [
+      "supervisor-session": [
         {
           "name": "Variables",
           "type": "webview",
@@ -642,32 +705,41 @@
           "id": "supervisor.plots",
           "contextualOnly": true,
           "icon": "$(preview)"
-        },
+        }
+      ],
+      "supervisor-packages": [
         {
           "name": "Packages",
           "type": "webview",
           "id": "supervisor.packages",
           "contextualOnly": true,
           "icon": "$(package)"
-        },
-        {
-          "name": "Runtime Sessions",
-          "id": "supervisor.runtimeSessions",
-          "icon": "$(server-process)"
         }
       ],
-      "supervisor-sidebar-exploration": [
+      "supervisor-runtimes": [
+        {
+          "name": "Sessions",
+          "id": "supervisor.runtimeSessions",
+          "icon": "$(versions)",
+          "when": "config.interpreters.showSessions"
+        }
+      ],
+      "supervisor-connections": [
         {
           "name": "Connections",
           "id": "supervisor.connections",
           "icon": "$(database)"
-        },
+        }
+      ],
+      "supervisor-help": [
         {
           "type": "webview",
           "id": "supervisor.help",
           "name": "Help",
           "icon": "$(book)"
-        },
+        }
+      ],
+      "supervisor-viewer": [
         {
           "name": "Viewer",
           "type": "webview",
@@ -686,6 +758,12 @@
     "configuration": {
       "title": "Ark",
       "properties": {
+        "interpreters.showSessions": {
+          "type": "boolean",
+          "default": false,
+          "scope": "machine",
+          "description": "Enable the debug Runtimes pane that lists active interpreter sessions."
+        },
         "supervisor.interpreters.startupBehavior": {
           "type": "string",
           "default": "auto",
