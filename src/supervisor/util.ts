@@ -52,27 +52,145 @@ export function summarizeError(err: any): string {
  * @returns A human-readable string summarizing the error.
  */
 export function summarizeAxiosError(err: AxiosError): string {
-	let result = '';
+	return getAxiosErrorDiagnostics(err).summary;
+}
 
-	// Add the status code
-	if (err.status) {
-		result += `HTTP ${err.status}. `;
+export interface AxiosErrorDiagnostics {
+	readonly summary: string;
+	readonly details: string;
+	readonly exitCode?: number;
+}
+
+interface AxiosErrorResponsePayload {
+	readonly code?: string;
+	readonly message?: string;
+	readonly details?: string;
+	readonly output?: string;
+	readonly exitCode?: number;
+	readonly rawBody?: string;
+}
+
+/**
+ * Extracts a concise summary and labelled diagnostics from an HTTP failure.
+ * Server-provided error information takes precedence over Axios' generic
+ * "Request failed with status code" message.
+ */
+export function getAxiosErrorDiagnostics(err: AxiosError): AxiosErrorDiagnostics {
+	const status = err.status ?? err.response?.status;
+	const statusText = err.response?.statusText?.trim();
+	const statusLabel = status
+		? `HTTP ${status}${statusText ? ` ${statusText}` : ''}`
+		: undefined;
+	const method = err.config.method?.toUpperCase();
+	const url = err.config.url;
+	const requestLabel = [method, url].filter(Boolean).join(' ');
+	const payload = extractAxiosErrorResponsePayload(err.response?.data);
+	const reason = payload.message ?? payload.rawBody ?? err.message ?? 'HTTP request failed';
+	const context = [statusLabel, requestLabel ? `request ${requestLabel}` : undefined]
+		.filter((entry): entry is string => !!entry)
+		.join(' for ');
+	const summary = context ? `${context}: ${reason}` : reason;
+	const details: string[] = [];
+
+	if (requestLabel) {
+		details.push(`Request: ${requestLabel}`);
+	}
+	if (statusLabel) {
+		details.push(`Response: ${statusLabel}`);
+	}
+	if (payload.code) {
+		details.push(`Server error code: ${payload.code}`);
+	}
+	if (payload.message) {
+		details.push(`Server message: ${payload.message}`);
+	}
+	if (payload.details) {
+		details.push(`Server details: ${payload.details}`);
+	}
+	if (payload.exitCode !== undefined) {
+		details.push(`Process exit code: ${payload.exitCode}`);
+	}
+	if (payload.output) {
+		details.push(`Kernel startup output:\n${payload.output}`);
+	}
+	if (payload.rawBody && !payload.message) {
+		details.push(`Server response body:\n${payload.rawBody}`);
+	}
+	if (err.code) {
+		details.push(`Transport error code: ${err.code}`);
 	}
 
-	// Add the message if it's available
-	if (err.message) {
-		// If the error has a specific message, return that.
-		result += `${err.message}`;
-	} else {
-		if (typeof err.response?.data === 'string') {
-			// If the body is a string, return that.
-			result += err.response.data;;
-		} else {
-			// Otherwise, return the JSON representation of the body.
-			result += JSON.stringify(err.response?.data);
+	return {
+		summary,
+		details: details.join('\n'),
+		exitCode: payload.exitCode,
+	};
+}
+
+function extractAxiosErrorResponsePayload(data: unknown): AxiosErrorResponsePayload {
+	if (typeof data === 'string') {
+		return { rawBody: data.trim() || undefined };
+	}
+
+	const response = asRecord(data);
+	if (!response) {
+		return {
+			rawBody: data === undefined ? undefined : formatUnknownValue(data),
+		};
+	}
+
+	const nestedError = asRecord(response.error);
+	const errorString = typeof response.error === 'string' ? response.error : undefined;
+	const message = firstNonEmptyString(
+		nestedError?.message,
+		response.message,
+		response.error_message,
+		errorString,
+		response.detail,
+	);
+	const details = firstNonEmptyString(
+		nestedError?.details,
+		response.details,
+	);
+	const codeValue = nestedError?.code ?? response.code;
+	const code = typeof codeValue === 'string' || typeof codeValue === 'number'
+		? String(codeValue)
+		: undefined;
+	const output = firstNonEmptyString(response.output);
+	const exitCode = typeof response.exit_code === 'number' ? response.exit_code : undefined;
+	const recognized = !!message || !!details || !!code || !!output || exitCode !== undefined;
+
+	return {
+		code,
+		message,
+		details,
+		output,
+		exitCode,
+		rawBody: recognized ? undefined : formatUnknownValue(data),
+	};
+}
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+	return typeof value === 'object' && value !== null && !Array.isArray(value)
+		? value as Record<string, unknown>
+		: undefined;
+}
+
+function firstNonEmptyString(...values: unknown[]): string | undefined {
+	for (const value of values) {
+		if (typeof value === 'string' && value.trim().length > 0) {
+			return value.trim();
 		}
 	}
-	return result;
+	return undefined;
+}
+
+function formatUnknownValue(value: unknown): string {
+	try {
+		return JSON.stringify(value);
+	} catch {
+		return String(value);
+	}
 }
 
 // --- Serialized Data Unpacking Logic ---

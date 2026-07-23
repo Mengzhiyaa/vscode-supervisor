@@ -65,12 +65,14 @@ import { ExtHostLanguageRuntimeSessionAdapter } from './extHostLanguageRuntimeSe
 export interface LanguageRuntimeStartupFailure {
     message: string;
     details: string;
+    exitCode?: number;
 }
 
 function toLanguageRuntimeStartupFailure(error: unknown): LanguageRuntimeStartupFailure {
     if (error instanceof Error) {
         const errorWithMetadata = error as Error & {
             details?: unknown;
+            exitCode?: unknown;
             errors?: unknown[];
         };
         const details: string[] = [];
@@ -94,12 +96,16 @@ function toLanguageRuntimeStartupFailure(error: unknown): LanguageRuntimeStartup
         return {
             message: error.message || error.name || String(error),
             details: details.join('\n\n'),
+            exitCode: typeof errorWithMetadata.exitCode === 'number'
+                ? errorWithMetadata.exitCode
+                : undefined,
         };
     }
 
     return {
         message: String(error),
         details: '',
+        exitCode: undefined,
     };
 }
 
@@ -785,7 +791,11 @@ export class RuntimeSession implements vscode.Disposable {
             info = await this._kernel.start();
         } catch (error) {
             const startupFailure = toLanguageRuntimeStartupFailure(error);
-            this.log(`Startup failed: ${startupFailure.message}`, vscode.LogLevel.Error);
+            this.log(
+                `Startup failed: ${startupFailure.message}` +
+                    (startupFailure.details ? `\n${startupFailure.details}` : ''),
+                vscode.LogLevel.Error,
+            );
             this._startupFailureEmitter.fire(startupFailure);
             throw error;
         }

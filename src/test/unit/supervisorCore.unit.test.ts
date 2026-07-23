@@ -14,6 +14,7 @@ import {
 import { RuntimeSession } from '../../runtime/session';
 import { KCApi } from '../../supervisor/KallichoreAdapterApi';
 import { KallichoreSession } from '../../supervisor/KallichoreSession';
+import { AxiosError } from '../../supervisor/httpClient';
 import { ExecuteRequest } from '../../supervisor/jupyter/ExecuteRequest';
 
 function createMemento(): vscode.Memento {
@@ -163,6 +164,71 @@ suite('[Unit] supervisor core backports', () => {
 
         assert.strictEqual(attempts, 2);
         assert.ok(logs.some((entry) => entry.level === vscode.LogLevel.Warning));
+    });
+
+    test('startup errors preserve supervisor response diagnostics', () => {
+        const createStartupError = (KallichoreSession.prototype as any)._createStartupError;
+        const config = {
+            method: 'post',
+            url: '/sessions/session-1/start',
+        };
+        const cause = new AxiosError(
+            'Request failed with status code 500',
+            config,
+            {
+                status: 500,
+                response: {
+                    config,
+                    data: {
+                        error: {
+                            code: 'KERNEL_START_FAILED',
+                            message: 'ARK exited before opening its connection file.',
+                            details: 'The configured R library could not be loaded.',
+                        },
+                        exit_code: 127,
+                        output: 'libR.so: cannot open shared object file',
+                    },
+                    headers: {},
+                    status: 500,
+                    statusText: 'Internal Server Error',
+                },
+            },
+        );
+        const fakeSession = {
+            metadata: { sessionId: 'session-1' },
+            _getStartupSourceLabel: (KallichoreSession.prototype as any)._getStartupSourceLabel,
+        };
+
+        const error = createStartupError.call(
+            fakeSession,
+            'startSession',
+            cause.message,
+            cause,
+        ) as Error & { details: string; exitCode?: number };
+
+        assert.deepStrictEqual(
+            {
+                name: error.name,
+                message: error.message,
+                exitCode: error.exitCode,
+                hasServerCode: error.details.includes('Server error code: KERNEL_START_FAILED'),
+                hasServerDetails: error.details.includes('The configured R library could not be loaded.'),
+                hasKernelOutput: error.details.includes('libR.so: cannot open shared object file'),
+                ownsStack: error.stack?.startsWith('RuntimeStartupError: Startup failed at '),
+            },
+            {
+                name: 'RuntimeStartupError',
+                message:
+                    'Startup failed at supervisor startSession API for session session-1: ' +
+                    'HTTP 500 Internal Server Error for request POST /sessions/session-1/start: ' +
+                    'ARK exited before opening its connection file.',
+                exitCode: 127,
+                hasServerCode: true,
+                hasServerDetails: true,
+                hasKernelOutput: true,
+                ownsStack: true,
+            },
+        );
     });
 
     test('runtime session converts editor attribution into utf8 code locations', async () => {

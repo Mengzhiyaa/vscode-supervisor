@@ -2119,8 +2119,8 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
             this.generateId(),
             new Date(),
             this.sessionName,
-            0,
-            startupFailure.message,
+            startupFailure.exitCode ?? 0,
+            `${this.sessionName} failed to start.`,
         ));
         this.addRuntimeItem(new RuntimeItemStartupFailure(
             this.generateId(),

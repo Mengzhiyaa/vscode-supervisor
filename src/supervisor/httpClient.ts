@@ -170,9 +170,16 @@ function parseResponseData(body: Buffer, headers: http.IncomingHttpHeaders): unk
 	}
 
 	const text = body.toString('utf8');
+	const trimmedText = text.trim();
 	const contentType = firstHeaderValue(headers['content-type'])?.toLowerCase() ?? '';
+	const looksLikeJson =
+		(trimmedText.startsWith('{') && trimmedText.endsWith('}')) ||
+		(trimmedText.startsWith('[') && trimmedText.endsWith(']'));
 
-	if (contentType.includes('application/json') || contentType.includes('+json')) {
+	// Axios parses JSON-looking response bodies even when a server omits or
+	// mislabels Content-Type. Kallichore startup failures are structured JSON,
+	// so preserve that behaviour in this lightweight client as well.
+	if (contentType.includes('application/json') || contentType.includes('+json') || looksLikeJson) {
 		try {
 			return JSON.parse(text);
 		} catch {

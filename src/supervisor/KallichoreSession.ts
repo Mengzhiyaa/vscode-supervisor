@@ -36,7 +36,7 @@ import { CommMsgRequest } from './jupyter/CommMsgRequest';
 import { SocketSession } from './ws/SocketSession';
 import { KernelOutputMessage } from './ws/KernelMessage';
 import { UICommRequest } from './UICommRequest';
-import { createUniqueId, delay, summarizeError, summarizeAxiosError } from './util';
+import { createUniqueId, delay, getAxiosErrorDiagnostics, summarizeError, summarizeAxiosError } from './util';
 import { AdoptedSession } from './AdoptedSession';
 import { DebugRequest } from './jupyter/DebugRequest';
 import { JupyterMessageType } from './jupyter/JupyterMessageType';
@@ -80,6 +80,21 @@ export interface DisconnectedEvent {
 }
 
 type SessionStartupPhase = 'establish' | 'startSession' | 'websocket';
+
+class RuntimeStartupError extends Error {
+	constructor(
+		message: string,
+		readonly details: string,
+		readonly exitCode: number | undefined,
+		cause?: unknown,
+	) {
+		super(message);
+		this.name = 'RuntimeStartupError';
+		if (cause !== undefined) {
+			(this as Error & { cause?: unknown }).cause = cause;
+		}
+	}
+}
 
 export class KallichoreSession implements JupyterLanguageRuntimeSession {
 	/**
@@ -1280,48 +1295,22 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 			const info = await this.tryStart(true);
 			return info;
 		} catch (err) {
-			if (isAxiosError(err) && err.status === 500) {
-				// When the server returns a 500 error, it means the startup
-				// failed. In this case the API returns a structured startup
-				// error we can use to report the problem with more detail.
-				const startupErr = err.response?.data as
-					| {
-						error?: { message?: string };
-						output?: string;
-						exit_code?: number;
-					}
-					| undefined;
-				let message = startupErr?.error?.message ?? summarizeAxiosError(err);
-				message =
-					`Startup failed at ${this._getStartupSourceLabel('startSession')} for session ${this.metadata.sessionId}: ` +
-					message;
-				if (startupErr?.output) {
-					message += `\n${startupErr.output}`;
-				}
-				const event: positron.LanguageRuntimeExit = {
-					runtime_name: this.runtimeMetadata.runtimeName,
-					session_name: this.dynState.sessionName,
-					exit_code: startupErr?.exit_code ?? 0,
-					reason: positron.RuntimeExitReason.StartupFailed,
-					message
-				};
-				this._exit.fire(event);
-			} else {
-				// This indicates that startup failed due to a problem on the
-				// client side. We still need to report an exit so that the UI
-				// treats the runtime as exited.
-
-				// Attempt to extract a message from the error, or just
-				// stringify it if it's not an Error
-				const event: positron.LanguageRuntimeExit = {
-					runtime_name: this.runtimeMetadata.runtimeName,
-					session_name: this.dynState.sessionName,
-					exit_code: 0,
-					reason: positron.RuntimeExitReason.StartupFailed,
-					message: summarizeError(err)
-				};
-				this._exit.fire(event);
-			}
+			// tryStart() annotates failures with their startup phase and
+			// preserves Kallichore's response diagnostics. Emit that same
+			// error through the exit and startup-failure paths so every UI
+			// surface reports one consistent root cause.
+			const message = summarizeError(err);
+			const exitCode = err instanceof RuntimeStartupError
+				? err.exitCode ?? 0
+				: 0;
+			const event: positron.LanguageRuntimeExit = {
+				runtime_name: this.runtimeMetadata.runtimeName,
+				session_name: this.dynState.sessionName,
+				exit_code: exitCode,
+				reason: positron.RuntimeExitReason.StartupFailed,
+				message,
+			};
+			this._exit.fire(event);
 
 			this.onStateChange(positron.RuntimeState.Exited, 'startup failed');
 			throw err;
@@ -1349,22 +1338,52 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 		reason: string,
 		cause?: unknown,
 	): Error {
-		const error = new Error(
-			`Startup failed at ${this._getStartupSourceLabel(phase)} for session ${this.metadata.sessionId}: ${reason}`
-		);
-		error.name = 'RuntimeStartupError';
+		const source = this._getStartupSourceLabel(phase);
+		const diagnosticLines = [
+			`Startup stage: ${source}`,
+			`Session ID: ${this.metadata.sessionId}`,
+		];
+		if (this.runtimeMetadata?.runtimePath) {
+			diagnosticLines.push(`Runtime path: ${this.runtimeMetadata.runtimePath}`);
+		}
+		if (this._kernelSpec?.argv.length) {
+			diagnosticLines.push(`Kernel spec command: ${this._kernelSpec.argv.join(' ')}`);
+		}
+		if (this._kernelSpec?.startup_command) {
+			diagnosticLines.push(`Startup command: ${this._kernelSpec.startup_command}`);
+		}
+		if (this.dynState?.currentWorkingDirectory) {
+			diagnosticLines.push(`Working directory: ${this.dynState.currentWorkingDirectory}`);
+		}
+		if (this._kernelLogFile) {
+			diagnosticLines.push(`Kernel log: ${this._kernelLogFile}`);
+		}
+		let resolvedReason = reason;
+		let exitCode: number | undefined;
 
-		if (cause instanceof Error && cause.stack) {
-			error.stack = cause.stack;
+		if (isAxiosError(cause)) {
+			const diagnostics = getAxiosErrorDiagnostics(cause);
+			resolvedReason = diagnostics.summary;
+			exitCode = diagnostics.exitCode;
+			if (diagnostics.details) {
+				diagnosticLines.push(diagnostics.details);
+			}
 		}
 
-		return error;
+		if (cause instanceof Error && cause.stack) {
+			diagnosticLines.push(`Cause:\n${cause.stack}`);
+		}
+
+		return new RuntimeStartupError(
+			`Startup failed at ${source} for session ${this.metadata.sessionId}: ${resolvedReason}`,
+			diagnosticLines.join('\n'),
+			exitCode,
+			cause,
+		);
 	}
 
-	private _isStructuredStartupError(error: unknown): error is Error {
-		return error instanceof Error &&
-			(error.name === 'RuntimeStartupError' ||
-				error.message.startsWith('Startup failed at '));
+	private _isStructuredStartupError(error: unknown): error is RuntimeStartupError {
+		return error instanceof RuntimeStartupError;
 	}
 
 	private async _withStartupTimeout<T>(
