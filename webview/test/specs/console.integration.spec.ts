@@ -1449,6 +1449,17 @@ test('console respects isComplete results for incomplete, invalid, unknown, and 
                 }
                 return { status: 'complete' };
             });
+            mockBackend.onRequest(ConsoleMethods.execute, (request) => {
+                const code = String((request.params as { code?: string }).code ?? '');
+                if (code.includes('rejected-fragment')) {
+                    throw new Error('execution unavailable');
+                }
+                return {
+                    executionId:
+                        (request.params as { executionId?: string }).executionId ??
+                        'exec-1',
+                };
+            });
         },
     });
 
@@ -1487,6 +1498,7 @@ test('console respects isComplete results for incomplete, invalid, unknown, and 
             code: 'invalid-fragment',
         }),
     );
+    expect((await invalidExecute).params).not.toHaveProperty('allowIncomplete');
 
     await backend.notify(ConsoleMethods.setPendingCode, {
         sessionId: 'session-1',
@@ -1512,6 +1524,29 @@ test('console respects isComplete results for incomplete, invalid, unknown, and 
     await page.waitForTimeout(200);
     expect(backend.requestCount(ConsoleMethods.execute)).toBe(executedAfterUnknown);
     expect(backend.requestCount(ConsoleMethods.isComplete)).toBeGreaterThanOrEqual(4);
+
+    const getEditorValue = () =>
+        page.evaluate(() => {
+            const editors = (globalThis as any).monaco?.editor?.getEditors?.();
+            if (editors && editors.length > 0) {
+                return editors[0].getValue();
+            }
+            return null;
+        });
+
+    await backend.notify(ConsoleMethods.setPendingCode, {
+        sessionId: 'session-1',
+        code: 'rejected-fragment',
+    });
+    await page.waitForTimeout(200);
+    const executeCountBeforeRejection =
+        backend.requestCount(ConsoleMethods.execute);
+    await monacoInput.press('Enter');
+
+    await expect
+        .poll(() => backend.requestCount(ConsoleMethods.execute))
+        .toBe(executeCountBeforeRejection + 1);
+    await expect.poll(getEditorValue).toBe('rejected-fragment');
 });
 
 test('console updates pending input, resource usage, and language assets from extension notifications', async ({ page }) => {

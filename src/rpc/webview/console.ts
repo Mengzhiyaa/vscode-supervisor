@@ -62,7 +62,6 @@ export namespace ExecuteRequest {
     export interface Params {
         code: string;
         executionId?: string;
-        allowIncomplete?: boolean;
         mode?: 'interactive' | 'non-interactive' | 'silent' | 'transient';
         errorBehavior?: 'continue' | 'stop';
         sessionId?: string;

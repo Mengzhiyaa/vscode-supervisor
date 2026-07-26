@@ -23,6 +23,7 @@ import { WebviewManager } from './webview/manager';
 import { PositronNewFolderService } from './newFolder/positronNewFolderService';
 import { RuntimeManager } from './runtime/manager';
 import { RuntimeSession } from './runtime/session';
+import { resolveStatementRangeProvider } from './runtime/statementRange';
 import { RuntimeSessionService } from './runtime/runtimeSession';
 import { RuntimeFrontendEventService } from './runtime/runtimeFrontendEventService';
 import { RuntimeStartupService } from './runtime/runtimeStartup';
@@ -1315,12 +1316,19 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
                 ) => {
                     const document = await vscode.workspace.openTextDocument(vscode.Uri.parse(documentUri));
                     const session = this._sessionManager.getConsoleSessionForLanguage(document.languageId);
-                    const provider = session?.lsp.statementRangeProvider;
-                    if (!session || !provider) {
+                    if (!session) {
                         return undefined;
                     }
 
                     if (document.languageId !== session.runtimeMetadata.languageId) {
+                        return undefined;
+                    }
+
+                    const provider = await resolveStatementRangeProvider(
+                        session,
+                        this._outputChannel,
+                    );
+                    if (!provider) {
                         return undefined;
                     }
 

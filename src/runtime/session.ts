@@ -212,6 +212,7 @@ export class RuntimeSession implements vscode.Disposable {
     private _lsp: ILanguageLsp;
     private readonly _supportsLsp: boolean;
     private _dapComm?: Promise<DapComm>;
+    private _lspActivationPromise?: Promise<void>;
     private _lspStartingPromise: Promise<number> = Promise.resolve(0);
     private _lspClientId?: string;
     private _lspTransportKind: 'serverComm' | undefined;
@@ -842,6 +843,10 @@ export class RuntimeSession implements vscode.Disposable {
     }
 
     private _toCodeLocation(attribution?: ICodeExecutionAttribution): Utf8Location | undefined {
+        if (attribution?.codeLocation) {
+            return attribution.codeLocation;
+        }
+
         if (!attribution?.fileUri) {
             return undefined;
         }
@@ -1276,7 +1281,22 @@ export class RuntimeSession implements vscode.Disposable {
     }
 
     public activateLsp(): Promise<void> {
-        return this._activateLsp();
+        if (this._lspActivationPromise) {
+            return this._lspActivationPromise;
+        }
+
+        const activationPromise = this._activateLsp();
+        this._lspActivationPromise = activationPromise;
+        const clearActivationPromise = () => {
+            if (this._lspActivationPromise === activationPromise) {
+                this._lspActivationPromise = undefined;
+            }
+        };
+        void activationPromise.then(
+            clearActivationPromise,
+            clearActivationPromise,
+        );
+        return activationPromise;
     }
 
     public deactivateLsp(): Promise<void> {

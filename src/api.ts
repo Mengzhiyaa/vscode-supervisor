@@ -354,6 +354,7 @@ export interface ICodeExecutionAttribution {
     source: string;
     fileUri?: vscode.Uri;
     lineNumber?: number;
+    codeLocation?: Utf8Location;
     metadata?: Record<string, unknown>;
 }
 

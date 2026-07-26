@@ -618,23 +618,16 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
                 return true;
             }
 
-            try {
-                return (
-                    (await this._session.isCodeFragmentComplete(codeToCheck)) ===
-                    RuntimeCodeFragmentStatus.Complete
-                );
-            } catch (error) {
-                this._outputChannel.warn(
-                    `[ConsoleInstance] Failed code completeness check: ${String(error)}`,
-                );
-                return false;
-            }
+            return (
+                (await this._session.isCodeFragmentComplete(codeToCheck)) ===
+                RuntimeCodeFragmentStatus.Complete
+            );
         };
 
-        // `allowIncomplete` is only used by console input execution.
-        // In that path, the webview already sends the full current editor text.
-        // Avoid re-prepending stale pending code from a prior incomplete submission.
-        if (mode === RuntimeCodeExecutionMode.Interactive && !allowIncomplete) {
+        // Handle interactive mode first. This mirrors Positron's enqueue semantics:
+        // callers that explicitly enqueue interactive code extend the current
+        // pending fragment. Console editor submissions use executeCode() instead.
+        if (mode === RuntimeCodeExecutionMode.Interactive) {
             let pendingCode = this._pendingCode;
             if (pendingCode) {
                 if (!executionId) {
@@ -715,7 +708,6 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
             this.addOrUpdateRuntimeItemActivity(execId, inputItem);
         }
 
-        this.setPendingCode();
         this._session.execute(code, execId, mode, errorBehavior, executionAttribution);
 
         if (mode !== RuntimeCodeExecutionMode.Silent) {

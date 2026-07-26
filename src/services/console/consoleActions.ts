@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
+import type { Utf8Location } from '../../api';
 import { CoreCommandIds, InternalCommandIds } from '../../coreCommandIds';
 import { PositronConsoleService } from './consoleService';
 import { IConsoleCodeAttribution } from './interfaces/consoleService';
@@ -12,6 +13,54 @@ import { IConsoleCodeAttribution } from './interfaces/consoleService';
  * Trims newlines from the start and end of a string (Positron pattern).
  */
 const trimNewlines = (str: string): string => str.replace(/^\n+|\n+$/g, '');
+
+function toUtf8Character(document: vscode.TextDocument, position: vscode.Position): number {
+    return Buffer.byteLength(
+        document.lineAt(position.line).text.slice(0, position.character),
+        'utf8',
+    );
+}
+
+function createCodeLocation(
+    document: vscode.TextDocument,
+    range: vscode.Range,
+): Utf8Location {
+    return {
+        uri: document.uri,
+        range: {
+            start: {
+                line: range.start.line,
+                character: toUtf8Character(document, range.start),
+            },
+            end: {
+                line: range.end.line,
+                character: toUtf8Character(document, range.end),
+            },
+        },
+    };
+}
+
+async function executeEditorCode(
+    consoleService: PositronConsoleService,
+    languageId: string,
+    code: string,
+    attribution: IConsoleCodeAttribution,
+): Promise<boolean> {
+    try {
+        await consoleService.executeCode(
+            languageId,
+            undefined,
+            code,
+            attribution,
+            false,
+        );
+        return true;
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        void vscode.window.showErrorMessage(`Cannot execute code: ${message}`);
+        return false;
+    }
+}
 
 /**
  * Statement range information (Positron pattern).
@@ -167,17 +216,17 @@ export function registerConsoleActions(
             const attribution: IConsoleCodeAttribution = {
                 source: 'editor',
                 fileUri: editor.document.uri,
-                lineNumber: 1
+                lineNumber: 1,
+                codeLocation: createCodeLocation(editor.document, range),
             };
 
             outputChannel.info(`[ConsoleActions] Executing code before cursor`);
 
-            await consoleService.executeCode(
+            await executeEditorCode(
+                consoleService,
                 document.languageId,
-                undefined,
                 code,
                 attribution,
-                false
             );
         })
     );
@@ -208,17 +257,17 @@ export function registerConsoleActions(
             const attribution: IConsoleCodeAttribution = {
                 source: 'editor',
                 fileUri: editor.document.uri,
-                lineNumber: position.line + 1
+                lineNumber: position.line + 1,
+                codeLocation: createCodeLocation(editor.document, range),
             };
 
             outputChannel.info(`[ConsoleActions] Executing code after cursor`);
 
-            await consoleService.executeCode(
+            await executeEditorCode(
+                consoleService,
                 document.languageId,
-                undefined,
                 code,
                 attribution,
-                false
             );
         })
     );
@@ -293,10 +342,12 @@ async function executeCodeWithAdvancement(
     const position = selection.active;
 
     let code: string | undefined;
+    let codeRange: vscode.Range | undefined;
 
     // If we have a selection and it isn't empty, use its contents (Positron pattern)
     if (!selection.isEmpty) {
         code = document.getText(selection);
+        codeRange = new vscode.Range(selection.start, selection.end);
 
         // HACK: Python multiline indented code fix (Positron pattern)
         if (document.languageId === 'python') {
@@ -322,6 +373,7 @@ async function executeCodeWithAdvancement(
             }
 
             code = statementRange.code ?? document.getText(statementRange.range);
+            codeRange = statementRange.range;
 
             if (advance) {
                 await advanceStatement(editor, statementRange, outputChannel);
@@ -339,6 +391,7 @@ async function executeCodeWithAdvancement(
             if (lineText.length > 0) {
                 code = lineText;
                 lineNumber = number;
+                codeRange = document.lineAt(number).range;
                 break;
             }
         }
@@ -370,17 +423,19 @@ async function executeCodeWithAdvancement(
         const attribution: IConsoleCodeAttribution = {
             source: 'editor',
             fileUri: document.uri,
-            lineNumber: position.line + 1
+            lineNumber: (codeRange?.start.line ?? position.line) + 1,
+            codeLocation: codeRange
+                ? createCodeLocation(document, codeRange)
+                : undefined,
         };
 
         outputChannel.info(`[ConsoleActions] Executing code: ${code.substring(0, 50)}...`);
 
-        await consoleService.executeCode(
+        await executeEditorCode(
+            consoleService,
             document.languageId,
-            undefined,
             code,
             attribution,
-            false // Don't focus console to keep cursor in editor (Positron pattern)
         );
     }
 }

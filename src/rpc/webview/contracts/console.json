@@ -203,11 +203,6 @@
               "type": "string"
             },
             {
-              "name": "allowIncomplete",
-              "optional": true,
-              "type": "boolean"
-            },
-            {
               "name": "mode",
               "optional": true,
               "type": "'interactive' | 'non-interactive' | 'silent' | 'transient'"

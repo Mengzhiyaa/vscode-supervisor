@@ -300,49 +300,60 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
 
         // Handle execute request from webview
         connection.onRequest(ConsoleProtocol.ExecuteRequest.type, async (params) => {
-            this.log(`Execute request: ${params.code.substring(0, 50)}...`, vscode.LogLevel.Debug);
+            try {
+                this.log(`Execute request: ${params.code.substring(0, 50)}...`, vscode.LogLevel.Debug);
 
-            // Use executionId from frontend if provided, otherwise generate one
-            const executionId = params.executionId || `exec-${Date.now()}`;
+                // Use executionId from frontend if provided, otherwise generate one
+                const executionId = params.executionId || `exec-${Date.now()}`;
 
-            const targetSession = this._resolveSessionForRequest('execute', params.sessionId);
-            if (!targetSession) {
-                throw new Error('sessionId is required for execute');
+                const targetSession = this._resolveSessionForRequest('execute', params.sessionId);
+                if (!targetSession) {
+                    throw new Error(`Console session '${params.sessionId ?? ''}' is not available`);
+                }
+
+                const instance = this._consoleService?.getConsoleInstance(targetSession.sessionId);
+                if (!instance) {
+                    throw new Error(`No console instance for session: ${targetSession.sessionId}`);
+                }
+
+                const attribution: IConsoleCodeAttribution = {
+                    source: 'console',
+                };
+
+                let mode: RuntimeCodeExecutionMode = RuntimeCodeExecutionMode.Interactive;
+                if (params.mode === 'non-interactive') {
+                    mode = RuntimeCodeExecutionMode.NonInteractive;
+                } else if (params.mode === 'silent') {
+                    mode = RuntimeCodeExecutionMode.Silent;
+                } else if (params.mode === 'transient') {
+                    mode = RuntimeCodeExecutionMode.Transient;
+                }
+
+                const errorBehavior =
+                    params.errorBehavior === RuntimeErrorBehavior.Stop
+                        ? RuntimeErrorBehavior.Stop
+                        : RuntimeErrorBehavior.Continue;
+
+                // The Svelte console input mirrors Positron's ConsoleInput component:
+                // it checks fragment completeness before sending this request. Once
+                // submitted, execute directly so invalid/unknown fragments reach the
+                // runtime and any pending editor fragment is cleared. Routing console
+                // submissions back through enqueueCode() can trap invalid code in the
+                // pending queue instead of letting the runtime report the syntax error.
+                this.log(`Executing on session: ${targetSession.sessionId}`, vscode.LogLevel.Debug);
+                instance.executeCode(
+                    params.code,
+                    attribution,
+                    mode,
+                    errorBehavior,
+                    executionId
+                );
+                return { executionId };
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                void vscode.window.showErrorMessage(`Cannot execute code: ${message}`);
+                throw error;
             }
-
-            const instance = this._consoleService?.getConsoleInstance(targetSession.sessionId);
-            if (!instance) {
-                throw new Error(`No console instance for session: ${targetSession.sessionId}`);
-            }
-
-            const attribution: IConsoleCodeAttribution = {
-                source: 'console',
-            };
-
-            let mode: RuntimeCodeExecutionMode = RuntimeCodeExecutionMode.Interactive;
-            if (params.mode === 'non-interactive') {
-                mode = RuntimeCodeExecutionMode.NonInteractive;
-            } else if (params.mode === 'silent') {
-                mode = RuntimeCodeExecutionMode.Silent;
-            } else if (params.mode === 'transient') {
-                mode = RuntimeCodeExecutionMode.Transient;
-            }
-
-            const errorBehavior =
-                params.errorBehavior === RuntimeErrorBehavior.Stop
-                    ? RuntimeErrorBehavior.Stop
-                    : RuntimeErrorBehavior.Continue;
-
-            this.log(`Executing on session: ${targetSession.sessionId}`, vscode.LogLevel.Debug);
-            await instance.enqueueCode(
-                params.code,
-                attribution,
-                params.allowIncomplete ?? false,
-                mode,
-                errorBehavior,
-                executionId
-            );
-            return { executionId };
         });
 
         // Handle completion request
@@ -364,10 +375,14 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
 
         // Handle isComplete request (Positron pattern: use runtime isCodeFragmentComplete)
         connection.onRequest(ConsoleProtocol.IsCompleteRequest.type, async (params) => {
-            this.log(`IsComplete request: ${params.code.substring(0, 30)}...`, vscode.LogLevel.Debug);
+            try {
+                this.log(`IsComplete request: ${params.code.substring(0, 30)}...`, vscode.LogLevel.Debug);
 
-            const targetSession = this._resolveSessionForRequest('isComplete', params.sessionId);
-            if (targetSession) {
+                const targetSession = this._resolveSessionForRequest('isComplete', params.sessionId);
+                if (!targetSession) {
+                    throw new Error(`Console session '${params.sessionId ?? ''}' is not available`);
+                }
+
                 const status = await targetSession.isCodeFragmentComplete(params.code);
                 const statusMap: Record<RuntimeCodeFragmentStatus, string> = {
                     [RuntimeCodeFragmentStatus.Complete]: 'complete',
@@ -376,10 +391,11 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
                     [RuntimeCodeFragmentStatus.Unknown]: 'unknown',
                 };
                 return { status: statusMap[status] || 'unknown' };
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                void vscode.window.showErrorMessage(`Cannot execute code: ${message}`);
+                throw error;
             }
-
-            // No session available - return unknown so frontend handles it appropriately
-            return { status: 'unknown' };
         });
 
         // Handle interrupt request

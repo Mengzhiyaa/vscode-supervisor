@@ -70,6 +70,7 @@ suite('[Unit] console actions', () => {
     const originalRegisterCommand = vscode.commands.registerCommand.bind(vscode.commands);
     const originalExecuteCommand = vscode.commands.executeCommand.bind(vscode.commands);
     const originalShowInformationMessage = vscode.window.showInformationMessage.bind(vscode.window);
+    const originalShowErrorMessage = vscode.window.showErrorMessage.bind(vscode.window);
     const originalActiveTextEditor = Object.getOwnPropertyDescriptor(vscode.window, 'activeTextEditor');
 
     function setActiveTextEditor(editor: vscode.TextEditor | undefined): void {
@@ -86,6 +87,8 @@ suite('[Unit] console actions', () => {
             originalExecuteCommand;
         (vscode.window as { showInformationMessage: typeof vscode.window.showInformationMessage }).showInformationMessage =
             originalShowInformationMessage;
+        (vscode.window as { showErrorMessage: typeof vscode.window.showErrorMessage }).showErrorMessage =
+            originalShowErrorMessage;
 
         if (originalActiveTextEditor) {
             Object.defineProperty(vscode.window, 'activeTextEditor', originalActiveTextEditor);
@@ -210,6 +213,57 @@ suite('[Unit] console actions', () => {
         }
     });
 
+    test('editor execution records the exact UTF-8 selection range', async () => {
+        const registeredCommands = new Map<string, RegisteredCommandHandler>();
+        let capturedAttribution: any;
+
+        (vscode.commands as { registerCommand: typeof vscode.commands.registerCommand }).registerCommand =
+            ((command: string, callback: RegisteredCommandHandler) => {
+                registeredCommands.set(command, callback);
+                return new vscode.Disposable(() => undefined);
+            }) as typeof vscode.commands.registerCommand;
+
+        const editor = makeEditor(
+            ['变量 <- 1'],
+            new vscode.Selection(new vscode.Position(0, 0), new vscode.Position(0, 2)),
+        );
+        setActiveTextEditor(editor);
+
+        const disposables = registerConsoleActions({
+            executeCode: async (
+                _languageId: string,
+                _sessionId: string | undefined,
+                _code: string,
+                attribution: unknown,
+            ) => {
+                capturedAttribution = attribution;
+                return 'session-1';
+            },
+            activePositronConsoleInstance: undefined,
+            focusConsole: async () => undefined,
+        } as any, makeNoopLogChannel());
+
+        try {
+            const handler = registeredCommands.get(
+                CoreCommandIds.consoleExecuteCodeWithoutAdvancing,
+            );
+            assert.ok(handler, 'expected execute-without-advancing command to be registered');
+
+            await handler?.();
+
+            assert.strictEqual(
+                capturedAttribution.codeLocation.uri.toString(),
+                'file:///workspace/test.R',
+            );
+            assert.deepStrictEqual(capturedAttribution.codeLocation.range, {
+                start: { line: 0, character: 0 },
+                end: { line: 0, character: 6 },
+            });
+        } finally {
+            disposables.forEach((disposable) => disposable.dispose());
+        }
+    });
+
     test('execute code before cursor preserves the original code text and keeps editor focus', async () => {
         const registeredCommands = new Map<string, RegisteredCommandHandler>();
         const executeCalls: Array<{ code: string; focus: boolean }> = [];
@@ -274,7 +328,7 @@ suite('[Unit] console actions', () => {
                     return {
                         kind: 'rejection',
                         rejectionKind: 'syntax',
-                        line: 1,
+                        line: 0,
                     };
                 }
                 return undefined;
@@ -286,8 +340,8 @@ suite('[Unit] console actions', () => {
             }) as typeof vscode.window.showInformationMessage;
 
         const editor = makeEditor(
-            ['if (TRUE) {', 'x <-', '}'],
-            new vscode.Selection(new vscode.Position(1, 0), new vscode.Position(1, 0)),
+            [')'],
+            new vscode.Selection(new vscode.Position(0, 0), new vscode.Position(0, 0)),
         );
         setActiveTextEditor(editor);
 
@@ -307,7 +361,52 @@ suite('[Unit] console actions', () => {
             await handler?.();
 
             assert.strictEqual(executeCalls, 0);
-            assert.deepStrictEqual(messages, ["Can't execute code due to a syntax error near line 2."]);
+            assert.deepStrictEqual(messages, ["Can't execute code due to a syntax error near line 1."]);
+        } finally {
+            disposables.forEach((disposable) => disposable.dispose());
+        }
+    });
+
+    test('execution failures are shown without converting code into pending input', async () => {
+        const registeredCommands = new Map<string, RegisteredCommandHandler>();
+        const messages: string[] = [];
+
+        (vscode.commands as { registerCommand: typeof vscode.commands.registerCommand }).registerCommand =
+            ((command: string, callback: RegisteredCommandHandler) => {
+                registeredCommands.set(command, callback);
+                return new vscode.Disposable(() => undefined);
+            }) as typeof vscode.commands.registerCommand;
+        (vscode.commands as { executeCommand: typeof vscode.commands.executeCommand }).executeCommand =
+            (async () => undefined) as typeof vscode.commands.executeCommand;
+        (vscode.window as { showErrorMessage: typeof vscode.window.showErrorMessage }).showErrorMessage =
+            (async (message: string) => {
+                messages.push(message);
+                return undefined;
+            }) as typeof vscode.window.showErrorMessage;
+
+        const editor = makeEditor(
+            ['1 + 1'],
+            new vscode.Selection(new vscode.Position(0, 0), new vscode.Position(0, 0)),
+        );
+        setActiveTextEditor(editor);
+
+        const disposables = registerConsoleActions({
+            executeCode: async () => {
+                throw new Error('completeness unavailable');
+            },
+            activePositronConsoleInstance: undefined,
+            focusConsole: async () => undefined,
+        } as any, makeNoopLogChannel());
+
+        try {
+            const handler = registeredCommands.get(CoreCommandIds.consoleExecuteCode);
+            assert.ok(handler, 'expected execute command to be registered');
+
+            await handler?.();
+
+            assert.deepStrictEqual(messages, [
+                'Cannot execute code: completeness unavailable',
+            ]);
         } finally {
             disposables.forEach((disposable) => disposable.dispose());
         }

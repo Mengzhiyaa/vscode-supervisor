@@ -1887,23 +1887,21 @@
     }
 
     async function handleExecute(sessionId: string, code: string) {
-        if (!connection) return;
+        if (!connection) {
+            throw new Error("Console connection is not available");
+        }
 
         const targetSessionId = sessionId || activeConsoleSessionId;
-        if (!targetSessionId) return;
+        if (!targetSessionId) {
+            throw new Error("No console session is available");
+        }
 
         const executionId = generateId();
-
-        try {
-            await connection.sendRequest("console/execute", {
-                code,
-                executionId,
-                sessionId: targetSessionId,
-                allowIncomplete: true,
-            });
-        } catch (error) {
-            console.error("Execute error:", error);
-        }
+        await connection.sendRequest("console/execute", {
+            code,
+            executionId,
+            sessionId: targetSessionId,
+        });
     }
 
     async function handleInterrupt(sessionId?: string) {

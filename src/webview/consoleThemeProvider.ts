@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import type { ConsoleThemeData, ConsoleThemeRule } from '../shared/console';
 
-type RawTokenColor = {
+export type RawTokenColor = {
     scope?: string | string[];
     settings?: {
         foreground?: string;
@@ -47,6 +47,7 @@ const DARK_DEFAULT_TOKEN_COLORS: RawTokenColor[] = [
     { scope: 'entity.name.function', settings: { foreground: '#DCDCAA' } },
     { scope: 'entity.name.type', settings: { foreground: '#4EC9B0' } },
     { scope: 'entity.name.class', settings: { foreground: '#4EC9B0' } },
+    { scope: 'entity.name.namespace', settings: { foreground: '#4EC9B0' } },
     { scope: 'variable', settings: { foreground: '#9CDCFE' } },
     { scope: 'variable.language', settings: { foreground: '#569CD6' } },
     { scope: 'variable.parameter', settings: { foreground: '#9CDCFE' } },
@@ -83,6 +84,7 @@ const LIGHT_DEFAULT_TOKEN_COLORS: RawTokenColor[] = [
     { scope: 'entity.name.function', settings: { foreground: '#795E26' } },
     { scope: 'entity.name.type', settings: { foreground: '#267F99' } },
     { scope: 'entity.name.class', settings: { foreground: '#267F99' } },
+    { scope: 'entity.name.namespace', settings: { foreground: '#267F99' } },
     { scope: 'variable', settings: { foreground: '#001080' } },
     { scope: 'variable.language', settings: { foreground: '#0000FF' } },
     { scope: 'variable.parameter', settings: { foreground: '#001080' } },
@@ -116,6 +118,7 @@ const HC_BLACK_DEFAULT_TOKEN_COLORS: RawTokenColor[] = [
     { scope: 'constant.language', settings: { foreground: '#569CD6' } },
     { scope: 'entity.name.function', settings: { foreground: '#DCDCAA' } },
     { scope: 'entity.name.type', settings: { foreground: '#4EC9B0' } },
+    { scope: 'entity.name.namespace', settings: { foreground: '#4EC9B0' } },
     { scope: 'variable', settings: { foreground: '#9CDCFE' } },
     { scope: 'support.function', settings: { foreground: '#DCDCAA' } },
     { scope: 'support.type', settings: { foreground: '#4EC9B0' } },
@@ -270,6 +273,56 @@ function parseJsonc(content: string): ThemeDocument {
     return JSON.parse(withoutTrailingCommas) as ThemeDocument;
 }
 
+function normalizeColor(color?: string): string | undefined {
+    if (!color) {
+        return undefined;
+    }
+
+    const normalized = color.trim();
+    if (!normalized) {
+        return undefined;
+    }
+
+    return normalized.startsWith('#') ? normalized.slice(1) : normalized;
+}
+
+export function flattenTokenColors(tokenColors: RawTokenColor[]): ConsoleThemeRule[] {
+    const rules: ConsoleThemeRule[] = [];
+
+    for (const item of tokenColors) {
+        const scopes = item.scope;
+        const settings = item.settings;
+        if (!scopes || !settings) {
+            continue;
+        }
+
+        const scopeList = Array.isArray(scopes) ? scopes : [scopes];
+        for (const scopeGroup of scopeList) {
+            if (!scopeGroup || typeof scopeGroup !== 'string') {
+                continue;
+            }
+
+            // TextMate accepts comma-separated selectors in one string.
+            // Monaco expects each selector to be registered as its own rule.
+            for (const scope of scopeGroup.split(',')) {
+                const token = scope.trim();
+                if (!token) {
+                    continue;
+                }
+
+                rules.push({
+                    token,
+                    foreground: normalizeColor(settings.foreground),
+                    background: normalizeColor(settings.background),
+                    fontStyle: settings.fontStyle,
+                });
+            }
+        }
+    }
+
+    return rules;
+}
+
 /**
  * Positron-style theme bridge for console Monaco token colors.
  *
@@ -300,7 +353,7 @@ export class ConsoleThemeProvider {
             ? tokenColors
             : getEmbeddedDefaultTokenColors(theme.kind);
 
-        const rules = this._flattenTokenColors(effectiveTokenColors);
+        const rules = flattenTokenColors(effectiveTokenColors);
         return { base, rules };
     }
 
@@ -433,49 +486,4 @@ export class ConsoleThemeProvider {
         }
     }
 
-    private _flattenTokenColors(tokenColors: RawTokenColor[]): ConsoleThemeRule[] {
-        const rules: ConsoleThemeRule[] = [];
-
-        for (const item of tokenColors) {
-            const scopes = item.scope;
-            const settings = item.settings;
-            if (!scopes || !settings) {
-                continue;
-            }
-
-            const scopeList = Array.isArray(scopes) ? scopes : [scopes];
-            for (const scope of scopeList) {
-                if (!scope || typeof scope !== 'string') {
-                    continue;
-                }
-
-                const token = scope.trim();
-                if (!token) {
-                    continue;
-                }
-
-                rules.push({
-                    token,
-                    foreground: this._normalizeColor(settings.foreground),
-                    background: this._normalizeColor(settings.background),
-                    fontStyle: settings.fontStyle,
-                });
-            }
-        }
-
-        return rules;
-    }
-
-    private _normalizeColor(color?: string): string | undefined {
-        if (!color) {
-            return undefined;
-        }
-
-        const normalized = color.trim();
-        if (!normalized) {
-            return undefined;
-        }
-
-        return normalized.startsWith('#') ? normalized.slice(1) : normalized;
-    }
 }

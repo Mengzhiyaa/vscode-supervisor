@@ -60,7 +60,7 @@
         readonly state: ConsoleState;
         readonly inputPrompt: string;
         readonly continuationPrompt: string;
-        readonly onExecute: (sessionId: string, code: string) => void;
+        readonly onExecute: (sessionId: string, code: string) => Promise<void>;
         readonly onInterrupt: (sessionId: string) => void;
         readonly onActivate: (sessionId: string) => void;
         readonly onSelectAll: () => void;
@@ -976,13 +976,15 @@
         );
     }
 
-    function submitCodeEditorWidgetCode(code: string): boolean {
+    async function submitCodeEditorWidgetCode(code: string): Promise<boolean> {
         const trimmedCode = code.trim();
         if (!trimmedCode) {
             return false;
         }
 
-        if (deferredExecuteSessionIdRef.current === currentSessionId()) {
+        const submittedSessionId = currentSessionId();
+
+        if (deferredExecuteSessionIdRef.current === submittedSessionId) {
             deferredExecuteSessionIdRef.current = undefined;
         }
 
@@ -1002,11 +1004,36 @@
             lineNumbersMinChars: promptWidth,
         });
 
-        // Add to history
-        addHistoryEntry(code);
+        try {
+            // Execute the code against the session that owned the input when
+            // Enter was pressed. Wait for the extension host to accept it so a
+            // rejected RPC cannot silently discard the user's code.
+            await onExecute(submittedSessionId, code);
+        } catch (error) {
+            // The editor is cleared optimistically to match Positron's prompt
+            // transition. Restore only if the user has not already begun a new
+            // draft while the request was in flight.
+            if (
+                currentSessionId() === submittedSessionId &&
+                codeEditorWidget.getValue() === ""
+            ) {
+                codeEditorWidget.setValue(code);
+                updateCodeEditorWidgetPosition(
+                    Position.Last,
+                    Position.Last,
+                );
+                codeEditorWidget.updateOptions(createLineNumbersOptions());
+            }
+            codeEditorWidget.render(true);
+            console.error("Execute error:", error);
 
-        // Execute the code (explicitly target this session)
-        onExecute(currentSessionId(), code);
+            // The Enter event has been handled by restoring the original code;
+            // callers must not append a newline on top of it.
+            return true;
+        }
+
+        // Only successful submissions enter history.
+        addHistoryEntry(code);
 
         // Render the code editor widget
         codeEditorWidget.render(true);
@@ -1093,7 +1120,7 @@
                 }
             }
 
-            return submitCodeEditorWidgetCode(code);
+            return await submitCodeEditorWidgetCode(code);
         } finally {
             executeAttemptInProgressRef.current = false;
         }

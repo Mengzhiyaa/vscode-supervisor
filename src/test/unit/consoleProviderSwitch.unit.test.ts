@@ -1,6 +1,7 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
 import { ViewIds } from '../../coreCommandIds';
+import * as ConsoleProtocol from '../../rpc/webview/console';
 import * as SessionProtocol from '../../rpc/webview/session';
 import { ConsoleViewProvider } from '../../webview/consoleProvider';
 
@@ -66,6 +67,7 @@ class FakeConnection {
 suite('[Unit] console provider session switching', () => {
     const originalActiveTextEditor = Object.getOwnPropertyDescriptor(vscode.window, 'activeTextEditor');
     const originalShowTextDocument = vscode.window.showTextDocument.bind(vscode.window);
+    const originalShowErrorMessage = vscode.window.showErrorMessage.bind(vscode.window);
     const originalExecuteCommand = vscode.commands.executeCommand.bind(vscode.commands);
 
     function setActiveTextEditor(editor: vscode.TextEditor | undefined): void {
@@ -77,6 +79,8 @@ suite('[Unit] console provider session switching', () => {
 
     teardown(() => {
         (vscode.window as { showTextDocument: typeof vscode.window.showTextDocument }).showTextDocument = originalShowTextDocument;
+        (vscode.window as { showErrorMessage: typeof vscode.window.showErrorMessage }).showErrorMessage =
+            originalShowErrorMessage;
         (vscode.commands as { executeCommand: typeof vscode.commands.executeCommand }).executeCommand = originalExecuteCommand;
 
         if (originalActiveTextEditor) {
@@ -129,6 +133,102 @@ suite('[Unit] console provider session switching', () => {
             'focus:start:session-2',
             'focus:end:session-2',
             'snapshot',
+        ]);
+    });
+
+    test('executes submitted console input directly instead of enqueueing it', async () => {
+        const executeCalls: unknown[][] = [];
+        let enqueueCalls = 0;
+        const session = {
+            sessionId: 'session-1',
+            sessionMetadata: { sessionMode: 'console' },
+        };
+        const instance = {
+            sessionId: 'session-1',
+            executeCode: (...args: unknown[]) => {
+                executeCalls.push(args);
+            },
+            enqueueCode: async () => {
+                enqueueCalls += 1;
+            },
+        };
+        const sessionManager = {
+            getSession: (sessionId: string) => sessionId === session.sessionId ? session : undefined,
+            onDidReceiveRuntimeEvent: createEventStub(),
+            onDidUpdateSessionName: createEventStub(),
+        };
+        const consoleService = {
+            getConsoleInstance: (sessionId: string) =>
+                sessionId === instance.sessionId ? instance : undefined,
+        };
+        const provider = new ConsoleViewProvider(
+            vscode.Uri.file('/tmp'),
+            makeNoopLogChannel(),
+            sessionManager as any,
+        );
+        (provider as any)._consoleService = consoleService;
+
+        const connection = new FakeConnection();
+        (provider as any)._registerRpcHandlers(connection as any);
+
+        const handler = connection.requests.get(ConsoleProtocol.ExecuteRequest.type.method);
+        assert.ok(handler, 'expected console/execute handler to be registered');
+
+        const result = await handler?.({
+            code: ')',
+            executionId: 'execution-1',
+            sessionId: 'session-1',
+        });
+
+        assert.deepStrictEqual(result, { executionId: 'execution-1' });
+        assert.strictEqual(enqueueCalls, 0);
+        assert.deepStrictEqual(executeCalls, [[
+            ')',
+            { source: 'console' },
+            'interactive',
+            'continue',
+            'execution-1',
+        ]]);
+    });
+
+    test('reports completeness failures through a VS Code notification', async () => {
+        const messages: string[] = [];
+        (vscode.window as { showErrorMessage: typeof vscode.window.showErrorMessage }).showErrorMessage =
+            (async (message: string) => {
+                messages.push(message);
+                return undefined;
+            }) as typeof vscode.window.showErrorMessage;
+
+        const provider = new ConsoleViewProvider(
+            vscode.Uri.file('/tmp'),
+            makeNoopLogChannel(),
+            {
+                getSession: () => ({
+                    sessionId: 'session-1',
+                    isCodeFragmentComplete: async () => {
+                        throw new Error('completeness unavailable');
+                    },
+                }),
+                onDidReceiveRuntimeEvent: createEventStub(),
+                onDidUpdateSessionName: createEventStub(),
+            } as any,
+        );
+
+        const connection = new FakeConnection();
+        (provider as any)._registerRpcHandlers(connection as any);
+
+        const handler = connection.requests.get(ConsoleProtocol.IsCompleteRequest.type.method);
+        assert.ok(handler, 'expected console/isComplete handler to be registered');
+
+        await assert.rejects(
+            Promise.resolve(handler?.({
+                code: '1 + 1',
+                sessionId: 'session-1',
+            })),
+            /completeness unavailable/,
+        );
+        assert.deepStrictEqual(messages, [
+            'Cannot execute code: completeness unavailable',
         ]);
     });
 

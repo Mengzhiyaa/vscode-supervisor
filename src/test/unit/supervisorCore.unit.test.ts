@@ -291,14 +291,21 @@ suite('[Unit] supervisor core backports', () => {
                 source: 'editor',
                 fileUri: vscode.Uri.parse('file:///workspace/example.R'),
                 lineNumber: 3,
+                codeLocation: {
+                    uri: vscode.Uri.parse('file:///workspace/example.R'),
+                    range: {
+                        start: { line: 2, character: 4 },
+                        end: { line: 2, character: 12 },
+                    },
+                },
                 metadata: { source: 'unit-test' },
             },
         );
 
         assert.strictEqual(capturedCodeLocation?.uri.toString(), 'file:///workspace/example.R');
         assert.deepStrictEqual(capturedCodeLocation?.range, {
-            start: { line: 2, character: 0 },
-            end: { line: 2, character: 0 },
+            start: { line: 2, character: 4 },
+            end: { line: 2, character: 12 },
         });
         assert.deepStrictEqual(capturedMetadata, { source: 'unit-test' });
 

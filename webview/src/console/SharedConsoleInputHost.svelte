@@ -26,7 +26,7 @@
         state: ConsoleState;
         inputPrompt: string;
         continuationPrompt: string;
-        onExecute: (sessionId: string, code: string) => void;
+        onExecute: (sessionId: string, code: string) => Promise<void>;
         onInterrupt: (sessionId: string) => void;
         onActivate: (sessionId: string) => void;
         onSelectAll: () => void;
@@ -72,7 +72,7 @@
         inputCommand: ConsoleInputCommandEnvelope | undefined;
         themeData: ConsoleThemeData | undefined;
         consoleSettings: ConsoleSettings;
-        onExecute: (sessionId: string, code: string) => void;
+        onExecute: (sessionId: string, code: string) => Promise<void>;
         onInterrupt: (sessionId: string) => void;
         onActivate: (sessionId: string) => void;
         onSelectAll: () => void;

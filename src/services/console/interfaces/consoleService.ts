@@ -18,6 +18,7 @@ import type {
 import type {
     LanguageRuntimeMetadata,
     IRuntimeSessionMetadata,
+    Utf8Location,
 } from '../../../api';
 import type {
     LanguageRuntimeClearOutput,
@@ -78,6 +79,8 @@ export interface IConsoleCodeAttribution {
     fileUri?: vscode.Uri;
     /** Optional line number in the source file */
     lineNumber?: number;
+    /** Exact UTF-8 source range for the submitted code */
+    codeLocation?: Utf8Location;
     /** Additional metadata for the code execution */
     metadata?: Record<string, unknown>;
 }
