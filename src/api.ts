@@ -332,7 +332,6 @@ export interface BinaryDefinition {
 }
 
 export interface IBinaryProvider {
-    readonly ownerId: string;
     getBinaryDefinitions(): Readonly<Record<string, BinaryDefinition>>;
 }
 
@@ -879,7 +878,6 @@ export interface ISupervisorFrameworkApi {
             | ILanguageRuntimeProvider<TInstallation>
     ): Promise<void>;
     registerLspFactory(factory: ILanguageLspFactory): Promise<void>;
-    registerBinaryProvider(provider: IBinaryProvider): Promise<void>;
     registerDataExplorerBackendProvider(provider: IDataExplorerBackendProvider): vscode.Disposable;
     openDataExplorer(uri: vscode.Uri, providerId?: string): Promise<void>;
     registerDataConnectionDriver(driver: IDataConnectionDriver): vscode.Disposable;

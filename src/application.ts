@@ -1,7 +1,6 @@
 import * as vscode from 'vscode';
 import {
     type ILanguageContributionServices,
-    type IBinaryProvider,
     type ILanguageLspFactory,
     type ILanguageRuntimeProvider,
     type ILanguageRuntimeRegistration,
@@ -158,7 +157,6 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
     private readonly _positronNewFolderService: PositronNewFolderService;
     private readonly _outputChannel: vscode.LogOutputChannel;
     private readonly _languageSupport = new Map<string, ILanguageSupportRegistration<any>>();
-    private readonly _pendingBinaryProviders = new Map<string, IBinaryProvider>();
     private readonly _pendingLspFactories = new Map<string, ILanguageLspFactory>();
     private readonly _languageWebviewAssets = new Map<string, ILanguageWebviewAssets>();
     private readonly _activatedLanguageContributionIds = new Set<string>();
@@ -473,7 +471,6 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
                     | ILanguageRuntimeProvider<TInstallation>
             ) => this.registerLanguageRuntime(registration),
             registerLspFactory: (factory: ILanguageLspFactory) => this.registerLspFactory(factory),
-            registerBinaryProvider: (provider: IBinaryProvider) => this.registerBinaryProvider(provider),
             registerDataExplorerBackendProvider: (provider: IDataExplorerBackendProvider) =>
                 this._positronDataExplorerService.registerBackendProvider(provider),
             openDataExplorer: async (uri, providerId) => {
@@ -539,25 +536,21 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
             this._setLanguageLspFactory(runtimeProvider, lspFactory);
         }
 
-        const normalizedRegistration: ILanguageSupportRegistration<TInstallation> = {
-            ...registration,
-            binaryProvider: registration.binaryProvider ?? this._pendingBinaryProviders.get(runtimeProvider.languageId),
-        };
         const existing = this._languageSupport.get(runtimeProvider.languageId);
         if (existing) {
             if (existing.runtimeProvider === runtimeProvider &&
-                existing.binaryProvider === normalizedRegistration.binaryProvider &&
-                existing.languageContribution === normalizedRegistration.languageContribution &&
-                existing.webviewAssets === normalizedRegistration.webviewAssets) {
+                existing.binaryProvider === registration.binaryProvider &&
+                existing.languageContribution === registration.languageContribution &&
+                existing.webviewAssets === registration.webviewAssets) {
                 return;
             }
 
             if (existing.runtimeProvider === runtimeProvider) {
                 const updatedRegistration: ILanguageSupportRegistration<TInstallation> = {
                     runtimeProvider,
-                    binaryProvider: normalizedRegistration.binaryProvider ?? existing.binaryProvider,
-                    languageContribution: normalizedRegistration.languageContribution ?? existing.languageContribution,
-                    webviewAssets: normalizedRegistration.webviewAssets ?? existing.webviewAssets,
+                    binaryProvider: registration.binaryProvider ?? existing.binaryProvider,
+                    languageContribution: registration.languageContribution ?? existing.languageContribution,
+                    webviewAssets: registration.webviewAssets ?? existing.webviewAssets,
                 };
                 this._languageSupport.set(runtimeProvider.languageId, updatedRegistration);
                 this._setLanguageWebviewAssets(runtimeProvider.languageId, updatedRegistration.webviewAssets);
@@ -573,8 +566,8 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
             throw new Error(`Language support for '${runtimeProvider.languageId}' is already registered`);
         }
 
-        this._languageSupport.set(runtimeProvider.languageId, normalizedRegistration);
-        this._setLanguageWebviewAssets(runtimeProvider.languageId, normalizedRegistration.webviewAssets);
+        this._languageSupport.set(runtimeProvider.languageId, registration);
+        this._setLanguageWebviewAssets(runtimeProvider.languageId, registration.webviewAssets);
         this._refreshLanguageSupportAssetsInWebviews();
         this._sessionManager.registerRuntimeProvider(runtimeProvider);
         this._runtimeManager.registerRuntimeProvider(runtimeProvider);
@@ -583,7 +576,7 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
             return;
         }
 
-        await this._initializeLanguageSupportAfterActivation(normalizedRegistration);
+        await this._initializeLanguageSupportAfterActivation(registration);
         this._startDeferredActivationTasks();
     }
 
@@ -607,25 +600,6 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
         }
 
         this._setLanguageLspFactory(existing.runtimeProvider, factory);
-    }
-
-    async registerBinaryProvider(provider: IBinaryProvider): Promise<void> {
-        this._pendingBinaryProviders.set(provider.ownerId, provider);
-
-        const existing = this._languageSupport.get(provider.ownerId);
-        if (!existing || existing.binaryProvider === provider) {
-            return;
-        }
-
-        const updatedRegistration: ILanguageSupportRegistration = {
-            ...existing,
-            binaryProvider: provider,
-        };
-        this._languageSupport.set(provider.ownerId, updatedRegistration);
-
-        if (this._activated) {
-            await this._ensureRegisteredBinaries();
-        }
     }
 
     registerDataExplorerBackendProvider(provider: IDataExplorerBackendProvider): vscode.Disposable {
