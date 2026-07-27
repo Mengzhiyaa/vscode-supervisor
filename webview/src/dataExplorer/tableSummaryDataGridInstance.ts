@@ -100,10 +100,7 @@ export class TableSummaryDataGridInstance extends DataGridInstance {
             useEditorFont: false,
             automaticLayout: true,
             cellBorders: false,
-            horizontalCellPadding: 0,
-            cursorInitiallyHidden: true,
-            internalCursor: true,
-            cursorOffset: 0,
+            internalCursor: false,
             selection: false,
         };
         super(options);

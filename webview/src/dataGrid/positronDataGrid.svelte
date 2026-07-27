@@ -48,15 +48,6 @@
         copyCapableInstance.copyClipboardData?.(clipboardData);
     }
 
-    // Handle keyboard events
-    function handleKeyDown(event: KeyboardEvent) {
-        // Handle Ctrl+C / Cmd+C for copy
-        if ((event.ctrlKey || event.metaKey) && event.key === "c") {
-            event.preventDefault();
-            handleCopy();
-        }
-    }
-
     onMount(() => {
         // Set up resize observer
         resizeObserver = new ResizeObserver((entries) => {
@@ -83,11 +74,8 @@
     class="data-grid"
     bind:this={containerRef}
     data-grid-role={gridRole}
-    onkeydown={handleKeyDown}
-    tabindex="0"
-    role="grid"
 >
-    <DataGridWaffle {onFocusChange} />
+    <DataGridWaffle {onFocusChange} onCopy={handleCopy} />
 </div>
 
 <style>

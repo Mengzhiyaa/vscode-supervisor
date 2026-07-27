@@ -52,11 +52,11 @@ export const DEFAULT_TABLE_DATA_DATA_GRID_OPTIONS: DataGridOptions = {
     rowHeaders: true,
     rowHeadersWidth: 55,
     rowHeadersResize: true,
-    defaultColumnWidth: 120,
+    defaultColumnWidth: 200,
     defaultRowHeight: 24,
     columnResize: true,
-    minimumColumnWidth: 50,
-    maximumColumnWidth: 500,
+    minimumColumnWidth: 80,
+    maximumColumnWidth: 800,
     rowResize: false,
     columnPinning: true,
     maximumPinnedColumns: 10,
@@ -65,16 +65,13 @@ export const DEFAULT_TABLE_DATA_DATA_GRID_OPTIONS: DataGridOptions = {
     horizontalScrollbar: true,
     verticalScrollbar: true,
     scrollbarThickness: 14,
-    scrollbarOverscroll: 50,
+    scrollbarOverscroll: 14,
     useEditorFont: true,
     automaticLayout: true,
-    rowsMargin: 0,
     cellBorders: true,
-    horizontalCellPadding: 8,
-    cursorInitiallyHidden: false,
+    horizontalCellPadding: 7,
     internalCursor: true,
-    cursorOffset: 1,
-    selection: true,
+    cursorOffset: 0.5,
 };
 
 const VISIBLE_DATA_PAGE_SIZE = 50;
@@ -273,7 +270,7 @@ export class TableDataDataGridInstance extends DataGridInstance {
 
     override rowHeader(rowIndex: number): string {
         if (!this._tableDataCache.hasRowLabels) {
-            return super.rowHeader(rowIndex);
+            return `${rowIndex}`;
         }
 
         return this._tableDataCache.getRowLabel(rowIndex) ?? '...';
@@ -397,6 +394,7 @@ export class TableDataDataGridInstance extends DataGridInstance {
         }
 
         this._dataGeneration = generation;
+        this.clearPinnedRows();
         this.invalidateCache(
             schemaChanged ? InvalidateCacheFlags.All : InvalidateCacheFlags.Data,
         );

@@ -16,6 +16,8 @@ export const DATA_EXPLORER_ROW_FILTERING_CONTEXT =
     ContextKeys.dataExplorerIsRowFiltering;
 export const DATA_EXPLORER_IS_PLAINTEXT_CONTEXT =
     ContextKeys.dataExplorerIsPlaintext;
+export const DATA_EXPLORER_IS_XLSX_CONTEXT =
+    ContextKeys.dataExplorerIsXlsx;
 export const DATA_EXPLORER_SUMMARY_COLLAPSED_CONTEXT =
     ContextKeys.dataExplorerSummaryCollapsed;
 export const DATA_EXPLORER_FOCUSED_CONTEXT = ContextKeys.dataExplorerFocused;

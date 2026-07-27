@@ -15,10 +15,15 @@
     --positron-data-grid-column-header-sort-index-font-size: 80%;
     --positron-data-grid-column-header-sort-index-font-weight: 600;
     --positron-data-grid-column-header-sort-index-font-variant-numeric: tabular-nums;
+    --vscode-positronDataGrid-background: var(--vscode-editor-background);
     --vscode-positronDataGrid-contrastBackground: color-mix(in srgb, var(--vscode-editor-background) 80%, white);
+    --vscode-positronDataGrid-foreground: var(--vscode-editor-foreground);
+    --vscode-positronDataGrid-border: var(--vscode-tree-tableColumnsBorder, var(--vscode-panel-border));
+    --vscode-positronDataGrid-cursorBorder: #0068c4;
     --vscode-positronDataGrid-selectionBorder: #175ab5;
     --vscode-positronDataGrid-selectionInnerBorder: #214984;
     --vscode-positronDataGrid-selectionBackground: rgba(28, 125, 250, 0.3);
+    --vscode-positronDataGrid-sortIndexForeground: var(--vscode-textLink-foreground);
     --vscode-positronActionBar-height: 28px;
     --vscode-positronActionBar-iconSize: 24px;
     --vscode-positronActionBar-tooltipTop: 26px;
@@ -31,7 +36,11 @@
     --vscode-positronActionBar-textInputBorder: var(--vscode-input-border, transparent);
     --vscode-positronActionBar-textInputSelectionForeground: var(--vscode-input-foreground);
     --vscode-positronActionBar-textInputSelectionBackground: var(--vscode-editor-selectionBackground);
+    --vscode-positronDataExplorer-background: var(--vscode-editor-background);
     --vscode-positronDataExplorer-contrastBackground: color-mix(in srgb, var(--vscode-editor-background) 80%, white);
+    --vscode-positronDataExplorer-foreground: var(--vscode-editor-foreground);
+    --vscode-positronDataExplorer-border: var(--vscode-tree-tableColumnsBorder, var(--vscode-panel-border));
+    --vscode-positronDataExplorer-invalidFilterBackground: #e95b5b;
     --vscode-positronDataExplorer-selectionBackground: color-mix(in srgb, var(--vscode-editor-background) 50%, white);
     --vscode-positronDataExplorer-columnNullPercentGraphBackgroundFill: #ee6331;
     --vscode-positronDataExplorer-columnNullPercentGraphBackgroundStroke: #738594;
@@ -152,6 +161,7 @@
 
 body.vscode-light {
     --vscode-positronDataGrid-contrastBackground: color-mix(in srgb, var(--vscode-editor-background) 98%, black);
+    --vscode-positronDataGrid-cursorBorder: #4891d7;
     --vscode-positronDataGrid-selectionBorder: #70a6e0;
     --vscode-positronDataGrid-selectionInnerBorder: #a1c5ef;
     --vscode-positronDataGrid-selectionBackground: rgba(172, 205, 243, 0.5);

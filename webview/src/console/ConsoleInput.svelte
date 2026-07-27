@@ -37,7 +37,10 @@
         HistoryPrefixMatchStrategy,
         HistoryInfixMatchStrategy,
     } from "./history";
-    import { copyScopedSelection } from "./utils/selectionUtils";
+    import {
+        copyScopedSelection,
+        writeClipboardText,
+    } from "./utils/selectionUtils";
 
     // Position constants (Positron pattern - using const instead of enum for Svelte compatibility)
     const Position = {
@@ -1587,7 +1590,104 @@
         );
     }
 
+    function handleEditorClipboardKeyDown(event: KeyboardEvent): void {
+        const ctrlCmd = event.ctrlKey || event.metaKey;
+        if (!ctrlCmd || event.shiftKey || event.altKey) {
+            return;
+        }
+
+        const key = event.key.toLowerCase();
+        if (key !== "c" && key !== "x") {
+            return;
+        }
+
+        const isInterruptChord =
+            event.ctrlKey &&
+            !event.metaKey &&
+            !event.getModifierState("AltGraph");
+        if (key === "c" && isMacintosh && isInterruptChord) {
+            event.preventDefault();
+            event.stopPropagation();
+            onInterrupt(currentSessionId());
+            return;
+        }
+
+        const selections = codeEditorWidget
+            .getSelections()
+            ?.filter((selection) => !selection.isEmpty());
+        const model = codeEditorWidget.getModel();
+        if (model && selections?.length) {
+            event.preventDefault();
+            event.stopPropagation();
+
+            const text = selections
+                .map((selection) => model.getValueInRange(selection))
+                .join("\n");
+            void writeClipboardText(text);
+
+            if (key === "x") {
+                codeEditorWidget.pushUndoStop();
+                codeEditorWidget.executeEdits(
+                    "console.clipboardCut",
+                    selections.map((selection) => ({
+                        range: selection,
+                        text: "",
+                        forceMoveMarkers: true,
+                    })),
+                );
+                codeEditorWidget.pushUndoStop();
+            }
+            return;
+        }
+
+        if (key === "x") {
+            // Console output is read-only, and an empty editor selection has
+            // nothing to cut. Leave the event alone for any nested widget.
+            return;
+        }
+
+        const consoleInstance = codeEditorWidgetContainerRef?.closest(
+            ".console-instance",
+        );
+        if (
+            consoleInstance instanceof HTMLElement &&
+            copyScopedSelection(consoleInstance)
+        ) {
+            event.preventDefault();
+            event.stopPropagation();
+            return;
+        }
+
+        // Preserve the conventional Console Ctrl+C interrupt only when
+        // neither the editor nor the output owns a selection.
+        if (isInterruptChord) {
+            event.preventDefault();
+            event.stopPropagation();
+            onInterrupt(currentSessionId());
+        }
+    }
+
     function setupKeyBindings() {
+        // Monaco's internal keybinding service can consume clipboard commands
+        // before onKeyDown subscribers run. Capture only copy/cut at the editor
+        // DOM boundary so model selections are handled deterministically.
+        const editorKeyEventBoundary = codeEditorWidgetContainerRef;
+        if (editorKeyEventBoundary) {
+            editorKeyEventBoundary.addEventListener(
+                "keydown",
+                handleEditorClipboardKeyDown,
+                true,
+            );
+            disposables.push({
+                dispose: () =>
+                    editorKeyEventBoundary.removeEventListener(
+                        "keydown",
+                        handleEditorClipboardKeyDown,
+                        true,
+                    ),
+            });
+        }
+
         // Handle Enter/Shift+Enter via editor keydown to avoid global keybinding leakage
         disposables.push(
             codeEditorWidget.onKeyDown((e: monaco.IKeyboardEvent) => {
@@ -1737,44 +1837,6 @@
                         return;
                     }
 
-                    return;
-                }
-
-                // Ctrl+C: interrupt when there is no selection, otherwise let Monaco copy.
-                if (
-                    ctrlCmd &&
-                    e.keyCode === monaco.KeyCode.KeyC &&
-                    !e.shiftKey &&
-                    !e.altKey
-                ) {
-                    const consoleInstance =
-                        codeEditorWidgetContainerRef?.closest(
-                            ".console-instance",
-                        );
-                    if (
-                        consoleInstance instanceof HTMLElement &&
-                        copyScopedSelection(consoleInstance)
-                    ) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        return;
-                    }
-                }
-
-                // Ctrl+C: interrupt when there is no Monaco selection, otherwise let Monaco copy.
-                if (
-                    e.ctrlKey &&
-                    !e.metaKey &&
-                    e.keyCode === monaco.KeyCode.KeyC &&
-                    !e.shiftKey &&
-                    !e.altKey
-                ) {
-                    const selection = codeEditorWidget.getSelection();
-                    if (!selection || selection.isEmpty()) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        onInterrupt(currentSessionId());
-                    }
                     return;
                 }
 

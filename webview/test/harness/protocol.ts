@@ -161,6 +161,7 @@ export const ConsoleMethods = {
     isComplete: 'console/isComplete',
     execute: 'console/execute',
     interrupt: 'console/interrupt',
+    writeClipboardText: 'console/writeClipboardText',
     clearConsole: 'console/clearConsole',
     toggleWordWrap: 'console/toggleWordWrap',
     toggleTrace: 'console/toggleTrace',

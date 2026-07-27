@@ -251,7 +251,7 @@
         {/if}
         <div class="data-grid-container">
             {#if layout === PositronDataExplorerLayout.SummaryOnLeft}
-                {#if tableSchemaDataGridInstance && !columnsCollapsed}
+                {#if tableSchemaDataGridInstance}
                     <div class="summary-data-grid" role="region" aria-label={columnSummaryLabel}>
                         <PositronDataGrid
                             instance={tableSchemaDataGridInstance}
@@ -308,7 +308,7 @@
                     />
                 {/if}
             {:else}
-                {#if tableSchemaDataGridInstance && !columnsCollapsed}
+                {#if tableSchemaDataGridInstance}
                     <div class="summary-data-grid" role="region" aria-label={columnSummaryLabel}>
                         <PositronDataGrid
                             instance={tableSchemaDataGridInstance}

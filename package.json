@@ -338,6 +338,13 @@
         "enablement": "supervisor.dataExplorerEditorActive && supervisor.dataExplorerIsPlaintext"
       },
       {
+        "command": "supervisor.dataExplorer.openAsSpreadsheet",
+        "title": "Open as Spreadsheet",
+        "category": "Ark Data Explorer",
+        "icon": "$(github-project)",
+        "enablement": "supervisor.dataExplorerEditorActive && supervisor.dataExplorerIsXlsx && !isWeb && remoteName == ''"
+      },
+      {
         "command": "supervisor.dataExplorer.toggleFileOptions",
         "title": "File Options",
         "category": "Ark Data Explorer",
@@ -600,14 +607,14 @@
           "group": "navigation@7"
         },
         {
+          "command": "supervisor.dataExplorer.openAsSpreadsheet",
+          "when": "supervisor.dataExplorerEditorActive && supervisor.dataExplorerIsXlsx && !isWeb && remoteName == ''",
+          "group": "navigation@7"
+        },
+        {
           "command": "supervisor.dataExplorer.toggleFileOptions",
           "when": "supervisor.dataExplorerEditorActive && supervisor.dataExplorerIsPlaintext",
           "group": "navigation@8"
-        },
-        {
-          "command": "supervisor.dataExplorer.moveToNewWindow",
-          "when": "supervisor.dataExplorerEditorActive",
-          "group": "navigation@9"
         }
       ],
       "commandPalette": [
@@ -654,6 +661,10 @@
         {
           "command": "supervisor.dataExplorer.openAsPlaintext",
           "when": "supervisor.dataExplorerEditorActive && supervisor.dataExplorerIsPlaintext"
+        },
+        {
+          "command": "supervisor.dataExplorer.openAsSpreadsheet",
+          "when": "supervisor.dataExplorerEditorActive && supervisor.dataExplorerIsXlsx && !isWeb && remoteName == ''"
         },
         {
           "command": "supervisor.dataExplorer.toggleFileOptions",

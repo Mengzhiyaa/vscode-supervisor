@@ -7,10 +7,21 @@ import type {
 } from '../../runtime/comms/positronDataExplorerComm';
 import { SupportStatus } from '../../runtime/comms/positronDataExplorerComm';
 import { PositronDataExplorerInstance } from '../../services/dataExplorer/positronDataExplorerInstance';
-import type { DataExplorerClientInstance } from '../../services/dataExplorer/languageRuntimeDataExplorerClient';
+import {
+    DataExplorerClientStatus,
+    type DataExplorerClientInstance,
+} from '../../services/dataExplorer/languageRuntimeDataExplorerClient';
 import { PositronDataExplorerService } from '../../services/dataExplorer/positronDataExplorerService';
 import { TableDataCache } from '../../services/dataExplorer/common/tableDataCache';
 import { TableSummaryCache } from '../../services/dataExplorer/common/tableSummaryCache';
+
+function deferred<T>() {
+    let resolve!: (value: T) => void;
+    const promise = new Promise<T>(currentResolve => {
+        resolve = currentResolve;
+    });
+    return { promise, resolve };
+}
 
 function createBackendState(rows = 2, columns = 2): BackendState {
     return {
@@ -67,6 +78,8 @@ function createClient(
         onDidSchemaUpdate: schemaEmitter.event,
         onDidDataUpdate: dataEmitter.event,
         onDidUpdateBackendState: backendEmitter.event,
+        status: DataExplorerClientStatus.Idle,
+        onDidStatusUpdate: (() => ({ dispose: () => undefined })) as vscode.Event<DataExplorerClientStatus>,
         getSchema: async (indices: number[]) => ({
             columns: indices.map(column_index => ({
                 column_index,
@@ -105,6 +118,42 @@ function createClient(
 }
 
 suite('[Unit] Positron Data Explorer model lifecycle', () => {
+    test('invalidates and runs mutations in serialized request order', async () => {
+        const fixture = createClient();
+        const instance = new PositronDataExplorerInstance(fixture.client, 'Python');
+        const firstMutation = deferred<void>();
+        const events: string[] = [];
+        const generations: number[] = [];
+        instance.onDidInvalidateData(({ generation }) => generations.push(generation));
+
+        const first = instance.runDataMutation(async () => {
+            events.push('first:start');
+            await firstMutation.promise;
+            events.push('first:end');
+        });
+        const second = instance.runDataMutation(async () => {
+            events.push('second:start');
+            events.push('second:end');
+        });
+
+        await Promise.resolve();
+        assert.deepStrictEqual(events, ['first:start']);
+        assert.deepStrictEqual(generations, []);
+
+        firstMutation.resolve();
+        await Promise.all([first, second]);
+
+        assert.deepStrictEqual(events, [
+            'first:start',
+            'first:end',
+            'second:start',
+            'second:end',
+        ]);
+        assert.deepStrictEqual(generations, [1, 2]);
+        instance.dispose();
+        fixture.dispose();
+    });
+
     test('coalesces overlapping host viewport requests', async () => {
         let resolveRequest: ((value: TableData) => void) | undefined;
         let requests = 0;

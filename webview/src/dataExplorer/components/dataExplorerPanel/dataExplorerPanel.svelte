@@ -23,8 +23,6 @@
         min-width: 0;
         min-height: 0;
         display: grid;
-        grid-row: data-explorer-panel / end;
-        grid-column: content / end-columns;
         grid-template-rows: [filter-bar] min-content [data-explorer] 1fr [status-bar] 24px [end];
     }
 </style>

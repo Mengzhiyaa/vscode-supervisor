@@ -85,7 +85,7 @@ import type {
 
 const MAX_CLIPBOARD_CELLS = 10_000;
 const SMALL_HISTOGRAM_NUM_BINS = 80;
-const LARGE_HISTOGRAM_NUM_BINS = 100;
+const LARGE_HISTOGRAM_NUM_BINS = 200;
 const SMALL_FREQUENCY_TABLE_LIMIT = 8;
 const LARGE_FREQUENCY_TABLE_LIMIT = 16;
 const BOOLEAN_FREQUENCY_TABLE_LIMIT = 2;
@@ -254,6 +254,12 @@ export class DataExplorerWebviewBridge {
                             event.schemaChanged ||
                             this._pendingInvalidation?.schemaChanged === true,
                     };
+                }
+            }),
+            instance.onDidUpdateBackendState(() => {
+                this.sendBackendStateUpdate();
+                if (_options.isInstanceActive()) {
+                    _options.onSyncActiveContexts();
                 }
             }),
             instance.onDidClose(() => this.sendBackendStateUpdate()),
@@ -773,12 +779,7 @@ export class DataExplorerWebviewBridge {
                     '[DataExplorerEditor] Received: dataExplorer/clearFilters',
                 );
                 try {
-                    await instance.runWithForegroundLoading(async () => {
-                        await instance.runDataMutation(async () => {
-                            await instance.clientInstance.setRowFilters([]);
-                            await instance.clientInstance.updateBackendState();
-                        });
-                    });
+                    await this._mutateRowFilters(() => []);
                 } catch (error) {
                     this._sendError(String(error));
                 }
@@ -788,16 +789,10 @@ export class DataExplorerWebviewBridge {
         connection.onNotification(DataExplorerAddFilterNotification.type, async (params) => {
             logChannel.debug('[DataExplorerEditor] Received: dataExplorer/addFilter');
             try {
-                const currentFilters = instance.backendState?.row_filters ?? [];
-                await instance.runWithForegroundLoading(async () => {
-                    await instance.runDataMutation(async () => {
-                        await instance.clientInstance.setRowFilters([
-                            ...currentFilters,
-                            params.filter as RowFilter,
-                        ]);
-                        await instance.clientInstance.updateBackendState();
-                    });
-                });
+                await this._mutateRowFilters((currentFilters) => [
+                    ...currentFilters,
+                    params.filter as RowFilter,
+                ]);
             } catch (error) {
                 this._sendError(String(error));
             }
@@ -806,19 +801,14 @@ export class DataExplorerWebviewBridge {
         connection.onNotification(DataExplorerUpdateFilterNotification.type, async (params) => {
             logChannel.debug('[DataExplorerEditor] Received: dataExplorer/updateFilter');
             try {
-                const currentFilters = instance.backendState?.row_filters ?? [];
-                const updatedFilters = currentFilters.map((filter) =>
-                    filter.filter_id ===
-                    (params.filter as RowFilter).filter_id
-                        ? (params.filter as RowFilter)
-                        : filter,
+                await this._mutateRowFilters((currentFilters) =>
+                    currentFilters.map((filter) =>
+                        filter.filter_id ===
+                        (params.filter as RowFilter).filter_id
+                            ? (params.filter as RowFilter)
+                            : filter,
+                    ),
                 );
-                await instance.runWithForegroundLoading(async () => {
-                    await instance.runDataMutation(async () => {
-                        await instance.clientInstance.setRowFilters(updatedFilters);
-                        await instance.clientInstance.updateBackendState();
-                    });
-                });
             } catch (error) {
                 this._sendError(String(error));
             }
@@ -827,16 +817,11 @@ export class DataExplorerWebviewBridge {
         connection.onNotification(DataExplorerRemoveFilterNotification.type, async (params) => {
             logChannel.debug('[DataExplorerEditor] Received: dataExplorer/removeFilter');
             try {
-                const currentFilters = instance.backendState?.row_filters ?? [];
-                const updatedFilters = currentFilters.filter(
-                    (filter) => filter.filter_id !== params.filterId,
+                await this._mutateRowFilters((currentFilters) =>
+                    currentFilters.filter(
+                        (filter) => filter.filter_id !== params.filterId,
+                    ),
                 );
-                await instance.runWithForegroundLoading(async () => {
-                    await instance.runDataMutation(async () => {
-                        await instance.clientInstance.setRowFilters(updatedFilters);
-                        await instance.clientInstance.updateBackendState();
-                    });
-                });
             } catch (error) {
                 this._sendError(String(error));
             }
@@ -1513,7 +1498,31 @@ export class DataExplorerWebviewBridge {
         );
     }
 
+    private async _mutateRowFilters(
+        mutate: (currentFilters: RowFilter[]) => RowFilter[],
+    ): Promise<void> {
+        const { instance, logChannel } = this._options;
+        await instance.runWithForegroundLoading(async () => {
+            await instance.runDataMutation(async () => {
+                // Read inside the serialized mutation. Reading before entering
+                // the queue lets rapid add/update/remove requests all derive
+                // from the same stale Ark state and overwrite one another.
+                const currentFilters = instance.backendState?.row_filters ?? [];
+                const result = await instance.clientInstance.setRowFilters(
+                    mutate([...currentFilters]),
+                );
+                await instance.clientInstance.updateBackendState();
+                if (result.had_errors) {
+                    logChannel.warn(
+                        '[DataExplorerEditor] Ark accepted row filters with evaluation errors.',
+                    );
+                }
+            });
+        });
+    }
+
     private _sendError(message: string): void {
+        void vscode.window.showErrorMessage(message);
         this._options.connection.sendNotification(DataExplorerErrorNotification.type, {
             message,
         });

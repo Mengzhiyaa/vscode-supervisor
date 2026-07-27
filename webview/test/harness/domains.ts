@@ -191,6 +191,7 @@ export function registerConsoleDefaults(
         executionId: (request.params as { executionId?: string }).executionId ?? 'exec-1',
     }));
     backend.onRequest(ConsoleMethods.interrupt, () => undefined);
+    backend.onRequest(ConsoleMethods.writeClipboardText, () => undefined);
     backend.onRequest(ConsoleMethods.clearConsole, () => undefined);
     backend.onRequest(ConsoleMethods.toggleWordWrap, () => undefined);
     backend.onRequest(ConsoleMethods.toggleTrace, () => undefined);

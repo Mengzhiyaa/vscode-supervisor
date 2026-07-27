@@ -22,6 +22,18 @@ function deferred<T>() {
     return { promise, resolve };
 }
 
+type TestRowFilter = {
+    filter_id: string;
+    filter_type: string;
+    column_schema: {
+        column_name: string;
+        column_index: number;
+        type_name: string;
+        type_display: string;
+    };
+    condition: string;
+};
+
 function createConnection() {
     const handlers = new Map<string, (params?: any) => Promise<void> | void>();
     const notifications: SentNotification[] = [];
@@ -67,13 +79,25 @@ function createBridge(options: {
     columns: number;
     status?: DataExplorerClientStatus;
     getDataValues?: () => Promise<{ columns: Array<Array<number | string>> }>;
+    setRowFilters?: (filters: TestRowFilter[]) => Promise<{
+        selected_num_rows: number;
+        had_errors?: boolean;
+    }>;
     openAsSpreadsheet?: () => Promise<void>;
 }) {
     const rpc = createConnection();
     let dataRequests = 0;
     let generation = 0;
     let lastDataRequest: DataExplorerDataRequest | undefined;
+    let mutationQueue = Promise.resolve();
     const state = backendState(options.rows, options.columns);
+    const backendStateListeners = new Set<(value: typeof state) => void>();
+    const backendStateEvent = ((listener: (value: typeof state) => void) => {
+        backendStateListeners.add(listener);
+        return {
+            dispose: () => backendStateListeners.delete(listener),
+        };
+    }) as vscode.Event<typeof state>;
     const noopEvent = (() => ({ dispose: () => undefined })) as vscode.Event<any>;
     const instance = {
         identifier: 'p0-table',
@@ -86,14 +110,20 @@ function createBridge(options: {
         get lastDataRequest() { return lastDataRequest; },
         onDidChangeUiState: noopEvent,
         onDidClose: noopEvent,
+        onDidUpdateBackendState: backendStateEvent,
         onDidChangeForegroundLoading: noopEvent,
         onDidInvalidateData: noopEvent,
         onDidChangeSelection: noopEvent,
         selection: undefined,
         runWithForegroundLoading: <T>(task: () => Promise<T>) => task(),
-        runDataMutation: async (task: () => Promise<void>) => {
-            generation += 1;
-            await task();
+        runDataMutation: (task: () => Promise<void>) => {
+            const run = async () => {
+                generation += 1;
+                await task();
+            };
+            const queued = mutationQueue.then(run, run);
+            mutationQueue = queued.then(() => undefined, () => undefined);
+            return queued;
         },
         invalidateData: () => ++generation,
         setLastDataRequest: (request: DataExplorerDataRequest) => {
@@ -102,13 +132,28 @@ function createBridge(options: {
         setSelection: () => undefined,
         clientInstance: {
             status: options.status ?? DataExplorerClientStatus.Idle,
-            updateBackendState: async () => state,
+            updateBackendState: async () => {
+                backendStateListeners.forEach(listener => listener(state));
+                return state;
+            },
             getBackendState: async () => state,
             getDataValues: async () => {
                 dataRequests += 1;
                 return options.getDataValues?.() ?? { columns: [['value']] };
             },
             getRowLabels: async () => ({ row_labels: [[]] }),
+            setRowFilters: async (filters: TestRowFilter[]) => {
+                if (options.setRowFilters) {
+                    const result = await options.setRowFilters(filters);
+                    state.row_filters = filters as never[];
+                    return result;
+                }
+                state.row_filters = filters as never[];
+                return {
+                    selected_num_rows: state.table_shape.num_rows,
+                    had_errors: false,
+                };
+            },
         },
         getSchema: async (columnIndices: number[]) => ({
             columns: columnIndices.map(columnIndex => ({
@@ -229,6 +274,55 @@ suite('[Unit] Data Explorer webview bridge P0 protocol', () => {
         await fixture.handlers.get('dataExplorer/openAsSpreadsheet')?.();
 
         assert.strictEqual(openCount, 1);
+        fixture.bridge.dispose();
+    });
+
+    test('derives rapid row-filter mutations from the latest serialized Ark state', async () => {
+        const appliedFilters: TestRowFilter[][] = [];
+        const fixture = createBridge({
+            rows: 10,
+            columns: 1,
+            setRowFilters: async (filters) => {
+                appliedFilters.push(filters);
+                return { selected_num_rows: 10, had_errors: false };
+            },
+        });
+        fixture.bridge.registerNotificationHandlers();
+        const addFilter = fixture.handlers.get('dataExplorer/addFilter');
+        const firstFilter: TestRowFilter = {
+            filter_id: 'first',
+            filter_type: 'not_null',
+            column_schema: {
+                column_name: 'column_0',
+                column_index: 0,
+                type_name: 'string',
+                type_display: 'string',
+            },
+            condition: 'and',
+        };
+        const secondFilter = { ...firstFilter, filter_id: 'second' };
+
+        await Promise.all([
+            addFilter?.({ filter: firstFilter }),
+            addFilter?.({ filter: secondFilter }),
+        ]);
+
+        assert.deepStrictEqual(
+            appliedFilters.map(filters => filters.map(filter => filter.filter_id)),
+            [['first'], ['first', 'second']],
+        );
+        const backendStateUpdates = fixture.notifications.filter(
+            ({ method }) => method === 'dataExplorer/backendState',
+        );
+        assert.strictEqual(backendStateUpdates.length, 2);
+        assert.deepStrictEqual(
+            (
+                backendStateUpdates.at(-1)?.params as {
+                    state?: { row_filters?: TestRowFilter[] };
+                }
+            ).state?.row_filters?.map(filter => filter.filter_id),
+            ['first', 'second'],
+        );
         fixture.bridge.dispose();
     });
 

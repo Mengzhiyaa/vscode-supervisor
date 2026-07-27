@@ -22,9 +22,10 @@
 
     interface Props {
         onFocusChange?: (focused: boolean) => void;
+        onCopy?: () => void;
     }
 
-    let { onFocusChange }: Props = $props();
+    let { onFocusChange, onCopy }: Props = $props();
 
     const { instance } = getPositronDataGridContext();
     const updateTrigger = instance.updateTrigger;
@@ -185,6 +186,16 @@
         navigator.platform.toLowerCase().includes("mac");
 
     async function handleKeyDown(event: KeyboardEvent) {
+        if (
+            (event.ctrlKey || event.metaKey) &&
+            event.key.toLowerCase() === "c"
+        ) {
+            event.preventDefault();
+            event.stopPropagation();
+            onCopy?.();
+            return;
+        }
+
         if (event.timeStamp - lastWheelEvent < 250) {
             return;
         }

@@ -1599,6 +1599,11 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
             )
         );
         this._disposables.push(
+            vscode.commands.registerCommand(CoreCommandIds.dataExplorerOpenAsSpreadsheet, () =>
+                vscode.commands.executeCommand(PositronDataExplorerCommandId.OpenAsSpreadsheet)
+            )
+        );
+        this._disposables.push(
             vscode.commands.registerCommand(CoreCommandIds.dataExplorerToggleFileOptions, () =>
                 vscode.commands.executeCommand(PositronDataExplorerCommandId.ToggleFileOptions)
             )

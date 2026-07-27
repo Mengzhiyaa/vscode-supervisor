@@ -244,6 +244,88 @@ test('console loads shared Monaco styles and colorizes activity input through th
     await expect.poll(() => colorizedInput.innerHTML()).toMatch(/class="mtk\d+"/u);
 });
 
+test('console copies output and copies or cuts Monaco selections before treating Ctrl+C as interrupt', async ({ page }) => {
+    const backend = await openWebviewPage(page, 'console', {
+        configure: (mockBackend) => {
+            registerConsoleDefaults(mockBackend, {
+                sessions: [createSession()],
+                activeSessionId: 'session-1',
+            });
+        },
+    });
+    await expect.poll(() => backend.notificationCount(ConsoleMethods.ready)).toBeGreaterThan(0);
+
+    await backend.notify(ConsoleMethods.restoreState, {
+        sessionId: 'session-1',
+        syncSeq: 1,
+        state: createConsoleState('copy this output'),
+    });
+    await expect(page.getByText('copy this output')).toBeVisible();
+
+    await page.getByTestId('console-session-1').evaluate((consoleNode) => {
+        const outputNode = Array.from(
+            consoleNode.querySelectorAll<HTMLElement>('*'),
+        ).find((node) => node.textContent === 'copy this output');
+        if (!outputNode) {
+            throw new Error('Expected output node');
+        }
+
+        (consoleNode as HTMLElement).focus();
+        const range = document.createRange();
+        range.selectNodeContents(outputNode);
+        const selection = window.getSelection();
+        selection?.removeAllRanges();
+        selection?.addRange(range);
+    });
+
+    await page.keyboard.press('Control+c');
+    await expect
+        .poll(() => backend.requestCount(ConsoleMethods.writeClipboardText))
+        .toBe(1);
+    expect(
+        backend.requests(ConsoleMethods.writeClipboardText).at(-1)?.params,
+    ).toEqual({ text: 'copy this output' });
+    expect(backend.requestCount(ConsoleMethods.interrupt)).toBe(0);
+
+    await backend.notify(ConsoleMethods.setPendingCode, {
+        sessionId: 'session-1',
+        code: 'alpha + beta',
+    });
+    await expect(page.locator('.console-input .view-lines')).toContainText(
+        'alpha + beta',
+    );
+    await page.locator('.console-input .view-lines').click();
+    await page.keyboard.press('Control+a');
+
+    await page.keyboard.press('Control+c');
+    await expect
+        .poll(() => backend.requestCount(ConsoleMethods.writeClipboardText))
+        .toBe(2);
+    expect(
+        backend.requests(ConsoleMethods.writeClipboardText).at(-1)?.params,
+    ).toEqual({ text: 'alpha + beta' });
+    expect(backend.requestCount(ConsoleMethods.interrupt)).toBe(0);
+
+    await page.keyboard.press('Control+x');
+    await expect
+        .poll(() => backend.requestCount(ConsoleMethods.writeClipboardText))
+        .toBe(3);
+    expect(
+        backend.requests(ConsoleMethods.writeClipboardText).at(-1)?.params,
+    ).toEqual({ text: 'alpha + beta' });
+    await expect(page.locator('.console-input .view-lines')).not.toContainText(
+        'alpha + beta',
+    );
+
+    const interruptRequest = backend.waitForNextRequest(
+        ConsoleMethods.interrupt,
+    );
+    await page.keyboard.press('Control+c');
+    expect((await interruptRequest).params).toEqual({
+        sessionId: 'session-1',
+    });
+});
+
 test('console execution and runtime indicators keep semantic non-black colors', async ({ page }) => {
     const sessions = [
         createSession({ id: 'session-1', name: 'Primary', state: 'busy' }),

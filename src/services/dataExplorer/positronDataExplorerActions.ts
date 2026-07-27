@@ -12,6 +12,7 @@ export enum PositronDataExplorerCommandId {
     ClearColumnSorting = 'supervisor.dataExplorer._clearColumnSortingInternal',
     ConvertToCode = 'supervisor.dataExplorer._convertToCodeInternal',
     OpenAsPlaintext = 'supervisor.dataExplorer._openAsPlaintextInternal',
+    OpenAsSpreadsheet = 'supervisor.dataExplorer._openAsSpreadsheetInternal',
     ToggleFileOptions = 'supervisor.dataExplorer._toggleFileOptionsInternal',
     MoveToNewWindow = 'supervisor.dataExplorer._moveToNewWindowInternal',
     ShowColumnContextMenu = 'supervisor.dataExplorer._showColumnContextMenuInternal',

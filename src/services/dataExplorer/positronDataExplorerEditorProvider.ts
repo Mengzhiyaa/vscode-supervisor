@@ -32,6 +32,7 @@ import {
     DATA_EXPLORER_FOCUSED_CONTEXT,
     DATA_EXPLORER_IN_NEW_WINDOW_CONTEXT,
     DATA_EXPLORER_IS_PLAINTEXT_CONTEXT,
+    DATA_EXPLORER_IS_XLSX_CONTEXT,
     DATA_EXPLORER_LAYOUT_CONTEXT,
     DATA_EXPLORER_ROW_FILTERING_CONTEXT,
     DATA_EXPLORER_SUMMARY_COLLAPSED_CONTEXT,
@@ -198,6 +199,23 @@ export class PositronDataExplorerEditorProvider implements vscode.Disposable {
         this._disposables.push(
             vscode.commands.registerCommand(PositronDataExplorerCommandId.OpenAsPlaintext, async () => {
                 await this._sendToActiveWebview(DataExplorerOpenAsPlaintextNotification.type.method);
+            })
+        );
+        this._disposables.push(
+            vscode.commands.registerCommand(PositronDataExplorerCommandId.OpenAsSpreadsheet, async () => {
+                const active = this._getActiveDataExplorer();
+                const instance = active
+                    ? this._dataExplorerService.getInstance(active.identifier)
+                    : undefined;
+                if (!instance) {
+                    vscode.window.showWarningMessage('No active Data Explorer editor.');
+                    return;
+                }
+                try {
+                    await this._openAsSpreadsheet(instance);
+                } catch (error) {
+                    vscode.window.showErrorMessage(String(error));
+                }
             })
         );
         this._disposables.push(
@@ -384,6 +402,7 @@ export class PositronDataExplorerEditorProvider implements vscode.Disposable {
         void vscode.commands.executeCommand('setContext', DATA_EXPLORER_CODE_SYNTAXES_AVAILABLE_CONTEXT, false);
         void vscode.commands.executeCommand('setContext', DATA_EXPLORER_ROW_FILTERING_CONTEXT, false);
         void vscode.commands.executeCommand('setContext', DATA_EXPLORER_IS_PLAINTEXT_CONTEXT, false);
+        void vscode.commands.executeCommand('setContext', DATA_EXPLORER_IS_XLSX_CONTEXT, false);
         void vscode.commands.executeCommand('setContext', DATA_EXPLORER_SUMMARY_COLLAPSED_CONTEXT, false);
         void vscode.commands.executeCommand('setContext', DATA_EXPLORER_FOCUSED_CONTEXT, false);
         void vscode.commands.executeCommand('setContext', DATA_EXPLORER_IN_NEW_WINDOW_CONTEXT, false);
@@ -414,6 +433,11 @@ export class PositronDataExplorerEditorProvider implements vscode.Disposable {
             'setContext',
             DATA_EXPLORER_IS_PLAINTEXT_CONTEXT,
             isPlaintextDataExplorerIdentifier(instance.identifier),
+        );
+        void vscode.commands.executeCommand(
+            'setContext',
+            DATA_EXPLORER_IS_XLSX_CONTEXT,
+            isSpreadsheetDataExplorerIdentifier(instance.identifier),
         );
         void vscode.commands.executeCommand('setContext', DATA_EXPLORER_SUMMARY_COLLAPSED_CONTEXT, uiState.summaryCollapsed);
         void vscode.commands.executeCommand(

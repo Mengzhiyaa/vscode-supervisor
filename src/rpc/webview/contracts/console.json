@@ -328,6 +328,26 @@
     },
     {
       "kind": "request",
+      "name": "WriteClipboardTextRequest",
+      "method": "console/writeClipboardText",
+      "paramsType": "Params",
+      "resultType": "void",
+      "errorType": "void",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "text",
+              "type": "string"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "request",
       "name": "ClearConsoleRequest",
       "method": "console/clearConsole",
       "paramsType": "Params | void",

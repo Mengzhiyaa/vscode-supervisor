@@ -23,7 +23,10 @@ import type {
     PositronDataExplorerSelection,
     PositronDataExplorerUiState,
 } from './interfaces/positronDataExplorerInstance';
-import type { DataExplorerClientInstance } from './languageRuntimeDataExplorerClient';
+import {
+    DataExplorerClientStatus,
+    type DataExplorerClientInstance,
+} from './languageRuntimeDataExplorerClient';
 import { createDefaultDataExplorerUiState } from './positronDataExplorerSummary';
 
 export class PositronDataExplorerInstance implements IPositronDataExplorerInstance {
@@ -46,6 +49,8 @@ export class PositronDataExplorerInstance implements IPositronDataExplorerInstan
     private _uiState: PositronDataExplorerUiState = createDefaultDataExplorerUiState();
     private _focused = false;
     private _foregroundLoadingCount = 0;
+    private _backendTaskLoading = false;
+    private _loading = false;
     private _dataGeneration = 0;
     private _lastDataRequest: PositronDataExplorerDataRequest | undefined;
     private _selection: PositronDataExplorerSelection | undefined;
@@ -141,22 +146,27 @@ export class PositronDataExplorerInstance implements IPositronDataExplorerInstan
 
     async runWithForegroundLoading<T>(task: () => Promise<T>): Promise<T> {
         this._foregroundLoadingCount++;
-        if (this._foregroundLoadingCount === 1) {
-            this._onDidChangeForegroundLoading.fire(true);
-        }
+        this._emitLoadingIfChanged();
         try {
             return await task();
         } finally {
             this._foregroundLoadingCount--;
-            if (this._foregroundLoadingCount === 0) {
-                this._onDidChangeForegroundLoading.fire(false);
-            }
+            this._emitLoadingIfChanged();
         }
     }
 
     async runDataMutation(task: () => Promise<void>, schemaChanged = false): Promise<void> {
-        this.invalidateData(schemaChanged);
-        const queuedMutation = this._dataMutationQueue.then(task, task);
+        const runMutation = async () => {
+            try {
+                await task();
+            } finally {
+                // Publish invalidation only after Ark has applied the mutation.
+                // Otherwise the webview can immediately fetch the new
+                // generation while Ark is still serving the old view.
+                this.invalidateData(schemaChanged);
+            }
+        };
+        const queuedMutation = this._dataMutationQueue.then(runMutation, runMutation);
         this._dataMutationQueue = queuedMutation.then(() => undefined, () => undefined);
         await queuedMutation;
     }
@@ -278,6 +288,9 @@ export class PositronDataExplorerInstance implements IPositronDataExplorerInstan
     }
 
     private _bindClientInstance(): void {
+        this._backendTaskLoading =
+            this._clientInstance.status === DataExplorerClientStatus.Computing;
+        this._emitLoadingIfChanged();
         this._clientDisposables = [
             this._clientInstance.onDidClose(() => {
                 if (this._disposed) { return; }
@@ -289,12 +302,27 @@ export class PositronDataExplorerInstance implements IPositronDataExplorerInstan
             }),
             this._clientInstance.onDidSchemaUpdate(() => this.invalidateData(true)),
             this._clientInstance.onDidDataUpdate(() => this.invalidateData(false)),
+            this._clientInstance.onDidStatusUpdate(status => {
+                this._backendTaskLoading =
+                    status === DataExplorerClientStatus.Computing;
+                this._emitLoadingIfChanged();
+            }),
         ];
     }
 
     private _disposeClientBindings(): void {
         this._clientDisposables.forEach(disposable => disposable.dispose());
         this._clientDisposables = [];
+    }
+
+    private _emitLoadingIfChanged(): void {
+        const loading =
+            this._foregroundLoadingCount > 0 || this._backendTaskLoading;
+        if (this._loading === loading) {
+            return;
+        }
+        this._loading = loading;
+        this._onDidChangeForegroundLoading.fire(loading);
     }
 
 }

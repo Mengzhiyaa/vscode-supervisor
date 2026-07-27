@@ -123,6 +123,7 @@ suite('[Unit] Supervisor package manifest', () => {
         assert.ok(!commands.has('supervisor.insertAssignmentOperator'));
         assert.ok(!commands.has('supervisor.insertPipeOperator'));
         assert.ok(!commands.has('supervisor.help.showHelpAtCursor'));
+        assert.ok(commands.has('supervisor.dataExplorer.openAsSpreadsheet'));
     });
 
     test('keeps release files and packaging rules', () => {

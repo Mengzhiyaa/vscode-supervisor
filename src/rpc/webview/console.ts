@@ -112,6 +112,15 @@ export namespace InterruptRequest {
     export const type = new RequestType<Params | void, void, void>('console/interrupt');
 }
 
+export namespace WriteClipboardTextRequest {
+
+    export interface Params {
+        text: string;
+    }
+
+    export const type = new RequestType<Params, void, void>('console/writeClipboardText');
+}
+
 export namespace ClearConsoleRequest {
 
     export interface Params {

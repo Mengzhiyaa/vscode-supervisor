@@ -347,6 +347,7 @@ test('data explorer renders row-label placeholders until row labels are cached',
 
 test('data explorer sends toolbar and schema-expansion notifications', async ({ page }) => {
     const backend = await openWebviewPage(page, 'dataExplorer');
+    mirrorDataExplorerPanelState(backend);
     await expect(page.locator('.positron-data-explorer')).toBeVisible({ timeout: 15_000 });
     await expect
         .poll(() => backend.notificationCount(DataExplorerMethods.ready), {
@@ -354,42 +355,40 @@ test('data explorer sends toolbar and schema-expansion notifications', async ({ 
         })
         .toBeGreaterThan(0);
 
-    await backend.notify(DataExplorerMethods.initialize, {
-        identifier: 'fixture-table',
-        displayName: 'Fixture Table',
+    await initializeExplorerFixture(backend, {
         backendState: createDataExplorerBackendState({
             table_shape: { num_rows: 12, num_columns: 3 },
             table_unfiltered_shape: { num_rows: 12, num_columns: 3 },
             sort_keys: [{ column_index: 0, ascending: true }],
         }),
     });
-    await backend.notify(DataExplorerMethods.schema, {
-        columns: [
-            createDataExplorerSchemaColumn({
-                column_name: 'id',
-                column_index: 0,
-            }),
-        ],
-    });
 
+    // Test clear sort via column header context menu
     const clearSort = backend.waitForNextNotification(DataExplorerMethods.clearSort);
-    await page.getByLabel('Clear sorting').click();
+    await backend.notify(DataExplorerMethods.showColumnContextMenu);
+    await page.getByText('Clear Sorting').click();
     expect((await clearSort).params).toEqual({ type: 'clearSort' });
 
+    // Test layout change via splitter double-click
     const setLayout = backend.waitForNextNotification(DataExplorerMethods.setLayout);
-    await page.getByLabel('Change layout').click();
-    await page.getByText('Summary on Right').click();
+    const splitter = page.locator('.vertical-splitter .sash');
+    const box = await splitter.boundingBox();
+    await splitter.dblclick({ position: { x: 1, y: 64 } });
     expect((await setLayout).params).toEqual({
         type: 'setLayout',
         layout: 'SummaryOnRight',
     });
+    await expect(page.locator('.data-explorer')).toHaveClass(/summary-on-right/);
 
+    // Test move to new window (triggered via backend notification)
     const moveToNewWindow = backend.waitForNextNotification(DataExplorerMethods.moveToNewWindow);
-    await page.getByLabel('Move into New Window').click();
+    await backend.notify(DataExplorerMethods.moveToNewWindow);
     expect((await moveToNewWindow).params).toEqual({ type: 'moveToNewWindow' });
 
+    // Test request schema via add filter from cell context menu
     const requestSchema = backend.waitForNextNotification(DataExplorerMethods.requestSchema);
-    await page.getByLabel('Add Filter').click();
+    await backend.notify(DataExplorerMethods.showCellContextMenu);
+    await page.getByText('Add Filter').click();
     expect((await requestSchema).params).toEqual({
         type: 'requestSchema',
         columns: [0, 1, 2],
@@ -524,6 +523,7 @@ test('data explorer publishes model-owned summary width and selection intents', 
 
 test('data explorer bridges convert-to-code, file options, and focus changes', async ({ page }) => {
     const backend = await openWebviewPage(page, 'dataExplorer');
+    mirrorDataExplorerPanelState(backend);
     await expect(page.locator('.positron-data-explorer')).toBeVisible({ timeout: 15_000 });
     await expect
         .poll(() => backend.notificationCount(DataExplorerMethods.ready), {
@@ -612,8 +612,9 @@ test('data explorer bridges convert-to-code, file options, and focus changes', a
         document.body.append(button);
     });
 
+    // Focus on summary sort dropdown button
     const focusIn = backend.waitForNextNotification(DataExplorerMethods.focusChanged);
-    await page.getByLabel('Clear sorting').focus();
+    await page.locator('.summary-sort-button').focus();
     expect((await focusIn).params).toEqual({
         type: 'focusChanged',
         focused: true,
@@ -632,8 +633,8 @@ test('data explorer restores the last focused control when the host regains focu
     await expect(page.locator('.positron-data-explorer')).toBeVisible({ timeout: 15_000 });
     await initializeExplorerFixture(backend);
 
-    const clearSort = page.getByLabel('Clear sorting');
-    await clearSort.focus();
+    const focusTarget = page.locator('.summary-sort-button');
+    await focusTarget.focus();
     await page.evaluate(() => {
         const outside = document.createElement('button');
         outside.id = 'outside-focus-restore';
@@ -643,17 +644,10 @@ test('data explorer restores the last focused control when the host regains focu
     await expect(page.locator('#outside-focus-restore')).toBeFocused();
 
     await backend.notify(DataExplorerMethods.focus);
-    await expect(clearSort).toBeFocused();
+    await expect(focusTarget).toBeFocused();
 });
 
-test('data explorer localizes actions and exposes large-column limitations in forced colors', async ({ page }) => {
-    await page.addInitScript(() => {
-        globalThis.__arkLocalization = {
-            'dataExplorer.actions': 'Localized Data Actions',
-            'dataExplorer.openAsSpreadsheet': 'Localized Spreadsheet Action',
-            'dataExplorer.largeColumnWarning': 'Localized large-column limitation',
-        };
-    });
+test('data explorer disables advanced features for large-column datasets', async ({ page }) => {
     await page.emulateMedia({ forcedColors: 'active' });
     const backend = await openWebviewPage(page, 'dataExplorer');
     await expect(page.locator('.positron-data-explorer')).toBeVisible({ timeout: 15_000 });
@@ -664,24 +658,22 @@ test('data explorer localizes actions and exposes large-column limitations in fo
         backendState: createDataExplorerBackendState({
             table_shape: { num_rows: 1, num_columns: 10_000_000 },
             table_unfiltered_shape: { num_rows: 1, num_columns: 10_000_000 },
-            __ark_file_options: {
-                supportsOpenAsSpreadsheet: true,
-            },
         }),
     });
 
-    await expect(page.getByRole('toolbar', { name: 'Localized Data Actions' })).toBeVisible();
-    const warning = page.getByRole('status').filter({
-        hasText: 'Localized large-column limitation',
-    });
-    await expect(warning).toBeVisible();
-    await expect(warning).toHaveCSS('border-top-style', 'solid');
+    // The summary row action bar should be disabled for large-column datasets
+    const summaryActionBar = page.locator('.summary-row-action-bar');
+    await expect(summaryActionBar).toBeVisible();
 
-    const openSpreadsheet = backend.waitForNextNotification(
-        DataExplorerMethods.openAsSpreadsheet,
-    );
-    await page.getByRole('button', { name: 'Localized Spreadsheet Action' }).click();
-    expect((await openSpreadsheet).params).toEqual({ type: 'openAsSpreadsheet' });
+    // Check that the sort dropdown is disabled
+    const sortDropdown = page.locator('.summary-sort-button');
+    await expect(sortDropdown).toBeVisible();
+    await expect(sortDropdown).toHaveAttribute('disabled', '');
+
+    // Check that the filter input is disabled
+    const filterInput = page.locator('.summary-row-filter-bar input');
+    await expect(filterInput).toBeVisible();
+    await expect(filterInput).toHaveAttribute('disabled', '');
 });
 
 test('data explorer syncs model-owned panel state, metadata, status indicators, and closed overlays', async ({ page }) => {

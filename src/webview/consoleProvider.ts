@@ -408,6 +408,13 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
             }
         });
 
+        // Clipboard access from a webview is not reliable in every VS Code host
+        // (notably remote and browser hosts). Route text writes through VS Code's
+        // clipboard service, matching the service-backed path used by Positron.
+        connection.onRequest(ConsoleProtocol.WriteClipboardTextRequest.type, async params => {
+            await vscode.env.clipboard.writeText(params.text);
+        });
+
         connection.onRequest(ConsoleProtocol.RunErrorSuggestionRequest.type, async (params) => {
             const instance = this._consoleService?.getConsoleInstance(params.sessionId);
             if (!instance) {
