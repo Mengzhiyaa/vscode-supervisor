@@ -1,5 +1,14 @@
 import * as vscode from 'vscode';
-import { RuntimeOutputKind } from '../internal/runtimeTypes';
+import type {
+    IRuntimeOutputRenderer,
+    RuntimeOutputMessage,
+    RuntimeRenderedOutput,
+} from '../api';
+import {
+    RuntimeOutputKind,
+    type LanguageRuntimeMessageIPyWidget,
+    type LanguageRuntimeOutput,
+} from '../internal/runtimeTypes';
 import type {
     LanguageRuntimeOutputWithKind,
     LanguageRuntimeResultWithKind,
@@ -125,6 +134,7 @@ export class RichOutputRouter implements vscode.Disposable {
     private readonly _routeRecords: RichOutputRouteRecord[] = [];
     private readonly _routeChains = new Map<string, Promise<void>>();
     private readonly _reportedFailures = new Set<string>();
+    private readonly _renderers = new Map<string, IRuntimeOutputRenderer>();
     private readonly _onDidRouteOutputEmitter = new vscode.EventEmitter<RichOutputRouteRecord>();
 
     readonly onDidRouteOutput = this._onDidRouteOutputEmitter.event;
@@ -172,6 +182,21 @@ export class RichOutputRouter implements vscode.Disposable {
         return RuntimeOutputConsumers[kind];
     }
 
+    registerRenderer(renderer: IRuntimeOutputRenderer): vscode.Disposable {
+        if (!renderer.id.trim()) {
+            throw new Error('Runtime output renderer id must not be empty.');
+        }
+        if (this._renderers.has(renderer.id)) {
+            throw new Error(`Runtime output renderer '${renderer.id}' is already registered.`);
+        }
+        this._renderers.set(renderer.id, renderer);
+        return new vscode.Disposable(() => {
+            if (this._renderers.get(renderer.id) === renderer) {
+                this._renderers.delete(renderer.id);
+            }
+        });
+    }
+
     private _attachSession(session: RuntimeSession): void {
         if (this._sessionDisposables.has(session.sessionId)) {
             return;
@@ -181,6 +206,9 @@ export class RichOutputRouter implements vscode.Disposable {
             session.onDidReceiveRuntimeMessageOutput(message => this._enqueue(session, message)),
             session.onDidReceiveRuntimeMessageResult(message => this._enqueue(session, message)),
             session.onDidReceiveRuntimeMessageUpdateOutput(message => this._enqueue(session, message)),
+            session.onDidReceiveRuntimeMessageIPyWidget(message => {
+                this._enqueue(session, this._toRichIPyWidgetMessage(message));
+            }),
         ];
         this._sessionDisposables.set(session.sessionId, disposables);
     }
@@ -215,7 +243,40 @@ export class RichOutputRouter implements vscode.Disposable {
         this._routeChains.set(key, current);
     }
 
+    /**
+     * Converts an intercepted IPyWidget message into the rich-output contract
+     * without discarding the wrapped Jupyter message. A native widget manager
+     * can consume original_message in the future; today the router provides an
+     * explicit, inspectable fallback.
+     */
+    private _toRichIPyWidgetMessage(
+        message: LanguageRuntimeMessageIPyWidget,
+    ): LanguageRuntimeOutputWithKind {
+        const original = message.original_message as Partial<LanguageRuntimeOutput>;
+        const originalData = original.data;
+        const data = originalData && typeof originalData === 'object' && !Array.isArray(originalData)
+            ? originalData
+            : {
+                'application/vnd.vscode-supervisor.ipywidget-message+json':
+                    message.original_message,
+            };
+
+        return {
+            ...message,
+            kind: RuntimeOutputKind.IPyWidget,
+            data,
+            output_id: typeof original.output_id === 'string'
+                ? original.output_id
+                : undefined,
+            outputMetadata: original.outputMetadata,
+        };
+    }
+
     private async _routeOutput(session: RuntimeSession, message: RichOutputMessage): Promise<void> {
+        if (await this._routeWithRegisteredRenderer(session, message)) {
+            return;
+        }
+
         switch (message.kind) {
             case RuntimeOutputKind.ViewerWidget:
                 await this._routeViewerOutput(session, message);
@@ -240,6 +301,103 @@ export class RichOutputRouter implements vscode.Disposable {
                 );
                 return;
         }
+    }
+
+    private async _routeWithRegisteredRenderer(
+        session: RuntimeSession,
+        message: RichOutputMessage,
+    ): Promise<boolean> {
+        const mimeTypes = Object.keys(message.data);
+        for (const renderer of this._renderers.values()) {
+            if (
+                renderer.outputKinds?.length &&
+                !renderer.outputKinds.includes(message.kind)
+            ) {
+                continue;
+            }
+            if (
+                renderer.mimeTypes?.length &&
+                !renderer.mimeTypes.some(mimeType => mimeTypes.includes(mimeType))
+            ) {
+                continue;
+            }
+
+            let rendered: RuntimeRenderedOutput | undefined;
+            try {
+                rendered = await renderer.render(
+                    message as unknown as RuntimeOutputMessage,
+                    { session, outputKind: message.kind },
+                );
+            } catch (error) {
+                this._outputChannel.error(
+                    `[RichOutputRouter] Renderer '${renderer.id}' failed: ${error}`,
+                );
+                continue;
+            }
+            if (!rendered) {
+                continue;
+            }
+            if (!rendered.uri && !rendered.html) {
+                this._outputChannel.warn(
+                    `[RichOutputRouter] Renderer '${renderer.id}' returned no URI or HTML.`,
+                );
+                continue;
+            }
+
+            await this._showRenderedOutput(session, message, renderer.id, rendered);
+            if (
+                message.kind === RuntimeOutputKind.IPyWidget ||
+                message.kind === RuntimeOutputKind.WebviewPreload
+            ) {
+                this._registerWidgetModel(session, message, true);
+            }
+            return true;
+        }
+        return false;
+    }
+
+    private async _showRenderedOutput(
+        session: RuntimeSession,
+        message: RichOutputMessage,
+        rendererId: string,
+        rendered: RuntimeRenderedOutput,
+    ): Promise<void> {
+        let uri = rendered.uri;
+        let htmlFile: vscode.Uri | undefined;
+        if (rendered.html) {
+            htmlFile = await this._writeHtmlOutput(
+                session.sessionId,
+                message,
+                rendered.html,
+                undefined,
+            );
+            uri = await this._previewService.resolveRuntimeOutputHtmlUri(htmlFile);
+        }
+
+        if (rendered.target === 'plot') {
+            this._plotsService.addHtmlOutputPlot(session.sessionId, {
+                uri: uri!,
+                title: rendered.title ?? 'Runtime Plot',
+            }, message);
+        } else if (htmlFile) {
+            await this._previewService.showRuntimeOutputHtml(session.sessionId, htmlFile, {
+                title: rendered.title ?? 'Runtime Viewer Output',
+                outputId: message.output_id,
+            });
+        } else {
+            await this._previewService.showRuntimeOutputUrl(
+                session.sessionId,
+                uri!.toString(),
+                message.output_id,
+            );
+        }
+        this._record(
+            session,
+            message,
+            'renderer',
+            'routed',
+            `${rendererId}:${uri!.toString()}`,
+        );
     }
 
     private async _routeViewerOutput(session: RuntimeSession, message: RichOutputMessage): Promise<void> {
@@ -435,7 +593,11 @@ export class RichOutputRouter implements vscode.Disposable {
         );
     }
 
-    private _registerWidgetModel(session: RuntimeSession, message: RichOutputMessage): void {
+    private _registerWidgetModel(
+        session: RuntimeSession,
+        message: RichOutputMessage,
+        rendererAvailable = false,
+    ): void {
         if (!this._surfaceLifecycle) {
             return;
         }
@@ -457,7 +619,7 @@ export class RichOutputRouter implements vscode.Disposable {
                 messageId: message.id,
                 executionId: message.parent_id,
                 mimeTypes: Object.keys(message.data),
-                rendererAvailable: false,
+                rendererAvailable,
             },
         });
     }

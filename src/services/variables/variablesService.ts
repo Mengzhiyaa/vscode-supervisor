@@ -222,7 +222,9 @@ export class PositronVariablesService implements IPositronVariablesService {
     private _setActivePositronVariablesInstance(instance: PositronVariablesInstance | undefined): void {
         this._activeVariablesInstance = instance;
         if (instance) {
-            instance.requestRefresh();
+            void instance.requestRefresh().catch(error => {
+                this._outputChannel.warn(`[VariablesService] Failed to refresh active variables: ${error}`);
+            });
         }
         this._onDidChangeActivePositronVariablesInstanceEmitter.fire(instance);
     }

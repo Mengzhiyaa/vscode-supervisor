@@ -50,6 +50,26 @@ export class ViewerViewProvider extends BaseWebviewProvider {
         return 'ViewerViewProvider';
     }
 
+    async reveal(preserveFocus: boolean = false): Promise<void> {
+        await this._revealViewerIfHidden(preserveFocus);
+    }
+
+    async focus(): Promise<void> {
+        await this.reveal(false);
+        this._connection?.sendNotification(
+            ViewerProtocol.ViewerFocusNotification.type,
+            {},
+        );
+    }
+
+    async find(): Promise<void> {
+        await this.reveal(false);
+        this._connection?.sendNotification(
+            ViewerProtocol.ViewerFindNotification.type,
+            {},
+        );
+    }
+
     private _subscribeToPreviewService(): void {
         this._disposables.push(
             this._previewService.onDidShowPreview(preview => this._acceptPreview(preview)),
@@ -111,11 +131,13 @@ export class ViewerViewProvider extends BaseWebviewProvider {
         // --- Navigation ---
         _connection.onNotification('viewer/navigate', (params: { url: string }) => {
             this.log(`[ViewerViewProvider] Navigate to: ${params.url}`);
-            this._previewService.handleShowUrl(
-                this._lastPreview?.sessionId ?? '',
-                { url: params.url }
-            );
+            this._navigate(params.url);
         });
+
+        _connection.onNotification(
+            ViewerProtocol.ViewerDidNavigateNotification.type,
+            params => this._navigate(params.url, params.title),
+        );
 
         _connection.onNotification('viewer/navigateBack', () => {
             if (this._historyIndex > 0) {
@@ -256,6 +278,41 @@ export class ViewerViewProvider extends BaseWebviewProvider {
             ViewerProtocol.ViewerUpdateInterruptStateNotification.type,
             { interruptible, interrupting },
         );
+    }
+
+    private _navigate(rawUrl: string, title?: string): void {
+        const current = this._lastPreview;
+        if (!current) {
+            return;
+        }
+
+        try {
+            const resolved = new URL(rawUrl, current.uri.toString(true));
+            if (!['http:', 'https:'].includes(resolved.protocol)) {
+                return;
+            }
+            const currentUrl = new URL(current.uri.toString(true));
+            if (resolved.toString() === currentUrl.toString()) {
+                return;
+            }
+
+            // Links inside a proxied page already point at the proxy origin.
+            // Keep that URI and let the provider own the history rather than
+            // accidentally wrapping the proxy in another proxy.
+            if (resolved.origin === currentUrl.origin) {
+                this._acceptPreview({
+                    ...current,
+                    uri: vscode.Uri.parse(resolved.toString()),
+                    title: title || current.title,
+                });
+                return;
+            }
+        } catch (error) {
+            this.log(`Ignored invalid Viewer navigation ${rawUrl}: ${error}`, vscode.LogLevel.Debug);
+            return;
+        }
+
+        void this._previewService.handleShowUrl(current.sessionId, { url: rawUrl });
     }
 
     /** Sends the current navigation state (back/forward availability) to the webview. */

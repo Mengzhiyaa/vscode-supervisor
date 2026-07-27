@@ -198,6 +198,14 @@ export interface LanguageRuntimeError extends LanguageRuntimeMessage {
     traceback: Array<string>;
 }
 
+/**
+ * A runtime message intercepted by an IPyWidget (for example an Output widget).
+ * The original message must be preserved so the widget consumer can replay it.
+ */
+export interface LanguageRuntimeMessageIPyWidget extends LanguageRuntimeMessage {
+    original_message: LanguageRuntimeMessage;
+}
+
 export interface LanguageRuntimeCommOpen extends LanguageRuntimeMessage {
     comm_id: string;
     target_name: string;

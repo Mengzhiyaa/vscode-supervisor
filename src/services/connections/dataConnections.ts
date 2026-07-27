@@ -1,59 +1,33 @@
 import * as vscode from 'vscode';
+import {
+    DataConnectionNodeKind,
+    DataConnectionParameterType,
+    type DataConnection,
+    type DataConnectionDriver,
+    type DataConnectionDriverSummary,
+    type DataConnectionMechanism,
+    type DataConnectionNode,
+    type DataConnectionParameter,
+    type DataConnectionParameterValues,
+    type IDataConnectionDriver,
+    type IDataConnectionHandle,
+    type IDataConnectionNode,
+} from '../../api';
+
+export {
+    DataConnectionNodeKind,
+    DataConnectionParameterType,
+    type DataConnection,
+    type DataConnectionDriver,
+    type DataConnectionDriverSummary,
+    type DataConnectionMechanism,
+    type DataConnectionNode,
+    type DataConnectionParameter,
+    type DataConnectionParameterValues,
+};
 
 const ProfilesStorageKey = 'supervisor.dataConnections.profiles.v1';
 const SecretStorageKeyPrefix = 'supervisor.dataConnections.secret';
-
-export type DataConnectionParameterValues = Record<string, boolean | number | string>;
-
-export type DataConnectionParameter = {
-    readonly id: string;
-    readonly label: string;
-    readonly type: 'boolean' | 'number' | 'string' | 'password' | 'option';
-    readonly required?: boolean;
-    readonly secret?: boolean;
-    readonly defaultValue?: boolean | number | string;
-    readonly options?: readonly string[];
-    readonly placeholder?: string;
-};
-
-export interface DataConnectionMechanism {
-    readonly id: string;
-    readonly label: string;
-    readonly description?: string;
-    readonly parameters: readonly DataConnectionParameter[];
-}
-
-export interface DataConnectionDriverMetadata {
-    readonly id: string;
-    readonly name: string;
-    readonly description?: string;
-    readonly iconSvg?: string;
-    readonly mechanisms: readonly DataConnectionMechanism[];
-    readonly supportedLanguageIds?: readonly string[];
-}
-
-export interface DataConnectionNode {
-    readonly handle: number;
-    readonly name: string;
-    readonly kind: string;
-    readonly dtype?: string;
-    readonly hasChildren?: boolean;
-    readonly containsData?: boolean;
-}
-
-export interface DataConnectionHandle extends vscode.Disposable {
-    isConnected(): Promise<boolean>;
-    getChildren(): Promise<readonly DataConnectionNode[]>;
-    nodeGetChildren(nodeHandle: number): Promise<readonly DataConnectionNode[]>;
-    nodePreview(nodeHandle: number): Promise<void>;
-    disconnect(): Promise<void>;
-}
-
-export interface DataConnectionDriver {
-    readonly id: string;
-    readonly metadata: DataConnectionDriverMetadata;
-    connect(mechanismId: string, params: DataConnectionParameterValues): Promise<DataConnectionHandle>;
-}
 
 export interface DataConnectionProfile {
     readonly id: string;
@@ -76,12 +50,13 @@ export class DataConnectionsDriverManager implements vscode.Disposable {
     private readonly _onDidChangeDrivers = new vscode.EventEmitter<readonly DataConnectionDriver[]>();
     readonly onDidChangeDrivers = this._onDidChangeDrivers.event;
 
-    registerDriver(driver: DataConnectionDriver): vscode.Disposable {
-        this._drivers.set(driver.id, driver);
+    registerDriver(driver: DataConnectionDriver | IDataConnectionDriver): vscode.Disposable {
+        const normalized = normalizeDataConnectionDriver(driver);
+        this._drivers.set(normalized.id, normalized);
         this._onDidChangeDrivers.fire(this.getDrivers());
         return new vscode.Disposable(() => {
-            if (this._drivers.get(driver.id) === driver) {
-                this._drivers.delete(driver.id);
+            if (this._drivers.get(normalized.id) === normalized) {
+                this._drivers.delete(normalized.id);
                 this._onDidChangeDrivers.fire(this.getDrivers());
             }
         });
@@ -89,7 +64,105 @@ export class DataConnectionsDriverManager implements vscode.Disposable {
 
     getDriver(driverId: string): DataConnectionDriver | undefined { return this._drivers.get(driverId); }
     getDrivers(): readonly DataConnectionDriver[] { return [...this._drivers.values()]; }
+    getDriverSummaries(): readonly DataConnectionDriverSummary[] {
+        return this.getDrivers().map(driver => ({
+            id: driver.id,
+            name: driver.name,
+            description: driver.description,
+            mechanisms: driver.mechanisms,
+            supportedLanguageIds: driver.supportedLanguageIds,
+        }));
+    }
+    async connect(
+        driverId: string,
+        mechanismId: string,
+        parameters: DataConnectionParameterValues,
+    ): Promise<DataConnection> {
+        const driver = this.getDriver(driverId);
+        if (!driver) {
+            throw new Error(`Data connection driver '${driverId}' is not registered.`);
+        }
+        return driver.connect(mechanismId, parameters);
+    }
     dispose(): void { this._drivers.clear(); this._onDidChangeDrivers.dispose(); }
+}
+
+function normalizeDataConnectionDriver(
+    driver: DataConnectionDriver | IDataConnectionDriver,
+): DataConnectionDriver {
+    if (!('metadata' in driver)) {
+        return driver;
+    }
+
+    const legacy = driver as IDataConnectionDriver;
+    return {
+        id: legacy.id,
+        name: legacy.metadata.name,
+        description: legacy.metadata.description ?? '',
+        iconSvg: legacy.metadata.iconSvg ?? '',
+        supportedLanguageIds: legacy.metadata.supportedLanguageIds ?? [],
+        mechanisms: legacy.metadata.mechanisms.map(mechanism => ({
+            id: mechanism.id,
+            label: mechanism.label,
+            description: mechanism.description ?? '',
+            parameters: mechanism.parameters.map(normalizeLegacyParameter),
+        })),
+        async connect(mechanismId, parameters) {
+            const handle = await legacy.connect(mechanismId, parameters);
+            return adaptLegacyConnection(handle);
+        },
+    };
+}
+
+function normalizeLegacyParameter(
+    parameter: IDataConnectionDriver['metadata']['mechanisms'][number]['parameters'][number],
+): DataConnectionParameter {
+    const base = {
+        id: parameter.id,
+        label: parameter.label,
+        required: parameter.required,
+    };
+    switch (parameter.type) {
+        case 'boolean':
+            return { ...base, type: DataConnectionParameterType.Boolean, defaultValue: parameter.defaultValue as boolean | undefined };
+        case 'number':
+            return { ...base, type: DataConnectionParameterType.Number, defaultValue: parameter.defaultValue as number | undefined, placeholder: parameter.placeholder };
+        case 'option':
+            return { ...base, type: DataConnectionParameterType.Option, options: [...(parameter.options ?? [])], defaultValue: parameter.defaultValue as string | undefined, placeholder: parameter.placeholder };
+        case 'password':
+            return { ...base, type: DataConnectionParameterType.Password, secret: true, placeholder: parameter.placeholder };
+        default:
+            return parameter.secret
+                ? { ...base, type: DataConnectionParameterType.String, secret: true, placeholder: parameter.placeholder }
+                : { ...base, type: DataConnectionParameterType.String, secret: false, defaultValue: parameter.defaultValue as string | undefined, placeholder: parameter.placeholder };
+    }
+}
+
+function adaptLegacyConnection(handle: IDataConnectionHandle): DataConnection {
+    const adaptNode = (node: IDataConnectionNode): DataConnectionNode => ({
+        name: node.name,
+        kind: normalizeNodeKind(node.kind),
+        dataType: node.dtype,
+        getChildren: node.hasChildren
+            ? async () => (await handle.nodeGetChildren(node.handle)).map(adaptNode)
+            : undefined,
+        preview: node.containsData
+            ? () => handle.nodePreview(node.handle)
+            : undefined,
+    });
+    return {
+        isReadOnly: async () => false,
+        isConnected: () => handle.isConnected(),
+        getChildren: async () => (await handle.getChildren()).map(adaptNode),
+        disconnect: () => handle.disconnect(),
+        dispose: () => handle.dispose(),
+    } as DataConnection & vscode.Disposable;
+}
+
+function normalizeNodeKind(kind: string): DataConnectionNodeKind {
+    return (Object.values(DataConnectionNodeKind) as string[]).includes(kind)
+        ? kind as DataConnectionNodeKind
+        : DataConnectionNodeKind.Database;
 }
 
 /** Stores profile descriptors in Memento and cleartext values only in SecretStorage. */
@@ -186,10 +259,11 @@ export function getSecretParameterIds(
     driver: DataConnectionDriver,
     mechanismId: string,
 ): readonly string[] {
-    const mechanism = driver.metadata.mechanisms.find(candidate => candidate.id === mechanismId)
-        ?? driver.metadata.mechanisms[0];
+    const mechanism = driver.mechanisms.find(candidate => candidate.id === mechanismId)
+        ?? driver.mechanisms[0];
     return mechanism?.parameters
-        .filter(parameter => parameter.type === 'password' || parameter.secret === true)
+        .filter(parameter => parameter.type === DataConnectionParameterType.Password ||
+            ('secret' in parameter && parameter.secret === true))
         .map(parameter => parameter.id) ?? [];
 }
 

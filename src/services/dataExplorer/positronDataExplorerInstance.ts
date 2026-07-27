@@ -270,6 +270,8 @@ export class PositronDataExplorerInstance implements IPositronDataExplorerInstan
         this._disposed = true;
         this._visibilityOwners.clear();
         this._disposeClientBindings();
+        this._tableDataCache.dispose();
+        this._tableSummaryCache.dispose();
         this._clientInstance.dispose();
         this._onDidDispose.fire();
         this._disposables.forEach(disposable => disposable.dispose());

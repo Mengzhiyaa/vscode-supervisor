@@ -69,6 +69,11 @@ export namespace HelpFindNotification {
     export const type = new NotificationType<{}>('help/find');
 }
 
+export namespace HelpFocusNotification {
+
+    export const type = new NotificationType<{}>('help/focus');
+}
+
 export namespace HelpScrollNotification {
 
     export interface Params {

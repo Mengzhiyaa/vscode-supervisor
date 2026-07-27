@@ -2,6 +2,10 @@ import * as assert from 'assert';
 import * as vscode from 'vscode';
 import { CoreCommandIds } from '../../coreCommandIds';
 import { registerConsoleActions } from '../../services/console/consoleActions';
+import {
+    RuntimeCodeExecutionMode,
+    RuntimeErrorBehavior,
+} from '../../services/console/interfaces/consoleService';
 
 type RegisteredCommandHandler = (...args: any[]) => unknown;
 
@@ -71,6 +75,7 @@ suite('[Unit] console actions', () => {
     const originalExecuteCommand = vscode.commands.executeCommand.bind(vscode.commands);
     const originalShowInformationMessage = vscode.window.showInformationMessage.bind(vscode.window);
     const originalShowErrorMessage = vscode.window.showErrorMessage.bind(vscode.window);
+    const originalShowWarningMessage = vscode.window.showWarningMessage.bind(vscode.window);
     const originalActiveTextEditor = Object.getOwnPropertyDescriptor(vscode.window, 'activeTextEditor');
 
     function setActiveTextEditor(editor: vscode.TextEditor | undefined): void {
@@ -89,6 +94,8 @@ suite('[Unit] console actions', () => {
             originalShowInformationMessage;
         (vscode.window as { showErrorMessage: typeof vscode.window.showErrorMessage }).showErrorMessage =
             originalShowErrorMessage;
+        (vscode.window as { showWarningMessage: typeof vscode.window.showWarningMessage }).showWarningMessage =
+            originalShowWarningMessage;
 
         if (originalActiveTextEditor) {
             Object.defineProperty(vscode.window, 'activeTextEditor', originalActiveTextEditor);
@@ -136,6 +143,42 @@ suite('[Unit] console actions', () => {
             assert.strictEqual(editor.selection.active.character, 0);
         } finally {
             disposables.forEach((disposable) => disposable.dispose());
+        }
+    });
+
+    test('passes command execution options through to the console service', async () => {
+        const registeredCommands = new Map<string, RegisteredCommandHandler>();
+        let executionArguments: unknown[] = [];
+        (vscode.commands as { registerCommand: typeof vscode.commands.registerCommand }).registerCommand =
+            ((command: string, callback: RegisteredCommandHandler) => {
+                registeredCommands.set(command, callback);
+                return new vscode.Disposable(() => undefined);
+            }) as typeof vscode.commands.registerCommand;
+
+        setActiveTextEditor(makeEditor(
+            ['x <- 1'],
+            new vscode.Selection(new vscode.Position(0, 0), new vscode.Position(0, 6)),
+        ));
+        const disposables = registerConsoleActions({
+            executeCode: async (...args: unknown[]) => {
+                executionArguments = args;
+                return 'session-1';
+            },
+            activePositronConsoleInstance: undefined,
+            focusConsole: async () => undefined,
+        } as any, makeNoopLogChannel());
+
+        try {
+            await registeredCommands.get(CoreCommandIds.consoleExecuteCode)?.({
+                allowIncomplete: true,
+                mode: RuntimeCodeExecutionMode.Silent,
+                errorBehavior: RuntimeErrorBehavior.Stop,
+            });
+            assert.strictEqual(executionArguments[5], true);
+            assert.strictEqual(executionArguments[6], RuntimeCodeExecutionMode.Silent);
+            assert.strictEqual(executionArguments[7], RuntimeErrorBehavior.Stop);
+        } finally {
+            disposables.forEach(disposable => disposable.dispose());
         }
     });
 
@@ -409,6 +452,65 @@ suite('[Unit] console actions', () => {
             ]);
         } finally {
             disposables.forEach((disposable) => disposable.dispose());
+        }
+    });
+
+    test('clears input history only after modal confirmation', async () => {
+        const registeredCommands = new Map<string, RegisteredCommandHandler>();
+        let clearCalls = 0;
+        let promptOptions: vscode.MessageOptions | undefined;
+        (vscode.commands as { registerCommand: typeof vscode.commands.registerCommand }).registerCommand =
+            ((command: string, callback: RegisteredCommandHandler) => {
+                registeredCommands.set(command, callback);
+                return new vscode.Disposable(() => undefined);
+            }) as typeof vscode.commands.registerCommand;
+        (vscode.window as { showWarningMessage: typeof vscode.window.showWarningMessage }).showWarningMessage =
+            (async (_message: string, options: vscode.MessageOptions, clear: string) => {
+                promptOptions = options;
+                return clear;
+            }) as typeof vscode.window.showWarningMessage;
+
+        const disposables = registerConsoleActions({
+            activePositronConsoleInstance: {
+                runtimeMetadata: { languageName: 'R' },
+                clearInputHistory: () => { clearCalls++; },
+            },
+            focusConsole: async () => undefined,
+        } as any, makeNoopLogChannel());
+
+        try {
+            await registeredCommands.get(CoreCommandIds.consoleClearInputHistory)?.();
+            assert.strictEqual(promptOptions?.modal, true);
+            assert.strictEqual(clearCalls, 1);
+        } finally {
+            disposables.forEach(disposable => disposable.dispose());
+        }
+    });
+
+    test('keeps input history when modal confirmation is cancelled', async () => {
+        const registeredCommands = new Map<string, RegisteredCommandHandler>();
+        let clearCalls = 0;
+        (vscode.commands as { registerCommand: typeof vscode.commands.registerCommand }).registerCommand =
+            ((command: string, callback: RegisteredCommandHandler) => {
+                registeredCommands.set(command, callback);
+                return new vscode.Disposable(() => undefined);
+            }) as typeof vscode.commands.registerCommand;
+        (vscode.window as { showWarningMessage: typeof vscode.window.showWarningMessage }).showWarningMessage =
+            (async () => undefined) as typeof vscode.window.showWarningMessage;
+
+        const disposables = registerConsoleActions({
+            activePositronConsoleInstance: {
+                runtimeMetadata: { languageName: 'Python' },
+                clearInputHistory: () => { clearCalls++; },
+            },
+            focusConsole: async () => undefined,
+        } as any, makeNoopLogChannel());
+
+        try {
+            await registeredCommands.get(CoreCommandIds.consoleClearInputHistory)?.();
+            assert.strictEqual(clearCalls, 0);
+        } finally {
+            disposables.forEach(disposable => disposable.dispose());
         }
     });
 });

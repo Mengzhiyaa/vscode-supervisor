@@ -38,6 +38,7 @@ export class VariablesViewProvider extends BaseWebviewProvider {
     private readonly _disposables: vscode.Disposable[] = [];
     private _pendingSessionInfoUpdate = false;
     private _webviewReady = false;
+    private _motionReduced = false;
     private readonly _sessionSnapshotBuilder: SessionSnapshotBuilder;
 
     private readonly _instanceDisposables = new Map<string, vscode.Disposable[]>();
@@ -148,6 +149,9 @@ export class VariablesViewProvider extends BaseWebviewProvider {
         if (this._instanceDisposables.has(sessionId)) {
             return;
         }
+        if (this._motionReduced) {
+            instance.highlightRecent = false;
+        }
 
         const disposables: vscode.Disposable[] = [];
         disposables.push(
@@ -166,7 +170,7 @@ export class VariablesViewProvider extends BaseWebviewProvider {
         this._sendVariablesInstanceUpdate(instance);
 
         // Trigger refresh to populate data when instance is ready
-        instance.requestRefresh();
+        void instance.requestRefresh().catch(() => undefined);
     }
 
     private _handleVariablesInstanceStopped(instance: IPositronVariablesInstance): void {
@@ -328,6 +332,18 @@ export class VariablesViewProvider extends BaseWebviewProvider {
             instance.highlightRecent = params.highlightRecent;
         });
 
+        connection.onRequest('variables/setReducedMotionPreference', async (
+            params: { reduced: boolean },
+        ) => {
+            this._motionReduced = params.reduced;
+            if (!params.reduced) {
+                return;
+            }
+            for (const instance of this._variablesService.positronVariablesInstances) {
+                instance.highlightRecent = false;
+            }
+        });
+
         connection.onRequest(VariablesProtocol.ExpandVariableGroupRequest.type, async (params) => {
             const sessionId = this._resolveSessionId(params.sessionId);
             if (!sessionId) {
@@ -370,7 +386,7 @@ export class VariablesViewProvider extends BaseWebviewProvider {
                 return;
             }
 
-            this._variablesService.getVariablesInstance(sessionId)?.requestRefresh();
+            await this._variablesService.getVariablesInstance(sessionId)?.requestRefresh();
         });
 
         connection.onRequest('variables/clear', async (params?: { includeHidden?: boolean; sessionId?: string }) => {
@@ -380,7 +396,7 @@ export class VariablesViewProvider extends BaseWebviewProvider {
             }
             const instance = this._variablesService.getVariablesInstance(sessionId);
             if (instance) {
-                instance.requestClear(params?.includeHidden ?? false);
+                await instance.requestClear(params?.includeHidden ?? false);
             }
         });
 
@@ -391,7 +407,7 @@ export class VariablesViewProvider extends BaseWebviewProvider {
             }
             const instance = this._variablesService.getVariablesInstance(sessionId);
             if (instance) {
-                instance.requestDelete(params.names);
+                await instance.requestDelete(params.names);
             }
         });
 

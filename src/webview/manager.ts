@@ -5,7 +5,7 @@ import { PlotsViewProvider } from './plotsProvider';
 import { ViewerViewProvider } from './viewerProvider';
 import { HelpViewProvider } from './helpProvider';
 import { PackagesViewProvider } from './packagesProvider';
-import { ViewIds } from '../coreCommandIds';
+import { CoreCommandIds, ViewIds } from '../coreCommandIds';
 import { RuntimeSessionService } from '../runtime/runtimeSession';
 import { RuntimeSession } from '../runtime/session';
 import { PositronConsoleService } from '../services/console';
@@ -157,7 +157,15 @@ export class WebviewManager implements vscode.Disposable {
                         retainContextWhenHidden: true
                     }
                 }
-            )
+            ),
+            vscode.commands.registerCommand(
+                CoreCommandIds.viewerFind,
+                () => this._viewerProvider?.find(),
+            ),
+            vscode.commands.registerCommand(
+                CoreCommandIds.viewerFocusContent,
+                () => this._viewerProvider?.focus(),
+            ),
         );
 
         // Help Panel Provider
@@ -176,7 +184,15 @@ export class WebviewManager implements vscode.Disposable {
                         retainContextWhenHidden: true
                     }
                 }
-            )
+            ),
+            vscode.commands.registerCommand(
+                CoreCommandIds.helpFind,
+                () => this._helpProvider?.find(),
+            ),
+            vscode.commands.registerCommand(
+                CoreCommandIds.helpFocusContent,
+                () => this._helpProvider?.focus(),
+            ),
         );
 
         // Subscribe to service events (Positron 1:1 pattern)

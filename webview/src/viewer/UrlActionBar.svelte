@@ -25,6 +25,7 @@
         defaultOpenTarget?: ViewerOpenTarget;
         onopen?: (target: ViewerOpenTarget) => void;
         oninterrupt?: () => void;
+        onfind?: () => void;
     }
 
     let {
@@ -41,6 +42,7 @@
         defaultOpenTarget = 'browser',
         onopen,
         oninterrupt,
+        onfind,
     }: Props = $props();
 
     let urlInput = $state('');
@@ -122,6 +124,12 @@
                 ariaLabel={localize('viewer.reloadUrl', 'Reload the current URL')}
                 tooltip={localize('viewer.reloadUrl', 'Reload the current URL')}
                 onclick={onreload}
+            />
+            <ActionBarButton
+                icon="search"
+                ariaLabel={localize('viewer.find', 'Find in preview')}
+                tooltip={localize('viewer.find', 'Find in preview')}
+                onclick={onfind}
             />
             <ViewerOpenMenuButton defaultTarget={defaultOpenTarget} {onopen} />
             <ActionBarSeparator />

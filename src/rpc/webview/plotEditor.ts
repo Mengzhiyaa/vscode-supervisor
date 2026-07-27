@@ -31,6 +31,11 @@ export namespace PlotEditorCopyNotification {
     export const type = new NotificationType<void>('plotEditor/copy');
 }
 
+export namespace PlotEditorOpenInBrowserNotification {
+
+    export const type = new NotificationType<void>('plotEditor/openInBrowser');
+}
+
 export namespace PlotEditorCloseNotification {
 
     export const type = new NotificationType<void>('plotEditor/close');
@@ -43,6 +48,29 @@ export namespace PlotEditorSetImageNotification {
     }
 
     export const type = new NotificationType<Params>('plotEditor/setImage');
+}
+
+export namespace PlotEditorSetContentNotification {
+
+    export interface Params {
+        kind: 'image' | 'html';
+        data?: string;
+        mimeType?: string;
+        uri?: string;
+        title?: string;
+    }
+
+    export const type = new NotificationType<Params>('plotEditor/setContent');
+}
+
+export namespace PlotEditorStatusNotification {
+
+    export interface Params {
+        message: string;
+        error: boolean;
+    }
+
+    export const type = new NotificationType<Params>('plotEditor/status');
 }
 
 export namespace PlotEditorRenderResultNotification {

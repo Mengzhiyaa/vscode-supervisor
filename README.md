@@ -18,6 +18,63 @@ extensions, such as `ark.vscode-ark`, depend on the public supervisor API
 defined here. The public compile-time surface is maintained in `src/api.d.ts`,
 which consumer repos copy into their own `src/types/` tree.
 
+### Notebook controller ownership
+
+`vscode-supervisor` owns notebook-mode runtime sessions and shared notebook
+surfaces, but it does **not** create a generic VS Code `NotebookController`.
+The language extension owns kernel selection and the complete cell execution
+lifecycle: it creates/finalizes `NotebookCellExecution`, handles cancellation,
+forwards code to `ILanguageRuntimeSession.execute`, projects
+`onDidReceiveRuntimeMessage` events into cell outputs, and supplies a stable
+`metadata.cellId` for every cell execution.
+
+The language extension must register that ownership before starting or
+restoring notebook sessions:
+
+```ts
+const ownership = supervisor.registerNotebookController(controller, ['r']);
+context.subscriptions.push(ownership, controller);
+```
+
+Notebook session creation/restoration fails explicitly when no controller is
+registered for the runtime language. Disposing the ownership registration only
+unregisters the boundary; the language extension remains responsible for
+disposing its controller.
+
+### Language-owned working directory
+
+Changing a working directory is language-specific. A runtime provider that
+supports it should implement `setWorkingDirectory(session, workingDirectory)`
+and use its language protocol or `session.execute()` to perform the change.
+The common Kallichore layer does not issue R `setwd()` calls.
+
+### Renderer bridge
+
+Outputs that need notebook renderer or preload logic can be integrated without
+private Positron workbench APIs:
+
+```ts
+const renderer = supervisor.registerRuntimeOutputRenderer({
+  id: 'example.bokeh',
+  mimeTypes: ['application/vnd.bokehjs_exec.v0+json'],
+  outputKinds: ['webview_preload'],
+  async render(output, context) {
+    return { target: 'plot', html: renderBokeh(output.data) };
+  },
+});
+context.subscriptions.push(renderer);
+```
+
+The renderer extension owns MIME interpretation and script/preload loading.
+Supervisor owns routing the resulting HTML or URI into Viewer or Plots.
+
+### Data Connections
+
+New drivers should use the current flat `DataConnectionDriver` contract and
+return object nodes with local `getChildren()` and `preview()` callbacks.
+Legacy `IDataConnectionDriver` registrations using numeric node handles remain
+supported through an adapter.
+
 `webview/` is also source-owned here now, so the supervisor UI can be rebuilt
 inside this repo without relying on parent-workspace artifacts.
 

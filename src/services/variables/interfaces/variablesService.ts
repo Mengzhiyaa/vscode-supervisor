@@ -122,9 +122,9 @@ export interface IPositronVariablesInstance extends vscode.Disposable {
     /** Current root variables, independent of grouping/filter presentation. */
     readonly variableItems: readonly VariablesTreeItem[];
 
-    requestRefresh(): void;
-    requestClear(includeHiddenVariables: boolean): void;
-    requestDelete(names: string[]): void;
+    requestRefresh(): Promise<void>;
+    requestClear(includeHiddenVariables: boolean): Promise<void>;
+    requestDelete(names: string[]): Promise<void>;
     expandVariableGroup(id: string): void;
     collapseVariableGroup(id: string): void;
     expandVariableItem(path: string[]): Promise<void>;

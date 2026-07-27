@@ -6,6 +6,8 @@ import {
 } from '../../services/connections/positronConnectionsService';
 import type { PositronConnectionsComm } from '../../runtime/comms/positronConnectionsComm';
 import {
+    DataConnectionNodeKind,
+    DataConnectionParameterType,
     DataConnectionProfileStore,
     DataConnectionsDriverManager,
 } from '../../services/connections/dataConnections';
@@ -137,9 +139,52 @@ suite('[Unit] Connections surface', () => {
             connect: async () => { throw new Error('not used'); },
         };
         const registration = manager.registerDriver(driver);
-        assert.strictEqual(manager.getDriver('duckdb'), driver);
+        assert.strictEqual(manager.getDriver('duckdb')?.name, 'DuckDB');
         registration.dispose();
         assert.strictEqual(manager.getDriver('duckdb'), undefined);
+        manager.dispose();
+    });
+
+    test('supports current Positron driver and node callback contracts', async () => {
+        const manager = new DataConnectionsDriverManager();
+        let previewed = false;
+        manager.registerDriver({
+            id: 'current-driver',
+            name: 'Current Driver',
+            description: 'Current Positron API',
+            iconSvg: '<svg/>',
+            supportedLanguageIds: ['python'],
+            mechanisms: [{
+                id: 'file',
+                label: 'File',
+                description: 'Open a database file',
+                parameters: [{
+                    id: 'path',
+                    label: 'Path',
+                    type: DataConnectionParameterType.File,
+                    required: true,
+                }],
+            }],
+            connect: async () => ({
+                isReadOnly: async () => true,
+                isConnected: async () => true,
+                disconnect: async () => undefined,
+                getChildren: async () => [{
+                    name: 'sales',
+                    kind: DataConnectionNodeKind.Table,
+                    preview: async () => { previewed = true; },
+                }],
+            }),
+        });
+
+        const summaries = manager.getDriverSummaries();
+        assert.deepStrictEqual(summaries.map(driver => driver.id), ['current-driver']);
+        const connection = await manager.connect('current-driver', 'file', { path: '/tmp/db' });
+        assert.strictEqual(await connection.isReadOnly(), true);
+        const nodes = await connection.getChildren();
+        assert.strictEqual(nodes[0].kind, DataConnectionNodeKind.Table);
+        await nodes[0].preview?.();
+        assert.strictEqual(previewed, true);
         manager.dispose();
     });
 

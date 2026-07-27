@@ -91,6 +91,7 @@ export interface MemoryUsageSnapshot {
     supervisorOverheadBytes?: number;
     extensionHostOverheadBytes: number;
     otherProcessesBytes: number;
+    collectionMethod: "process-tree" | "process-api";
     source: MemoryUsageSource;
     lowMemory?: LowMemoryStatus;
 }

@@ -1,5 +1,75 @@
 const ROOT_RELATIVE_ATTRIBUTE_PATTERN = /\b(src|href|action|poster)=(["'])\/([^"']+)\2/g;
 
+export const VIEWER_BRIDGE_PATH = '/.supervisor/viewer-bridge.js';
+
+export const VIEWER_BRIDGE_SCRIPT = String.raw`
+(() => {
+    const send = (id, data = {}) => window.parent.postMessage({ id, ...data }, '*');
+    const notifyLocation = () => send('supervisor-viewer-location', {
+        url: window.location.href,
+        title: document.title
+    });
+
+    window.addEventListener('message', event => {
+        const data = event.data || {};
+        if (data.id === 'supervisor-viewer-ping') {
+            send('supervisor-viewer-ready');
+        } else if (data.id === 'supervisor-viewer-focus') {
+            window.focus();
+        } else if (data.id === 'supervisor-viewer-find') {
+            window.getSelection()?.removeAllRanges();
+            const found = data.value
+                ? window.find(data.value, false, false, true, false, false, false)
+                : true;
+            send('supervisor-viewer-find-result', { found });
+        } else if (data.id === 'supervisor-viewer-find-next' && data.value) {
+            send('supervisor-viewer-find-result', {
+                found: window.find(data.value, false, false, true, false, false, false)
+            });
+        } else if (data.id === 'supervisor-viewer-find-previous' && data.value) {
+            send('supervisor-viewer-find-result', {
+                found: window.find(data.value, false, true, true, false, false, false)
+            });
+        }
+    });
+
+    document.addEventListener('click', event => {
+        const link = event.target instanceof Element ? event.target.closest('a[href]') : null;
+        if (!link || link.hasAttribute('download') || link.target === '_blank') {
+            return;
+        }
+        const href = link.href;
+        if (!href || href.startsWith('javascript:') || href.startsWith('mailto:')) {
+            return;
+        }
+        event.preventDefault();
+        send('supervisor-viewer-navigate', { url: href });
+    }, true);
+
+    window.addEventListener('keydown', event => {
+        if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 'f') {
+            event.preventDefault();
+            send('supervisor-viewer-show-find');
+        }
+    }, true);
+
+    for (const method of ['pushState', 'replaceState']) {
+        const original = history[method];
+        history[method] = function (...args) {
+            const result = original.apply(this, args);
+            queueMicrotask(notifyLocation);
+            return result;
+        };
+    }
+    window.addEventListener('popstate', notifyLocation);
+    window.addEventListener('hashchange', notifyLocation);
+    window.addEventListener('DOMContentLoaded', () => {
+        send('supervisor-viewer-ready');
+        notifyLocation();
+    }, { once: true });
+})();
+`;
+
 export function normalizeProxyPath(proxyPath: string): string {
     if (!proxyPath || proxyPath === '/') {
         return '/';
@@ -47,6 +117,19 @@ export function rewriteRootRelativeUrls(content: string, proxyPath: string): str
             return `${attribute}=${quote}${buildProxyPath(normalizedProxyPath, matchedPath)}${quote}`;
         }
     );
+}
+
+export function injectViewerBridge(content: string, proxyPath: string): string {
+    if (content.includes('data-supervisor-viewer-bridge')) {
+        return content;
+    }
+    const scriptPath = buildProxyPath(proxyPath, VIEWER_BRIDGE_PATH);
+    const script = `<script data-supervisor-viewer-bridge src="${scriptPath}"></script>`;
+    const bodyEnd = content.search(/<\/body\s*>/i);
+    if (bodyEnd >= 0) {
+        return `${content.slice(0, bodyEnd)}${script}${content.slice(bodyEnd)}`;
+    }
+    return `${content}${script}`;
 }
 
 export function rewriteProxyLocation(

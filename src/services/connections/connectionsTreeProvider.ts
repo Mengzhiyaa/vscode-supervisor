@@ -179,11 +179,11 @@ export class ConnectionsTreeProvider implements vscode.TreeDataProvider<Connecti
             return;
         }
         const driverPick = await vscode.window.showQuickPick(
-            drivers.map(driver => ({ label: driver.metadata.name, description: driver.metadata.description, driver })),
+            drivers.map(driver => ({ label: driver.name, description: driver.description, driver })),
             { title: 'New Data Connection', placeHolder: 'Select a connection provider' },
         );
         if (!driverPick) { return; }
-        const mechanisms = driverPick.driver.metadata.mechanisms;
+        const mechanisms = driverPick.driver.mechanisms;
         const mechanism = mechanisms.length === 1
             ? mechanisms[0]
             : (await vscode.window.showQuickPick(
@@ -197,10 +197,28 @@ export class ConnectionsTreeProvider implements vscode.TreeDataProvider<Connecti
             if (parameter.type === 'boolean') {
                 const selected = await vscode.window.showQuickPick(['Yes', 'No'], {
                     title: parameter.label,
-                    placeHolder: parameter.placeholder,
                 });
                 if (!selected && parameter.required) { return; }
                 parameterValues[parameter.id] = selected === 'Yes';
+                continue;
+            }
+            if (parameter.type === 'file') {
+                const selected = await vscode.window.showOpenDialog({
+                    title: parameter.label,
+                    canSelectFiles: true,
+                    canSelectFolders: false,
+                    canSelectMany: false,
+                    filters: parameter.filters
+                        ? Object.fromEntries(
+                            Object.entries(parameter.filters).map(([name, extensions]) => [
+                                name,
+                                [...extensions],
+                            ]),
+                        )
+                        : undefined,
+                });
+                if (!selected?.[0] && parameter.required) { return; }
+                if (selected?.[0]) { parameterValues[parameter.id] = selected[0].fsPath; }
                 continue;
             }
             if (parameter.type === 'option') {
@@ -215,8 +233,11 @@ export class ConnectionsTreeProvider implements vscode.TreeDataProvider<Connecti
             const value = await vscode.window.showInputBox({
                 title: parameter.label,
                 placeHolder: parameter.placeholder,
-                password: parameter.type === 'password' || parameter.secret === true,
-                value: parameter.defaultValue === undefined ? undefined : String(parameter.defaultValue),
+                password: parameter.type === 'password' ||
+                    ('secret' in parameter && parameter.secret === true),
+                value: 'defaultValue' in parameter && parameter.defaultValue !== undefined
+                    ? String(parameter.defaultValue)
+                    : undefined,
                 validateInput: input => parameter.required && !input ? `${parameter.label} is required.` : undefined,
             });
             if (value === undefined) { return; }
@@ -224,7 +245,7 @@ export class ConnectionsTreeProvider implements vscode.TreeDataProvider<Connecti
         }
         const connectionName = await vscode.window.showInputBox({
             title: 'Connection Name',
-            value: driverPick.driver.metadata.name,
+            value: driverPick.driver.name,
             validateInput: value => value.trim() ? undefined : 'A connection name is required.',
         });
         if (!connectionName) { return; }

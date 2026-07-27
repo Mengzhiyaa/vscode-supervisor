@@ -36,7 +36,7 @@ import { CommMsgRequest } from './jupyter/CommMsgRequest';
 import { SocketSession } from './ws/SocketSession';
 import { KernelOutputMessage } from './ws/KernelMessage';
 import { UICommRequest } from './UICommRequest';
-import { createUniqueId, delay, getAxiosErrorDiagnostics, summarizeError, summarizeAxiosError } from './util';
+import { createUniqueId, getAxiosErrorDiagnostics, summarizeError, summarizeAxiosError } from './util';
 import { AdoptedSession } from './AdoptedSession';
 import { DebugRequest } from './jupyter/DebugRequest';
 import { JupyterMessageType } from './jupyter/JupyterMessageType';
@@ -838,17 +838,27 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 			stop_on_error: errorBehavior === positron.RuntimeErrorBehavior.Stop,
 		};
 
-		if (codeLocation || executionMetadata) {
+		// cellId belongs to the Jupyter message envelope metadata. Ark uses this
+		// convention to associate notebook cell execution with breakpoint
+		// injection. All remaining fields are Positron execute extensions and
+		// therefore live directly under content.positron.
+		const { cellId, ...positronMetadata } = executionMetadata ?? {};
+
+		if (codeLocation || Object.keys(positronMetadata).length > 0) {
 			request.positron = {
 				...(codeLocation ? {
 					code_location: this._toJupyterPositronLocation(codeLocation),
 				} : {}),
-				...(executionMetadata ? { executionMetadata } : {}),
+				...positronMetadata,
 			};
 		}
 
 		// Create and send the execute request
-		const execute = new ExecuteRequest(id, request);
+		const execute = new ExecuteRequest(
+			id,
+			request,
+			typeof cellId === 'string' && cellId.length > 0 ? cellId : undefined,
+		);
 		this.sendRequest(execute).then((reply) => {
 			this.log(`Execution result: ${JSON.stringify(reply)}`, vscode.LogLevel.Debug);
 		}).catch((err) => {
@@ -1080,44 +1090,6 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 		const reply = new InputReplyCommand(this._activeBackendRequestHeader, value);
 		this.log(`Sending input reply for ${id}: ${value}`, vscode.LogLevel.Debug);
 		this.sendCommand(reply);
-	}
-
-	/**
-	 * Set the working directory for the kernel by executing `setwd()` and
-	 * polling the supervisor until the session metadata converges.
-	 *
-	 * @param workingDirectory The working directory to set
-	 */
-	async setWorkingDirectory(workingDirectory: string): Promise<void> {
-		const desiredDirectory = path.normalize(workingDirectory);
-		const requestId = `setwd-${createUniqueId()}`;
-		const code = `setwd(normalizePath(${JSON.stringify(workingDirectory)}, winslash = "/", mustWork = FALSE))`;
-
-		this.log(`Setting working directory to ${desiredDirectory}`, vscode.LogLevel.Info);
-		this.execute(
-			code,
-			requestId,
-			positron.RuntimeCodeExecutionMode.Silent,
-			positron.RuntimeErrorBehavior.Stop
-		);
-
-		await withTimeout(
-			(async () => {
-				for (;;) {
-					const response = await this._api.getSession(this.metadata.sessionId);
-					const currentDirectory = typeof response.data.working_directory === 'string'
-						? path.normalize(response.data.working_directory)
-						: undefined;
-					if (currentDirectory === desiredDirectory) {
-						this.dynState.currentWorkingDirectory = currentDirectory;
-						return;
-					}
-					await delay(100);
-				}
-			})(),
-			10000,
-			`Timed out waiting for working directory to change to ${desiredDirectory}`
-		);
 	}
 
 	/**

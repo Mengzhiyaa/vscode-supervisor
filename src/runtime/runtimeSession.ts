@@ -46,6 +46,11 @@ interface SessionStartOptions {
     hasConsole: boolean;
 }
 
+interface RuntimeStateWatchdog {
+    timer: ReturnType<typeof setTimeout>;
+    expectedStates: readonly RuntimeState[];
+}
+
 function getNotebookSessionMapKey(notebookUri: vscode.Uri): string {
     return notebookUri.toString();
 }
@@ -68,6 +73,8 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
     private readonly _activeSessionsBySessionId = new Map<string, ActiveRuntimeSession>();
     private readonly _sessionLifecycleDisposables = new Map<string, vscode.Disposable[]>();
     private readonly _runtimeProviders = new Map<string, ILanguageRuntimeProvider<any>>();
+    private readonly _notebookControllersByLanguageId =
+        new Map<string, Set<vscode.NotebookController>>();
     private readonly _defaultInstallationsByLanguageId = new Map<string, unknown>();
     private readonly _availableRuntimeMetadataByRuntimeId = new Map<string, LanguageRuntimeMetadata>();
     private readonly _installationsByRuntimeId = new Map<string, unknown>();
@@ -80,6 +87,7 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
     private readonly _shuttingDownNotebookSessionsByNotebookUri = new Map<string, Promise<void>>();
     private readonly _restoredSessionIds = new Set<string>();
     private readonly _restartingSessionPromises = new Map<string, Promise<void>>();
+    private readonly _stateWatchdogs = new Map<string, RuntimeStateWatchdog>();
     private readonly _encounteredLanguagesByLanguageId = new Set<string>();
     private readonly _deferredAutoStartDisposablesByRuntimeId = new Map<string, vscode.Disposable>();
     private readonly _disposables: vscode.Disposable[] = [];
@@ -175,6 +183,61 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
 
     registerRuntimeProvider<TInstallation>(provider: ILanguageRuntimeProvider<TInstallation>): void {
         this._runtimeProviders.set(provider.languageId, provider as ILanguageRuntimeProvider<any>);
+    }
+
+    registerNotebookController(
+        controller: vscode.NotebookController,
+        languageIds: readonly string[],
+    ): vscode.Disposable {
+        if (!controller.id.trim()) {
+            throw new Error('Notebook controller ownership requires a stable controller id.');
+        }
+        if (!controller.notebookType.trim()) {
+            throw new Error(
+                `Notebook controller '${controller.id}' must declare a notebook type.`,
+            );
+        }
+
+        const normalizedLanguageIds = Array.from(new Set(
+            languageIds.map(languageId => languageId.trim()).filter(Boolean),
+        ));
+        if (normalizedLanguageIds.length === 0) {
+            throw new Error(
+                `Notebook controller '${controller.id}' must own at least one language.`,
+            );
+        }
+
+        const supportedLanguages = controller.supportedLanguages?.filter(Boolean) ?? [];
+        if (
+            supportedLanguages.length > 0 &&
+            normalizedLanguageIds.some(languageId => !supportedLanguages.includes(languageId))
+        ) {
+            throw new Error(
+                `Notebook controller '${controller.id}' does not advertise every owned language.`,
+            );
+        }
+
+        for (const languageId of normalizedLanguageIds) {
+            const controllers = this._notebookControllersByLanguageId.get(languageId) ??
+                new Set<vscode.NotebookController>();
+            controllers.add(controller);
+            this._notebookControllersByLanguageId.set(languageId, controllers);
+        }
+
+        let disposed = false;
+        return new vscode.Disposable(() => {
+            if (disposed) {
+                return;
+            }
+            disposed = true;
+            for (const languageId of normalizedLanguageIds) {
+                const controllers = this._notebookControllersByLanguageId.get(languageId);
+                controllers?.delete(controller);
+                if (controllers?.size === 0) {
+                    this._notebookControllersByLanguageId.delete(languageId);
+                }
+            }
+        });
     }
 
     getRuntimeProvider<TInstallation = unknown>(languageId: string): ILanguageRuntimeProvider<TInstallation> | undefined {
@@ -497,6 +560,10 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
 
         const startPromise = (async () => {
             const runtimeEntry = this._requireRuntimeEntry(runtimeId);
+            this._assertNotebookControllerOwnership(
+                sessionMode,
+                runtimeEntry.metadata.languageId,
+            );
             const runningSessionId = this.validateRuntimeSessionStart(
                 sessionMode,
                 runtimeEntry.metadata,
@@ -651,6 +718,10 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
         kernelSpec: JupyterKernelSpec,
         dynState: LanguageRuntimeDynState,
     ): Promise<RuntimeSession> {
+        this._assertNotebookControllerOwnership(
+            sessionMetadata.sessionMode,
+            runtimeMetadata.languageId,
+        );
         const provider = this._requireRuntimeProvider(runtimeMetadata.languageId);
         const normalizedRuntimeMetadata = this._rememberRuntimeMetadata(runtimeMetadata);
         const normalizedSessionMetadata: IRuntimeSessionMetadata = {
@@ -660,7 +731,8 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
             createdTimestamp: sessionMetadata.createdTimestamp ?? Date.now(),
         };
 
-        return this._createRuntimeSession(
+        let session!: RuntimeSession;
+        session = this._createRuntimeSession(
             normalizedRuntimeMetadata,
             normalizedSessionMetadata,
             provider.lspFactory,
@@ -668,9 +740,13 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
                 localSupervisor: this._requireLocalSupervisor(),
                 kernelSpec,
                 kernelExtra: createJupyterKernelExtra(),
+                setWorkingDirectory: provider.setWorkingDirectory
+                    ? workingDirectory => provider.setWorkingDirectory!(session, workingDirectory)
+                    : undefined,
                 dynState,
             },
         );
+        return session;
     }
 
     async restoreSession(
@@ -678,6 +754,10 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
         sessionMetadata: IRuntimeSessionMetadata,
         dynState: LanguageRuntimeDynState,
     ): Promise<RuntimeSession> {
+        this._assertNotebookControllerOwnership(
+            sessionMetadata.sessionMode,
+            runtimeMetadata.languageId,
+        );
         const provider = this._requireRuntimeProvider(runtimeMetadata.languageId);
         const normalizedRuntimeMetadata = this._rememberRuntimeMetadata(runtimeMetadata);
         const normalizedSessionMetadata: IRuntimeSessionMetadata = {
@@ -687,15 +767,20 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
             createdTimestamp: sessionMetadata.createdTimestamp ?? Date.now(),
         };
 
-        return this._createRuntimeSession(
+        let session!: RuntimeSession;
+        session = this._createRuntimeSession(
             normalizedRuntimeMetadata,
             normalizedSessionMetadata,
             provider.lspFactory,
             {
                 localSupervisor: this._requireLocalSupervisor(),
+                setWorkingDirectory: provider.setWorkingDirectory
+                    ? workingDirectory => provider.setWorkingDirectory!(session, workingDirectory)
+                    : undefined,
                 dynState,
             },
         );
+        return session;
     }
 
     async validateSession(sessionId: string): Promise<boolean> {
@@ -788,6 +873,10 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
         activate: boolean,
         workingDirectory?: string,
     ): Promise<RuntimeSession> {
+        this._assertNotebookControllerOwnership(
+            metadata.sessionMode,
+            runtimeMetadata.languageId,
+        );
         const existingSession = this._sessions.get(metadata.sessionId);
         if (existingSession) {
             await this._startExistingSession(existingSession.sessionId, {
@@ -823,6 +912,23 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
         );
 
         return session;
+    }
+
+    private _assertNotebookControllerOwnership(
+        sessionMode: LanguageRuntimeSessionMode,
+        languageId: string,
+    ): void {
+        if (sessionMode !== LanguageRuntimeSessionMode.Notebook) {
+            return;
+        }
+        if ((this._notebookControllersByLanguageId.get(languageId)?.size ?? 0) > 0) {
+            return;
+        }
+
+        throw new Error(
+            `Cannot start or restore a notebook session for '${languageId}': ` +
+            'no language extension has registered ownership of a VS Code NotebookController.',
+        );
     }
 
     hasStartingOrRunningConsole(languageId?: string): boolean {
@@ -868,6 +974,15 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
         }
 
         await session.interrupt();
+    }
+
+    async forceQuitSession(sessionId: string): Promise<void> {
+        const session = this._sessions.get(sessionId);
+        if (!session) {
+            throw new Error(`Session ${sessionId} not found`);
+        }
+        this._clearStateWatchdog(sessionId);
+        await session.forceQuit();
     }
 
     async deleteSession(sessionId: string): Promise<boolean> {
@@ -1119,6 +1234,9 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
             this._shuttingDownNotebookSessionsByNotebookUri.clear();
             this._restoredSessionIds.clear();
             this._restartingSessionPromises.clear();
+            for (const sessionId of this._stateWatchdogs.keys()) {
+                this._clearStateWatchdog(sessionId);
+            }
 
             for (const disposable of this._deferredAutoStartDisposablesByRuntimeId.values()) {
                 disposable.dispose();
@@ -1667,7 +1785,8 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
 
         this.registerDiscoveredRuntime(provider.languageId, installation, normalizedRuntimeMetadata);
 
-        return this._createRuntimeSession(
+        let session!: RuntimeSession;
+        session = this._createRuntimeSession(
             normalizedRuntimeMetadata,
             normalizedSessionMetadata,
             provider.lspFactory,
@@ -1675,6 +1794,9 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
                 localSupervisor: this._requireLocalSupervisor(),
                 kernelSpec,
                 kernelExtra: createJupyterKernelExtra(),
+                setWorkingDirectory: provider.setWorkingDirectory
+                    ? workingDirectory => provider.setWorkingDirectory!(session, workingDirectory)
+                    : undefined,
                 dynState: dynState ?? {
                     sessionName: normalizedSessionMetadata.sessionName,
                     inputPrompt: '>',
@@ -1685,6 +1807,7 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
                 },
             },
         );
+        return session;
     }
 
     private _createRestoredRuntimeSession(
@@ -1707,15 +1830,20 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
             currentNotebookUri: normalizedSessionMetadata.notebookUri,
         };
 
-        return this._createRuntimeSession(
+        let session!: RuntimeSession;
+        session = this._createRuntimeSession(
             normalizedRuntimeMetadata,
             normalizedSessionMetadata,
             provider.lspFactory,
             {
                 localSupervisor: this._requireLocalSupervisor(),
+                setWorkingDirectory: provider.setWorkingDirectory
+                    ? workingDirectory => provider.setWorkingDirectory!(session, workingDirectory)
+                    : undefined,
                 dynState,
             },
         );
+        return session;
     }
 
     private _createRuntimeSession(
@@ -1963,6 +2091,7 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
     ): void {
         const oldState = activeSession.state;
         activeSession.state = state;
+        this._clearStateWatchdog(session.sessionId);
 
         this._onDidChangeSessionState.fire({
             sessionId: session.sessionId,
@@ -1989,6 +2118,82 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
 
         if (state === RuntimeState.Exited) {
             this.updateSessionMapsAfterExit(session);
+        } else {
+            this._startStateWatchdog(session, state);
+        }
+    }
+
+    private _startStateWatchdog(session: RuntimeSession, state: RuntimeState): void {
+        let timeoutMs: number | undefined;
+        let expectedStates: readonly RuntimeState[] | undefined;
+        let operation: string | undefined;
+
+        switch (state) {
+            case RuntimeState.Interrupting:
+                timeoutMs = 10_000;
+                expectedStates = [RuntimeState.Idle, RuntimeState.Ready];
+                operation = 'interrupt';
+                break;
+            case RuntimeState.Exiting:
+                timeoutMs = 10_000;
+                expectedStates = [RuntimeState.Exited];
+                operation = 'shut down';
+                break;
+            case RuntimeState.Offline:
+                timeoutMs = 30_000;
+                expectedStates = [RuntimeState.Ready, RuntimeState.Idle];
+                operation = 'reconnect';
+                break;
+            default:
+                return;
+        }
+
+        const timer = setTimeout(() => {
+            const watchdog = this._stateWatchdogs.get(session.sessionId);
+            if (!watchdog || watchdog.timer !== timer) {
+                return;
+            }
+            this._stateWatchdogs.delete(session.sessionId);
+            if (watchdog.expectedStates.includes(session.state)) {
+                return;
+            }
+            void this._promptToForceQuitUnresponsiveSession(session, operation!);
+        }, timeoutMs);
+        this._stateWatchdogs.set(session.sessionId, { timer, expectedStates });
+    }
+
+    private _clearStateWatchdog(sessionId: string): void {
+        const watchdog = this._stateWatchdogs.get(sessionId);
+        if (!watchdog) {
+            return;
+        }
+        clearTimeout(watchdog.timer);
+        this._stateWatchdogs.delete(sessionId);
+    }
+
+    private async _promptToForceQuitUnresponsiveSession(
+        session: RuntimeSession,
+        operation: string,
+    ): Promise<void> {
+        const choice = await vscode.window.showWarningMessage(
+            `${session.runtimeMetadata.runtimeName} did not ${operation} in time.`,
+            { modal: true },
+            'Force Quit',
+            'Wait',
+        );
+        if (choice !== 'Force Quit' || session.state === RuntimeState.Exited) {
+            return;
+        }
+
+        try {
+            await this.forceQuitSession(session.sessionId);
+        } catch (error) {
+            this._outputChannel.error(
+                `[RuntimeSession] Failed to force quit ${session.sessionId}: ${error}`,
+            );
+            void vscode.window.showErrorMessage(
+                `Failed to force quit ${session.runtimeMetadata.runtimeName}. See the Supervisor log for details.`,
+            );
         }
     }
 
@@ -2120,6 +2325,7 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
     }
 
     private _disposeSessionLifecycleDisposables(sessionId: string): void {
+        this._clearStateWatchdog(sessionId);
         const sessionDisposables = this._sessionLifecycleDisposables.get(sessionId);
         if (sessionDisposables) {
             for (const disposable of sessionDisposables) {

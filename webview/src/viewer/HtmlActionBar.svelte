@@ -17,6 +17,7 @@
         onclear?: () => void;
         defaultOpenTarget?: ViewerOpenTarget;
         onopen?: (target: ViewerOpenTarget) => void;
+        onfind?: () => void;
     }
 
     let {
@@ -25,6 +26,7 @@
         onclear,
         defaultOpenTarget = 'browser',
         onopen,
+        onfind,
     }: Props = $props();
 
 </script>
@@ -48,6 +50,12 @@
                 ariaLabel={localize('viewer.reloadContent', 'Reload the content')}
                 tooltip={localize('viewer.reloadContent', 'Reload the content')}
                 onclick={onreload}
+            />
+            <ActionBarButton
+                icon="search"
+                ariaLabel={localize('viewer.find', 'Find in preview')}
+                tooltip={localize('viewer.find', 'Find in preview')}
+                onclick={onfind}
             />
             <ViewerOpenMenuButton defaultTarget={defaultOpenTarget} {onopen} />
             <ActionBarSeparator />

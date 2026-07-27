@@ -1,7 +1,10 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
 import { LanguageRuntimeSessionMode } from '../../api';
-import { RuntimeClientState } from '../../services/variables/interfaces/variablesService';
+import {
+    PositronVariablesSorting,
+    RuntimeClientState,
+} from '../../services/variables/interfaces/variablesService';
 import { PositronVariablesInstance } from '../../services/variables/variablesInstance';
 import { PositronVariablesService } from '../../services/variables/variablesService';
 
@@ -31,6 +34,35 @@ function logStub(): vscode.LogOutputChannel {
 }
 
 suite('[Unit] variables lifecycle', () => {
+    test('uses Positron decimal size-group boundaries and ordering', () => {
+        const instance = Object.create(
+            PositronVariablesInstance.prototype,
+        ) as PositronVariablesInstance;
+        Object.assign(instance as any, {
+            _collapsedGroupIds: new Set<string>(),
+            _sorting: PositronVariablesSorting.Name,
+        });
+        const items = [
+            { id: 'small', displayName: 'small', size: 999 },
+            { id: 'medium', displayName: 'medium', size: 1_000 },
+            { id: 'large', displayName: 'large', size: 10_000 },
+            { id: 'very-large', displayName: 'very-large', size: 1_000_000 },
+        ];
+
+        const groups = (instance as any).groupBySize(items);
+
+        assert.deepStrictEqual(groups.map((group: any) => group.title), [
+            'Small',
+            'Medium',
+            'Large',
+            'Very Large',
+        ]);
+        assert.deepStrictEqual(
+            groups.map((group: any) => group.variableItems[0].id),
+            ['small', 'medium', 'large', 'very-large'],
+        );
+    });
+
     test('rebinds the model through a full detach and attach sequence', () => {
         const oldSession = { sessionId: 'session-1' } as any;
         const newSession = { sessionId: 'session-1' } as any;

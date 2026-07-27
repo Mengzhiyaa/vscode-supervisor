@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import type { IDataConnectionDriver } from '../../api';
 import { RuntimeClientState, RuntimeClientType } from '../../internal/runtimeTypes';
 import type { RuntimeClientInstance } from '../../runtime/RuntimeClientInstance';
 import type { RuntimeClientManager } from '../../runtime/runtimeClientManager';
@@ -18,7 +19,8 @@ import {
     SurfaceSourceKind,
 } from '../surfaces/surfaceLifecycleService';
 import {
-    DataConnectionHandle,
+    DataConnection,
+    DataConnectionNode,
     DataConnectionProfile,
     DataConnectionProfileStore,
     DataConnectionsDriverManager,
@@ -28,7 +30,7 @@ import {
 
 export interface ConnectionPathEntry extends ConnectionObjectSchema {
     readonly dtype?: string;
-    readonly nodeHandle?: number;
+    readonly dataConnectionNode?: DataConnectionNode;
 }
 
 export interface PositronConnectionNode extends ConnectionPathEntry {
@@ -168,13 +170,13 @@ class ProfileConnectionInstance implements IConnectionInstance {
     constructor(
         readonly profile: DataConnectionProfile,
         readonly driver: DataConnectionDriver,
-        private readonly _handle: DataConnectionHandle,
+        private readonly _handle: DataConnection,
     ) {
         this.clientId = profile.id;
         this.metadata = {
             name: profile.connectionName,
-            language_id: driver.metadata.supportedLanguageIds?.[0] ?? 'unknown',
-            type: driver.metadata.name,
+            language_id: driver.supportedLanguageIds[0] ?? 'unknown',
+            type: driver.name,
             host: typeof profile.parameterValues.host === 'string' ? profile.parameterValues.host : undefined,
         };
     }
@@ -184,33 +186,33 @@ class ProfileConnectionInstance implements IConnectionInstance {
 
     async getChildren(path: readonly ConnectionPathEntry[] = []): Promise<readonly PositronConnectionNode[]> {
         const parent = path.at(-1);
-        const children = parent?.nodeHandle === undefined
+        const children = parent?.dataConnectionNode === undefined
             ? await this._handle.getChildren()
-            : await this._handle.nodeGetChildren(parent.nodeHandle);
+            : await parent.dataConnectionNode.getChildren?.() ?? [];
         return children.map(child => {
             const entry: ConnectionPathEntry = {
                 name: child.name,
                 kind: child.kind,
-                dtype: child.dtype,
-                has_children: child.hasChildren,
-                nodeHandle: child.handle,
+                dtype: child.dataType,
+                has_children: !!child.getChildren,
+                dataConnectionNode: child,
             };
             const childPath = [...path, entry];
             return {
                 ...entry,
                 id: childPath.map(item => `${item.kind}:${item.name}`).join('/'),
                 path: childPath,
-                containsData: child.containsData ?? false,
+                containsData: !!child.preview,
             };
         });
     }
 
     async preview(path: readonly ConnectionPathEntry[]): Promise<void> {
-        const nodeHandle = path.at(-1)?.nodeHandle;
-        if (nodeHandle === undefined) {
+        const node = path.at(-1)?.dataConnectionNode;
+        if (!node?.preview) {
             throw new Error('The selected connection node cannot be previewed.');
         }
-        await this._handle.nodePreview(nodeHandle);
+        await node.preview();
     }
 
     refresh(): void { this._onDidChange.fire(); }
@@ -224,7 +226,8 @@ class ProfileConnectionInstance implements IConnectionInstance {
 
     dispose(): void {
         this._active = false;
-        this._handle.dispose();
+        const disposable = this._handle as DataConnection & Partial<vscode.Disposable>;
+        disposable.dispose?.();
         this._onDidChange.dispose();
         this._onDidFocus.dispose();
     }
@@ -316,7 +319,7 @@ export class PositronConnectionsService implements vscode.Disposable {
         return this._instances.get(id);
     }
 
-    registerDriver(driver: DataConnectionDriver): vscode.Disposable {
+    registerDriver(driver: DataConnectionDriver | IDataConnectionDriver): vscode.Disposable {
         return this.driverManager.registerDriver(driver);
     }
 

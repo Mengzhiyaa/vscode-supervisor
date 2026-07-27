@@ -7,6 +7,10 @@ import {
     type PackageSpec,
     RuntimeState,
 } from '../../api';
+import {
+    type CachedPackageMetadata,
+    PackageMetadataCache,
+} from './packageMetadataCache';
 
 function isCancellationError(error: unknown): boolean {
     return error instanceof vscode.CancellationError ||
@@ -21,7 +25,7 @@ function throwIfCancellationRequested(token?: vscode.CancellationToken): void {
 
 export class PositronPackagesInstance implements IPositronPackagesInstance, vscode.Disposable {
     private _packages: LanguageRuntimePackage[] = [];
-    private readonly _metadataCache = new Map<string, Partial<LanguageRuntimePackage>>();
+    private readonly _metadataCache = new Map<string, CachedPackageMetadata>();
     private _metadataTokenSource: vscode.CancellationTokenSource | undefined;
     private readonly _runtimeDisposables: vscode.Disposable[] = [];
     private readonly _disposables: vscode.Disposable[] = [];
@@ -37,6 +41,7 @@ export class PositronPackagesInstance implements IPositronPackagesInstance, vsco
         private _session: ILanguageRuntimeSession,
         private _packageManager: ILanguageRuntimePackageManager,
         private readonly _outputChannel: vscode.LogOutputChannel,
+        private readonly _persistedMetadataCache: PackageMetadataCache,
     ) {
         this._disposables.push(
             this._onDidRefreshPackagesInstance,
@@ -46,6 +51,7 @@ export class PositronPackagesInstance implements IPositronPackagesInstance, vsco
             this._onDidChangeUpdateState,
             this._onDidChangeUpdateAllState,
         );
+        this._loadPersistedMetadata();
         this.attachRuntime();
     }
 
@@ -59,7 +65,13 @@ export class PositronPackagesInstance implements IPositronPackagesInstance, vsco
     get packages(): LanguageRuntimePackage[] {
         return this._packages.map(pkg => {
             const metadata = this._metadataCache.get(pkg.name.toLowerCase());
-            return metadata ? { ...pkg, ...metadata } : pkg;
+            return metadata?.version === pkg.version
+                ? {
+                    ...pkg,
+                    outdated: metadata.outdated,
+                    latestVersion: metadata.latestVersion,
+                }
+                : pkg;
         });
     }
 
@@ -73,6 +85,9 @@ export class PositronPackagesInstance implements IPositronPackagesInstance, vsco
     ): void {
         this._session = session;
         this._packageManager = packageManager;
+        this._metadataTokenSource?.cancel();
+        this._metadataCache.clear();
+        this._loadPersistedMetadata();
         this.attachRuntime();
     }
 
@@ -95,7 +110,7 @@ export class PositronPackagesInstance implements IPositronPackagesInstance, vsco
 
         this._metadataTokenSource?.cancel();
         this._metadataCache.clear();
-        await this._fetchAndMergeMetadata(token);
+        await this._fetchAndMergeMetadata(token, true);
     }
 
     async installPackages(packages: PackageSpec[], token?: vscode.CancellationToken): Promise<void> {
@@ -145,6 +160,7 @@ export class PositronPackagesInstance implements IPositronPackagesInstance, vsco
             throwIfCancellationRequested(token);
             this._metadataTokenSource?.cancel();
             this._metadataCache.clear();
+            this._persistedMetadataCache.clear(this._runtimeId);
             await this._refreshPackagesInternal(token);
         } finally {
             this._onDidChangeUpdateAllState.fire(false);
@@ -210,7 +226,8 @@ export class PositronPackagesInstance implements IPositronPackagesInstance, vsco
         this._onDidRefreshPackagesInstance.fire(this.packages);
 
         if (this._packageManager.getPackageMetadata && this._packages.length > 0) {
-            void this._fetchAndMergeMetadata().catch(error => {
+            const fetchAll = !this._persistedMetadataCache.isFresh(this._runtimeId);
+            void this._fetchAndMergeMetadata(undefined, fetchAll).catch(error => {
                 if (!isCancellationError(error)) {
                     this._outputChannel.warn(`[Packages] Failed to fetch package metadata: ${error}`);
                 }
@@ -218,7 +235,10 @@ export class PositronPackagesInstance implements IPositronPackagesInstance, vsco
         }
     }
 
-    private async _fetchAndMergeMetadata(externalToken?: vscode.CancellationToken): Promise<void> {
+    private async _fetchAndMergeMetadata(
+        externalToken?: vscode.CancellationToken,
+        fetchAll = false,
+    ): Promise<void> {
         if (!this._packageManager.getPackageMetadata) {
             return;
         }
@@ -232,9 +252,12 @@ export class PositronPackagesInstance implements IPositronPackagesInstance, vsco
         if (externalToken?.isCancellationRequested) {
             tokenSource.cancel();
         }
-        const uncachedPackages = this._packages.filter(pkg =>
-            !this._metadataCache.has(pkg.name.toLowerCase())
-        );
+        const uncachedPackages = fetchAll
+            ? this._packages
+            : this._packages.filter(pkg => {
+                const metadata = this._metadataCache.get(pkg.name.toLowerCase());
+                return metadata?.version !== pkg.version;
+            });
 
         if (uncachedPackages.length === 0) {
             this._onDidRefreshPackagesInstance.fire(this.packages);
@@ -256,10 +279,26 @@ export class PositronPackagesInstance implements IPositronPackagesInstance, vsco
                 return;
             }
 
+            const versionByName = new Map(
+                this._packages.map(pkg => [pkg.name.toLowerCase(), pkg.version]),
+            );
             for (const [name, packageMetadata] of metadata) {
-                this._metadataCache.set(name.toLowerCase(), packageMetadata);
+                const key = name.toLowerCase();
+                const version = versionByName.get(key);
+                if (version === undefined) {
+                    continue;
+                }
+                this._metadataCache.set(key, {
+                    version,
+                    outdated: packageMetadata.outdated,
+                    latestVersion: packageMetadata.latestVersion,
+                });
             }
 
+            this._persistedMetadataCache.upsert(
+                this._runtimeId,
+                this._snapshotForPersist(),
+            );
             this._onDidRefreshPackagesInstance.fire(this.packages);
         } finally {
             externalDisposable?.dispose();
@@ -279,5 +318,32 @@ export class PositronPackagesInstance implements IPositronPackagesInstance, vsco
         for (const name of packageNames) {
             this._metadataCache.delete(name.toLowerCase());
         }
+        this._persistedMetadataCache.evict(this._runtimeId, packageNames);
+    }
+
+    private get _runtimeId(): string {
+        return this._session.runtimeMetadata.runtimeId;
+    }
+
+    private _loadPersistedMetadata(): void {
+        const environment = this._persistedMetadataCache.get(this._runtimeId);
+        if (!environment) {
+            return;
+        }
+        for (const [name, metadata] of Object.entries(environment.packages)) {
+            this._metadataCache.set(name, metadata);
+        }
+    }
+
+    private _snapshotForPersist(): Record<string, CachedPackageMetadata> {
+        const snapshot: Record<string, CachedPackageMetadata> = {};
+        for (const pkg of this._packages) {
+            const key = pkg.name.toLowerCase();
+            const metadata = this._metadataCache.get(key);
+            if (metadata?.version === pkg.version) {
+                snapshot[key] = metadata;
+            }
+        }
+        return snapshot;
     }
 }

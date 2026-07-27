@@ -20,6 +20,10 @@ import { KallichoreApiInstance, KallichoreTransport } from './KallichoreApiInsta
 import { KallichoreInstances } from './KallichoreInstances';
 import { DapComm } from './DapComm';
 import { HandshakeSocket } from './HandshakeSocket';
+import {
+	extensionHostEphemeralState,
+	type EphemeralMemento,
+} from '../runtime/ephemeralState';
 
 export const KALLICHORE_STATE_KEY = 'positron-supervisor.v2';
 const HANDSHAKE_SOCKET_ENV_VAR = 'POSITRON_SUPERVISOR_HANDSHAKE_SOCKET';
@@ -73,6 +77,57 @@ export function isServerIdentityStale(
 	liveServerId: string | undefined,
 ): boolean {
 	return !!savedServerId && !!liveServerId && savedServerId !== liveServerId;
+}
+
+/** Returns whether the supervisor process is owned by this application. */
+export function sharesApplicationLifetime(
+	uiKind: vscode.UIKind,
+	shutdownTimeout: string,
+): boolean {
+	if (uiKind === vscode.UIKind.Web) {
+		return false;
+	}
+	return shutdownTimeout === 'immediately';
+}
+
+/**
+ * Returns whether reconnect state must survive a future application launch.
+ * "when idle" is intentionally not a reconnect target: it only remains alive
+ * long enough to finish in-flight work.
+ */
+export function isReconnectTarget(
+	uiKind: vscode.UIKind,
+	shutdownTimeout: string,
+): boolean {
+	if (uiKind === vscode.UIKind.Web) {
+		return true;
+	}
+	return shutdownTimeout !== 'immediately' && shutdownTimeout !== 'when idle';
+}
+
+/** Writes reconnect state to exactly one lifetime-appropriate storage tier. */
+export async function saveServerStateToTier(
+	useEphemeral: boolean,
+	ephemeralState: Pick<vscode.Memento, 'update'>,
+	persistentState: Pick<vscode.Memento, 'update'>,
+	state: KallichoreServerState | undefined,
+): Promise<void> {
+	if (useEphemeral) {
+		await ephemeralState.update(KALLICHORE_STATE_KEY, state);
+		await persistentState.update(KALLICHORE_STATE_KEY, undefined);
+	} else {
+		await persistentState.update(KALLICHORE_STATE_KEY, state);
+		await ephemeralState.update(KALLICHORE_STATE_KEY, undefined);
+	}
+}
+
+/** Selects the preferred tier, with fallback for configuration migration. */
+export function selectServerState(
+	useEphemeral: boolean,
+	ephemeral: KallichoreServerState | undefined,
+	persistent: KallichoreServerState | undefined,
+): KallichoreServerState | undefined {
+	return useEphemeral ? (ephemeral ?? persistent) : (persistent ?? ephemeral);
 }
 
 export class KCApi implements PositronSupervisorApi {
@@ -137,7 +192,9 @@ export class KCApi implements PositronSupervisorApi {
 		private readonly _context: vscode.ExtensionContext,
 		private readonly _log: vscode.LogOutputChannel,
 		private readonly _transport: KallichoreTransport,
-		private readonly _reconnect: boolean) {
+		private readonly _reconnect: boolean,
+		private readonly _ephemeralState: EphemeralMemento =
+			extensionHostEphemeralState) {
 
 		this._api = new KallichoreApiInstance(_transport);
 
@@ -167,13 +224,16 @@ export class KCApi implements PositronSupervisorApi {
 		// Listen for changes to the idle shutdown hours config setting; if the
 		// server is running, apply the change immediately
 		if (vscode.env.uiKind === vscode.UIKind.Desktop) {
-			const configListener = vscode.workspace.onDidChangeConfiguration((event) => {
+			const configListener = vscode.workspace.onDidChangeConfiguration(async (event) => {
 				if (event.affectsConfiguration('kernelSupervisor.shutdownTimeout')) {
 					if (this._started.isOpen()) {
 						this.log(
 							'Updating server configuration with new shutdown timeout: ' +
 							this.getShutdownHours(), vscode.LogLevel.Debug);
 						this.updateIdleTimeout();
+						if (this._reconnect) {
+							await this.migrateServerState();
+						}
 					}
 				}
 			});
@@ -348,7 +408,7 @@ export class KCApi implements PositronSupervisorApi {
 		// Check to see if there's a server already running for this workspace,
 		// if reconnect is permitted.
 		const serverState = this._reconnect ?
-			this.loadServerState() :
+			await this.loadServerState() :
 			undefined;
 
 		// If there is, and we can reconnect to it, do so
@@ -786,7 +846,12 @@ export class KCApi implements PositronSupervisorApi {
 	 * @param state The server state to save, or undefined to clear the saved state.
 	 */
 	private async saveServerState(state: KallichoreServerState | undefined): Promise<void> {
-		await this._context.workspaceState.update(KALLICHORE_STATE_KEY, state);
+		await saveServerStateToTier(
+			this.useEphemeralState(),
+			this._ephemeralState,
+			this._context.workspaceState,
+			state,
+		);
 	}
 
 	/**
@@ -794,8 +859,25 @@ export class KCApi implements PositronSupervisorApi {
 	 *
 	 * @returns The saved server state, or undefined if not found.
 	 */
-	private loadServerState(): KallichoreServerState | undefined {
-		return this._context.workspaceState.get<KallichoreServerState>(KALLICHORE_STATE_KEY);
+	private async loadServerState(): Promise<KallichoreServerState | undefined> {
+		const ephemeral =
+			this._ephemeralState.get<KallichoreServerState>(KALLICHORE_STATE_KEY);
+		const persistent =
+			this._context.workspaceState.get<KallichoreServerState>(KALLICHORE_STATE_KEY);
+		return selectServerState(this.useEphemeralState(), ephemeral, persistent);
+	}
+
+	private useEphemeralState(): boolean {
+		const config = vscode.workspace.getConfiguration('kernelSupervisor');
+		const shutdownTimeout = config.get<string>('shutdownTimeout', 'immediately');
+		return !isReconnectTarget(vscode.env.uiKind, shutdownTimeout);
+	}
+
+	private async migrateServerState(): Promise<void> {
+		const state = await this.loadServerState();
+		if (state) {
+			await this.saveServerState(state);
+		}
 	}
 
 	/***

@@ -269,13 +269,13 @@
 					 * @param e The keyboard event.
 					 * @return A value which indicates whether the KeyboardEvent is ctrl or meta.
 					 */
-					const isAltCtrlOrMeta = (e) => e.altKey || e.ctrlKey || e.metaKey;
+						const isCtrlOrMeta = e.ctrlKey || e.metaKey;
 
-					// Rope off select all (65: keyCode of "A").
-					if (isAltCtrlOrMeta && e.keyCode === 65) {
-						e.preventDefault();
-						return;
-					}
+						// The parent owns the find widget, including when the
+						// document iframe currently has keyboard focus.
+						if (isCtrlOrMeta && !e.altKey && e.code === "KeyF") {
+							e.preventDefault();
+						}
 
 					// Post the positron-help-keydown message.
 					window.parent.postMessage(

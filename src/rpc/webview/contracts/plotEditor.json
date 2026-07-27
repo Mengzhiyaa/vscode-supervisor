@@ -52,6 +52,12 @@
     },
     {
       "kind": "notification",
+      "name": "PlotEditorOpenInBrowserNotification",
+      "method": "plotEditor/openInBrowser",
+      "paramsType": "void"
+    },
+    {
+      "kind": "notification",
       "name": "PlotEditorCloseNotification",
       "method": "plotEditor/close",
       "paramsType": "void"
@@ -69,6 +75,66 @@
             {
               "name": "data",
               "type": "string"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "PlotEditorSetContentNotification",
+      "method": "plotEditor/setContent",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "kind",
+              "type": "'image' | 'html'"
+            },
+            {
+              "name": "data",
+              "optional": true,
+              "type": "string"
+            },
+            {
+              "name": "mimeType",
+              "optional": true,
+              "type": "string"
+            },
+            {
+              "name": "uri",
+              "optional": true,
+              "type": "string"
+            },
+            {
+              "name": "title",
+              "optional": true,
+              "type": "string"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "PlotEditorStatusNotification",
+      "method": "plotEditor/status",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "message",
+              "type": "string"
+            },
+            {
+              "name": "error",
+              "type": "boolean"
             }
           ]
         }

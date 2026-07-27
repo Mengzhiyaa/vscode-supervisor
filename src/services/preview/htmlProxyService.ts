@@ -14,9 +14,12 @@ import {
     buildWebSocketTargetUrl,
     buildProxyPath,
     isHtmlContentType,
+    injectViewerBridge,
     normalizeProxyPath,
     rewriteProxyLocation,
     rewriteRootRelativeUrls,
+    VIEWER_BRIDGE_PATH,
+    VIEWER_BRIDGE_SCRIPT,
 } from './htmlProxyUtils';
 
 interface BaseProxyServerInfo {
@@ -176,6 +179,10 @@ export class HtmlProxyService implements vscode.Disposable {
             }
 
             const url = new URL(req.url || '/', info.baseUrl);
+            if (url.pathname.endsWith(VIEWER_BRIDGE_PATH)) {
+                this._writeViewerBridge(req, res);
+                return;
+            }
             let requestPath = decodeURIComponent(url.pathname);
             if (requestPath.startsWith('/')) {
                 requestPath = requestPath.slice(1);
@@ -208,7 +215,10 @@ export class HtmlProxyService implements vscode.Disposable {
             const contentType = this._getContentType(filePath);
             if (isHtmlContentType(contentType)) {
                 const content = await fs.readFile(filePath, 'utf8');
-                const rewritten = rewriteRootRelativeUrls(content, info.proxyPath);
+                const rewritten = injectViewerBridge(
+                    rewriteRootRelativeUrls(content, info.proxyPath),
+                    info.proxyPath,
+                );
                 const body = Buffer.from(rewritten, 'utf8');
                 res.writeHead(200, {
                     'Content-Type': 'text/html; charset=utf-8',
@@ -248,6 +258,10 @@ export class HtmlProxyService implements vscode.Disposable {
     ): Promise<void> {
         try {
             const requestUrl = new URL(req.url || '/', info.targetOrigin);
+            if (requestUrl.pathname.endsWith(VIEWER_BRIDGE_PATH)) {
+                this._writeViewerBridge(req, res);
+                return;
+            }
             const transport = requestUrl.protocol === 'https:' ? https : http;
             const headers: http.OutgoingHttpHeaders = {
                 ...req.headers,
@@ -334,9 +348,12 @@ export class HtmlProxyService implements vscode.Disposable {
         });
 
         upstreamResponse.on('end', () => {
-            const rewritten = rewriteRootRelativeUrls(
-                Buffer.concat(chunks).toString('utf8'),
-                info.proxyPath
+            const rewritten = injectViewerBridge(
+                rewriteRootRelativeUrls(
+                    Buffer.concat(chunks).toString('utf8'),
+                    info.proxyPath,
+                ),
+                info.proxyPath,
             );
             const body = Buffer.from(rewritten, 'utf8');
 
@@ -505,6 +522,19 @@ export class HtmlProxyService implements vscode.Disposable {
             query: parsed.search.startsWith('?') ? parsed.search.slice(1) : parsed.search,
             fragment: parsed.hash.startsWith('#') ? parsed.hash.slice(1) : parsed.hash,
         });
+    }
+
+    private _writeViewerBridge(
+        req: http.IncomingMessage,
+        res: http.ServerResponse,
+    ): void {
+        const body = Buffer.from(VIEWER_BRIDGE_SCRIPT, 'utf8');
+        res.writeHead(200, {
+            'Content-Type': 'text/javascript; charset=utf-8',
+            'Content-Length': body.byteLength,
+            'Cache-Control': 'no-cache',
+        });
+        res.end(req.method === 'HEAD' ? undefined : body);
     }
 
     private _cloneResponseHeaders(headers: http.IncomingHttpHeaders): http.OutgoingHttpHeaders {

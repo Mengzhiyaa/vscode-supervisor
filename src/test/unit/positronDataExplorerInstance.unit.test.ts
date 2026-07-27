@@ -9,6 +9,8 @@ import { SupportStatus } from '../../runtime/comms/positronDataExplorerComm';
 import { PositronDataExplorerInstance } from '../../services/dataExplorer/positronDataExplorerInstance';
 import type { DataExplorerClientInstance } from '../../services/dataExplorer/languageRuntimeDataExplorerClient';
 import { PositronDataExplorerService } from '../../services/dataExplorer/positronDataExplorerService';
+import { TableDataCache } from '../../services/dataExplorer/common/tableDataCache';
+import { TableSummaryCache } from '../../services/dataExplorer/common/tableSummaryCache';
 
 function createBackendState(rows = 2, columns = 2): BackendState {
     return {
@@ -103,6 +105,55 @@ function createClient(
 }
 
 suite('[Unit] Positron Data Explorer model lifecycle', () => {
+    test('coalesces overlapping host viewport requests', async () => {
+        let resolveRequest: ((value: TableData) => void) | undefined;
+        let requests = 0;
+        const client = {
+            getDataValues: async () => {
+                requests++;
+                return new Promise<TableData>(resolve => {
+                    resolveRequest = resolve;
+                });
+            },
+        } as unknown as DataExplorerClientInstance;
+        const cache = new TableDataCache(client);
+        const selection: ColumnSelection[] = [{
+            column_index: 0,
+            spec: { first_index: 0, last_index: 2 },
+        }];
+
+        const first = cache.getDataValues(selection, 0);
+        const second = cache.getDataValues(selection, 0);
+        assert.strictEqual(requests, 1);
+        resolveRequest?.({ columns: [['a', 'b', 'c']] });
+
+        assert.deepStrictEqual(await first, { columns: [['a', 'b', 'c']] });
+        assert.deepStrictEqual(await second, { columns: [['a', 'b', 'c']] });
+        assert.strictEqual(requests, 1);
+    });
+
+    test('chunks profile fetches and serves them from the shared cache', async () => {
+        const chunkSizes: number[] = [];
+        const client = {
+            requestColumnProfiles: async (requests: Array<{ column_index: number }>) => {
+                chunkSizes.push(requests.length);
+                return requests.map(request => ({ null_count: request.column_index }));
+            },
+        } as unknown as DataExplorerClientInstance;
+        const cache = new TableSummaryCache(client);
+        const requests = Array.from({ length: 17 }, (_, column_index) => ({
+            column_index,
+            profiles: [],
+        }));
+
+        const first = await cache.requestColumnProfiles(requests, 0);
+        const second = await cache.requestColumnProfiles(requests, 0);
+
+        assert.deepStrictEqual(chunkSizes, [8, 8, 1]);
+        assert.strictEqual(first.length, 17);
+        assert.deepStrictEqual(second, first);
+    });
+
     test('owns UI, visibility and foreground loading state', async () => {
         const fixture = createClient();
         const instance = new PositronDataExplorerInstance(fixture.client, 'Python');

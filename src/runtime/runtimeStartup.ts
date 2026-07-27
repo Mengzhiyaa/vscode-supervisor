@@ -2,22 +2,33 @@ import * as fs from 'fs';
 import * as vscode from 'vscode';
 import {
     type IRuntimeManager,
+    LanguageRuntimeSessionLocation,
     LanguageRuntimeSessionMode,
     type LanguageRuntimeMetadata,
     LanguageRuntimeStartupBehavior,
     type IRuntimeSessionMetadata,
 } from '../api';
 import { CoreConfigurationSections } from '../coreCommandIds';
-import { RuntimeState } from '../internal/runtimeTypes';
+import {
+    LanguageRuntimeSessionChannel,
+    RuntimeExitReason,
+    RuntimeState,
+} from '../internal/runtimeTypes';
 import { type IPositronNewFolderService } from '../newFolder/positronNewFolder';
 import { RuntimeStartupPhase } from '../shared/runtime';
 import { RuntimeManager } from './manager';
 import { RuntimeSession } from './session';
 import { type SerializedSessionMetadata } from './runtimeSessionService';
 import { RuntimeSessionService } from './runtimeSession';
+import {
+    extensionHostEphemeralState,
+    type EphemeralMemento,
+} from './ephemeralState';
 
 const AFFILIATED_RUNTIME_KEY_PREFIX = 'vscode-supervisor.affiliatedRuntimeMetadata.v1';
 const PERSISTENT_WORKSPACE_SESSIONS = 'vscode-supervisor.workspaceSessionList.v1';
+export const EPHEMERAL_WORKSPACE_SESSIONS =
+    'vscode-supervisor.workspaceSessionList.ephemeral.v1';
 const DISMISSED_ARCHITECTURE_MISMATCH_KEY_PREFIX = 'vscode-supervisor.dismissedArchMismatch.v1';
 
 interface IAffiliatedRuntimeMetadata {
@@ -71,6 +82,7 @@ export class RuntimeStartupService implements vscode.Disposable {
     private readonly _localWindowId = `window-${Math.random().toString(16).slice(2, 10)}`;
     private readonly _shownArchitectureMismatchWarnings = new Set<string>();
     private readonly _failedRestoredSessionIds = new Set<string>();
+    private readonly _crashRestartsInProgress = new Set<string>();
 
     private _startupPhase = RuntimeStartupPhase.Initializing;
     private _startupPromise: Promise<void> | undefined;
@@ -86,6 +98,8 @@ export class RuntimeStartupService implements vscode.Disposable {
         private readonly _sessionManager: RuntimeSessionService,
         private readonly _newFolderService: IPositronNewFolderService,
         private readonly _outputChannel: vscode.LogOutputChannel,
+        private readonly _ephemeralState: EphemeralMemento =
+            extensionHostEphemeralState,
     ) {
         this._restoredSessionsLoadedPromise = new Promise<void>((resolve) => {
             this._resolveRestoredSessionsLoaded = resolve;
@@ -309,7 +323,7 @@ export class RuntimeStartupService implements vscode.Disposable {
         this._resetDiscoveryCompletionState();
         this._setStartupPhase(RuntimeStartupPhase.Discovering);
         await this._refreshWorkspaceRecommendationSignals();
-        await this._discoverAllRuntimes();
+        await this._discoverAllRuntimes(true);
         await this._autoStartAfterDiscovery();
         await this._waitForStartupCompletion();
     }
@@ -510,7 +524,7 @@ export class RuntimeStartupService implements vscode.Disposable {
         }
     }
 
-    private async _discoverAllRuntimes(): Promise<void> {
+    private async _discoverAllRuntimes(force = false): Promise<void> {
         if (this._runtimeManagers.length === 0) {
             this._sessionManager.implicitStartupSuppressed = false;
             this._setStartupPhase(RuntimeStartupPhase.Complete);
@@ -519,7 +533,7 @@ export class RuntimeStartupService implements vscode.Disposable {
         }
 
         await Promise.all(this._runtimeManagers.map((manager) =>
-            manager.discoverAllRuntimes(this._getDisabledLanguageIds()),
+            manager.discoverAllRuntimes(this._getDisabledLanguageIds(), force),
         ));
     }
 
@@ -603,8 +617,62 @@ export class RuntimeStartupService implements vscode.Disposable {
                 void this.saveWorkspaceSessions();
             }),
         );
+        if (typeof session.onDidEndSession === 'function') {
+            disposables.push(session.onDidEndSession((exit) => {
+                if (
+                    exit.reason === RuntimeExitReason.Error &&
+                    this._startupPhase === RuntimeStartupPhase.Complete
+                ) {
+                    void this._restartSessionAfterCrash(session, exit.exit_code);
+                }
+            }));
+        }
 
         this._sessionLifecycleDisposables.set(sessionId, disposables);
+    }
+
+    private async _restartSessionAfterCrash(
+        session: RuntimeSession,
+        exitCode: number,
+    ): Promise<void> {
+        if (this._crashRestartsInProgress.has(session.sessionId)) {
+            return;
+        }
+
+        const config = vscode.workspace.getConfiguration(
+            CoreConfigurationSections.supervisor,
+            { languageId: session.runtimeMetadata.languageId },
+        );
+        if (!config.get<boolean>('interpreters.restartOnCrash', true)) {
+            return;
+        }
+
+        this._crashRestartsInProgress.add(session.sessionId);
+        try {
+            await new Promise<void>(resolve => setTimeout(resolve, 250));
+            await this._sessionManager.restartSession(
+                session.sessionId,
+                'automatic crash recovery',
+                false,
+            );
+            const choice = await vscode.window.showWarningMessage(
+                `${session.runtimeMetadata.runtimeName} exited unexpectedly ` +
+                `(code ${exitCode}) and was restarted.`,
+                'Open Kernel Log',
+            );
+            if (choice === 'Open Kernel Log') {
+                session.showOutput(LanguageRuntimeSessionChannel.Kernel);
+            }
+        } catch (error) {
+            this._outputChannel.error(
+                `[RuntimeStartup] Failed to restart crashed session ${session.sessionId}: ${error}`,
+            );
+            void vscode.window.showErrorMessage(
+                `${session.runtimeMetadata.runtimeName} exited unexpectedly and could not be restarted.`,
+            );
+        } finally {
+            this._crashRestartsInProgress.delete(session.sessionId);
+        }
     }
 
     private _disposeSessionLifecycleListeners(sessionId: string): void {
@@ -795,7 +863,12 @@ export class RuntimeStartupService implements vscode.Disposable {
                 };
 
                 return metadata;
-            });
+            })
+            // Browser sessions live in the frontend and cannot be reconnected.
+            .filter((session) =>
+                this._getSessionLocation(session) !==
+                LanguageRuntimeSessionLocation.Browser,
+            );
         const activeSessionIds = new Set(activeSessions.map((session) => session.metadata.sessionId));
         const pendingRestoredSessionIds = this._sessionManager.isRestoringPersistedSessions
             ? new Set(
@@ -830,11 +903,34 @@ export class RuntimeStartupService implements vscode.Disposable {
             return false;
         });
 
-        const persistedSessions = preservedSessions.concat(activeSessions)
+        const sessionsToStore = preservedSessions.concat(activeSessions)
             .sort((a, b) => b.lastUsed - a.lastUsed);
 
-        await this._context.workspaceState.update(PERSISTENT_WORKSPACE_SESSIONS, persistedSessions);
+        const workspaceSessions = sessionsToStore.filter((session) =>
+            this._getSessionLocation(session) ===
+            LanguageRuntimeSessionLocation.Workspace,
+        );
+        const machineSessions = sessionsToStore.filter((session) =>
+            this._getSessionLocation(session) ===
+            LanguageRuntimeSessionLocation.Machine,
+        );
+
+        await this._ephemeralState.update(
+            EPHEMERAL_WORKSPACE_SESSIONS,
+            workspaceSessions,
+        );
+        await this._context.workspaceState.update(
+            PERSISTENT_WORKSPACE_SESSIONS,
+            machineSessions,
+        );
         return true;
+    }
+
+    private _getSessionLocation(
+        session: SerializedSessionMetadata,
+    ): LanguageRuntimeSessionLocation {
+        return session.runtimeMetadata.sessionLocation ??
+            LanguageRuntimeSessionLocation.Workspace;
     }
 
     private _isSessionRestorable(session: RuntimeSession): boolean {
@@ -846,16 +942,24 @@ export class RuntimeStartupService implements vscode.Disposable {
     }
 
     private async _readStoredSessions(): Promise<SerializedSessionMetadata[]> {
-        const stored = this._context.workspaceState.get<unknown[]>(PERSISTENT_WORKSPACE_SESSIONS) ?? [];
-        const sessions: SerializedSessionMetadata[] = [];
+        const ephemeral =
+            this._ephemeralState.get<unknown[]>(EPHEMERAL_WORKSPACE_SESSIONS) ?? [];
+        const persistent =
+            this._context.workspaceState.get<unknown[]>(PERSISTENT_WORKSPACE_SESSIONS) ?? [];
+        const sessionsById = new Map<string, SerializedSessionMetadata>();
 
-        for (const entry of stored) {
+        for (const entry of [...ephemeral, ...persistent]) {
             const session = this._normalizeSerializedSession(entry);
-            if (session) {
-                sessions.push(session);
+            if (
+                session &&
+                this._getSessionLocation(session) !==
+                    LanguageRuntimeSessionLocation.Browser
+            ) {
+                sessionsById.set(session.metadata.sessionId, session);
             }
         }
 
+        const sessions = Array.from(sessionsById.values());
         sessions.sort((a, b) => b.lastUsed - a.lastUsed);
         return sessions;
     }

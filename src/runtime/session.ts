@@ -3,6 +3,7 @@ import * as vscode from 'vscode';
 import {
     type LanguageRuntimeDynState,
     type ICodeExecutionAttribution,
+    type RuntimeProtocolMessage,
     type LanguageRuntimeMetadata,
     type JupyterKernelSpec,
     type IRuntimeSessionMetadata,
@@ -39,6 +40,7 @@ import {
     type LanguageRuntimePrompt,
     type LanguageRuntimeClearOutput,
     type LanguageRuntimeUpdateOutput,
+    type LanguageRuntimeMessageIPyWidget,
     type LanguageRuntimeDebugEvent,
     type LanguageRuntimeDebugReply,
     LanguageRuntimeMessageType,
@@ -154,6 +156,7 @@ export interface RuntimeSessionProvisioningOptions {
     kernelSpec?: JupyterKernelSpec;
     kernelExtra?: JupyterKernelExtra;
     dynState?: LanguageRuntimeDynState;
+    setWorkingDirectory?: (workingDirectory: string) => Promise<void>;
 }
 
 /**
@@ -168,6 +171,10 @@ export class RuntimeSession implements vscode.Disposable {
     private readonly _workingDirectoryEmitter = new vscode.EventEmitter<string>();
     private readonly _clientManagerEmitter = new vscode.EventEmitter<RuntimeClientManager>();
     private readonly _resourceUsageEmitter = new vscode.EventEmitter<RuntimeResourceUsage>();
+    private readonly _setWorkingDirectoryHandler:
+        ((workingDirectory: string) => Promise<void>) | undefined;
+    private readonly _onDidReceiveRuntimeMessageEmitter =
+        new vscode.EventEmitter<RuntimeProtocolMessage>();
 
     // Typed emitters (1:1 Positron mainThreadLanguageRuntime)
     private readonly _onDidReceiveRuntimeMessageStreamEmitter = new vscode.EventEmitter<LanguageRuntimeStream>();
@@ -179,6 +186,7 @@ export class RuntimeSession implements vscode.Disposable {
     private readonly _onDidReceiveRuntimeMessagePromptEmitter = new vscode.EventEmitter<LanguageRuntimePrompt>();
     private readonly _onDidReceiveRuntimeMessageClearOutputEmitter = new vscode.EventEmitter<LanguageRuntimeClearOutput>();
     private readonly _onDidReceiveRuntimeMessageUpdateOutputEmitter = new vscode.EventEmitter<LanguageRuntimeUpdateOutputWithKind>();
+    private readonly _onDidReceiveRuntimeMessageIPyWidgetEmitter = new vscode.EventEmitter<LanguageRuntimeMessageIPyWidget>();
     private readonly _onDidReceiveRuntimeMessageDebugEventEmitter = new vscode.EventEmitter<LanguageRuntimeDebugEvent>();
     private readonly _onDidReceiveRuntimeMessageDebugReplyEmitter = new vscode.EventEmitter<LanguageRuntimeDebugReply>();
     private readonly _disposables: vscode.Disposable[] = [];
@@ -228,6 +236,7 @@ export class RuntimeSession implements vscode.Disposable {
     readonly onDidChangeWorkingDirectory = this._workingDirectoryEmitter.event;
     readonly onDidCreateClientManager = this._clientManagerEmitter.event;
     readonly onDidUpdateResourceUsage = this._resourceUsageEmitter.event;
+    readonly onDidReceiveRuntimeMessage = this._onDidReceiveRuntimeMessageEmitter.event;
 
     // Typed events (1:1 Positron mainThreadLanguageRuntime)
     readonly onDidReceiveRuntimeMessageStream = this._onDidReceiveRuntimeMessageStreamEmitter.event;
@@ -239,6 +248,7 @@ export class RuntimeSession implements vscode.Disposable {
     readonly onDidReceiveRuntimeMessagePrompt = this._onDidReceiveRuntimeMessagePromptEmitter.event;
     readonly onDidReceiveRuntimeMessageClearOutput = this._onDidReceiveRuntimeMessageClearOutputEmitter.event;
     readonly onDidReceiveRuntimeMessageUpdateOutput = this._onDidReceiveRuntimeMessageUpdateOutputEmitter.event;
+    readonly onDidReceiveRuntimeMessageIPyWidget = this._onDidReceiveRuntimeMessageIPyWidgetEmitter.event;
     readonly onDidReceiveRuntimeMessageDebugEvent = this._onDidReceiveRuntimeMessageDebugEventEmitter.event;
     readonly onDidReceiveRuntimeMessageDebugReply = this._onDidReceiveRuntimeMessageDebugReplyEmitter.event;
 
@@ -254,6 +264,7 @@ export class RuntimeSession implements vscode.Disposable {
         this._localSupervisor = provisioning?.localSupervisor;
         this._kernelSpec = provisioning?.kernelSpec;
         this._kernelExtra = provisioning?.kernelExtra;
+        this._setWorkingDirectoryHandler = provisioning?.setWorkingDirectory;
 
         // Set the initial dynamic state
         this.dynState = provisioning?.dynState ?? {
@@ -280,6 +291,7 @@ export class RuntimeSession implements vscode.Disposable {
         this._disposables.push(this._workingDirectoryEmitter);
         this._disposables.push(this._clientManagerEmitter);
         this._disposables.push(this._resourceUsageEmitter);
+        this._disposables.push(this._onDidReceiveRuntimeMessageEmitter);
         // Typed emitters
         this._disposables.push(this._onDidReceiveRuntimeMessageStreamEmitter);
         this._disposables.push(this._onDidReceiveRuntimeMessageInputEmitter);
@@ -290,6 +302,7 @@ export class RuntimeSession implements vscode.Disposable {
         this._disposables.push(this._onDidReceiveRuntimeMessagePromptEmitter);
         this._disposables.push(this._onDidReceiveRuntimeMessageClearOutputEmitter);
         this._disposables.push(this._onDidReceiveRuntimeMessageUpdateOutputEmitter);
+        this._disposables.push(this._onDidReceiveRuntimeMessageIPyWidgetEmitter);
         this._disposables.push(this._onDidReceiveRuntimeMessageDebugEventEmitter);
         this._disposables.push(this._onDidReceiveRuntimeMessageDebugReplyEmitter);
     }
@@ -627,6 +640,9 @@ export class RuntimeSession implements vscode.Disposable {
      * (1:1 Positron mainThreadLanguageRuntime.processMessage)
      */
     private processMessage(message: LanguageRuntimeMessage): void {
+        this._onDidReceiveRuntimeMessageEmitter.fire(
+            message as RuntimeProtocolMessage,
+        );
         switch (message.type) {
             case LanguageRuntimeMessageType.Stream:
                 this._onDidReceiveRuntimeMessageStreamEmitter.fire(message as LanguageRuntimeStream);
@@ -657,6 +673,11 @@ export class RuntimeSession implements vscode.Disposable {
                 break;
             case LanguageRuntimeMessageType.UpdateOutput:
                 this.emitRuntimeMessageUpdateOutput(message as LanguageRuntimeUpdateOutput);
+                break;
+            case LanguageRuntimeMessageType.IPyWidget:
+                this._onDidReceiveRuntimeMessageIPyWidgetEmitter.fire(
+                    message as LanguageRuntimeMessageIPyWidget,
+                );
                 break;
             case LanguageRuntimeMessageType.CommOpen:
                 this._clientManager?.openClientInstance(message as LanguageRuntimeMessageCommOpen);
@@ -1026,18 +1047,42 @@ export class RuntimeSession implements vscode.Disposable {
         return this._kernel.interrupt();
     }
 
+    async createClient(
+        id: string,
+        type: LanguageRuntimeClientType,
+        params: Record<string, unknown>,
+        metadata?: Record<string, unknown>,
+    ): Promise<void> {
+        if (!this._kernel) {
+            throw new Error('Kernel not attached');
+        }
+        await this._kernel.createClient(
+            id,
+            type as unknown as InternalRuntimeClientType,
+            params,
+            metadata,
+        );
+    }
+
+    async listClients(type?: LanguageRuntimeClientType): Promise<Record<string, string>> {
+        if (!this._kernel) {
+            throw new Error('Kernel not attached');
+        }
+        return this._kernel.listClients(type as unknown as InternalRuntimeClientType | undefined);
+    }
+
     /**
      * Sets the working directory for the session and persists the new value locally.
      */
     async setWorkingDirectory(workingDirectory: string): Promise<void> {
-        if (!this._kernel || typeof this._kernel.setWorkingDirectory !== 'function') {
-            throw new Error('Kernel does not support setting the working directory');
+        if (!this._setWorkingDirectoryHandler) {
+            throw new Error(
+                `The ${this.runtimeMetadata.languageName} runtime provider does not support changing the working directory`,
+            );
         }
 
-        await this._kernel.setWorkingDirectory(workingDirectory);
-        this.updateWorkingDirectory(
-            this._kernel.dynState.currentWorkingDirectory ?? workingDirectory,
-        );
+        await this._setWorkingDirectoryHandler(workingDirectory);
+        this.updateWorkingDirectory(workingDirectory);
     }
 
     /**
@@ -1145,6 +1190,17 @@ export class RuntimeSession implements vscode.Disposable {
         }
         await this._deactivateServices('shutting down session');
         return this._kernel.shutdown(exitReason);
+    }
+
+    /**
+     * Immediately terminates an unresponsive runtime.
+     */
+    async forceQuit(): Promise<void> {
+        if (!this._kernel) {
+            return;
+        }
+        await this._deactivateServices('force quitting session');
+        await this._kernel.forceQuit();
     }
 
     /**

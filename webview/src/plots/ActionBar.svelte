@@ -97,7 +97,6 @@
 
     const isDynamicPlot = $derived(selectedPlotKind === "dynamic");
     const isStaticPlot = $derived(selectedPlotKind === "static");
-    const isHtmlPlot = $derived(selectedPlotKind === "html");
     const enableSizingPolicy = $derived(hasPlots && isDynamicPlot);
     const enableImagePlotActions = $derived(
         hasPlots && (isDynamicPlot || isStaticPlot),
@@ -105,9 +104,9 @@
     const enableSavingPlots = $derived(enableImagePlotActions);
     const enableCopyPlot = $derived(enableImagePlotActions);
     const enableZoomPlot = $derived(enableImagePlotActions);
-    const enableEditorPlot = $derived(enableImagePlotActions);
+    const enableEditorPlot = $derived(hasPlots);
     const enableDarkFilter = $derived(enableCopyPlot);
-    const enablePopoutPlot = $derived(hasPlots && isHtmlPlot);
+    const enablePopoutPlot = $derived(false);
     const enableCodeActions = $derived(hasPlots && !!selectedPlotCode);
     const zoomLevelLabels = new Map<ZoomLevel, string>([
         [ZoomLevel.Fit, "Fit"],

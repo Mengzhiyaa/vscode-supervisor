@@ -19,13 +19,61 @@ import {
     SurfaceModelKind,
 } from '../services/surfaces/surfaceLifecycleService';
 
+export type PlotEditorContent =
+    | {
+        kind: 'image';
+        data: string;
+        mimeType?: string;
+    }
+    | {
+        kind: 'html';
+        uri: string;
+        title?: string;
+    };
+
+const MaxHtmlExportBytes = 50 * 1024 * 1024;
+
+export function decodeImageDataUri(data: string): { mimeType: string; bytes: Uint8Array } {
+    const match = /^data:([^;,]+)(;base64)?,([\s\S]*)$/i.exec(data);
+    if (!match || !match[1].startsWith('image/')) {
+        throw new Error('Invalid image data URI');
+    }
+    const bytes = match[2]
+        ? Buffer.from(match[3], 'base64')
+        : Buffer.from(decodeURIComponent(match[3]), 'utf8');
+    return { mimeType: match[1].toLowerCase(), bytes };
+}
+
+export function imageExtension(mimeType: string): string {
+    switch (mimeType.toLowerCase()) {
+        case 'image/svg+xml': return 'svg';
+        case 'image/jpeg': return 'jpg';
+        case 'image/gif': return 'gif';
+        case 'image/webp': return 'webp';
+        default: return 'png';
+    }
+}
+
+export function addHtmlBaseUri(content: string, sourceUri: string): string {
+    if (/<base(?:\s|>)/i.test(content)) {
+        return content;
+    }
+    const base = `<base href="${sourceUri.replace(/&/g, '&amp;').replace(/"/g, '&quot;')}">`;
+    const head = /<head(?:\s[^>]*)?>/i.exec(content);
+    if (head?.index !== undefined) {
+        const index = head.index + head[0].length;
+        return `${content.slice(0, index)}${base}${content.slice(index)}`;
+    }
+    return `${base}${content}`;
+}
+
 /**
  * Manages plot editor panels for viewing individual plots in VS Code editor tabs.
  */
 export class PlotEditorProvider implements vscode.Disposable {
     private readonly _panels = new Map<string, vscode.WebviewPanel>();
     private readonly _connections = new Map<string, MessageConnection>();
-    private readonly _currentPlotData = new Map<string, string>();
+    private readonly _currentPlotContent = new Map<string, PlotEditorContent>();
     private readonly _newWindowPanels = new Set<string>();
     private readonly _disposables: vscode.Disposable[] = [];
 
@@ -39,21 +87,24 @@ export class PlotEditorProvider implements vscode.Disposable {
     /**
      * Opens a plot in a new editor tab.
      * @param plotId The unique identifier for the plot
-     * @param plotData Base64-encoded image data (data URI format)
+     * @param plotContent Image data or an HTML/renderer URI
      * @param title Optional title for the editor tab
      */
     openPlotInEditor(
         plotId: string,
-        plotData: string,
+        plotContent: string | PlotEditorContent,
         title?: string,
         viewColumn: vscode.ViewColumn = vscode.ViewColumn.Active,
     ): void {
-        this._currentPlotData.set(plotId, plotData);
+        const content = typeof plotContent === 'string'
+            ? { kind: 'image' as const, data: plotContent }
+            : plotContent;
+        this._currentPlotContent.set(plotId, content);
 
         const existingPanel = this._panels.get(plotId);
         if (existingPanel) {
             existingPanel.reveal(viewColumn);
-            this._sendSetImage(plotId, plotData);
+            this._sendContent(plotId, content);
             return;
         }
 
@@ -86,14 +137,14 @@ export class PlotEditorProvider implements vscode.Disposable {
         connection.listen();
 
         panel.webview.html = this._getEditorHtml(panel.webview);
-        this._sendSetImage(plotId, plotData);
+        this._sendContent(plotId, content);
 
         panel.onDidDispose(() => {
             attachmentLease?.dispose();
             connection.dispose();
             this._connections.delete(plotId);
             this._panels.delete(plotId);
-            this._currentPlotData.delete(plotId);
+            this._currentPlotContent.delete(plotId);
             this._newWindowPanels.delete(plotId);
             this._outputChannel.debug(`Plot editor closed: ${plotId}`);
         });
@@ -211,9 +262,9 @@ export class PlotEditorProvider implements vscode.Disposable {
         connection: MessageConnection,
     ): void {
         connection.onNotification(RpcProtocol.PlotEditorReadyNotification.type, () => {
-            const data = this._currentPlotData.get(plotId);
-            if (data) {
-                this._sendSetImage(plotId, data);
+            const content = this._currentPlotContent.get(plotId);
+            if (content) {
+                this._sendContent(plotId, content);
             }
         });
 
@@ -225,6 +276,13 @@ export class PlotEditorProvider implements vscode.Disposable {
             void this._copyCurrentPlot(plotId);
         });
 
+        connection.onNotification(RpcProtocol.PlotEditorOpenInBrowserNotification.type, () => {
+            const content = this._currentPlotContent.get(plotId);
+            if (content?.kind === 'html') {
+                void vscode.env.openExternal(vscode.Uri.parse(content.uri));
+            }
+        });
+
         connection.onNotification(RpcProtocol.PlotEditorCloseNotification.type, () => {
             panel.dispose();
         });
@@ -234,12 +292,12 @@ export class PlotEditorProvider implements vscode.Disposable {
         });
     }
 
-    private _sendSetImage(plotId: string, data: string): void {
+    private _sendContent(plotId: string, content: PlotEditorContent): void {
         const connection = this._connections.get(plotId);
         if (!connection) {
             return;
         }
-        connection.sendNotification(RpcProtocol.PlotEditorSetImageNotification.type, { data });
+        connection.sendNotification(RpcProtocol.PlotEditorSetContentNotification.type, content);
     }
 
     private async _handleRenderRequest(
@@ -262,7 +320,11 @@ export class PlotEditorProvider implements vscode.Disposable {
                 return;
             }
 
-            this._currentPlotData.set(plotId, rendered.data);
+            this._currentPlotContent.set(plotId, {
+                kind: 'image',
+                data: rendered.data,
+                mimeType: rendered.mimeType,
+            });
             connection.sendNotification(RpcProtocol.PlotEditorRenderResultNotification.type, {
                 data: rendered.data,
                 mimeType: rendered.mimeType,
@@ -313,47 +375,111 @@ export class PlotEditorProvider implements vscode.Disposable {
     }
 
     private async _saveCurrentPlot(plotId: string): Promise<void> {
-        const data = this._currentPlotData.get(plotId);
-        if (!data) {
+        const content = this._currentPlotContent.get(plotId);
+        if (!content) {
             vscode.window.showWarningMessage('No plot data available to save.');
             return;
         }
 
         try {
+            const image = content.kind === 'image'
+                ? decodeImageDataUri(content.data)
+                : undefined;
+            const extension = image ? imageExtension(image.mimeType) : 'html';
             const uri = await vscode.window.showSaveDialog({
-                defaultUri: vscode.Uri.file(`plot-${plotId.substring(0, 8)}.png`),
-                filters: {
-                    'PNG Image': ['png'],
+                defaultUri: vscode.Uri.file(`plot-${plotId.substring(0, 8)}.${extension}`),
+                filters: image ? {
+                    [`${extension.toUpperCase()} Image`]: [extension],
                     'All Files': ['*']
-                }
+                } : {
+                    'HTML Document': ['html', 'htm'],
+                    'All Files': ['*'],
+                },
             });
 
             if (uri) {
-                const base64Data = data.replace(/^data:image\/\w+;base64,/, '');
-                const buffer = Buffer.from(base64Data, 'base64');
-                await vscode.workspace.fs.writeFile(uri, buffer);
-                vscode.window.showInformationMessage(`Plot saved to ${uri.fsPath}`);
+                const bytes = image?.bytes ?? Buffer.from(
+                    addHtmlBaseUri(
+                        await this._readHtml(content.kind === 'html' ? content.uri : ''),
+                        content.kind === 'html' ? content.uri : '',
+                    ),
+                    'utf8',
+                );
+                await vscode.workspace.fs.writeFile(uri, bytes);
+                const message = vscode.l10n.t('Plot exported to {0}', uri.fsPath);
+                this._sendStatus(plotId, message);
+                void vscode.window.showInformationMessage(message);
             }
         } catch (e) {
             this._outputChannel.error(`Failed to save plot: ${e}`);
+            this._sendStatus(plotId, vscode.l10n.t('Failed to export plot: {0}', String(e)), true);
             vscode.window.showErrorMessage(`Failed to save plot: ${e}`);
         }
     }
 
     private async _copyCurrentPlot(plotId: string): Promise<void> {
-        const data = this._currentPlotData.get(plotId);
-        if (!data) {
+        const content = this._currentPlotContent.get(plotId);
+        if (!content) {
             vscode.window.showWarningMessage('No plot data available to copy.');
             return;
         }
 
         try {
-            await vscode.env.clipboard.writeText(data);
-            vscode.window.showInformationMessage('Plot copied to clipboard');
+            const value = content.kind === 'image'
+                ? content.data
+                : addHtmlBaseUri(await this._readHtml(content.uri), content.uri);
+            await vscode.env.clipboard.writeText(value);
+            const message = content.kind === 'html'
+                ? vscode.l10n.t('Plot HTML copied to clipboard')
+                : vscode.l10n.t('Plot data URI copied to clipboard');
+            this._sendStatus(plotId, message);
+            void vscode.window.showInformationMessage(message);
         } catch (e) {
             this._outputChannel.error(`Failed to copy plot: ${e}`);
+            this._sendStatus(plotId, vscode.l10n.t('Failed to copy plot: {0}', String(e)), true);
             vscode.window.showErrorMessage(`Failed to copy plot: ${e}`);
         }
+    }
+
+    private async _readHtml(uriText: string): Promise<string> {
+        const uri = vscode.Uri.parse(uriText);
+        if (uri.scheme === 'file') {
+            const bytes = await vscode.workspace.fs.readFile(uri);
+            if (bytes.byteLength > MaxHtmlExportBytes) {
+                throw new Error('HTML plot is too large to export');
+            }
+            return Buffer.from(bytes).toString('utf8');
+        }
+        if (uri.scheme !== 'http' && uri.scheme !== 'https') {
+            throw new Error(`Unsupported HTML plot URI scheme: ${uri.scheme}`);
+        }
+
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 15_000);
+        try {
+            const response = await fetch(uri.toString(true), { signal: controller.signal });
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status} ${response.statusText}`);
+            }
+            const contentLength = Number(response.headers.get('content-length') ?? 0);
+            if (contentLength > MaxHtmlExportBytes) {
+                throw new Error('HTML plot is too large to export');
+            }
+            const bytes = new Uint8Array(await response.arrayBuffer());
+            if (bytes.byteLength > MaxHtmlExportBytes) {
+                throw new Error('HTML plot is too large to export');
+            }
+            return Buffer.from(bytes).toString('utf8');
+        } finally {
+            clearTimeout(timeout);
+        }
+    }
+
+    private _sendStatus(plotId: string, message: string, error = false): void {
+        this._connections.get(plotId)?.sendNotification(
+            RpcProtocol.PlotEditorStatusNotification.type,
+            { message, error },
+        );
     }
 
     /**
@@ -370,7 +496,7 @@ export class PlotEditorProvider implements vscode.Disposable {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}'; font-src ${webview.cspSource} data:; img-src ${webview.cspSource} data:;">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}'; font-src ${webview.cspSource} data:; img-src ${webview.cspSource} data:; frame-src http: https: ${webview.cspSource};">
     <link href="${styleUri}" rel="stylesheet">
     <title>Plot Editor</title>
 </head>
@@ -405,7 +531,7 @@ export class PlotEditorProvider implements vscode.Disposable {
         }
         this._connections.clear();
 
-        this._currentPlotData.clear();
+        this._currentPlotContent.clear();
         this._newWindowPanels.clear();
 
         for (const d of this._disposables) {

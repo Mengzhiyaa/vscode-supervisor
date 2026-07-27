@@ -76,6 +76,26 @@ export namespace ViewerInterruptNotification {
     export const type = new NotificationType<{}>('viewer/interrupt');
 }
 
+export namespace ViewerFocusNotification {
+
+    export const type = new NotificationType<{}>('viewer/focus');
+}
+
+export namespace ViewerFindNotification {
+
+    export const type = new NotificationType<{}>('viewer/find');
+}
+
+export namespace ViewerDidNavigateNotification {
+
+    export interface Params {
+        url: string;
+        title?: string;
+    }
+
+    export const type = new NotificationType<Params>('viewer/didNavigate');
+}
+
 export namespace ViewerShowNotification {
 
     export interface Params {

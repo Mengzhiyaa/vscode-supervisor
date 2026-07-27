@@ -45,6 +45,10 @@ export const CoreCommandIds = {
     connectionsNew: 'supervisor.connections.new',
     connectionsDisconnect: 'supervisor.connections.disconnect',
     connectionsPreview: 'supervisor.connections.preview',
+    viewerFind: 'supervisor.viewer.find',
+    viewerFocusContent: 'supervisor.viewer.focusContent',
+    helpFind: 'supervisor.help.find',
+    helpFocusContent: 'supervisor.help.focusContent',
     supervisorReconnectSession: 'positron.supervisor.reconnectSession',
     supervisorRestartSupervisor: 'positron.supervisor.restartSupervisor',
 } as const;

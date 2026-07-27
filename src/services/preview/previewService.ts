@@ -267,11 +267,15 @@ export class PositronPreviewService implements vscode.Disposable {
                 return;
             }
             try {
-                uri = await vscode.env.asExternalUri(uri);
+                // Route local runtime pages through our proxy. Besides remote
+                // port forwarding this installs the small Viewer bridge used
+                // for focus, find and host-owned navigation history.
+                uri = await this._proxyService.resolvePath(event.url);
             } catch (error) {
                 this._outputChannel.debug(
-                    `[PositronPreviewService] Failed to resolve external URI for ${event.url}: ${error}`
+                    `[PositronPreviewService] Failed to proxy local URI for ${event.url}: ${error}`
                 );
+                uri = await vscode.env.asExternalUri(uri);
             }
         }
 

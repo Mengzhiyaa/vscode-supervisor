@@ -1,3 +1,4 @@
+import { promises as fs } from 'fs';
 import * as vscode from 'vscode';
 import {
     type IDiscoveredLanguageRuntime,
@@ -8,6 +9,30 @@ import {
 } from '../api';
 import { RuntimeStartMode } from '../internal/runtimeTypes';
 import { RuntimeSessionService } from './runtimeSession';
+
+const DISCOVERY_CACHE_KEY = 'vscode-supervisor.runtimeDiscoveryCache.v1';
+const DISCOVERY_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+interface RuntimePathFingerprint {
+    size: number;
+    mtimeMs: number;
+    ctimeMs: number;
+}
+
+interface CachedRuntime {
+    metadata: LanguageRuntimeMetadata;
+    fingerprint?: RuntimePathFingerprint;
+}
+
+interface CachedLanguageDiscovery {
+    discoveredAt: number;
+    runtimes: CachedRuntime[];
+}
+
+interface RuntimeDiscoveryCache {
+    version: 1;
+    languages: Record<string, CachedLanguageDiscovery>;
+}
 
 /**
  * Manages discovery and registration of language runtimes.
@@ -24,6 +49,8 @@ export class RuntimeManager implements vscode.Disposable, IRuntimeManager {
     private _isDiscovering = false;
     private _discoveryComplete = false;
     private _discoveryPromise: Promise<void> | undefined;
+    private readonly _discoveryCache: RuntimeDiscoveryCache;
+    private _cacheWriteChain = Promise.resolve();
 
     readonly id = RuntimeManager._nextRuntimeManagerId++;
 
@@ -38,6 +65,10 @@ export class RuntimeManager implements vscode.Disposable, IRuntimeManager {
         private readonly _sessionManager: RuntimeSessionService,
         private readonly _outputChannel: vscode.LogOutputChannel
     ) {
+        this._discoveryCache = this._context.globalState.get<RuntimeDiscoveryCache>(
+            DISCOVERY_CACHE_KEY,
+            { version: 1, languages: {} },
+        );
         this._disposables.push(this._onDidDiscoverRuntime);
         this._disposables.push(this._onDidFinishDiscovery);
     }
@@ -82,7 +113,10 @@ export class RuntimeManager implements vscode.Disposable, IRuntimeManager {
         await this.discoverAllRuntimes([]);
     }
 
-    async discoverAllRuntimes(disabledLanguageIds: string[]): Promise<void> {
+    async discoverAllRuntimes(
+        disabledLanguageIds: string[],
+        force = false,
+    ): Promise<void> {
         if (this._discoveryPromise) {
             this._outputChannel.debug('Discovery already in progress, waiting for it...');
             await this._discoveryPromise;
@@ -97,24 +131,48 @@ export class RuntimeManager implements vscode.Disposable, IRuntimeManager {
         this._outputChannel.debug('Starting incremental runtime discovery...');
 
         try {
-            for (const provider of this._runtimeProviders.values()) {
+            const providers = Array.from(this._runtimeProviders.values()).filter(provider => {
                 if (disabledLanguageIds.includes(provider.languageId)) {
-                    continue;
+                    return false;
                 }
                 if (this._languagesWithExternalDiscoveryManagers.has(provider.languageId)) {
                     this._outputChannel.debug(
                         `Skipping internal discovery for ${provider.languageId}; extension-owned manager is registered.`,
                     );
-                    continue;
+                    return false;
                 }
+                return true;
+            });
+            const configuredConcurrency = vscode.workspace
+                .getConfiguration('supervisor')
+                .get<number>('interpreters.discoveryConcurrency', 4);
+            const concurrency = Math.max(
+                1,
+                Math.min(8, Math.trunc(configuredConcurrency)),
+            );
+            await this._runWithConcurrency(providers, concurrency, async provider => {
                 try {
-                    await this._discoverProvider(provider);
+                    const cached = force
+                        ? { restored: false, needsRevalidation: false }
+                        : await this._restoreCachedProvider(provider);
+                    if (!cached.restored) {
+                        await this._discoverProvider(provider);
+                    } else if (cached.needsRevalidation) {
+                        this._outputChannel.debug(
+                            `Revalidating cached ${provider.languageName} runtimes in the background.`,
+                        );
+                        void this._discoverProvider(provider).catch(error => {
+                            this._outputChannel.error(
+                                `Error revalidating runtimes for ${provider.languageId}: ${error}`,
+                            );
+                        });
+                    }
                 } catch (error) {
                     this._outputChannel.error(
                         `Error discovering runtimes for ${provider.languageId}: ${error}`,
                     );
                 }
-            }
+            });
         } finally {
             this._isDiscovering = false;
             this._discoveryComplete = true;
@@ -260,38 +318,159 @@ export class RuntimeManager implements vscode.Disposable, IRuntimeManager {
     private async _discoverProvider<TInstallation>(
         provider: ILanguageRuntimeProvider<TInstallation>
     ): Promise<void> {
+        const discovered: Array<{
+            installation: TInstallation;
+            metadata: LanguageRuntimeMetadata;
+            runtimePath: string;
+        }> = [];
+        const paths = new Set<string>();
+
         for await (const installation of provider.discoverInstallations(this._outputChannel)) {
             const runtimePath = provider.getRuntimePath(installation);
-            const installations = this._getOrCreateInstallations(provider.languageId);
-
-            if (installations.some(existing => provider.getRuntimePath(existing as TInstallation) === runtimePath)) {
+            if (paths.has(runtimePath)) {
                 continue;
             }
-
-            installations.push(installation);
+            paths.add(runtimePath);
 
             const metadata = provider.createRuntimeMetadata(
                 this._context,
                 installation,
                 this._outputChannel
             );
-            this._runtimes.set(metadata.runtimeId, metadata);
+            discovered.push({ installation, metadata, runtimePath });
+        }
+
+        const previousPaths = new Set(
+            this.getInstallations<TInstallation>(provider.languageId)
+                .map(installation => provider.getRuntimePath(installation)),
+        );
+        for (const [runtimeId, metadata] of this._runtimes) {
+            if (metadata.languageId === provider.languageId) {
+                this._runtimes.delete(runtimeId);
+            }
+        }
+        this._installationsByLanguageId.set(
+            provider.languageId,
+            discovered.map(entry => entry.installation),
+        );
+
+        for (const entry of discovered) {
+            this._runtimes.set(entry.metadata.runtimeId, entry.metadata);
             this._sessionManager.registerDiscoveredRuntime(
                 provider.languageId,
-                installation,
-                metadata,
+                entry.installation,
+                entry.metadata,
             );
-
-            this._onDidDiscoverRuntime.fire({
-                provider,
-                installation,
-                metadata,
-            });
-
+            if (!previousPaths.has(entry.runtimePath)) {
+                this._onDidDiscoverRuntime.fire({
+                    provider,
+                    installation: entry.installation,
+                    metadata: entry.metadata,
+                });
+            }
             this._outputChannel.debug(
-                `Discovered ${provider.languageName} ${metadata.languageVersion} at ${runtimePath}`
+                `Discovered ${provider.languageName} ${entry.metadata.languageVersion} at ${entry.runtimePath}`,
             );
         }
+
+        const cachedRuntimes = await Promise.all(discovered.map(async entry => ({
+            metadata: entry.metadata,
+            fingerprint: await this._fingerprint(entry.runtimePath),
+        })));
+        this._discoveryCache.languages[provider.languageId] = {
+            discoveredAt: Date.now(),
+            runtimes: cachedRuntimes,
+        };
+        await this._writeDiscoveryCache();
+    }
+
+    private async _restoreCachedProvider<TInstallation>(
+        provider: ILanguageRuntimeProvider<TInstallation>,
+    ): Promise<{ restored: boolean; needsRevalidation: boolean }> {
+        const cached = this._discoveryCache.languages[provider.languageId];
+        if (!cached || cached.runtimes.length === 0 || !provider.restoreInstallationFromMetadata) {
+            return { restored: false, needsRevalidation: false };
+        }
+
+        let restored = false;
+        let needsRevalidation =
+            Date.now() - cached.discoveredAt > DISCOVERY_CACHE_MAX_AGE_MS;
+        for (const entry of cached.runtimes) {
+            const installation = provider.restoreInstallationFromMetadata(entry.metadata);
+            if (!installation) {
+                needsRevalidation = true;
+                continue;
+            }
+            const runtimePath = provider.getRuntimePath(installation);
+            const fingerprint = await this._fingerprint(runtimePath);
+            if (!fingerprint) {
+                needsRevalidation = true;
+                continue;
+            }
+            if (!entry.fingerprint || !this._fingerprintsEqual(entry.fingerprint, fingerprint)) {
+                needsRevalidation = true;
+            }
+            this.registerDiscoveredRuntime(provider.languageId, installation, entry.metadata);
+            restored = true;
+        }
+
+        if (restored) {
+            this._outputChannel.debug(
+                `Restored cached runtime discovery for ${provider.languageName}.`,
+            );
+        }
+        return { restored, needsRevalidation };
+    }
+
+    private async _fingerprint(runtimePath: string): Promise<RuntimePathFingerprint | undefined> {
+        try {
+            const stat = await fs.stat(runtimePath);
+            return {
+                size: stat.size,
+                mtimeMs: stat.mtimeMs,
+                ctimeMs: stat.ctimeMs,
+            };
+        } catch {
+            return undefined;
+        }
+    }
+
+    private _fingerprintsEqual(
+        left: RuntimePathFingerprint,
+        right: RuntimePathFingerprint,
+    ): boolean {
+        return left.size === right.size &&
+            left.mtimeMs === right.mtimeMs &&
+            left.ctimeMs === right.ctimeMs;
+    }
+
+    private async _writeDiscoveryCache(): Promise<void> {
+        const write = this._cacheWriteChain.then(() =>
+            this._context.globalState.update(DISCOVERY_CACHE_KEY, this._discoveryCache),
+        );
+        this._cacheWriteChain = write.then(() => undefined, () => undefined);
+        await write;
+    }
+
+    private async _runWithConcurrency<T>(
+        values: readonly T[],
+        concurrency: number,
+        task: (value: T) => Promise<void>,
+    ): Promise<void> {
+        let index = 0;
+        const workers = Array.from(
+            { length: Math.min(concurrency, values.length) },
+            async () => {
+                for (;;) {
+                    const current = index++;
+                    if (current >= values.length) {
+                        return;
+                    }
+                    await task(values[current]);
+                }
+            },
+        );
+        await Promise.all(workers);
     }
 
     private _getOrCreateInstallations(languageId: string): unknown[] {

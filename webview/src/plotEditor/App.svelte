@@ -13,6 +13,7 @@
     import DynamicActionBar from "../shared/DynamicActionBar.svelte";
     import ActionBarButton from "../shared/ActionBarButton.svelte";
     import ActionBarMenuButton from "../shared/ActionBarMenuButton.svelte";
+    import { localize } from "$lib/localization";
 
     // JSON-RPC connection
     let connection = $state<MessageConnection | undefined>();
@@ -30,6 +31,11 @@
 
     // State
     let imageUri = $state("");
+    let contentKind = $state<"image" | "html">("image");
+    let htmlUri = $state("");
+    let htmlTitle = $state("");
+    let statusMessage = $state("");
+    let statusError = $state(false);
     let zoom = $state<EditorZoomLevel>(ZoomLevel.Fit);
     let lastRenderKey = "";
     let renderTimer: ReturnType<typeof setTimeout> | null = null;
@@ -56,7 +62,7 @@
 
     // --- Debounced render request ---
     function requestRender() {
-        if (!connection || !containerEl) return;
+        if (!connection || !containerEl || contentKind !== "image") return;
         const width = containerWidth || containerEl.clientWidth;
         const height = containerHeight || containerEl.clientHeight;
         if (width <= 0 || height <= 0) return;
@@ -89,6 +95,12 @@
     }
 
     function handleCopy() {
+        if (contentKind === "html") {
+            statusMessage = localize("plotEditor.copyingHtml", "Copying plot HTML…");
+            statusError = false;
+            connection?.sendNotification("plotEditor/copy");
+            return;
+        }
         // Try Clipboard API first, fall back to extension
         const imgEl = containerEl?.querySelector(
             "img",
@@ -97,9 +109,18 @@
             connection?.sendNotification("plotEditor/copy");
             return;
         }
-        copyImageToClipboard(imgEl.src).catch(() => {
-            connection?.sendNotification("plotEditor/copy");
-        });
+        copyImageToClipboard(imgEl.src)
+            .then(() => {
+                statusMessage = localize("plotEditor.copied", "Plot copied to clipboard");
+                statusError = false;
+            })
+            .catch(() => {
+                connection?.sendNotification("plotEditor/copy");
+            });
+    }
+
+    function handleOpenInBrowser() {
+        connection?.sendNotification("plotEditor/openInBrowser");
     }
 
     async function copyImageToClipboard(dataUri: string): Promise<void> {
@@ -161,9 +182,41 @@
                 (params: { data: string }) => {
                     if (typeof params?.data === "string" && params.data.length > 0) {
                         imageUri = params.data;
+                        contentKind = "image";
+                        htmlUri = "";
                         lastRenderKey = "";
                         scheduleRender();
                     }
+                },
+            ),
+            connection.onNotification(
+                "plotEditor/setContent",
+                (params: {
+                    kind: "image" | "html";
+                    data?: string;
+                    mimeType?: string;
+                    uri?: string;
+                    title?: string;
+                }) => {
+                    contentKind = params.kind;
+                    if (params.kind === "html" && params.uri) {
+                        htmlUri = params.uri;
+                        htmlTitle = params.title || localize("plotEditor.interactivePlot", "Interactive plot");
+                        imageUri = "";
+                        lastRenderKey = "";
+                    } else if (params.kind === "image" && params.data) {
+                        imageUri = params.data;
+                        htmlUri = "";
+                        lastRenderKey = "";
+                        scheduleRender();
+                    }
+                },
+            ),
+            connection.onNotification(
+                "plotEditor/status",
+                (params: { message: string; error: boolean }) => {
+                    statusMessage = params.message;
+                    statusError = params.error;
                 },
             ),
         ];
@@ -198,7 +251,9 @@
     $effect(() => {
         if (containerEl) {
             updateContainerSize();
-            requestRender();
+            if (contentKind === "image") {
+                requestRender();
+            }
         }
     });
 </script>
@@ -244,15 +299,25 @@
 
 <DynamicActionBar
     leftActions={[
-        {
+        ...(contentKind === "image" ? [{
             fixedWidth: 36,
             text: zoomLabel,
             minWidth: 54,
             separator: false,
             component: zoomMenuSnippet,
-        },
-        { fixedWidth: 24, separator: true, component: saveSnippet, overflowMenuItem: { label: 'Save plot', icon: 'positron-save', onSelected: handleSave } },
-        { fixedWidth: 24, separator: false, component: copySnippet, overflowMenuItem: { label: 'Copy plot to clipboard', icon: 'copy', onSelected: handleCopy } },
+        }] : []),
+        { fixedWidth: 24, separator: contentKind === "image", component: saveSnippet, overflowMenuItem: { label: localize('plots.save', 'Save plot'), icon: 'positron-save', onSelected: handleSave } },
+        { fixedWidth: 24, separator: false, component: copySnippet, overflowMenuItem: { label: contentKind === "html" ? localize('plotEditor.copyHtml', 'Copy plot HTML') : localize('plots.copyPlot', 'Copy plot to clipboard'), icon: 'copy', onSelected: handleCopy } },
+        ...(contentKind === "html" ? [{
+            fixedWidth: 24,
+            separator: false,
+            component: openBrowserSnippet,
+            overflowMenuItem: {
+                label: localize('common.openInBrowser', 'Open in Browser'),
+                icon: 'link-external',
+                onSelected: handleOpenInBrowser,
+            },
+        }] : []),
     ]}
     rightActions={[]}
     paddingLeft={8}
@@ -261,12 +326,27 @@
     borderBottom={true}
 />
 
+{#snippet openBrowserSnippet()}
+    <ActionBarButton
+        icon="link-external"
+        ariaLabel={localize('common.openInBrowser', 'Open in Browser')}
+        tooltip={localize('common.openInBrowser', 'Open in Browser')}
+        onclick={handleOpenInBrowser}
+    />
+{/snippet}
+
 <!-- Plot container -->
 <div
     class="plot-container"
     bind:this={containerEl}
 >
-    {#if imageUri}
+    {#if contentKind === "html" && htmlUri}
+        <iframe
+            class="html-plot-frame"
+            src={htmlUri}
+            title={htmlTitle}
+        ></iframe>
+    {:else if imageUri}
         <PanZoomImage
             width={containerWidth}
             height={containerHeight}
@@ -274,6 +354,11 @@
             description="Plot"
             zoom={zoom}
         />
+    {/if}
+    {#if statusMessage}
+        <div class:status-error={statusError} class="plot-status" role="status" aria-live="polite">
+            {statusMessage}
+        </div>
     {/if}
 </div>
 
@@ -283,5 +368,29 @@
         flex: 1;
         overflow: hidden;
         position: relative;
+    }
+
+    .html-plot-frame {
+        width: 100%;
+        height: 100%;
+        border: 0;
+        background: white;
+    }
+
+    .plot-status {
+        position: absolute;
+        right: 8px;
+        bottom: 8px;
+        max-width: min(420px, calc(100% - 16px));
+        padding: 4px 8px;
+        color: var(--vscode-notifications-foreground, var(--vscode-foreground));
+        background: var(--vscode-notifications-background, var(--vscode-editorWidget-background));
+        border: 1px solid var(--vscode-notifications-border, var(--vscode-panel-border));
+        border-radius: 3px;
+        font-size: 12px;
+    }
+
+    .plot-status.status-error {
+        color: var(--vscode-errorForeground);
     }
 </style>

@@ -4,6 +4,7 @@
     import ActionBarButton from "../shared/ActionBarButton.svelte";
     import ActionBarSeparator from "../shared/ActionBarSeparator.svelte";
     import ActionBarMenuButton from "../shared/ActionBarMenuButton.svelte";
+    import { localize } from "$lib/localization";
 
     interface HelpEntryState {
         sourceUrl: string;
@@ -128,6 +129,12 @@
             case "positron-help-keydown":
                 if ((message.metaKey || message.ctrlKey) && message.code === "KeyC") {
                     postToIframe({ id: "positron-help-copy-selection" });
+                } else if (
+                    (message.metaKey || message.ctrlKey) &&
+                    !message.altKey &&
+                    message.code === "KeyF"
+                ) {
+                    showFind();
                 }
                 break;
             case "positron-help-copy-selection":
@@ -150,6 +157,7 @@
     }
 
     onMount(() => {
+        const subscriptions = [
         connection.onNotification("help/state", (params: HelpStateParams) => {
             currentEntry = params.entry;
             history = params.history || [];
@@ -165,26 +173,39 @@
                 findVisible = false;
                 findValue = "";
             }
-        });
+        }),
 
         connection.onNotification("help/themeChanged", () => {
             sendStyles();
-        });
+        }),
 
         connection.onNotification("help/find", () => {
             showFind();
-        });
+        }),
 
-        window.addEventListener("message", (event) => {
+        connection.onNotification("help/focus", () => {
+            postToIframe({ id: "positron-help-focus" });
+            iframeEl?.focus();
+        }),
+        ];
+
+        const onMessage = (event: MessageEvent) => {
             if (event.source === iframeEl?.contentWindow) {
                 const data = event.data as IframeMessage;
                 if (data?.id && data.id.startsWith("positron-help-")) {
                     handleIframeMessage(data);
                 }
             }
-        });
+        };
+        window.addEventListener("message", onMessage);
 
         sendStyles();
+        return () => {
+            for (const subscription of subscriptions) {
+                subscription.dispose();
+            }
+            window.removeEventListener("message", onMessage);
+        };
     });
 
     function openHistory(index: number): void {
@@ -226,6 +247,8 @@
         findVisible = false;
         findValue = "";
         postToIframe({ id: "positron-help-update-find", findValue: undefined });
+        iframeEl?.focus();
+        postToIframe({ id: "positron-help-focus" });
     }
 
     function updateFind(value: string): void {
@@ -254,22 +277,26 @@
     }
 </script>
 
-<div class="help-root">
+<div
+    class="help-root"
+    role="region"
+    aria-label={localize('help.region', 'Help')}
+>
     <!-- Action Bar Container - Two rows like Positron -->
     <div class="action-bars-container">
         <!-- Row 1: Navigation buttons -->
-        <div class="action-bar positron-action-bar border-top border-bottom">
+        <div class="action-bar positron-action-bar border-top border-bottom" role="toolbar" aria-label={localize('help.navigation', 'Help navigation')}>
             <ActionBarButton
                 icon="arrow-left"
-                ariaLabel="Previous topic"
-                tooltip="Previous topic"
+                ariaLabel={localize('help.previousTopic', 'Previous topic')}
+                tooltip={localize('help.previousTopic', 'Previous topic')}
                 disabled={!canNavigateBackward}
                 onclick={navigateBackward}
             />
             <ActionBarButton
                 icon="arrow-right"
-                ariaLabel="Next topic"
-                tooltip="Next topic"
+                ariaLabel={localize('help.nextTopic', 'Next topic')}
+                tooltip={localize('help.nextTopic', 'Next topic')}
                 disabled={!canNavigateForward}
                 onclick={navigateForward}
             />
@@ -278,20 +305,20 @@
 
             <ActionBarButton
                 icon="home"
-                ariaLabel="Show help home"
-                tooltip="Show help home"
+                ariaLabel={localize('help.home', 'Show help home')}
+                tooltip={localize('help.home', 'Show help home')}
                 onclick={showWelcome}
             />
         </div>
 
         <!-- Row 2: History dropdown + Find button -->
-        <div class="action-bar positron-action-bar border-bottom">
+        <div class="action-bar positron-action-bar border-bottom" role="toolbar" aria-label={localize('help.topicActions', 'Help topic actions')}>
             <div class="action-bar-region left">
                 {#if currentTitle && !currentEntry?.isWelcome}
                     <ActionBarMenuButton
                         label={currentTitle}
-                        tooltip="Help history"
-                        ariaLabel="Help history"
+                        tooltip={localize('help.history', 'Help history')}
+                        ariaLabel={localize('help.history', 'Help history')}
                         actions={() => [...history].reverse().map((entry, idx) => {
                             const realIndex = history.length - 1 - idx;
                             return {
@@ -303,15 +330,15 @@
                         })}
                     />
                 {:else if currentEntry?.isWelcome}
-                    <span class="welcome-title">Welcome</span>
+                    <span class="welcome-title">{localize('common.welcome', 'Welcome')}</span>
                 {/if}
             </div>
 
             <div class="action-bar-region right">
                 <ActionBarButton
                     icon="search"
-                    ariaLabel="Find in page"
-                    tooltip="Find in page"
+                    ariaLabel={localize('help.find', 'Find in page')}
+                    tooltip={localize('help.find', 'Find in page')}
                     disabled={!currentEntry || currentEntry.isWelcome}
                     onclick={showFind}
                 />
@@ -321,28 +348,29 @@
 
     <!-- Find Widget (positioned overlay style like VS Code) -->
     {#if findVisible}
-        <div class="find-widget">
+        <div class="find-widget" role="search" aria-label={localize('help.find', 'Find in page')}>
             <div class="find-input-container">
                 <input
                     id="help-find-input"
                     type="text"
                     class="find-input"
-                    placeholder="Find"
+                    placeholder={localize('common.find', 'Find')}
+                    aria-label={localize('help.find', 'Find in page')}
                     value={findValue}
                     oninput={(e) => updateFind((e.target as HTMLInputElement).value)}
                     onkeydown={handleFindKeydown}
                 />
                 {#if findValue && !findHasResult}
-                    <span class="find-no-results">No results</span>
+                    <span class="find-no-results" role="status" aria-live="polite">{localize('common.noResults', 'No results')}</span>
                 {/if}
             </div>
-            <button class="find-action" onclick={findPrevious} title="Previous Match (Shift+Enter)" aria-label="Previous Match">
+            <button class="find-action" onclick={findPrevious} title={localize('common.previousMatch', 'Previous match')} aria-label={localize('common.previousMatch', 'Previous match')}>
                 <span class="codicon codicon-arrow-up"></span>
             </button>
-            <button class="find-action" onclick={findNext} title="Next Match (Enter)" aria-label="Next Match">
+            <button class="find-action" onclick={findNext} title={localize('common.nextMatch', 'Next match')} aria-label={localize('common.nextMatch', 'Next match')}>
                 <span class="codicon codicon-arrow-down"></span>
             </button>
-            <button class="find-action" onclick={closeFind} title="Close (Escape)" aria-label="Close">
+            <button class="find-action" onclick={closeFind} title={localize('common.close', 'Close')} aria-label={localize('common.close', 'Close')}>
                 <span class="codicon codicon-close"></span>
             </button>
         </div>

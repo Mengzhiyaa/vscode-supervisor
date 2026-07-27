@@ -2,12 +2,17 @@ import * as assert from 'assert';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import {
+    LanguageRuntimeSessionLocation,
     LanguageRuntimeSessionMode,
     LanguageRuntimeStartupBehavior,
+    type LanguageRuntimeMetadata,
 } from '../../api';
 import { RuntimeState } from '../../internal/runtimeTypes';
 import { PositronNewFolderService } from '../../newFolder/positronNewFolderService';
-import { RuntimeStartupService } from '../../runtime/runtimeStartup';
+import {
+    EPHEMERAL_WORKSPACE_SESSIONS,
+    RuntimeStartupService,
+} from '../../runtime/runtimeStartup';
 import type { SerializedSessionMetadata } from '../../runtime/runtimeSessionService';
 
 const WORKSPACE_SESSION_LIST_KEY = 'vscode-supervisor.workspaceSessionList.v1';
@@ -86,7 +91,7 @@ function createDeferred<T = void>(): {
     return { promise, resolve, reject };
 }
 
-function makeRuntimeMetadata() {
+function makeRuntimeMetadata(): LanguageRuntimeMetadata {
     return {
         runtimeId: 'r-4.4.1-test',
         runtimeName: 'R 4.4.1',
@@ -258,6 +263,7 @@ suite('[Unit] runtime startup', () => {
             'vscode-supervisor.dismissedArchMismatch.v1.python': true,
             'vscode-supervisor.other': true,
         });
+        const ephemeralState = createMemento();
 
         const startupService = new RuntimeStartupService(
             context,
@@ -276,6 +282,7 @@ suite('[Unit] runtime startup', () => {
             } as any,
             makeNewFolderService(context, makeNoopLogChannel()),
             makeNoopLogChannel(),
+            ephemeralState,
         );
 
         startupService.resetArchitectureMismatchWarning('r');
@@ -294,6 +301,7 @@ suite('[Unit] runtime startup', () => {
         const runtimeMetadata = makeRuntimeMetadata();
         const deferredTask = createDeferred<void>();
         const localSessionManager = makeSessionManager();
+        const ephemeralState = createMemento();
 
         const startupService = new RuntimeStartupService(
             context,
@@ -301,6 +309,7 @@ suite('[Unit] runtime startup', () => {
             localSessionManager.value,
             makeNewFolderService(context, makeNoopLogChannel()),
             makeNoopLogChannel(),
+            ephemeralState,
         );
 
         startupService.registerNewFolderInitTask(async () => {
@@ -350,6 +359,7 @@ suite('[Unit] runtime startup', () => {
         const context = makeContext();
         const logChannel = makeNoopLogChannel();
         const localSessionManager = makeSessionManager();
+        const ephemeralState = createMemento();
         localSessionManager.value.hasStartingOrRunningConsole = () => true;
         const startupService = new RuntimeStartupService(
             context,
@@ -363,6 +373,7 @@ suite('[Unit] runtime startup', () => {
             localSessionManager.value,
             makeNewFolderService(context, logChannel),
             logChannel,
+            ephemeralState,
         );
 
         const runtimeManager = {
@@ -413,6 +424,7 @@ suite('[Unit] runtime startup', () => {
         const logChannel = makeNoopLogChannel();
         const localSessionManager = makeSessionManager();
         const runtimeProvider = makeRuntimeProvider();
+        const ephemeralState = createMemento();
         const validateCalls: string[] = [];
         const restoreCalls: Array<{ sessionId: string; activate: boolean }> = [];
         const restoreFailures: Array<{ sessionId: string; message: string }> = [];
@@ -443,6 +455,7 @@ suite('[Unit] runtime startup', () => {
             localSessionManager.value,
             makeNewFolderService(context, logChannel),
             logChannel,
+            ephemeralState,
         );
         startupService.onSessionRestoreFailure((event) => {
             restoreFailures.push({
@@ -463,8 +476,8 @@ suite('[Unit] runtime startup', () => {
             { sessionId: 'session-3', message: 'Session is no longer available' },
         ]);
         assert.deepStrictEqual(
-            context.workspaceState.get<SerializedSessionMetadata[]>(
-                WORKSPACE_SESSION_LIST_KEY,
+            ephemeralState.get<SerializedSessionMetadata[]>(
+                EPHEMERAL_WORKSPACE_SESSIONS,
                 [],
             )!.map((session) => session.metadata.sessionId),
             ['session-2', 'session-1'],
@@ -484,6 +497,7 @@ suite('[Unit] runtime startup', () => {
         const localSessionManager = makeSessionManager();
         const runtimeProvider = makeRuntimeProvider();
         const deletedSessionIds: string[] = [];
+        const ephemeralState = createMemento();
 
         localSessionManager.value.getSession = (sessionId: string) => {
             return sessionId === 'session-failed'
@@ -512,6 +526,7 @@ suite('[Unit] runtime startup', () => {
             localSessionManager.value,
             makeNewFolderService(context, logChannel),
             logChannel,
+            ephemeralState,
         );
 
         await startupService.getRestoredSessions();
@@ -519,8 +534,8 @@ suite('[Unit] runtime startup', () => {
 
         assert.deepStrictEqual(deletedSessionIds, ['session-failed']);
         assert.deepStrictEqual(
-            context.workspaceState.get<SerializedSessionMetadata[]>(
-                WORKSPACE_SESSION_LIST_KEY,
+            ephemeralState.get<SerializedSessionMetadata[]>(
+                EPHEMERAL_WORKSPACE_SESSIONS,
                 [],
             )!.map((session) => session.metadata.sessionId),
             ['session-ok'],
@@ -541,6 +556,7 @@ suite('[Unit] runtime startup', () => {
         const localSessionManager = makeSessionManager();
         const runtimeProvider = makeRuntimeProvider();
         const liveSession = makeLiveSession('session-1', { created: 10 });
+        const ephemeralState = createMemento();
 
         localSessionManager.value.sessions = [liveSession];
         localSessionManager.value.activeSessionId = 'session-1';
@@ -562,6 +578,7 @@ suite('[Unit] runtime startup', () => {
             localSessionManager.value,
             makeNewFolderService(context, logChannel),
             logChannel,
+            ephemeralState,
         );
 
         await startupService.getRestoredSessions();
@@ -569,8 +586,8 @@ suite('[Unit] runtime startup', () => {
         await (startupService as any).saveWorkspaceSessions();
         localSessionManager.isRestoringPersistedSessions = false;
 
-        const persistedSessions = context.workspaceState.get<SerializedSessionMetadata[]>(
-            WORKSPACE_SESSION_LIST_KEY,
+        const persistedSessions = ephemeralState.get<SerializedSessionMetadata[]>(
+            EPHEMERAL_WORKSPACE_SESSIONS,
             [],
         )!;
         assert.deepStrictEqual(
@@ -590,6 +607,7 @@ suite('[Unit] runtime startup', () => {
         const logChannel = makeNoopLogChannel();
         const localSessionManager = makeSessionManager();
         const runtimeProvider = makeRuntimeProvider();
+        const ephemeralState = createMemento();
         const readySession = makeLiveSession('session-ready', {
             created: 10,
             state: RuntimeState.Ready,
@@ -629,12 +647,13 @@ suite('[Unit] runtime startup', () => {
             localSessionManager.value,
             makeNewFolderService(context, logChannel),
             logChannel,
+            ephemeralState,
         );
 
         await startupService.prepareForExtensionHostShutdown();
 
-        const persistedSessions = context.workspaceState.get<SerializedSessionMetadata[]>(
-            WORKSPACE_SESSION_LIST_KEY,
+        const persistedSessions = ephemeralState.get<SerializedSessionMetadata[]>(
+            EPHEMERAL_WORKSPACE_SESSIONS,
             [],
         )!;
         assert.deepStrictEqual(
@@ -658,6 +677,7 @@ suite('[Unit] runtime startup', () => {
         const localSessionManager = makeSessionManager();
         const runtimeProvider = makeRuntimeProvider();
         const liveSession = makeLiveSession('session-local', { created: 10 });
+        const ephemeralState = createMemento();
 
         localSessionManager.value.sessions = [liveSession];
         localSessionManager.value.activeSessionId = 'session-local';
@@ -679,18 +699,86 @@ suite('[Unit] runtime startup', () => {
             localSessionManager.value,
             makeNewFolderService(context, logChannel),
             logChannel,
+            ephemeralState,
         );
 
         await startupService.getRestoredSessions();
         await (startupService as any).saveWorkspaceSessions();
 
-        const persistedSessions = context.workspaceState.get<SerializedSessionMetadata[]>(
-            WORKSPACE_SESSION_LIST_KEY,
+        const persistedSessions = ephemeralState.get<SerializedSessionMetadata[]>(
+            EPHEMERAL_WORKSPACE_SESSIONS,
             [],
         )!;
         assert.deepStrictEqual(
             persistedSessions.map((session) => session.metadata.sessionId),
             ['session-local', 'session-remote'],
+        );
+
+        startupService.dispose();
+    });
+
+    test('routes Workspace, Machine, and Browser sessions to the correct lifetime tier', async () => {
+        const context = makeContext();
+        const ephemeralState = createMemento();
+        const logChannel = makeNoopLogChannel();
+        const localSessionManager = makeSessionManager();
+        const workspaceSession = makeLiveSession('session-workspace', {
+            runtimeMetadata: {
+                ...makeRuntimeMetadata(),
+                sessionLocation: LanguageRuntimeSessionLocation.Workspace,
+            },
+        });
+        const machineSession = makeLiveSession('session-machine', {
+            runtimeMetadata: {
+                ...makeRuntimeMetadata(),
+                runtimeId: 'r-machine',
+                sessionLocation: LanguageRuntimeSessionLocation.Machine,
+            },
+        });
+        const browserSession = makeLiveSession('session-browser', {
+            runtimeMetadata: {
+                ...makeRuntimeMetadata(),
+                runtimeId: 'r-browser',
+                sessionLocation: LanguageRuntimeSessionLocation.Browser,
+            },
+        });
+        localSessionManager.value.sessions = [
+            workspaceSession,
+            machineSession,
+            browserSession,
+        ];
+        localSessionManager.value.getActiveSession = () => ({ hasConsole: true });
+
+        const startupService = new RuntimeStartupService(
+            context,
+            makeRuntimeManager(),
+            localSessionManager.value,
+            makeNewFolderService(context, logChannel),
+            logChannel,
+            ephemeralState,
+        );
+
+        await startupService.prepareForExtensionHostShutdown();
+
+        const ephemeralSessions = ephemeralState.get<SerializedSessionMetadata[]>(
+            EPHEMERAL_WORKSPACE_SESSIONS,
+            [],
+        );
+        const persistentSessions = context.workspaceState.get<SerializedSessionMetadata[]>(
+            WORKSPACE_SESSION_LIST_KEY,
+            [],
+        );
+        assert.deepStrictEqual(
+            ephemeralSessions.map(session => session.metadata.sessionId),
+            ['session-workspace'],
+        );
+        assert.deepStrictEqual(
+            persistentSessions.map(session => session.metadata.sessionId),
+            ['session-machine'],
+        );
+        assert.ok(
+            ![...ephemeralSessions, ...persistentSessions]
+                .some(session => session.metadata.sessionId === 'session-browser'),
         );
 
         startupService.dispose();

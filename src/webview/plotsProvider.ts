@@ -1639,20 +1639,6 @@ export class PlotsViewProvider extends BaseWebviewProvider {
                 return { success: false, error: 'Plot not found' };
             }
             try {
-                if (plot.kind === 'html') {
-                    const htmlClient = this._plotsService.positronPlotInstances.find(candidate => candidate.id === plotId);
-                    if (htmlClient instanceof HtmlPlotClient) {
-                        await htmlClient.openInBrowser();
-                    } else if (plot.htmlUri) {
-                        await vscode.env.openExternal(vscode.Uri.parse(plot.htmlUri));
-                    } else {
-                        return { success: false, error: 'HTML plot URI not found' };
-                    }
-
-                    this.log(`Opened HTML plot ${plotId} in browser`, vscode.LogLevel.Debug);
-                    return { success: true };
-                }
-
                 const plotClient = this._plotClients.get(plotId);
                 await this._plotsService.openEditor(
                     plotId,
@@ -1681,10 +1667,6 @@ export class PlotsViewProvider extends BaseWebviewProvider {
                 this.log(`Plot ${plotId} not found`, vscode.LogLevel.Warning);
                 return { success: false, error: 'Plot not found' };
             }
-            if (plot.kind === 'html') {
-                return { success: false, error: 'HTML plot open in editor not supported' };
-            }
-
             try {
                 const viewColumn = params?.viewColumn === 'beside'
                     ? vscode.ViewColumn.Beside

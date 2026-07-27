@@ -32,6 +32,7 @@ export type RuntimeOutputConsumerId =
     | 'data-explorer'
     | 'notebook-inline-data-explorer'
     | 'rich-output-router'
+    | 'renderer'
     | 'viewer-fallback';
 
 /**
@@ -42,10 +43,10 @@ export const RuntimeOutputConsumers: Record<RuntimeOutputKind, readonly RuntimeO
     [RuntimeOutputKind.Text]: ['console'],
     [RuntimeOutputKind.StaticImage]: ['console', 'plots'],
     [RuntimeOutputKind.InlineHtml]: ['console'],
-    [RuntimeOutputKind.ViewerWidget]: ['rich-output-router', 'viewer', 'data-explorer', 'notebook-inline-data-explorer'],
-    [RuntimeOutputKind.PlotWidget]: ['rich-output-router', 'plots'],
-    [RuntimeOutputKind.IPyWidget]: ['rich-output-router', 'viewer-fallback'],
-    [RuntimeOutputKind.WebviewPreload]: ['rich-output-router', 'viewer-fallback'],
+    [RuntimeOutputKind.ViewerWidget]: ['rich-output-router', 'renderer', 'viewer', 'data-explorer', 'notebook-inline-data-explorer'],
+    [RuntimeOutputKind.PlotWidget]: ['rich-output-router', 'renderer', 'plots'],
+    [RuntimeOutputKind.IPyWidget]: ['rich-output-router', 'renderer', 'viewer-fallback'],
+    [RuntimeOutputKind.WebviewPreload]: ['rich-output-router', 'renderer', 'viewer-fallback'],
     [RuntimeOutputKind.Unknown]: ['console'],
 };
 

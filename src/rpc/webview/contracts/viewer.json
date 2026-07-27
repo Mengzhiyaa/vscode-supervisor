@@ -123,6 +123,41 @@
     },
     {
       "kind": "notification",
+      "name": "ViewerFocusNotification",
+      "method": "viewer/focus",
+      "paramsType": "{}"
+    },
+    {
+      "kind": "notification",
+      "name": "ViewerFindNotification",
+      "method": "viewer/find",
+      "paramsType": "{}"
+    },
+    {
+      "kind": "notification",
+      "name": "ViewerDidNavigateNotification",
+      "method": "viewer/didNavigate",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "url",
+              "type": "string"
+            },
+            {
+              "name": "title",
+              "optional": true,
+              "type": "string"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
       "name": "ViewerShowNotification",
       "method": "viewer/show",
       "paramsType": "Params",

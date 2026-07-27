@@ -139,7 +139,7 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
     private _grouping: PositronVariablesGrouping = PositronVariablesGrouping.Kind;
     private _sorting: PositronVariablesSorting = PositronVariablesSorting.Name;
     private _filterText = '';
-    private _highlightRecent = true;
+    private _highlightRecent: boolean;
     private readonly _collapsedGroupIds = new Set<string>();
     private readonly _expandedPaths = new Set<string>();
     private _entries: VariablesTreeEntry[] = [];
@@ -162,6 +162,10 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
         private _session: RuntimeSession,
         private readonly _outputChannel: vscode.LogOutputChannel
     ) {
+        const reduceMotion = vscode.workspace
+            .getConfiguration('workbench')
+            .get<string>('reduceMotion', 'auto');
+        this._highlightRecent = reduceMotion !== 'on';
         this._outputChannel.debug(`[VariablesInstance] Created for session ${_session.sessionId}`);
         this.attachToSession();
     }
@@ -200,7 +204,7 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
     readonly onDidChangeStatus = this._onDidChangeStatusEmitter.event;
     readonly onFocusElement = this._onFocusElementEmitter.event;
 
-    requestRefresh(): void {
+    async requestRefresh(): Promise<void> {
         this._outputChannel.debug('[VariablesInstance] Requesting refresh');
         if (!this._variablesClient) {
             this._warnMissingClient('refresh');
@@ -208,47 +212,51 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
         }
 
         this._expandedPaths.clear();
-        void this._runWithClientRequest(async () => {
-            const list = await this._variablesClient!.requestRefresh();
-            await this.processList(list);
-        })
-            .catch(error => {
-                this._outputChannel.warn(`[VariablesInstance] Refresh failed: ${error}`);
+        try {
+            await this._runWithClientRequest(async () => {
+                const list = await this._variablesClient!.requestRefresh();
+                await this.processList(list);
             });
+        } catch (error) {
+            await this._notifyRequestError('refreshing', error);
+            throw error;
+        }
     }
 
-    requestClear(includeHiddenVariables: boolean): void {
+    async requestClear(includeHiddenVariables: boolean): Promise<void> {
         this._outputChannel.debug('[VariablesInstance] Requesting clear');
         if (!this._variablesClient) {
             this._warnMissingClient('clear');
             return;
         }
 
-        void this._runWithClientRequest(() =>
-            this._variablesClient!.requestClear(includeHiddenVariables)
-        )
-            .then(() => {
-                this.requestRefresh();
-            })
-            .catch(error => {
-                this._outputChannel.warn(`[VariablesInstance] Clear failed: ${error}`);
-            });
+        try {
+            await this._runWithClientRequest(() =>
+                this._variablesClient!.requestClear(includeHiddenVariables)
+            );
+        } catch (error) {
+            await this._notifyRequestError('clearing', error);
+            throw error;
+        }
+        await this.requestRefresh();
     }
 
-    requestDelete(names: string[]): void {
+    async requestDelete(names: string[]): Promise<void> {
         this._outputChannel.debug(`[VariablesInstance] Requesting delete: ${names.join(', ')}`);
         if (!this._variablesClient) {
             this._warnMissingClient('delete');
             return;
         }
 
-        void this._runWithClientRequest(async () => {
-            const update = await this._variablesClient!.requestDelete(names);
-            await this.processUpdate(update);
-        })
-            .catch(error => {
-                this._outputChannel.warn(`[VariablesInstance] Delete failed: ${error}`);
+        try {
+            await this._runWithClientRequest(async () => {
+                const update = await this._variablesClient!.requestDelete(names);
+                await this.processUpdate(update);
             });
+        } catch (error) {
+            await this._notifyRequestError('deleting', error);
+            throw error;
+        }
     }
 
     expandVariableGroup(id: string): void {
@@ -486,7 +494,7 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
         );
 
         // Kick off an initial refresh to populate data
-        this.requestRefresh();
+        void this.requestRefresh().catch(() => undefined);
     }
 
     private _syncClientState(state: RuntimeClientState): void {
@@ -774,18 +782,24 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
     private groupBySize(items: VariableItem[]): VariablesTreeEntry[] {
         const groups: Record<string, VariableItem[]> = { small: [], medium: [], large: [], veryLarge: [] };
         for (const item of items) {
-            if (item.size < 1024) {groups.small.push(item);}
-            else if (item.size < 1024 * 1024) {groups.medium.push(item);}
-            else if (item.size < 1024 * 1024 * 100) {groups.large.push(item);}
+            if (item.size < 1_000) {groups.small.push(item);}
+            else if (item.size < 10_000) {groups.medium.push(item);}
+            else if (item.size < 1_000_000) {groups.large.push(item);}
             else {groups.veryLarge.push(item);}
         }
 
         const entries: VariablesTreeEntry[] = [];
-        if (groups.veryLarge.length > 0) {entries.push(new VariableGroup('group/very-large', 'Very Large (>100MB)', !this._collapsedGroupIds.has('group/very-large'), this.sortItems(groups.veryLarge)));}
-        if (groups.large.length > 0) {entries.push(new VariableGroup('group/large', 'Large (1MB-100MB)', !this._collapsedGroupIds.has('group/large'), this.sortItems(groups.large)));}
-        if (groups.medium.length > 0) {entries.push(new VariableGroup('group/medium', 'Medium (1KB-1MB)', !this._collapsedGroupIds.has('group/medium'), this.sortItems(groups.medium)));}
-        if (groups.small.length > 0) {entries.push(new VariableGroup('group/small', 'Small (<1KB)', !this._collapsedGroupIds.has('group/small'), this.sortItems(groups.small)));}
+        if (groups.small.length > 0) {entries.push(new VariableGroup('group/small', 'Small', !this._collapsedGroupIds.has('group/small'), this.sortItems(groups.small)));}
+        if (groups.medium.length > 0) {entries.push(new VariableGroup('group/medium', 'Medium', !this._collapsedGroupIds.has('group/medium'), this.sortItems(groups.medium)));}
+        if (groups.large.length > 0) {entries.push(new VariableGroup('group/large', 'Large', !this._collapsedGroupIds.has('group/large'), this.sortItems(groups.large)));}
+        if (groups.veryLarge.length > 0) {entries.push(new VariableGroup('group/very-large', 'Very Large', !this._collapsedGroupIds.has('group/very-large'), this.sortItems(groups.veryLarge)));}
         return entries;
+    }
+
+    private async _notifyRequestError(action: string, error: unknown): Promise<void> {
+        const message = error instanceof Error ? error.message : String(error);
+        this._outputChannel.warn(`[VariablesInstance] Error ${action} variables: ${message}`);
+        await vscode.window.showErrorMessage(`Error ${action} variables: ${message}`);
     }
 
     private fireEntriesChanged(): void {

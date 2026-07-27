@@ -398,6 +398,28 @@
         "title": "Preview Data",
         "category": "Ark Connections",
         "icon": "$(preview)"
+      },
+      {
+        "command": "supervisor.viewer.find",
+        "title": "Find in Viewer",
+        "category": "Ark Viewer",
+        "icon": "$(search)"
+      },
+      {
+        "command": "supervisor.viewer.focusContent",
+        "title": "Focus Viewer Content",
+        "category": "Ark Viewer"
+      },
+      {
+        "command": "supervisor.help.find",
+        "title": "Find in Help",
+        "category": "Ark Help",
+        "icon": "$(search)"
+      },
+      {
+        "command": "supervisor.help.focusContent",
+        "title": "Focus Help Content",
+        "category": "Ark Help"
       }
     ],
     "keybindings": [
@@ -417,6 +439,18 @@
         "command": "supervisor.console.clearConsole",
         "key": "ctrl+l",
         "when": "view == supervisor.console"
+      },
+      {
+        "command": "supervisor.viewer.find",
+        "key": "ctrl+f",
+        "mac": "cmd+f",
+        "when": "view == supervisor.viewer"
+      },
+      {
+        "command": "supervisor.help.find",
+        "key": "ctrl+f",
+        "mac": "cmd+f",
+        "when": "view == supervisor.help"
       },
       {
         "command": "supervisor.dataExplorer.convertToCode",
@@ -485,6 +519,16 @@
         {
           "command": "supervisor.connections.refresh",
           "when": "view == supervisor.connections",
+          "group": "navigation@1"
+        },
+        {
+          "command": "supervisor.viewer.find",
+          "when": "view == supervisor.viewer",
+          "group": "navigation@1"
+        },
+        {
+          "command": "supervisor.help.find",
+          "when": "view == supervisor.help",
           "group": "navigation@1"
         }
       ],
@@ -776,6 +820,20 @@
           ],
           "description": "Controls interpreter auto-start behavior for the workspace."
         },
+        "supervisor.interpreters.restartOnCrash": {
+          "type": "boolean",
+          "default": true,
+          "scope": "machine-overridable",
+          "description": "Automatically restart interpreter sessions that exit unexpectedly after startup."
+        },
+        "supervisor.interpreters.discoveryConcurrency": {
+          "type": "integer",
+          "default": 4,
+          "minimum": 1,
+          "maximum": 8,
+          "scope": "machine-overridable",
+          "description": "Maximum number of language runtime providers scanned concurrently."
+        },
         "kernelSupervisor.logLevel": {
           "type": "string",
           "default": "info",
@@ -883,6 +941,26 @@
           "default": 0,
           "minimum": 0,
           "description": "Show a low-memory warning when free system memory drops to or below this number of megabytes. Set to 0 to disable."
+        },
+        "packages.metadataCache.enabled": {
+          "type": "boolean",
+          "default": true,
+          "scope": "window",
+          "description": "Persist version-anchored package update metadata for fast package-pane warm starts."
+        },
+        "packages.metadataCache.maxAgeHours": {
+          "type": "number",
+          "default": 24,
+          "minimum": 0.01,
+          "scope": "window",
+          "description": "How long persisted package update metadata remains fresh before it is refreshed in the background."
+        },
+        "supervisor.console.inputHistorySize": {
+          "type": "integer",
+          "default": 1000,
+          "minimum": 0,
+          "scope": "window",
+          "description": "Number of recent commands stored for each Supervisor console session and language. Set to 0 to disable history storage."
         },
         "memoryUsage.lowMemoryNotification": {
           "type": "boolean",

@@ -239,6 +239,51 @@ suite('[Unit] P0 rich output and compatibility contracts', () => {
         await vscode.workspace.fs.delete(storageUri, { recursive: true, useTrash: false });
     });
 
+    test('routes preload-dependent output through a registered renderer before fallback', async () => {
+        const plots: string[] = [];
+        const storageUri = vscode.Uri.file('/tmp/vscode-supervisor-renderer-bridge-test');
+        const router = new RichOutputRouter(
+            { globalStorageUri: storageUri } as any,
+            {
+                sessions: [],
+                onDidCreateSession: createEventStub(),
+                onDidDeleteRuntimeSession: createEventStub(),
+            } as any,
+            {
+                addHtmlOutputPlot: (_sessionId: string, event: { uri: vscode.Uri }) => {
+                    plots.push(event.uri.toString());
+                },
+            } as any,
+            {
+                resolveRuntimeOutputHtmlUri: async (uri: vscode.Uri) => uri,
+            } as any,
+            makeNoopLogChannel(),
+        );
+        const registration = router.registerRenderer({
+            id: 'bokeh-renderer',
+            mimeTypes: [RuntimeOutputMime.bokehExec],
+            outputKinds: [RuntimeOutputKind.WebviewPreload],
+            render: async () => ({
+                target: 'plot',
+                title: 'Bokeh',
+                html: '<div id=\"bokeh\">rendered</div>',
+            }),
+        });
+
+        await (router as any)._routeOutput(
+            { sessionId: 'renderer-session' },
+            output(RuntimeOutputKind.WebviewPreload, {
+                [RuntimeOutputMime.bokehExec]: { model: 'plot-1' },
+            }),
+        );
+
+        assert.strictEqual(plots.length, 1);
+        assert.strictEqual(router.getRouteRecords('renderer-session')[0]?.consumer, 'renderer');
+        registration.dispose();
+        router.dispose();
+        await vscode.workspace.fs.delete(storageUri, { recursive: true, useTrash: false });
+    });
+
     test('confirms data explorer acceptance, instance creation, and editor attachment separately', async () => {
         const commId = 'data-explorer-console-1';
         const model = {

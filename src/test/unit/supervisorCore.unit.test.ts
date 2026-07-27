@@ -8,12 +8,21 @@ import {
     type Utf8Location,
 } from '../../api';
 import {
+    LanguageRuntimeMessageType,
     RuntimeCodeExecutionMode,
     RuntimeErrorBehavior,
+    RuntimeOutputKind,
 } from '../../internal/runtimeTypes';
 import { RuntimeSession } from '../../runtime/session';
 import { DapComm } from '../../supervisor/DapComm';
-import { KCApi } from '../../supervisor/KallichoreAdapterApi';
+import {
+    KALLICHORE_STATE_KEY,
+    KCApi,
+    isReconnectTarget,
+    saveServerStateToTier,
+    selectServerState,
+    sharesApplicationLifetime,
+} from '../../supervisor/KallichoreAdapterApi';
 import { KallichoreSession } from '../../supervisor/KallichoreSession';
 import { AxiosError } from '../../supervisor/httpClient';
 import { ExecuteRequest } from '../../supervisor/jupyter/ExecuteRequest';
@@ -106,6 +115,46 @@ function createDeferred<T>(): {
 }
 
 suite('[Unit] supervisor core backports', () => {
+    test('uses ephemeral reconnect state only for non-reconnect-target supervisors', async () => {
+        assert.strictEqual(
+            sharesApplicationLifetime(vscode.UIKind.Desktop, 'immediately'),
+            true,
+        );
+        assert.strictEqual(
+            isReconnectTarget(vscode.UIKind.Desktop, 'immediately'),
+            false,
+        );
+        assert.strictEqual(
+            isReconnectTarget(vscode.UIKind.Desktop, 'when idle'),
+            false,
+        );
+        assert.strictEqual(
+            isReconnectTarget(vscode.UIKind.Desktop, '4'),
+            true,
+        );
+        assert.strictEqual(
+            isReconnectTarget(vscode.UIKind.Web, 'immediately'),
+            true,
+        );
+
+        const ephemeral = createMemento();
+        const persistent = createMemento();
+        const state = {
+            base_path: 'http://127.0.0.1:9000',
+            bearer_token: 'secret',
+            server_pid: 42,
+        } as any;
+
+        await saveServerStateToTier(true, ephemeral, persistent, state);
+        assert.strictEqual(ephemeral.get(KALLICHORE_STATE_KEY), state);
+        assert.strictEqual(persistent.get(KALLICHORE_STATE_KEY), undefined);
+        assert.strictEqual(selectServerState(true, state, undefined), state);
+
+        await saveServerStateToTier(false, ephemeral, persistent, state);
+        assert.strictEqual(ephemeral.get(KALLICHORE_STATE_KEY), undefined);
+        assert.strictEqual(persistent.get(KALLICHORE_STATE_KEY), state);
+        assert.strictEqual(selectServerState(false, undefined, state), state);
+    });
     test('internal DAP sessions do not save open editors before attaching', async () => {
         const comm = {
             id: 'dap-comm-1',
@@ -337,7 +386,10 @@ suite('[Unit] supervisor core backports', () => {
                     end: { line: 4, character: 0 },
                 },
             },
-            { source: 'unit-test' },
+            {
+                source: 'unit-test',
+                cellId: 'cell-7',
+            },
         );
 
         assert.ok(capturedRequest);
@@ -349,8 +401,62 @@ suite('[Unit] supervisor core backports', () => {
                     end: { line: 4, character: 0 },
                 },
             },
-            executionMetadata: { source: 'unit-test' },
+            source: 'unit-test',
         });
+        assert.deepStrictEqual((capturedRequest as any).metadata, {
+            cellId: 'cell-7',
+        });
+        assert.strictEqual(
+            Object.prototype.hasOwnProperty.call(
+                capturedRequest?.commandPayload.positron ?? {},
+                'cellId',
+            ),
+            false,
+        );
+    });
+
+    test('runtime sessions explicitly dispatch wrapped IPyWidget messages', async () => {
+        const session = new RuntimeSession(
+            'session-1',
+            makeRuntimeMetadata(),
+            makeSessionMetadata(),
+            makeNoopLogChannel(),
+            'Session 1',
+        );
+        const received: any[] = [];
+        const genericReceived: any[] = [];
+        const listener = session.onDidReceiveRuntimeMessageIPyWidget(message => {
+            received.push(message);
+        });
+        const genericListener = session.onDidReceiveRuntimeMessage(message => {
+            genericReceived.push(message);
+        });
+        const originalMessage = {
+            id: 'original-1',
+            event_clock: 1,
+            parent_id: 'exec-1',
+            when: new Date(0).toISOString(),
+            type: LanguageRuntimeMessageType.Output,
+            kind: RuntimeOutputKind.IPyWidget,
+            data: { 'text/plain': 'captured widget output' },
+        };
+
+        (session as any).processMessage({
+            id: 'widget-1',
+            event_clock: 2,
+            parent_id: 'exec-1',
+            when: new Date(0).toISOString(),
+            type: LanguageRuntimeMessageType.IPyWidget,
+            original_message: originalMessage,
+        });
+
+        assert.strictEqual(received.length, 1);
+        assert.strictEqual(received[0].original_message, originalMessage);
+        assert.strictEqual(genericReceived.length, 1);
+        assert.strictEqual(genericReceived[0].original_message, originalMessage);
+        listener.dispose();
+        genericListener.dispose();
+        await session.dispose();
     });
 
     test('resource usage emits cached process ids and fetches missing ids once', async () => {

@@ -76,6 +76,11 @@ export class HelpViewProvider extends BaseWebviewProvider {
         this._connection.sendNotification(HelpProtocol.HelpFindNotification.type, {});
     }
 
+    async focus(): Promise<void> {
+        await this.reveal(false);
+        this._connection?.sendNotification(HelpProtocol.HelpFocusNotification.type, {});
+    }
+
     protected _registerRpcHandlers(connection: MessageConnection): void {
         connection.onNotification(HelpProtocol.HelpNavigateNotification.type, params => {
             if (params.url.startsWith('command:')) {

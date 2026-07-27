@@ -146,6 +146,12 @@
     },
     {
       "kind": "notification",
+      "name": "HelpFocusNotification",
+      "method": "help/focus",
+      "paramsType": "{}"
+    },
+    {
+      "kind": "notification",
       "name": "HelpScrollNotification",
       "method": "help/scroll",
       "paramsType": "Params",

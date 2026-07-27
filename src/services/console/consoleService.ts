@@ -30,6 +30,7 @@ import {
 } from '../../runtime/comms/positronUiComm';
 import { LanguageRuntimeSessionMode } from '../../api';
 import type { ConsoleErrorFollowupServiceLike } from './consoleErrorFollowup';
+import { ExecutionHistoryService } from './executionHistoryService';
 
 
 /**
@@ -49,6 +50,7 @@ export class PositronConsoleService implements IPositronConsoleService {
         | undefined;
     private readonly _disposables: vscode.Disposable[] = [];
     private readonly _consoleStateStore?: ConsoleStateStore;
+    private readonly _executionHistoryService?: ExecutionHistoryService;
 
     // Event emitters (1:1 Positron naming)
     private readonly _onDidStartPositronConsoleInstanceEmitter = new vscode.EventEmitter<IPositronConsoleInstance>();
@@ -71,7 +73,14 @@ export class PositronConsoleService implements IPositronConsoleService {
         this._outputChannel.debug('[PositronConsoleService] Created');
         if (context) {
             this._consoleStateStore = new ConsoleStateStore(context.workspaceState, this._outputChannel);
-            this._disposables.push(this._consoleStateStore);
+            const historyStorage = vscode.workspace.workspaceFolders?.length
+                ? context.workspaceState
+                : context.globalState;
+            this._executionHistoryService = new ExecutionHistoryService(
+                historyStorage,
+                this._outputChannel,
+            );
+            this._disposables.push(this._consoleStateStore, this._executionHistoryService);
         }
     }
 
@@ -228,6 +237,7 @@ export class PositronConsoleService implements IPositronConsoleService {
             this._outputChannel.debug(`[PositronConsoleService] Deleting console: ${sessionId}`);
             this._consoleInstancesBySessionId.delete(sessionId);
             this._consoleStateStore?.delete(sessionId);
+            this._executionHistoryService?.deleteSessionHistory(sessionId);
             this._onDidDeletePositronConsoleInstanceEmitter.fire(instance);
             instance.dispose();
 
@@ -292,6 +302,7 @@ export class PositronConsoleService implements IPositronConsoleService {
 
     async flushPersistedState(): Promise<void> {
         await this._consoleStateStore?.flush();
+        await this._executionHistoryService?.flush();
     }
 
     /**
@@ -629,6 +640,7 @@ export class PositronConsoleService implements IPositronConsoleService {
             runtimeMetadata,
             this._outputChannel,
             this._errorFollowupService,
+            this._executionHistoryService,
         );
 
         instance.setWidthInChars(this._consoleWidth);

@@ -1232,11 +1232,6 @@
         }>,
     ) {
         if (!connection || !selectedPlotId) return;
-        if (selectedPlot?.kind === "html") {
-            console.warn("Open in editor not supported for HTML plots");
-            return;
-        }
-
         const previousTarget = openInEditorDefaultTarget;
         const nextTarget: EditorTarget =
             event.detail.target === "newWindow"

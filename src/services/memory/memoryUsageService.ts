@@ -52,6 +52,7 @@ export interface MemoryUsageSnapshot {
     supervisorOverheadBytes?: number;
     extensionHostOverheadBytes: number;
     otherProcessesBytes: number;
+    collectionMethod: 'process-tree' | 'process-api';
     source: MemoryUsageSource;
     lowMemory?: LowMemoryStatus;
 }
@@ -331,7 +332,10 @@ export class MemoryUsageService implements vscode.Disposable {
 
         this._pollInProgress = true;
         try {
-            const processMemoryInfo = await this._memoryInfoProvider.getProcessMemoryInfo();
+            const processMemoryInfo = await this._memoryInfoProvider.getProcessMemoryInfo({
+                kernelProcessIds: Array.from(this._kernelMemory.values())
+                    .flatMap(session => session.processId ? [session.processId] : []),
+            });
             if (!this._enabled) {
                 return;
             }
@@ -340,6 +344,7 @@ export class MemoryUsageService implements vscode.Disposable {
                 freeSystemMemory,
                 extensionHostOverheadBytes,
                 supervisorOverheadBytes,
+                collectionMethod,
                 source,
             } = processMemoryInfo;
             const kernelSessions = Array.from(this._kernelMemory.values());
@@ -359,6 +364,7 @@ export class MemoryUsageService implements vscode.Disposable {
                 supervisorOverheadBytes,
                 extensionHostOverheadBytes,
                 otherProcessesBytes,
+                collectionMethod,
                 source,
                 lowMemory: computeLowMemoryStatus(
                     freeSystemMemory,

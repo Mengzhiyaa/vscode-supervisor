@@ -250,6 +250,10 @@
           "type": "number"
         },
         {
+          "name": "collectionMethod",
+          "type": "\"process-tree\" | \"process-api\""
+        },
+        {
           "name": "source",
           "type": "MemoryUsageSource"
         },

@@ -7,7 +7,12 @@ import {
     type ILanguageSupportRegistration,
     type ILanguageWebviewAssets,
     type IDataExplorerBackendProvider,
+    type IRuntimeOutputRenderer,
     type IDataConnectionDriver,
+    type DataConnection,
+    type DataConnectionDriver,
+    type DataConnectionDriverSummary,
+    type DataConnectionParameterValues,
     type IDataConnectionProfile,
     type IRuntimeSessionMetadata,
     type ISupervisorFrameworkApi,
@@ -48,7 +53,7 @@ import {
     SurfaceLifecycleService,
 } from './services/surfaces';
 import { ConnectionsTreeProvider, PositronConnectionsService } from './services/connections';
-import { PlotEditorProvider, PlotsGalleryEditorProvider } from './editor';
+import { PlotEditorProvider, PlotsGalleryEditorProvider, type PlotEditorContent } from './editor';
 import { registerConsoleActions } from './services/console/consoleActions';
 import {
     PositronDataExplorerService,
@@ -455,6 +460,8 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
             runtimeStartupService: this.runtimeStartupService,
             positronNewFolderService: this.positronNewFolderService,
             version: this.version,
+            registerNotebookController: (controller, languageIds) =>
+                this.registerNotebookController(controller, languageIds),
             startRuntime: (metadata, source, activate) =>
                 this.startRuntime(metadata, source, activate),
             createSession: (runtimeMetadata, sessionMetadata, kernelSpec, dynState) =>
@@ -477,8 +484,14 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
             openDataExplorer: async (uri, providerId) => {
                 await this._positronDataExplorerService.openWithBackend(uri, providerId);
             },
-            registerDataConnectionDriver: (driver: IDataConnectionDriver) =>
+            registerRuntimeOutputRenderer: renderer =>
+                this._richOutputRouter.registerRenderer(renderer),
+            registerDataConnectionDriver: driver =>
                 this._connectionsService.registerDriver(driver),
+            getDataConnectionDrivers: async () =>
+                this._connectionsService.driverManager.getDriverSummaries(),
+            connectDataConnection: (driverId, mechanismId, parameters) =>
+                this._connectionsService.driverManager.connect(driverId, mechanismId, parameters),
             addUpdateDataConnectionProfile: async (profile: IDataConnectionProfile, connect = true) => {
                 await this._connectionsService.addUpdateProfile(profile, connect);
             },
@@ -496,6 +509,13 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
         activate: boolean,
     ): Promise<string> {
         return this._sessionManager.startRuntime(metadata, source, activate);
+    }
+
+    registerNotebookController(
+        controller: vscode.NotebookController,
+        languageIds: readonly string[],
+    ): vscode.Disposable {
+        return this._sessionManager.registerNotebookController(controller, languageIds);
     }
 
     async createSession(
@@ -611,8 +631,26 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
         await this._positronDataExplorerService.openWithBackend(uri, providerId);
     }
 
-    registerDataConnectionDriver(driver: IDataConnectionDriver): vscode.Disposable {
+    registerRuntimeOutputRenderer(renderer: IRuntimeOutputRenderer): vscode.Disposable {
+        return this._richOutputRouter.registerRenderer(renderer);
+    }
+
+    registerDataConnectionDriver(
+        driver: DataConnectionDriver | IDataConnectionDriver,
+    ): vscode.Disposable {
         return this._connectionsService.registerDriver(driver);
+    }
+
+    async getDataConnectionDrivers(): Promise<readonly DataConnectionDriverSummary[]> {
+        return this._connectionsService.driverManager.getDriverSummaries();
+    }
+
+    async connectDataConnection(
+        driverId: string,
+        mechanismId: string,
+        parameters: DataConnectionParameterValues,
+    ): Promise<DataConnection> {
+        return this._connectionsService.driverManager.connect(driverId, mechanismId, parameters);
     }
 
     async addUpdateDataConnectionProfile(profile: IDataConnectionProfile, connect = true): Promise<void> {
@@ -1450,7 +1488,12 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
 
         // Open Plot in Editor command (requires plotId and plotData from webview)
         this._disposables.push(
-            vscode.commands.registerCommand(CoreCommandIds.openPlotInEditor, async (plotId?: string, plotData?: string, viewColumn?: vscode.ViewColumn, moveToNewWindow?: boolean) => {
+            vscode.commands.registerCommand(CoreCommandIds.openPlotInEditor, async (
+                plotId?: string,
+                plotData?: string | PlotEditorContent,
+                viewColumn?: vscode.ViewColumn,
+                moveToNewWindow?: boolean,
+            ) => {
                 if (plotId && plotData) {
                     this._plotEditorProvider.openPlotInEditor(plotId, plotData, undefined, viewColumn);
                     if (moveToNewWindow) {

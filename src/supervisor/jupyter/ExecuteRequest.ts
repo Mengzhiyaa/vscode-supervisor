@@ -11,11 +11,17 @@ import { JupyterRequest } from './JupyterRequest';
 
 
 export class ExecuteRequest extends JupyterRequest<JupyterExecuteRequest, JupyterExecuteResult> {
-	constructor(readonly requestId: string, req: JupyterExecuteRequest) {
+	private readonly _cellId?: string;
+
+	constructor(readonly requestId: string, req: JupyterExecuteRequest, cellId?: string) {
 		super(JupyterMessageType.ExecuteRequest, req, JupyterMessageType.ExecuteResult, JupyterChannel.Shell);
+		this._cellId = cellId;
 	}
 	protected override createMsgId(): string {
 		return this.requestId;
+	}
+	protected override get metadata(): Record<string, unknown> {
+		return this._cellId ? { cellId: this._cellId } : {};
 	}
 }
 
@@ -49,7 +55,7 @@ export interface JupyterExecuteRequest {
 
 export interface JupyterPositronExecuteRequest {
 	code_location?: JupyterPositronLocation;
-	executionMetadata?: Record<string, unknown>;
+	[key: string]: unknown;
 }
 
 /**

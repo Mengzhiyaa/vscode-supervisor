@@ -15,6 +15,8 @@ export {
 // Classes
 export { PositronConsoleInstance } from './consoleInstance';
 export { PositronConsoleService } from './consoleService';
+export { ExecutionHistoryService } from './executionHistoryService';
+export type { InputHistoryEntry } from './executionHistoryService';
 
 // Runtime Items
 export {

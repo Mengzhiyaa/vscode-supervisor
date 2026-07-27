@@ -8,6 +8,7 @@ import {
 } from '../../api';
 import { RuntimeStartMode, RuntimeState } from '../../internal/runtimeTypes';
 import { RuntimeSessionService } from '../../runtime/runtimeSession';
+import { RuntimeSession } from '../../runtime/session';
 
 function createMemento(): vscode.Memento {
     const store = new Map<string, unknown>();
@@ -59,6 +60,14 @@ function makeNoopLogChannel(): vscode.LogOutputChannel {
         hide: noop,
         dispose: noop,
     };
+}
+
+function registerNotebookController(service: RuntimeSessionService): vscode.Disposable {
+    return service.registerNotebookController({
+        id: 'r-notebook-controller',
+        notebookType: 'jupyter-notebook',
+        supportedLanguages: ['r'],
+    } as vscode.NotebookController, ['r']);
 }
 
 function makeRuntimeMetadata(runtimeId: string = 'runtime-1'): LanguageRuntimeMetadata {
@@ -249,6 +258,7 @@ suite('[Unit] runtime session start semantics', () => {
 
     test('reuses the existing notebook session for the same runtime and notebook URI', async () => {
         const service = new RuntimeSessionService(makeContext(), makeNoopLogChannel());
+        const controllerRegistration = registerNotebookController(service);
         const runtimeMetadata = makeRuntimeMetadata();
         const notebookUri = vscode.Uri.parse('file:///workspace/notebook.ipynb');
         let createCalls = 0;
@@ -279,11 +289,13 @@ suite('[Unit] runtime session start semantics', () => {
 
         assert.strictEqual(sessionId, 'notebook-session-1');
         assert.strictEqual(createCalls, 0);
+        controllerRegistration.dispose();
         service.dispose();
     });
 
     test('allows console and notebook sessions for the same runtime to start concurrently', async () => {
         const service = new RuntimeSessionService(makeContext(), makeNoopLogChannel());
+        const controllerRegistration = registerNotebookController(service);
         const runtimeMetadata = makeRuntimeMetadata();
         const notebookUri = vscode.Uri.parse('file:///workspace/notebook.ipynb');
         let createCalls = 0;
@@ -329,6 +341,31 @@ suite('[Unit] runtime session start semantics', () => {
         assert.strictEqual(createCalls, 2);
         assert.strictEqual(consoleSessionId, 'console-session');
         assert.strictEqual(notebookSessionId, 'notebook-session');
+        controllerRegistration.dispose();
+        service.dispose();
+    });
+
+    test('rejects notebook sessions without a language-owned controller', async () => {
+        const service = new RuntimeSessionService(makeContext(), makeNoopLogChannel());
+        const runtimeMetadata = makeRuntimeMetadata();
+        (service as any)._requireRuntimeEntry = () => ({
+            metadata: runtimeMetadata,
+            installation: {},
+            provider: {},
+        });
+
+        await assert.rejects(
+            service.startNewRuntimeSession(
+                runtimeMetadata.runtimeId,
+                runtimeMetadata.runtimeName,
+                LanguageRuntimeSessionMode.Notebook,
+                vscode.Uri.parse('file:///workspace/notebook.ipynb'),
+                'unit-test',
+                RuntimeStartMode.Starting,
+                false,
+            ),
+            /no language extension has registered ownership/,
+        );
         service.dispose();
     });
 
@@ -388,6 +425,59 @@ suite('[Unit] runtime session start semantics', () => {
         assert.deepStrictEqual(willStartEvents, [RuntimeStartMode.Restarting]);
 
         dispose();
+        service.dispose();
+    });
+
+    test('delegates working-directory changes to the language-owned hook', async () => {
+        const runtimeMetadata = makeRuntimeMetadata();
+        const sessionMetadata: IRuntimeSessionMetadata = {
+            sessionId: 'working-directory-session',
+            sessionMode: LanguageRuntimeSessionMode.Console,
+            sessionName: 'working-directory-session',
+            createdTimestamp: Date.now(),
+            startReason: 'unit-test',
+        };
+        const requested: string[] = [];
+        const session = new RuntimeSession(
+            sessionMetadata.sessionId,
+            runtimeMetadata,
+            sessionMetadata,
+            makeNoopLogChannel(),
+            sessionMetadata.sessionName,
+            undefined,
+            {
+                setWorkingDirectory: async directory => {
+                    requested.push(directory);
+                },
+            },
+        );
+
+        await session.setWorkingDirectory('/workspace/project');
+
+        assert.deepStrictEqual(requested, ['/workspace/project']);
+        assert.strictEqual(session.workingDirectory, '/workspace/project');
+        await session.dispose();
+    });
+
+    test('tracks watchdog state and delegates force quit to the runtime session', async () => {
+        const service = new RuntimeSessionService(makeContext(), makeNoopLogChannel());
+        let forceQuitCalls = 0;
+        const session = {
+            sessionId: 'unresponsive-session',
+            state: RuntimeState.Interrupting,
+            runtimeMetadata: makeRuntimeMetadata(),
+            forceQuit: async () => { forceQuitCalls++; },
+        };
+        (service as any)._sessions.set(session.sessionId, session);
+        (service as any)._startStateWatchdog(session, RuntimeState.Interrupting);
+
+        const watchdog = (service as any)._stateWatchdogs.get(session.sessionId);
+        assert.deepStrictEqual(watchdog.expectedStates, [RuntimeState.Idle, RuntimeState.Ready]);
+
+        await service.forceQuitSession(session.sessionId);
+        assert.strictEqual(forceQuitCalls, 1);
+        assert.strictEqual((service as any)._stateWatchdogs.has(session.sessionId), false);
+        (service as any)._sessions.delete(session.sessionId);
         service.dispose();
     });
 });

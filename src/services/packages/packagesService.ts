@@ -11,6 +11,7 @@ import {
 } from '../../api';
 import { ContextKeys } from '../../coreCommandIds';
 import { RuntimeSessionService } from '../../runtime/runtimeSession';
+import { PackageMetadataCache } from './packageMetadataCache';
 import { PositronPackagesInstance } from './packagesInstance';
 
 const ITEM_SIZE_STORAGE_KEY = 'positron.packages.itemSize';
@@ -34,6 +35,7 @@ export class PositronPackagesService implements IPositronPackagesService {
     private readonly _instancesBySessionId = new Map<string, PositronPackagesInstance>();
     private readonly _disposables: vscode.Disposable[] = [];
     private readonly _activeInstanceDisposables: vscode.Disposable[] = [];
+    private readonly _metadataCache: PackageMetadataCache;
 
     private _activeInstance: PositronPackagesInstance | undefined;
     private _selectedPackage: string | undefined;
@@ -50,6 +52,10 @@ export class PositronPackagesService implements IPositronPackagesService {
         private readonly _sessionManager: RuntimeSessionService,
         private readonly _outputChannel: vscode.LogOutputChannel,
     ) {
+        this._metadataCache = new PackageMetadataCache(
+            this._context.workspaceState,
+            this._outputChannel,
+        );
         this._itemSize = this._readStoredItemSize();
         this._disposables.push(
             this._onDidChangeActivePackagesInstance,
@@ -258,7 +264,12 @@ export class PositronPackagesService implements IPositronPackagesService {
                 return undefined;
             }
 
-            instance = new PositronPackagesInstance(session, packageManager, this._outputChannel);
+            instance = new PositronPackagesInstance(
+                session,
+                packageManager,
+                this._outputChannel,
+                this._metadataCache,
+            );
             this._instancesBySessionId.set(session.sessionId, instance);
         }
 

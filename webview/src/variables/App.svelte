@@ -58,7 +58,8 @@
     const DEFAULT_GROUPING: GroupingMode = "kind";
     const DEFAULT_SORTING: SortingMode = "name";
     const DEFAULT_FILTER_TEXT = "";
-    const DEFAULT_HIGHLIGHT_RECENT = true;
+    const DEFAULT_HIGHLIGHT_RECENT =
+        !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
     let sessions = $state<SessionInfo[]>([]);
     let activeSessionId = $state<string | undefined>();
@@ -356,6 +357,9 @@
         );
 
         rpc.sendNotification("variables/ready");
+        void rpc.sendRequest("variables/setReducedMotionPreference", {
+            reduced: !DEFAULT_HIGHLIGHT_RECENT,
+        });
         void hydrateMemoryUsage(rpc);
     });
 

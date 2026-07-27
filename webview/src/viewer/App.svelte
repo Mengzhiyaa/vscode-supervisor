@@ -26,6 +26,12 @@
     let interrupting = $state(false);
     let loadState = $state<"idle" | "loading" | "ready" | "error">("idle");
     let defaultOpenTarget = $state<ViewerOpenTarget>("browser");
+    let iframeEl = $state<HTMLIFrameElement | null>(null);
+    let findVisible = $state(false);
+    let findValue = $state("");
+    let findHasResult = $state(true);
+    let bridgeAvailable = $state(false);
+    let bridgeProbeTimer: ReturnType<typeof setTimeout> | undefined;
 
     onMount(() => {
         void connection.sendRequest("viewer/getDefaultOpenTarget", {}).then((result) => {
@@ -41,6 +47,8 @@
             // runtime/terminal state; URL previews are not inherently stoppable.
             interruptible = false;
             interrupting = false;
+            bridgeAvailable = false;
+            if (bridgeProbeTimer) clearTimeout(bridgeProbeTimer);
         });
 
         connection.onNotification("viewer/updateInterruptState", (params: {
@@ -59,8 +67,30 @@
             canNavigateForward = params.canNavigateForward;
         });
 
+        connection.onNotification("viewer/focus", () => {
+            focusPreview();
+        });
+
+        connection.onNotification("viewer/find", () => {
+            showFind();
+        });
+
         const handleKeyboardShortcut = (event: KeyboardEvent) => {
-            if (!currentUrl || kind !== "url") {
+            if (!currentUrl) {
+                return;
+            }
+
+            if (
+                (event.ctrlKey || event.metaKey) &&
+                !event.altKey &&
+                event.key.toLowerCase() === "f"
+            ) {
+                event.preventDefault();
+                showFind();
+                return;
+            }
+
+            if (kind !== "url") {
                 return;
             }
 
@@ -85,8 +115,46 @@
                 handleForward();
             }
         };
+        const handleFrameMessage = (event: MessageEvent) => {
+            if (event.source !== iframeEl?.contentWindow) {
+                return;
+            }
+            const message = event.data as {
+                id?: string;
+                url?: string;
+                title?: string;
+                found?: boolean;
+            };
+            switch (message?.id) {
+                case "supervisor-viewer-ready":
+                    bridgeAvailable = true;
+                    if (bridgeProbeTimer) clearTimeout(bridgeProbeTimer);
+                    break;
+                case "supervisor-viewer-location":
+                case "supervisor-viewer-navigate":
+                    if (message.url) {
+                        connection.sendNotification("viewer/didNavigate", {
+                            url: message.url,
+                            title: message.title,
+                        });
+                    }
+                    break;
+                case "supervisor-viewer-show-find":
+                    showFind();
+                    break;
+                case "supervisor-viewer-find-result":
+                    bridgeAvailable = true;
+                    findHasResult = Boolean(message.found);
+                    break;
+            }
+        };
         window.addEventListener("keydown", handleKeyboardShortcut);
-        return () => window.removeEventListener("keydown", handleKeyboardShortcut);
+        window.addEventListener("message", handleFrameMessage);
+        return () => {
+            window.removeEventListener("keydown", handleKeyboardShortcut);
+            window.removeEventListener("message", handleFrameMessage);
+            if (bridgeProbeTimer) clearTimeout(bridgeProbeTimer);
+        };
     });
 
     const iframeHeight = $derived(
@@ -133,14 +201,75 @@
 
     function handleFrameLoaded() {
         loadState = "ready";
+        bridgeAvailable = false;
+        postToFrame({ id: "supervisor-viewer-ping" });
+        bridgeProbeTimer = setTimeout(() => {
+            bridgeAvailable = false;
+        }, 500);
     }
 
     function handleFrameError() {
         loadState = "error";
     }
+
+    function postToFrame(message: Record<string, unknown>) {
+        iframeEl?.contentWindow?.postMessage(message, "*");
+    }
+
+    function focusPreview() {
+        iframeEl?.focus();
+        postToFrame({ id: "supervisor-viewer-focus" });
+    }
+
+    function showFind() {
+        if (!currentUrl) return;
+        findVisible = true;
+        setTimeout(() => {
+            const input = document.getElementById("viewer-find-input") as HTMLInputElement | null;
+            input?.focus();
+            input?.select();
+        }, 0);
+    }
+
+    function closeFind() {
+        findVisible = false;
+        findValue = "";
+        findHasResult = true;
+        postToFrame({ id: "supervisor-viewer-find", value: "" });
+        focusPreview();
+    }
+
+    function updateFind(value: string) {
+        findValue = value;
+        findHasResult = true;
+        postToFrame({ id: "supervisor-viewer-find", value });
+    }
+
+    function findNext() {
+        postToFrame({ id: "supervisor-viewer-find-next", value: findValue });
+    }
+
+    function findPrevious() {
+        postToFrame({ id: "supervisor-viewer-find-previous", value: findValue });
+    }
+
+    function handleFindKeydown(event: KeyboardEvent) {
+        if (event.key === "Enter") {
+            event.preventDefault();
+            event.shiftKey ? findPrevious() : findNext();
+        } else if (event.key === "Escape") {
+            event.preventDefault();
+            closeFind();
+        }
+    }
 </script>
 
-<div class="viewer-root" aria-busy={loadState === "loading"}>
+<div
+    class="viewer-root"
+    role="region"
+    aria-label={localize('viewer.region', 'Viewer')}
+    aria-busy={loadState === "loading"}
+>
     {#if currentUrl}
         <!-- Toolbar: choose based on kind -->
         {#if kind === "url"}
@@ -158,6 +287,7 @@
                 {defaultOpenTarget}
                 onopen={handleOpen}
                 oninterrupt={handleInterrupt}
+                onfind={showFind}
             />
         {:else if kind === "html"}
             <HtmlActionBar
@@ -166,6 +296,7 @@
                 onclear={handleClear}
                 {defaultOpenTarget}
                 onopen={handleOpen}
+                onfind={showFind}
             />
         {:else}
             <BasicActionBar
@@ -175,8 +306,43 @@
         {/if}
 
         <div class="viewer-content">
+            {#if findVisible}
+                <div
+                    class="find-widget"
+                    role="search"
+                    aria-label={localize('viewer.find', 'Find in preview')}
+                >
+                    <input
+                        id="viewer-find-input"
+                        class="find-input"
+                        type="text"
+                        placeholder={localize('common.find', 'Find')}
+                        value={findValue}
+                        aria-label={localize('viewer.find', 'Find in preview')}
+                        oninput={(event) => updateFind((event.target as HTMLInputElement).value)}
+                        onkeydown={handleFindKeydown}
+                    />
+                    <span class="find-status" role="status" aria-live="polite">
+                        {#if !bridgeAvailable}
+                            {localize('viewer.findUnavailable', 'Find is unavailable for this content')}
+                        {:else if findValue && !findHasResult}
+                            {localize('common.noResults', 'No results')}
+                        {/if}
+                    </span>
+                    <button type="button" class="find-action" onclick={findPrevious} aria-label={localize('common.previousMatch', 'Previous match')} title={localize('common.previousMatch', 'Previous match')}>
+                        <span class="codicon codicon-arrow-up" aria-hidden="true"></span>
+                    </button>
+                    <button type="button" class="find-action" onclick={findNext} aria-label={localize('common.nextMatch', 'Next match')} title={localize('common.nextMatch', 'Next match')}>
+                        <span class="codicon codicon-arrow-down" aria-hidden="true"></span>
+                    </button>
+                    <button type="button" class="find-action" onclick={closeFind} aria-label={localize('common.close', 'Close')} title={localize('common.close', 'Close')}>
+                        <span class="codicon codicon-close" aria-hidden="true"></span>
+                    </button>
+                </div>
+            {/if}
             <iframe
                 class="viewer-frame"
+                bind:this={iframeEl}
                 src={currentUrl}
                 style="height: {iframeHeight};"
                 title={title || "Viewer"}
@@ -235,6 +401,67 @@
         flex: 1;
         min-height: 0;
         overflow: hidden;
+    }
+
+    .find-widget {
+        position: absolute;
+        z-index: 4;
+        top: 4px;
+        right: 16px;
+        display: flex;
+        align-items: center;
+        gap: 2px;
+        padding: 4px;
+        max-width: calc(100% - 32px);
+        background: var(--vscode-editorWidget-background);
+        border: 1px solid var(--vscode-editorWidget-border, var(--vscode-panel-border));
+        border-radius: 4px;
+        box-shadow: 0 2px 8px rgb(0 0 0 / 20%);
+    }
+
+    .find-input {
+        width: min(220px, 45vw);
+        padding: 3px 6px;
+        color: var(--vscode-input-foreground);
+        background: var(--vscode-input-background);
+        border: 1px solid var(--vscode-input-border, transparent);
+        outline: none;
+        font: inherit;
+    }
+
+    .find-input:focus {
+        border-color: var(--vscode-focusBorder);
+    }
+
+    .find-status {
+        max-width: 180px;
+        overflow: hidden;
+        color: var(--vscode-descriptionForeground);
+        font-size: 11px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .find-action {
+        display: grid;
+        width: 22px;
+        height: 22px;
+        padding: 0;
+        place-items: center;
+        border: 0;
+        border-radius: 3px;
+        color: var(--vscode-foreground);
+        background: transparent;
+        cursor: pointer;
+    }
+
+    .find-action:hover {
+        background: var(--vscode-toolbar-hoverBackground);
+    }
+
+    .find-action:focus-visible {
+        outline: 1px solid var(--vscode-focusBorder);
+        outline-offset: 1px;
     }
 
     .viewer-progress {

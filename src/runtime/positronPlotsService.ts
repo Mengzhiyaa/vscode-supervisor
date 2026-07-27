@@ -1259,13 +1259,20 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
                 this._editorPlotClients.set(plotId, plotCopy);
                 this._storePlotMetadata(plotCopy.metadata, PlotStorageLocationEditor);
                 editorPlot = plotCopy;
+            } else if (viewPlot instanceof HtmlPlotClient) {
+                // The editor renders the URI in its own iframe. Reuse the
+                // URI-backed model instead of duplicating a runtime comm.
+                editorPlot = viewPlot;
             } else {
                 vscode.window.showWarningMessage('Opening this plot type in editor is not supported yet.');
                 return;
             }
         }
 
-        let plotData: string | undefined;
+        let plotData:
+            | string
+            | { kind: 'html'; uri: string; title?: string }
+            | undefined;
         if (editorPlot instanceof PlotClientInstance) {
             let rendered = editorPlot.lastRender;
             if (!rendered) {
@@ -1283,6 +1290,12 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
             plotData = rendered?.uri;
         } else if (editorPlot instanceof StaticPlotClient) {
             plotData = editorPlot.uri;
+        } else if (editorPlot instanceof HtmlPlotClient) {
+            plotData = {
+                kind: 'html',
+                uri: editorPlot.uri.toString(true),
+                title: editorPlot.metadata.name,
+            };
         }
 
         if (!plotData) {

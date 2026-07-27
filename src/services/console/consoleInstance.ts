@@ -81,6 +81,7 @@ import {
 } from '../../internal/runtimeTypes';
 import { runtimeStateToPositronConsoleState } from '../../runtime/runtimeStateMapping';
 import type { ConsoleErrorFollowupServiceLike } from './consoleErrorFollowup';
+import type { ExecutionHistoryService } from './executionHistoryService';
 export type {
     SerializedActivityItem,
     SerializedConsoleState,
@@ -198,7 +199,14 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
         private readonly _runtimeMetadata: LanguageRuntimeMetadata,
         private readonly _outputChannel: vscode.LogOutputChannel,
         private readonly _errorFollowupService?: ConsoleErrorFollowupServiceLike,
+        private readonly _executionHistoryService?: ExecutionHistoryService,
     ) {
+        if (this._executionHistoryService) {
+            this._inputHistory = this._executionHistoryService
+                .getSessionInputEntries(_sessionMetadata.sessionId)
+                .map(entry => entry.input)
+                .reverse();
+        }
         this._outputChannel.debug(`[ConsoleInstance] Created for session ${_sessionMetadata.sessionId}`);
     }
 
@@ -454,7 +462,14 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
             }
         }
 
-        this._inputHistory = [...state.inputHistory].reverse();
+        const restoredHistory = this._executionHistoryService
+            ? this._executionHistoryService.restoreLegacySessionEntries(
+                this.sessionId,
+                this._runtimeMetadata.languageId,
+                state.inputHistory,
+            ).map(entry => entry.input)
+            : state.inputHistory;
+        this._inputHistory = [...restoredHistory].reverse();
         this._inputHistoryIndex = -1;
         this._savedCurrentInput = '';
         this._trace = state.trace;
@@ -1268,6 +1283,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
         this._inputHistory = [];
         this._inputHistoryIndex = -1;
         this._savedCurrentInput = '';
+        this._executionHistoryService?.clearSessionInputEntries(this.sessionId);
         this._onDidClearInputHistoryEmitter.fire();
         this._outputChannel.debug('[ConsoleInstance] Input history cleared');
     }
@@ -1284,6 +1300,11 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
 
         // Add to beginning of history (most recent first)
         this._inputHistory.unshift(code);
+        this._executionHistoryService?.recordInput(
+            this.sessionId,
+            this._runtimeMetadata.languageId,
+            code,
+        );
 
         // Limit history size (Positron uses 1000)
         const maxHistorySize = 1000;
