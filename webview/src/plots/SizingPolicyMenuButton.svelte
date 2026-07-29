@@ -8,7 +8,6 @@
      * Licensed under the Elastic License 2.0. See LICENSE.txt for license information.
      */
 
-    import { createEventDispatcher } from "svelte";
     import ActionBarMenuButton from "../shared/ActionBarMenuButton.svelte";
 
     /**
@@ -45,6 +44,8 @@
         hasIntrinsicSize?: boolean;
         /** Custom size if set */
         customSize?: { width: number; height: number };
+        onSelectPolicy?: (policyId: string) => void;
+        onSetCustomSize?: () => void;
     }
 
     let {
@@ -52,13 +53,9 @@
         policies,
         hasIntrinsicSize = false,
         customSize,
+        onSelectPolicy,
+        onSetCustomSize,
     }: Props = $props();
-
-    const dispatch = createEventDispatcher<{
-        selectPolicy: { policyId: string };
-        setCustomSize: void;
-        clearCustomSize: void;
-    }>();
 
     // Localized strings matching Positron
     const sizingPolicyTooltip =
@@ -99,7 +96,7 @@
                 checked: policy.id === selectedPolicy.id,
                 disabled: !isPolicyEnabled(policy),
                 onSelected: () => {
-                    dispatch("selectPolicy", { policyId: policy.id });
+                    onSelectPolicy?.(policy.id);
                 },
             })),
         {
@@ -114,7 +111,7 @@
                 label: policy.getName(),
                 checked: policy.id === selectedPolicy.id,
                 onSelected: () => {
-                    dispatch("selectPolicy", { policyId: policy.id });
+                    onSelectPolicy?.(policy.id);
                 },
             })),
         {
@@ -123,7 +120,7 @@
                 ? changeCustomPolicyTooltip
                 : newCustomPolicyTooltip,
             onSelected: () => {
-                dispatch("setCustomSize");
+                onSetCustomSize?.();
             },
         },
     ]}

@@ -174,29 +174,11 @@
     }
 
     $effect(() => {
-        document.addEventListener('mousedown', handleOutsidePointer, true);
-        document.addEventListener('contextmenu', handleOutsidePointer, true);
-        return () => {
-            document.removeEventListener('mousedown', handleOutsidePointer, true);
-            document.removeEventListener('contextmenu', handleOutsidePointer, true);
-        };
-    });
-
-    $effect(() => {
         if (!menuEl) {
             return;
         }
 
         updatePosition();
-        const handleViewportChange = () => updatePosition();
-
-        window.addEventListener('resize', handleViewportChange);
-        window.addEventListener('scroll', handleViewportChange, true);
-
-        return () => {
-            window.removeEventListener('resize', handleViewportChange);
-            window.removeEventListener('scroll', handleViewportChange, true);
-        };
     });
 
     // Close on Escape
@@ -266,6 +248,15 @@
         };
     });
 </script>
+
+<svelte:document
+    onmousedowncapture={handleOutsidePointer}
+    oncontextmenucapture={handleOutsidePointer}
+/>
+<svelte:window
+    onresize={updatePosition}
+    onscrollcapture={updatePosition}
+/>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div

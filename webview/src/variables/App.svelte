@@ -1,5 +1,6 @@
 <script lang="ts">
-    import { onDestroy, onMount } from "svelte";
+    import { onMount } from "svelte";
+    import { SvelteMap, SvelteSet } from "svelte/reactivity";
     import type { MessageConnection } from "vscode-jsonrpc/browser";
     import { getRpcConnection } from "$lib/rpc/client";
     import ActionBars from "./ActionBars.svelte";
@@ -64,8 +65,9 @@
     let sessions = $state<SessionInfo[]>([]);
     let activeSessionId = $state<string | undefined>();
     let activeVariablesInstanceId = $state<string | undefined>();
-    let sessionDataMap = $state(new Map<string, SessionVariablesData>());
-    let variablesInstanceMap = $state(new Map<string, VariablesInstanceInfo>());
+    const sessionDataMap = new SvelteMap<string, SessionVariablesData>();
+    const variablesInstanceMap =
+        new SvelteMap<string, VariablesInstanceInfo>();
 
     let loading = $state(true);
     let connection = $state<MessageConnection | undefined>();
@@ -76,7 +78,6 @@
     let nameColumnWidth = $state(DEFAULT_NAME_COLUMN_WIDTH);
     let detailsColumnWidth = $state(0);
     let rightColumnVisible = $state(true);
-    let containerRef: HTMLDivElement;
 
     let groupingMode = $state<GroupingMode>(DEFAULT_GROUPING);
     let sortingMode = $state<SortingMode>(DEFAULT_SORTING);
@@ -87,7 +88,7 @@
     let contextMenuPosition = $state({ x: 0, y: 0 });
     let contextMenuEntry = $state<VariableEntry | null>(null);
     let showDeleteAllDialog = $state(false);
-    let viewerLoadingEntryIds = $state<Set<string>>(new Set());
+    const viewerLoadingEntryIds = new SvelteSet<string>();
     let memoryUsageEnabled = $state(true);
     let memoryUsageSnapshot = $state<MemoryUsageSnapshot | undefined>();
 
@@ -110,7 +111,6 @@
                 loaded: false,
             };
             sessionDataMap.set(sessionId, data);
-            sessionDataMap = new Map(sessionDataMap);
         }
         return data;
     }
@@ -191,20 +191,9 @@
         syncActiveInstanceControls();
     });
 
-    let resizeObserver: ResizeObserver | undefined;
-
     onMount(() => {
         const rpc = getRpcConnection();
         connection = rpc;
-
-        resizeObserver = new ResizeObserver((entries) => {
-            for (const entry of entries) {
-                containerWidth = entry.contentRect.width;
-            }
-        });
-        if (containerRef) {
-            resizeObserver.observe(containerRef);
-        }
 
         rpc.onNotification(
             "variables/entriesChanged",
@@ -217,7 +206,7 @@
                 );
                 if (changed) {
                     data.entries = entries;
-                    sessionDataMap = new Map(sessionDataMap);
+                    sessionDataMap.set(params.sessionId, { ...data });
                 }
                 applyRecentEntries(params.sessionId, params.entries);
 
@@ -249,7 +238,6 @@
                         variablesInstanceMap.delete(sessionId);
                     }
                 }
-                variablesInstanceMap = new Map(variablesInstanceMap);
                 if (
                     activeVariablesInstanceId &&
                     !knownSessionIds.has(activeVariablesInstanceId)
@@ -291,7 +279,6 @@
                     params.instance.sessionId,
                     params.instance,
                 );
-                variablesInstanceMap = new Map(variablesInstanceMap);
             },
         );
 
@@ -299,7 +286,6 @@
             "variables/instanceStopped",
             (params: { sessionId: string }) => {
                 variablesInstanceMap.delete(params.sessionId);
-                variablesInstanceMap = new Map(variablesInstanceMap);
 
                 if (activeVariablesInstanceId === params.sessionId) {
                     const availableInstanceSessions = sessions.filter((session) =>
@@ -363,10 +349,6 @@
         void hydrateMemoryUsage(rpc);
     });
 
-    onDestroy(() => {
-        resizeObserver?.disconnect();
-    });
-
     function applyRecentEntries(sessionId: string, entries: VariableEntry[]) {
         const recentIds = entries.flatMap((entry) =>
             isVariableItem(entry) && entry.isRecent ? [entry.id] : [],
@@ -380,7 +362,7 @@
             ...Array.from(data.recentEntryIds),
             ...recentIds,
         ]);
-        sessionDataMap = new Map(sessionDataMap);
+        sessionDataMap.set(sessionId, { ...data });
 
         setTimeout(() => {
             const sessionData = sessionDataMap.get(sessionId);
@@ -393,7 +375,7 @@
                     (id) => !recentIds.includes(id),
                 ),
             );
-            sessionDataMap = new Map(sessionDataMap);
+            sessionDataMap.set(sessionId, { ...sessionData });
         }, 2000);
     }
 
@@ -444,7 +426,7 @@
             );
             if (changed) {
                 data.entries = entries;
-                sessionDataMap = new Map(sessionDataMap);
+                sessionDataMap.set(targetSessionId, { ...data });
             }
             applyRecentEntries(targetSessionId, result.entries);
         } catch (error) {
@@ -807,7 +789,6 @@
         if (!connection || !activeSessionId || !entry.hasViewer) return;
 
         viewerLoadingEntryIds.add(entry.id);
-        viewerLoadingEntryIds = new Set(viewerLoadingEntryIds);
 
         try {
             await connection.sendRequest("variables/view", {
@@ -818,7 +799,6 @@
             console.error("Failed to view variable:", error);
         } finally {
             viewerLoadingEntryIds.delete(entry.id);
-            viewerLoadingEntryIds = new Set(viewerLoadingEntryIds);
         }
     }
 
@@ -970,7 +950,7 @@
 
     <div
         class="variables-container"
-        bind:this={containerRef}
+        bind:clientWidth={containerWidth}
         tabindex="0"
         role="listbox"
         onkeydown={handleKeyDown}

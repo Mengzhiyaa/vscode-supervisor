@@ -3,7 +3,7 @@
   Port from Positron's columnSelectorModalPopup.tsx
 -->
 <script lang="ts">
-    import { onDestroy } from "svelte";
+    import { onDestroy, tick } from "svelte";
     import { PositronDataGrid } from "../../../../../../dataGrid";
     import type { SchemaColumn } from "../../../../../../dataGrid/types";
     import ModalPopup from "../../../../../../shared/ModalPopup.svelte";
@@ -105,7 +105,7 @@
             return;
         }
 
-        requestAnimationFrame(() => {
+        void tick().then(() => {
             const gridContainer = gridContainerRef;
             if (!gridContainer) {
                 return;

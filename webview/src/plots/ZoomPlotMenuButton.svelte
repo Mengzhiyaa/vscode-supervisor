@@ -8,20 +8,16 @@
      * Licensed under the Elastic License 2.0. See LICENSE.txt for license information.
      */
 
-    import { createEventDispatcher } from "svelte";
     import ActionBarMenuButton from "../shared/ActionBarMenuButton.svelte";
     import { ZoomLevel } from "./types";
 
     interface Props {
         /** Current zoom level */
         zoomLevel: ZoomLevel;
+        onZoomChange?: (zoomLevel: ZoomLevel) => void;
     }
 
-    let { zoomLevel }: Props = $props();
-
-    const dispatch = createEventDispatcher<{
-        zoomChange: { zoomLevel: ZoomLevel };
-    }>();
+    let { zoomLevel, onZoomChange }: Props = $props();
 
     // Zoom level labels matching Positron's zoomLevelMap
     const zoomLevelMap = new Map<ZoomLevel, string>([
@@ -60,7 +56,7 @@
             label: zoomLevelMap.get(level) ?? "Fit",
             checked: level === zoomLevel,
             onSelected: () => {
-                dispatch("zoomChange", { zoomLevel: level });
+                onZoomChange?.(level);
             },
         }))
     }

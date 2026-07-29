@@ -156,6 +156,15 @@
         }
     }
 
+    function handleWindowMessage(event: MessageEvent): void {
+        if (event.source === iframeEl?.contentWindow) {
+            const data = event.data as IframeMessage;
+            if (data?.id && data.id.startsWith("positron-help-")) {
+                handleIframeMessage(data);
+            }
+        }
+    }
+
     onMount(() => {
         const subscriptions = [
         connection.onNotification("help/state", (params: HelpStateParams) => {
@@ -189,22 +198,11 @@
         }),
         ];
 
-        const onMessage = (event: MessageEvent) => {
-            if (event.source === iframeEl?.contentWindow) {
-                const data = event.data as IframeMessage;
-                if (data?.id && data.id.startsWith("positron-help-")) {
-                    handleIframeMessage(data);
-                }
-            }
-        };
-        window.addEventListener("message", onMessage);
-
         sendStyles();
         return () => {
             for (const subscription of subscriptions) {
                 subscription.dispose();
             }
-            window.removeEventListener("message", onMessage);
         };
     });
 
@@ -276,6 +274,8 @@
         }
     }
 </script>
+
+<svelte:window onmessage={handleWindowMessage} />
 
 <div
     class="help-root"

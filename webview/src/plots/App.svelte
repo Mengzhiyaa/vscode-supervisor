@@ -247,8 +247,8 @@
 
     // Reference to history scroller for keyboard navigation
     let historyScrollerElement = $state<HTMLDivElement | undefined>(undefined);
-    let resizeObserver: ResizeObserver | undefined;
-    let viewportObserver: ResizeObserver | undefined;
+    let plotViewportWidth = $state(1);
+    let plotViewportHeight = $state(1);
     let viewportUpdateTimeout: ReturnType<typeof setTimeout> | null = null;
     let lastViewportKey = "";
     const isGalleryEditor = Boolean(
@@ -710,7 +710,7 @@
 
     onMount(() => {
         connection = getRpcConnection();
-        window.addEventListener("keydown", handleWindowKeyDown, true);
+        scheduleViewportUpdate();
 
         // Listen for new plots with sessionId
         connection.onNotification(
@@ -808,20 +808,6 @@
                 console.error("Failed to position history scroller:", e);
             }
         })();
-
-        // Setup resize observer
-        resizeObserver = new ResizeObserver((entries) => {
-            for (const entry of entries) {
-                containerWidth = entry.contentRect.width;
-                containerHeight = entry.contentRect.height;
-            }
-        });
-
-        if (containerElement) {
-            resizeObserver.observe(containerElement);
-            containerWidth = containerElement.clientWidth;
-            containerHeight = containerElement.clientHeight;
-        }
 
         // Listen for sizing policy changes
         connection.onNotification(
@@ -944,20 +930,7 @@
             },
         );
 
-        // Track plot viewport size for pre-render settings.
-        viewportObserver = new ResizeObserver(() => {
-            scheduleViewportUpdate();
-        });
-
-        if (plotViewportElement) {
-            viewportObserver.observe(plotViewportElement);
-            scheduleViewportUpdate();
-        }
-
         return () => {
-            window.removeEventListener("keydown", handleWindowKeyDown, true);
-            resizeObserver?.disconnect();
-            viewportObserver?.disconnect();
             if (viewportUpdateTimeout) {
                 clearTimeout(viewportUpdateTimeout);
             }
@@ -1145,27 +1118,23 @@
         }
     }
 
-    function handleZoomChange(event: CustomEvent<{ zoomLevel: ZoomLevel }>) {
+    function handleZoomChange(zoomLevel: ZoomLevel) {
         if (!selectedPlotId) {
             return;
         }
 
-        const nextZoom = event.detail.zoomLevel;
-
-        patchPlot(selectedPlotId, { zoomLevel: nextZoom });
+        patchPlot(selectedPlotId, { zoomLevel });
 
         if (connection) {
             void connection.sendRequest("plots/selectZoom", {
                 plotId: selectedPlotId,
-                zoomLevel: nextZoom,
+                zoomLevel,
             });
         }
     }
 
-    async function handleDarkFilterChange(
-        event: CustomEvent<{ mode: DarkFilter }>,
-    ) {
-        darkFilterMode = event.detail.mode;
+    async function handleDarkFilterChange(mode: DarkFilter) {
+        darkFilterMode = mode;
 
         if (!connection) {
             return;
@@ -1173,27 +1142,19 @@
 
         try {
             await connection.sendRequest("plots/selectDarkFilterMode", {
-                mode: event.detail.mode,
+                mode,
             });
         } catch (e) {
             console.error("Failed to update dark filter mode:", e);
         }
     }
 
-    function handleDisplayModeChange(
-        event: CustomEvent<{ mode: PlotDisplayMode }>,
-    ) {
-        plotDisplayMode = event.detail.mode;
-    }
-
     // Sizing policy handlers (Positron integration)
-    async function handleSelectSizingPolicy(
-        event: CustomEvent<{ policyId: string }>,
-    ) {
+    async function handleSelectSizingPolicy(policyId: string) {
         if (!connection) return;
         try {
             await connection.sendRequest("plots/selectSizingPolicy", {
-                policyId: event.detail.policyId,
+                policyId,
             });
         } catch (e) {
             console.error("Failed to select sizing policy:", e);
@@ -1204,11 +1165,12 @@
         showCustomSizeDialog = true;
     }
 
-    async function handleCustomSizeSubmit(
-        event: CustomEvent<{ width: number; height: number }>,
-    ) {
+    async function handleCustomSizeSubmit(size: {
+        width: number;
+        height: number;
+    }) {
         if (!connection) return;
-        const { width, height } = event.detail;
+        const { width, height } = size;
         try {
             await connection.sendRequest("plots/setCustomSize", {
                 width,
@@ -1227,22 +1189,20 @@
     }
 
     async function handleOpenInEditor(
-        event: CustomEvent<{
-            target: "editorTab" | "editorTabSide" | "newWindow";
-        }>,
+        target: "editorTab" | "editorTabSide" | "newWindow",
     ) {
         if (!connection || !selectedPlotId) return;
         const previousTarget = openInEditorDefaultTarget;
         const nextTarget: EditorTarget =
-            event.detail.target === "newWindow"
+            target === "newWindow"
                 ? "newWindow"
-                : event.detail.target === "editorTabSide"
+                : target === "editorTabSide"
                   ? "sideGroup"
                   : "activeGroup";
 
         try {
             openInEditorDefaultTarget = nextTarget;
-            if (event.detail.target === "newWindow") {
+            if (target === "newWindow") {
                 await connection.sendRequest("plots/openInNewWindow", {
                     plotId: selectedPlotId,
                 });
@@ -1250,7 +1210,7 @@
             }
 
             const viewColumn =
-                event.detail.target === "editorTabSide" ? "beside" : "active";
+                target === "editorTabSide" ? "beside" : "active";
             await connection.sendRequest("plots/openInEditor", {
                 plotId: selectedPlotId,
                 viewColumn,
@@ -1284,27 +1244,26 @@
         }
     }
 
-    async function handleRevealPlotCodeInConsole(
-        event: CustomEvent<{ sessionId: string; executionId: string }>,
-    ) {
+    async function handleRevealPlotCodeInConsole(data: {
+        sessionId: string;
+        executionId: string;
+    }) {
         if (!connection) return;
         try {
-            await connection.sendRequest("plots/revealInConsole", event.detail);
+            await connection.sendRequest("plots/revealInConsole", data);
         } catch (e) {
             console.error("Failed to reveal plot code in console:", e);
         }
     }
 
-    async function handleRunPlotCodeAgain(
-        event: CustomEvent<{
-            code: string;
-            sessionId: string;
-            languageId: string;
-        }>,
-    ) {
+    async function handleRunPlotCodeAgain(data: {
+        code: string;
+        sessionId: string;
+        languageId: string;
+    }) {
         if (!connection) return;
         try {
-            await connection.sendRequest("plots/runCodeAgain", event.detail);
+            await connection.sendRequest("plots/runCodeAgain", data);
         } catch (e) {
             console.error("Failed to run plot code again:", e);
         }
@@ -1576,6 +1535,12 @@
     });
 
     $effect(() => {
+        void plotViewportWidth;
+        void plotViewportHeight;
+        scheduleViewportUpdate();
+    });
+
+    $effect(() => {
         const scroller = historyScrollerElement;
         if (!scroller) {
             return;
@@ -1619,6 +1584,8 @@
     });
 </script>
 
+<svelte:window onkeydowncapture={handleWindowKeyDown} />
+
 <div class="positron-plots-container">
     <ActionBar
         plotCount={plots.length}
@@ -1652,28 +1619,31 @@
         selectedPlotSessionId={selectedPlot?.sessionId}
         selectedPlotLanguageId={selectedPlot?.languageId}
         selectedPlotHasOriginFile={!!selectedOriginUri}
-        on:previous={handlePrevious}
-        on:next={handleNext}
-        on:save={handleSave}
-        on:copy={handleCopy}
-        on:zoomChange={handleZoomChange}
-        on:darkFilterChange={handleDarkFilterChange}
-        on:openDarkFilterSettings={handleOpenDarkFilterSettings}
-        on:selectSizingPolicy={handleSelectSizingPolicy}
-        on:setCustomSize={handleSetCustomSize}
-        on:openInEditor={handleOpenInEditor}
-        on:popoutPlot={handlePopoutPlot}
-        on:revealPlotCodeInConsole={handleRevealPlotCodeInConsole}
-        on:runPlotCodeAgain={handleRunPlotCodeAgain}
-        on:openSourceFile={handleOpenOriginFile}
-        on:openGalleryInNewWindow={handleOpenGalleryInNewWindow}
-        on:clearAll={handleClearAll}
-        on:displayModeChange={handleDisplayModeChange}
+        onPrevious={handlePrevious}
+        onNext={handleNext}
+        onSave={handleSave}
+        onCopy={handleCopy}
+        onZoomChange={handleZoomChange}
+        onDarkFilterChange={handleDarkFilterChange}
+        onOpenDarkFilterSettings={handleOpenDarkFilterSettings}
+        onSelectSizingPolicy={handleSelectSizingPolicy}
+        onSetCustomSize={handleSetCustomSize}
+        onOpenInEditor={handleOpenInEditor}
+        onPopoutPlot={handlePopoutPlot}
+        onRevealPlotCodeInConsole={handleRevealPlotCodeInConsole}
+        onRunPlotCodeAgain={handleRunPlotCodeAgain}
+        onOpenSourceFile={handleOpenOriginFile}
+        onOpenGalleryInNewWindow={handleOpenGalleryInNewWindow}
+        onClearAll={handleClearAll}
     />
     <PlotsContainer
         bind:containerElement
         bind:plotViewportElement
         bind:historyScrollerElement
+        bind:containerWidth
+        bind:containerHeight
+        bind:viewportWidth={plotViewportWidth}
+        bind:viewportHeight={plotViewportHeight}
         {connection}
         {plots}
         {selectedPlotId}
@@ -1704,7 +1674,7 @@
     bind:show={showCustomSizeDialog}
     initialWidth={selectedPlotCustomSize?.width ?? 800}
     initialHeight={selectedPlotCustomSize?.height ?? 600}
-    on:submit={handleCustomSizeSubmit}
+    onSubmit={handleCustomSizeSubmit}
 />
 
 <style>

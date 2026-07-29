@@ -3,7 +3,6 @@
   Port from Positron's positronDataGrid.tsx
 -->
 <script lang="ts">
-    import { onMount, onDestroy } from "svelte";
     import type {
         DataGridInstance,
         ClipboardData,
@@ -24,11 +23,8 @@
     // Use a getter to avoid capturing only the initial prop value.
     setPositronDataGridContext(() => instance);
 
-    // Container reference
-    let containerRef: HTMLDivElement;
-
-    // Track resize
-    let resizeObserver: ResizeObserver | undefined;
+    let containerWidth = $state(0);
+    let containerHeight = $state(0);
 
     // Handle clipboard copy (triggered from context menu or keyboard)
     function handleCopy() {
@@ -48,31 +44,19 @@
         copyCapableInstance.copyClipboardData?.(clipboardData);
     }
 
-    onMount(() => {
-        // Set up resize observer
-        resizeObserver = new ResizeObserver((entries) => {
-            const entry = entries[0];
-            if (entry) {
-                instance.setSize(
-                    entry.contentRect.width,
-                    entry.contentRect.height,
-                );
-            }
-        });
-        resizeObserver.observe(containerRef);
+    $effect(() => {
+        if (containerWidth <= 0 || containerHeight <= 0) {
+            return;
+        }
 
-        // Initial size
-        instance.setSize(containerRef.clientWidth, containerRef.clientHeight);
-    });
-
-    onDestroy(() => {
-        resizeObserver?.disconnect();
+        void instance.setSize(containerWidth, containerHeight);
     });
 </script>
 
 <div
     class="data-grid"
-    bind:this={containerRef}
+    bind:clientWidth={containerWidth}
+    bind:clientHeight={containerHeight}
     data-grid-role={gridRole}
 >
     <DataGridWaffle {onFocusChange} onCopy={handleCopy} />

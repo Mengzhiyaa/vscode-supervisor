@@ -33,6 +33,85 @@
     let bridgeAvailable = $state(false);
     let bridgeProbeTimer: ReturnType<typeof setTimeout> | undefined;
 
+    function handleKeyboardShortcut(event: KeyboardEvent) {
+        if (!currentUrl) {
+            return;
+        }
+
+        if (
+            (event.ctrlKey || event.metaKey) &&
+            !event.altKey &&
+            event.key.toLowerCase() === "f"
+        ) {
+            event.preventDefault();
+            showFind();
+            return;
+        }
+
+        if (kind !== "url") {
+            return;
+        }
+
+        if (
+            (event.ctrlKey || event.metaKey) &&
+            event.key.toLowerCase() === "l"
+        ) {
+            const input =
+                document.querySelector<HTMLInputElement>(".url-bar");
+            if (input) {
+                event.preventDefault();
+                input.focus();
+                input.select();
+            }
+            return;
+        }
+
+        if (!event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
+            return;
+        }
+        if (event.key === "ArrowLeft" && canNavigateBack) {
+            event.preventDefault();
+            handleBack();
+        } else if (event.key === "ArrowRight" && canNavigateForward) {
+            event.preventDefault();
+            handleForward();
+        }
+    }
+
+    function handleFrameMessage(event: MessageEvent) {
+        if (event.source !== iframeEl?.contentWindow) {
+            return;
+        }
+        const message = event.data as {
+            id?: string;
+            url?: string;
+            title?: string;
+            found?: boolean;
+        };
+        switch (message?.id) {
+            case "supervisor-viewer-ready":
+                bridgeAvailable = true;
+                if (bridgeProbeTimer) clearTimeout(bridgeProbeTimer);
+                break;
+            case "supervisor-viewer-location":
+            case "supervisor-viewer-navigate":
+                if (message.url) {
+                    connection.sendNotification("viewer/didNavigate", {
+                        url: message.url,
+                        title: message.title,
+                    });
+                }
+                break;
+            case "supervisor-viewer-show-find":
+                showFind();
+                break;
+            case "supervisor-viewer-find-result":
+                bridgeAvailable = true;
+                findHasResult = Boolean(message.found);
+                break;
+        }
+    }
+
     onMount(() => {
         void connection.sendRequest("viewer/getDefaultOpenTarget", {}).then((result) => {
             defaultOpenTarget = (result as { target: ViewerOpenTarget }).target;
@@ -75,84 +154,7 @@
             showFind();
         });
 
-        const handleKeyboardShortcut = (event: KeyboardEvent) => {
-            if (!currentUrl) {
-                return;
-            }
-
-            if (
-                (event.ctrlKey || event.metaKey) &&
-                !event.altKey &&
-                event.key.toLowerCase() === "f"
-            ) {
-                event.preventDefault();
-                showFind();
-                return;
-            }
-
-            if (kind !== "url") {
-                return;
-            }
-
-            if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "l") {
-                const input = document.querySelector<HTMLInputElement>(".url-bar");
-                if (input) {
-                    event.preventDefault();
-                    input.focus();
-                    input.select();
-                }
-                return;
-            }
-
-            if (!event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
-                return;
-            }
-            if (event.key === "ArrowLeft" && canNavigateBack) {
-                event.preventDefault();
-                handleBack();
-            } else if (event.key === "ArrowRight" && canNavigateForward) {
-                event.preventDefault();
-                handleForward();
-            }
-        };
-        const handleFrameMessage = (event: MessageEvent) => {
-            if (event.source !== iframeEl?.contentWindow) {
-                return;
-            }
-            const message = event.data as {
-                id?: string;
-                url?: string;
-                title?: string;
-                found?: boolean;
-            };
-            switch (message?.id) {
-                case "supervisor-viewer-ready":
-                    bridgeAvailable = true;
-                    if (bridgeProbeTimer) clearTimeout(bridgeProbeTimer);
-                    break;
-                case "supervisor-viewer-location":
-                case "supervisor-viewer-navigate":
-                    if (message.url) {
-                        connection.sendNotification("viewer/didNavigate", {
-                            url: message.url,
-                            title: message.title,
-                        });
-                    }
-                    break;
-                case "supervisor-viewer-show-find":
-                    showFind();
-                    break;
-                case "supervisor-viewer-find-result":
-                    bridgeAvailable = true;
-                    findHasResult = Boolean(message.found);
-                    break;
-            }
-        };
-        window.addEventListener("keydown", handleKeyboardShortcut);
-        window.addEventListener("message", handleFrameMessage);
         return () => {
-            window.removeEventListener("keydown", handleKeyboardShortcut);
-            window.removeEventListener("message", handleFrameMessage);
             if (bridgeProbeTimer) clearTimeout(bridgeProbeTimer);
         };
     });
@@ -263,6 +265,11 @@
         }
     }
 </script>
+
+<svelte:window
+    onkeydown={handleKeyboardShortcut}
+    onmessage={handleFrameMessage}
+/>
 
 <div
     class="viewer-root"

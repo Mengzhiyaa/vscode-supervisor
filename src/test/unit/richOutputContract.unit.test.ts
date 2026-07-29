@@ -163,6 +163,45 @@ suite('[Unit] P0 rich output and compatibility contracts', () => {
         emitter.dispose();
     });
 
+    test('forwards managed comm close messages to runtime clients', () => {
+        const emitter = new RuntimeMessageEmitter();
+        const received: any[] = [];
+        const listener = emitter.event(message => received.push(message));
+        const header = {
+            msg_id: 'comm-close-1',
+            session: 'session-1',
+            username: 'test',
+            date: '2026-07-29T00:00:00.000Z',
+            msg_type: JupyterMessageType.CommClose,
+            version: '5.3',
+        };
+
+        emitter.emitJupyter({
+            header,
+            parent_header: { ...header, msg_id: 'comm-open-1' },
+            metadata: { reason: 'backend-closed' },
+            content: {
+                comm_id: 'data-explorer-1',
+                data: { reason: 'binding-changed' },
+            },
+            channel: JupyterChannel.IOPub,
+            buffers: [],
+        });
+
+        assert.deepStrictEqual(received, [{
+            id: 'comm-close-1',
+            event_clock: 0,
+            parent_id: 'comm-open-1',
+            when: '2026-07-29T00:00:00.000Z',
+            type: 'comm_closed',
+            comm_id: 'data-explorer-1',
+            data: { reason: 'binding-changed' },
+            metadata: { reason: 'backend-closed' },
+        }]);
+        listener.dispose();
+        emitter.dispose();
+    });
+
     test('reports unsupported context keys instead of silently evaluating them', async () => {
         const reply = await methods.call('evaluate_when_clause', {
             when_clause: 'positron.somePrivateContext',

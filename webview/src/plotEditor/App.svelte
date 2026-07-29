@@ -48,15 +48,6 @@
         ZOOM_LEVELS.find((l) => l.value === zoom)?.label ?? `${zoom}%`,
     );
 
-    function updateContainerSize() {
-        if (!containerEl) {
-            return;
-        }
-
-        containerWidth = Math.max(1, containerEl.clientWidth);
-        containerHeight = Math.max(1, containerEl.clientHeight);
-    }
-
     // Debounce delay (ms)
     const DEBOUNCE_MS = 150;
 
@@ -230,38 +221,21 @@
         };
     });
 
-    // --- Lifecycle ---
     $effect(() => {
-        // Set up ResizeObserver with debounce
-        if (!containerEl) return;
+        containerWidth;
+        containerHeight;
 
-        const resizeObserver = new ResizeObserver(() => {
-            updateContainerSize();
+        if (containerEl && contentKind === "image") {
             scheduleRender();
-        });
-        resizeObserver.observe(containerEl);
+        }
 
         return () => {
-            resizeObserver.disconnect();
             if (renderTimer) clearTimeout(renderTimer);
         };
     });
-
-    // Initial render
-    $effect(() => {
-        if (containerEl) {
-            updateContainerSize();
-            if (contentKind === "image") {
-                requestRender();
-            }
-        }
-    });
 </script>
 
-<svelte:window
-    on:resize={scheduleRender}
-    on:keydown|capture={handleWindowKeyDown}
-/>
+<svelte:window onkeydowncapture={handleWindowKeyDown} />
 
 <!-- Action Bar -->
 {#snippet zoomMenuSnippet()}
@@ -339,6 +313,8 @@
 <div
     class="plot-container"
     bind:this={containerEl}
+    bind:clientWidth={containerWidth}
+    bind:clientHeight={containerHeight}
 >
     {#if contentKind === "html" && htmlUri}
         <iframe

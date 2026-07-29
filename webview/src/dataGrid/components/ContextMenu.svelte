@@ -199,15 +199,6 @@
         }
 
         updatePosition();
-
-        const handleViewportChange = () => updatePosition();
-        window.addEventListener("resize", handleViewportChange);
-        window.addEventListener("scroll", handleViewportChange, true);
-
-        return () => {
-            window.removeEventListener("resize", handleViewportChange);
-            window.removeEventListener("scroll", handleViewportChange, true);
-        };
     });
 
     onMount(() => {
@@ -215,18 +206,12 @@
             document.body.appendChild(menuRef);
         }
 
-        document.addEventListener("mousedown", handleOutsidePointer, true);
-        document.addEventListener("contextmenu", handleOutsidePointer, true);
-
         requestAnimationFrame(() => {
             updatePosition();
             focusMenuItem(0);
         });
 
         return () => {
-            document.removeEventListener("mousedown", handleOutsidePointer, true);
-            document.removeEventListener("contextmenu", handleOutsidePointer, true);
-
             if (menuRef?.parentElement) {
                 menuRef.parentElement.removeChild(menuRef);
             }
@@ -239,6 +224,15 @@
         };
     });
 </script>
+
+<svelte:document
+    onmousedowncapture={handleOutsidePointer}
+    oncontextmenucapture={handleOutsidePointer}
+/>
+<svelte:window
+    onresize={updatePosition}
+    onscrollcapture={updatePosition}
+/>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div

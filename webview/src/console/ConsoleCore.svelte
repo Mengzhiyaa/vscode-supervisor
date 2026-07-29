@@ -4,6 +4,7 @@
      * Main container managing multi-session console with sidebar
      */
     import { onMount } from "svelte";
+    import { SvelteMap } from "svelte/reactivity";
     import { getRpcConnection } from "$lib/rpc/client";
     import ActionBar from "./ActionBar.svelte";
     import ConsoleTabList from "./ConsoleTabList.svelte";
@@ -119,16 +120,16 @@
     let activeConsoleSessionId = $state<string | undefined>();
     let pendingForegroundSessionId = $state<string | undefined>();
     let userSelectedForegroundSessionId = $state<string | undefined>();
-    let sessionDataMap = $state(new Map<string, SessionData>());
+    const sessionDataMap = new SvelteMap<string, SessionData>();
     const sessionSyncSeqMap = new Map<string, number>();
     const pendingFullStateRequests = new Set<string>();
     let inputCommand = $state<ConsoleInputCommandEnvelope | undefined>(
         undefined,
     );
     let inputCommandCounter = 0;
-    let inputAnchorBySession = $state(new Map<string, HTMLDivElement>());
+    const inputAnchorBySession = new SvelteMap<string, HTMLDivElement>();
     let inputAnchorVersion = $state(0);
-    let scrollLockedBySession = $state(new Map<string, boolean>());
+    const scrollLockedBySession = new SvelteMap<string, boolean>();
     let sessionSwitchNonce = 0;
     let revealRequest = $state<
         { sessionId: string; executionId: string; nonce: number } | undefined
@@ -142,18 +143,20 @@
     let consoleSessionListCollapsed = $state(false);
 
     // ActionBar state
-    let workingDirectoryBySession = $state(new Map<string, string>());
+    const workingDirectoryBySession = new SvelteMap<string, string>();
     const currentWorkingDirectory = $derived(
         activeConsoleSessionId
             ? (workingDirectoryBySession.get(activeConsoleSessionId) ?? "")
             : "",
     );
-    let promptBySession = $state(
-        new Map<string, { inputPrompt: string; continuationPrompt: string }>(),
-    );
-    let wordWrapBySession = $state(new Map<string, boolean>());
-    let traceBySession = $state(new Map<string, boolean>());
-    let resourceUsageBySession = $state(new Map<string, ResourceUsage[]>());
+    const promptBySession = new SvelteMap<
+        string,
+        { inputPrompt: string; continuationPrompt: string }
+    >();
+    const wordWrapBySession = new SvelteMap<string, boolean>();
+    const traceBySession = new SvelteMap<string, boolean>();
+    const resourceUsageBySession =
+        new SvelteMap<string, ResourceUsage[]>();
     let languageAssetsVersion = $state(0);
 
     // Console width state (Positron pattern: dynamic width adjustment)
@@ -299,49 +302,36 @@
                 pendingFullStateRequests.delete(sessionId);
             }
         }
-        sessionDataMap = new Map(sessionDataMap);
-
         for (const sessionId of [...promptBySession.keys()]) {
             if (!remainingSessionIds.has(sessionId)) {
                 promptBySession.delete(sessionId);
             }
         }
-        promptBySession = new Map(promptBySession);
-
         for (const sessionId of [...wordWrapBySession.keys()]) {
             if (!remainingSessionIds.has(sessionId)) {
                 wordWrapBySession.delete(sessionId);
             }
         }
-        wordWrapBySession = new Map(wordWrapBySession);
-
         for (const sessionId of [...traceBySession.keys()]) {
             if (!remainingSessionIds.has(sessionId)) {
                 traceBySession.delete(sessionId);
             }
         }
-        traceBySession = new Map(traceBySession);
-
         for (const sessionId of [...resourceUsageBySession.keys()]) {
             if (!remainingSessionIds.has(sessionId)) {
                 resourceUsageBySession.delete(sessionId);
             }
         }
-        resourceUsageBySession = new Map(resourceUsageBySession);
-
         for (const sessionId of [...workingDirectoryBySession.keys()]) {
             if (!remainingSessionIds.has(sessionId)) {
                 workingDirectoryBySession.delete(sessionId);
             }
         }
-        workingDirectoryBySession = new Map(workingDirectoryBySession);
-
         for (const sessionId of [...inputAnchorBySession.keys()]) {
             if (!remainingSessionIds.has(sessionId)) {
                 inputAnchorBySession.delete(sessionId);
             }
         }
-        inputAnchorBySession = new Map(inputAnchorBySession);
         inputAnchorVersion += 1;
 
         for (const sessionId of [...scrollLockedBySession.keys()]) {
@@ -349,8 +339,6 @@
                 scrollLockedBySession.delete(sessionId);
             }
         }
-        scrollLockedBySession = new Map(scrollLockedBySession);
-
         if (
             pendingForegroundSessionId &&
             !remainingSessionIds.has(pendingForegroundSessionId)
@@ -560,7 +548,6 @@
                 executeScrollMarker: 0,
                 hydrated: false,
             });
-            sessionDataMap = new Map(sessionDataMap); // Trigger reactivity
         }
 
         // Seed per-session state maps
@@ -569,19 +556,15 @@
                 inputPrompt: ">",
                 continuationPrompt: "+",
             });
-            promptBySession = new Map(promptBySession);
         }
         if (!wordWrapBySession.has(sessionId)) {
             wordWrapBySession.set(sessionId, true);
-            wordWrapBySession = new Map(wordWrapBySession);
         }
         if (!traceBySession.has(sessionId)) {
             traceBySession.set(sessionId, false);
-            traceBySession = new Map(traceBySession);
         }
         if (!resourceUsageBySession.has(sessionId)) {
             resourceUsageBySession.set(sessionId, []);
-            resourceUsageBySession = new Map(resourceUsageBySession);
         }
     }
 
@@ -674,8 +657,8 @@
         for (const [sessionId, data] of sessionDataMap) {
             optimizeScrollbackForSession(sessionId);
             data.runtimeItems = [...data.runtimeItems];
+            sessionDataMap.set(sessionId, { ...data });
         }
-        sessionDataMap = new Map(sessionDataMap);
     }
 
     function signalCodeExecuted(sessionId: string): void {
@@ -685,7 +668,7 @@
         }
 
         data.executeScrollMarker += 1;
-        sessionDataMap = new Map(sessionDataMap);
+        sessionDataMap.set(sessionId, { ...data });
     }
 
     function requestOpenSearch(sessionId: string): void {
@@ -725,7 +708,6 @@
         }
 
         scrollLockedBySession.set(sessionId, nextScrollLocked);
-        scrollLockedBySession = new Map(scrollLockedBySession);
     }
 
     function getWordWrap(sessionId: string): boolean {
@@ -734,7 +716,6 @@
 
     function setWordWrap(sessionId: string, enabled: boolean): void {
         wordWrapBySession.set(sessionId, enabled);
-        wordWrapBySession = new Map(wordWrapBySession);
     }
 
     function getTraceEnabled(sessionId?: string): boolean {
@@ -744,7 +725,6 @@
 
     function setTraceEnabled(sessionId: string, enabled: boolean): void {
         traceBySession.set(sessionId, enabled);
-        traceBySession = new Map(traceBySession);
     }
 
     function pushResourceUsage(sessionId: string, usage: ResourceUsage): void {
@@ -754,7 +734,6 @@
             updated.splice(0, updated.length - MAX_RESOURCE_USAGE_HISTORY);
         }
         resourceUsageBySession.set(sessionId, updated);
-        resourceUsageBySession = new Map(resourceUsageBySession);
     }
 
     function emitInputCommand(
@@ -877,7 +856,6 @@
             inputAnchorBySession.delete(sessionId);
         }
 
-        inputAnchorBySession = new Map(inputAnchorBySession);
         inputAnchorVersion += 1;
     }
 
@@ -929,7 +907,6 @@
                         ? metadata.continuationPrompt
                         : previousPrompt.continuationPrompt,
             });
-            promptBySession = new Map(promptBySession);
         }
         if ("workingDirectory" in metadata) {
             if (typeof metadata.workingDirectory === "string") {
@@ -940,7 +917,6 @@
             } else {
                 workingDirectoryBySession.delete(sessionId);
             }
-            workingDirectoryBySession = new Map(workingDirectoryBySession);
         }
     }
 
@@ -949,7 +925,7 @@
         optimizeScrollbackForSession(sessionId);
         data.runtimeItems = [...data.runtimeItems];
         data.runtimeItemsMarker += 1;
-        sessionDataMap = new Map(sessionDataMap);
+        sessionDataMap.set(sessionId, { ...data });
     }
 
     function deserializeActivityItem(
@@ -1828,27 +1804,6 @@
         }
     }
 
-    $effect(() => {
-        const container = mainContainer;
-        const settings = consoleSettings;
-        if (!container) {
-            return;
-        }
-
-        container.style.setProperty(
-            "--console-content-font-family",
-            settings.fontFamily,
-        );
-        container.style.setProperty(
-            "--console-content-font-size",
-            `${settings.fontSize}px`,
-        );
-        container.style.setProperty(
-            "--console-line-height",
-            String(settings.lineHeight),
-        );
-    });
-
     async function loadSessions() {
         if (!connection) return;
         try {
@@ -2098,7 +2053,13 @@
     );
 </script>
 
-<div class="console-core" bind:this={mainContainer}>
+<div
+    class="console-core"
+    bind:this={mainContainer}
+    style:--console-content-font-family={consoleSettings.fontFamily}
+    style:--console-content-font-size="{consoleSettings.fontSize}px"
+    style:--console-line-height={String(consoleSettings.lineHeight)}
+>
     {#if sessions.length === 0}
         {#if runtimeStartupPhase !== "complete"}
             <StartupStatus

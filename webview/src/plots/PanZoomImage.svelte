@@ -23,12 +23,9 @@
 
     let { width, height, imageUri, description, zoom }: Props = $props();
 
-    // State - initialized to defaults, synced from props via effect
+    // State
     let naturalWidth = $state(0);
     let naturalHeight = $state(0);
-    let scrollableWidth = $state(0);
-    let scrollableHeight = $state(0);
-    let imageElement: HTMLImageElement;
     let scrollableElement: HTMLDivElement;
 
     // Handle mouse pan state
@@ -38,57 +35,36 @@
     let scrollStartX = 0;
     let scrollStartY = 0;
 
-    // Update image size and position based on zoom level
-    $effect(() => {
-        void imageUri;
+    const isFit = $derived(zoom === ZoomLevel.Fit);
+    const adjustedWidth = $derived(
+        isFit ? naturalWidth : naturalWidth * zoom,
+    );
+    const adjustedHeight = $derived(
+        isFit ? naturalHeight : naturalHeight * zoom,
+    );
+    const scrollableWidth = $derived(isFit ? width : adjustedWidth);
+    const scrollableHeight = $derived(isFit ? height : adjustedHeight);
+    const imageWidth = $derived(isFit ? "100%" : `${adjustedWidth}px`);
+    const imageHeight = $derived(isFit ? "100%" : `${adjustedHeight}px`);
+    const imageCursor = $derived(
+        isFit ? "default" : isPanning ? "grabbing" : "grab",
+    );
+    const imagePosition = $derived.by(() => {
+        const centeredHorizontally = adjustedWidth < width;
+        const centeredVertically = adjustedHeight < height;
 
-        if (!imageElement) {
-            return;
-        }
-
-        // Scale by the zoom level
-        // If the zoom level is Fit, then the image should fill the container using CSS
-        const adjustedWidth =
-            zoom === ZoomLevel.Fit ? naturalWidth : naturalWidth * zoom;
-        const adjustedHeight =
-            zoom === ZoomLevel.Fit ? naturalHeight : naturalHeight * zoom;
-
-        if (zoom === ZoomLevel.Fit) {
-            imageElement.style.width = "100%";
-            imageElement.style.height = "100%";
-            imageElement.style.objectFit = "contain";
-            imageElement.style.cursor = "default";
-            scrollableWidth = width;
-            scrollableHeight = height;
-        } else {
-            imageElement.style.width = `${adjustedWidth}px`;
-            imageElement.style.height = `${adjustedHeight}px`;
-            imageElement.style.objectFit = "";
-            imageElement.style.cursor = isPanning ? "grabbing" : "grab";
-            scrollableWidth = adjustedWidth;
-            scrollableHeight = adjustedHeight;
-        }
-
-        imageElement.style.position = "relative";
-
-        // Center the image if smaller than container
-        if (adjustedWidth < width && adjustedHeight < height) {
-            imageElement.style.top = "50%";
-            imageElement.style.left = "50%";
-            imageElement.style.transform = "translate(-50%, -50%)";
-        } else if (adjustedWidth < width) {
-            imageElement.style.top = "0";
-            imageElement.style.left = "50%";
-            imageElement.style.transform = "translate(-50%, 0)";
-        } else if (adjustedHeight < height) {
-            imageElement.style.top = "50%";
-            imageElement.style.left = "0";
-            imageElement.style.transform = "translate(0, -50%)";
-        } else {
-            imageElement.style.top = "0";
-            imageElement.style.left = "0";
-            imageElement.style.transform = "none";
-        }
+        return {
+            top: centeredVertically ? "50%" : "0",
+            left: centeredHorizontally ? "50%" : "0",
+            transform:
+                centeredHorizontally && centeredVertically
+                    ? "translate(-50%, -50%)"
+                    : centeredHorizontally
+                      ? "translate(-50%, 0)"
+                      : centeredVertically
+                        ? "translate(0, -50%)"
+                        : "none",
+        };
     });
 
     // Handle image load to get natural dimensions
@@ -104,9 +80,6 @@
             return;
         }
         isPanning = true;
-        if (imageElement) {
-            imageElement.style.cursor = "grabbing";
-        }
         panStartX = event.clientX;
         panStartY = event.clientY;
         scrollStartX = scrollableElement?.scrollLeft || 0;
@@ -126,25 +99,10 @@
 
     function handleMouseUp() {
         isPanning = false;
-        if (zoom !== ZoomLevel.Fit && imageElement) {
-            imageElement.style.cursor = "grab";
-        }
     }
 
     function handleMouseLeave() {
         isPanning = false;
-        if (zoom !== ZoomLevel.Fit && imageElement) {
-            imageElement.style.cursor = "grab";
-        }
-    }
-
-    // Compute scrollable container style
-    function getScrollableStyle(): string {
-        if (zoom === ZoomLevel.Fit) {
-            return `width: ${width}px; height: ${height}px; overflow: hidden;`;
-        }
-
-        return `width: ${width}px; height: ${height}px; overflow: auto;`;
     }
 </script>
 
@@ -152,7 +110,9 @@
 <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 <div
     class="pan-zoom-image-scrollable"
-    style={getScrollableStyle()}
+    style:width="{width}px"
+    style:height="{height}px"
+    style:overflow={isFit ? "hidden" : "auto"}
     bind:this={scrollableElement}
     onmousedown={handleMouseDown}
     onmousemove={handleMouseMove}
@@ -164,13 +124,20 @@
 >
     <div
         class="pan-zoom-image-content"
-        style="width: {scrollableWidth}px; height: {scrollableHeight}px;"
+        style:width="{scrollableWidth}px"
+        style:height="{scrollableHeight}px"
     >
         <img
-            bind:this={imageElement}
             alt={description}
             class="plot"
-            class:panning={isPanning}
+            style:width={imageWidth}
+            style:height={imageHeight}
+            style:object-fit={isFit ? "contain" : null}
+            style:cursor={imageCursor}
+            style:position="relative"
+            style:top={imagePosition.top}
+            style:left={imagePosition.left}
+            style:transform={imagePosition.transform}
             draggable="false"
             src={imageUri}
             onload={handleImageLoad}
@@ -215,11 +182,4 @@
         user-select: none;
     }
 
-    img.plot.panning {
-        cursor: grabbing;
-    }
-
-    img.plot:not(.panning) {
-        cursor: grab;
-    }
 </style>

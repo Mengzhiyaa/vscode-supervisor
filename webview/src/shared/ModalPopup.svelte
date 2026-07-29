@@ -494,23 +494,17 @@
             updatePopupLayout();
         });
 
-        document.addEventListener("mousedown", handleClickOutside, true);
-        document.addEventListener("keydown", handleKeyDown, true);
-        window.addEventListener("resize", handleWindowChange, true);
-        window.addEventListener("scroll", handleWindowChange, true);
-
-        return () => {
-            document.removeEventListener(
-                "mousedown",
-                handleClickOutside,
-                true,
-            );
-            document.removeEventListener("keydown", handleKeyDown, true);
-            window.removeEventListener("resize", handleWindowChange, true);
-            window.removeEventListener("scroll", handleWindowChange, true);
-        };
     });
 </script>
+
+<svelte:document
+    onmousedowncapture={handleClickOutside}
+    onkeydowncapture={handleKeyDown}
+/>
+<svelte:window
+    onresizecapture={handleWindowChange}
+    onscrollcapture={handleWindowChange}
+/>
 
 <div
     class="positron-modal-popup-container"

@@ -62,22 +62,19 @@
         onClose();
     }
 
+    function handleClickOutside(e: MouseEvent) {
+        if (menuRef && !menuRef.contains(e.target as Node)) {
+            onClose();
+        }
+    }
+
     onMount(() => {
         // Focus the menu for keyboard events
         menuRef?.focus();
-
-        // Close on outside click
-        function handleClickOutside(e: MouseEvent) {
-            if (menuRef && !menuRef.contains(e.target as Node)) {
-                onClose();
-            }
-        }
-
-        document.addEventListener("mousedown", handleClickOutside);
-        return () =>
-            document.removeEventListener("mousedown", handleClickOutside);
     });
 </script>
+
+<svelte:document onmousedown={handleClickOutside} />
 
 <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 <div

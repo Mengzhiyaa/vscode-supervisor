@@ -51,6 +51,36 @@
         return instance.getRowDescriptors(instance.verticalScrollOffset, height);
     });
 
+    const horizontalScrollOffset = $derived.by(() => {
+        $updateTrigger;
+        return instance.horizontalScrollOffset;
+    });
+
+    const verticalScrollOffset = $derived.by(() => {
+        $updateTrigger;
+        return instance.verticalScrollOffset;
+    });
+
+    const scrollWidth = $derived.by(() => {
+        $updateTrigger;
+        return instance.scrollWidth;
+    });
+
+    const scrollHeight = $derived.by(() => {
+        $updateTrigger;
+        return instance.scrollHeight;
+    });
+
+    const layoutWidth = $derived.by(() => {
+        $updateTrigger;
+        return instance.layoutWidth;
+    });
+
+    const layoutHeight = $derived.by(() => {
+        $updateTrigger;
+        return instance.layoutHeight;
+    });
+
     let lastWheelEvent = $state(0);
 
     let contextMenuVisible = $state(false);
@@ -588,14 +618,11 @@
         >
             <DataGridScrollbar
                 orientation="horizontal"
-                totalSize={instance.scrollWidth}
-                viewportSize={instance.layoutWidth}
-                scrollPosition={instance.horizontalScrollOffset}
-                onscroll={(event) =>
-                    instance.setScrollOffsets(
-                        event.detail.scrollLeft,
-                        event.detail.scrollTop,
-                    )}
+                totalSize={scrollWidth}
+                viewportSize={layoutWidth}
+                scrollPosition={horizontalScrollOffset}
+                onDidChangeScrollOffset={(scrollOffset) =>
+                    instance.setHorizontalScrollOffset(scrollOffset)}
             />
         </div>
     {/if}
@@ -608,14 +635,11 @@
         >
             <DataGridScrollbar
                 orientation="vertical"
-                totalSize={instance.scrollHeight}
-                viewportSize={instance.layoutHeight}
-                scrollPosition={instance.verticalScrollOffset}
-                onscroll={(event) =>
-                    instance.setScrollOffsets(
-                        event.detail.scrollLeft,
-                        event.detail.scrollTop,
-                    )}
+                totalSize={scrollHeight}
+                viewportSize={layoutHeight}
+                scrollPosition={verticalScrollOffset}
+                onDidChangeScrollOffset={(scrollOffset) =>
+                    instance.updateVerticalScrollOffset(scrollOffset)}
             />
         </div>
     {/if}

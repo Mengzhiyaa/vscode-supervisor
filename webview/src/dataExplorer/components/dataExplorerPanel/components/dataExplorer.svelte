@@ -4,6 +4,7 @@
 -->
 <script lang="ts">
     import { onMount } from "svelte";
+    import { MediaQuery } from "svelte/reactivity";
     import { getDataExplorerContext } from "../../../positronDataExplorerContext";
     import VerticalSplitter from "../../splitters/verticalSplitter.svelte";
     import SummaryRowActionBar from "./summaryRowActionBar/summaryRowActionBar.svelte";
@@ -37,8 +38,6 @@
     );
 
     let dataExplorerRef: HTMLDivElement | null = null;
-    let leftColumnRef: HTMLDivElement | null = null;
-    let rightColumnRef: HTMLDivElement | null = null;
     let columnNameExemplarRef: HTMLDivElement | null = null;
     let typeNameExemplarRef: HTMLDivElement | null = null;
     let sortIndexExemplarRef: HTMLDivElement | null = null;
@@ -48,6 +47,10 @@
     let animateColumnsWidth = $state(false);
     let columnsCollapsed = $state(false);
     let initialLayoutFrame: number | undefined;
+    const reducedMotion = new MediaQuery(
+        "prefers-reduced-motion: reduce",
+        false,
+    );
     const collapseSummaryLabel = localize(
         "dataExplorer.collapseSummary",
         "Collapse summary",
@@ -64,10 +67,6 @@
         "dataExplorer.resizeSummary",
         "Resize summary panel",
     );
-
-    const motionReduced = () =>
-        typeof window !== "undefined" &&
-        window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
     $effect(() => {
         columnsCollapsed = isSummaryCollapsed;
@@ -118,11 +117,6 @@
             });
         }
 
-        const resizeObserver = new ResizeObserver((entries) => {
-            width = entries[0].contentRect.width;
-        });
-        resizeObserver.observe(dataExplorerRef);
-
         // Initialize WidthCalculators from exemplar divs
         initWidthCalculators();
 
@@ -133,7 +127,6 @@
             ) {
                 cancelAnimationFrame(initialLayoutFrame);
             }
-            resizeObserver.disconnect();
         };
     });
 
@@ -173,33 +166,6 @@
     }
 
     $effect(() => {
-        if (!leftColumnRef || !rightColumnRef) return;
-        const tableSchemaColumn =
-            layout === PositronDataExplorerLayout.SummaryOnLeft
-                ? leftColumnRef
-                : rightColumnRef;
-        const tableDataColumn =
-            layout === PositronDataExplorerLayout.SummaryOnLeft
-                ? rightColumnRef
-                : leftColumnRef;
-
-        tableDataColumn.style.width = "auto";
-        if (columnsCollapsed) {
-            tableSchemaColumn.style.width = "0";
-            tableSchemaColumn.style.transition = animateColumnsWidth
-                ? "width 0.1s ease-out"
-                : "";
-            animateColumnsWidth = false;
-        } else {
-            tableSchemaColumn.style.width = `${columnsWidth}px`;
-            tableSchemaColumn.style.transition = animateColumnsWidth
-                ? "width 0.1s ease-out"
-                : "";
-            animateColumnsWidth = false;
-        }
-    });
-
-    $effect(() => {
         if (!tableSchemaDataGridInstance) {
             return;
         }
@@ -219,12 +185,30 @@
     };
 
     function handleCollapsedChanged(collapsed: boolean) {
-        animateColumnsWidth = !motionReduced();
+        animateColumnsWidth = !reducedMotion.current;
         if (collapsed) {
             context.instance.collapseSummary();
         } else {
             context.instance.expandSummary();
         }
+    }
+
+    function handleColumnTransitionEnd(event: TransitionEvent) {
+        if (event.propertyName === "width") {
+            animateColumnsWidth = false;
+        }
+    }
+
+    function getColumnWidth(side: "left" | "right"): string {
+        const summarySide =
+            layout === PositronDataExplorerLayout.SummaryOnLeft
+                ? "left"
+                : "right";
+        if (side !== summarySide) {
+            return "auto";
+        }
+
+        return columnsCollapsed ? "0" : `${columnsWidth}px`;
     }
 
     function handleSplitterInvert(invert: boolean) {
@@ -240,12 +224,18 @@
     class:summary-on-right={layout ===
         PositronDataExplorerLayout.SummaryOnRight}
     bind:this={dataExplorerRef}
+    bind:clientWidth={width}
 >
     <div class="column-name-exemplar" bind:this={columnNameExemplarRef}></div>
     <div class="type-name-exemplar" bind:this={typeNameExemplarRef}></div>
     <div class="sort-index-exemplar" bind:this={sortIndexExemplarRef}></div>
 
-    <div class="left-column" bind:this={leftColumnRef}>
+    <div
+        class="left-column"
+        class:animate-width={animateColumnsWidth}
+        style:width={getColumnWidth("left")}
+        ontransitionend={handleColumnTransitionEnd}
+    >
         {#if layout === PositronDataExplorerLayout.SummaryOnLeft}
             <SummaryRowActionBar instance={tableSchemaDataGridInstance} />
         {/if}
@@ -294,7 +284,12 @@
         <div class="collapsed-right-spacer"></div>
     {/if}
 
-    <div class="right-column" bind:this={rightColumnRef}>
+    <div
+        class="right-column"
+        class:animate-width={animateColumnsWidth}
+        style:width={getColumnWidth("right")}
+        ontransitionend={handleColumnTransitionEnd}
+    >
         {#if layout !== PositronDataExplorerLayout.SummaryOnLeft}
             <SummaryRowActionBar instance={tableSchemaDataGridInstance} />
         {/if}
@@ -388,6 +383,11 @@
         grid-template-columns: 100%;
         grid-row: main-row / end-rows;
         grid-column: left-column / collapsed-left-spacer;
+    }
+
+    :global(.data-explorer-panel) .data-explorer .left-column.animate-width,
+    :global(.data-explorer-panel) .data-explorer .right-column.animate-width {
+        transition: width 0.1s ease-out;
     }
 
     :global(.data-explorer-panel) .data-explorer.summary-on-left .left-column {

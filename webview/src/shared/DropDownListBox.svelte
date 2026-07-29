@@ -3,6 +3,7 @@
   Port from Positron's DropDownListBox behavior
 -->
 <script lang="ts">
+    import { tick } from "svelte";
     import ModalPopup from "./ModalPopup.svelte";
 
     export interface DropDownListBoxEntry {
@@ -91,9 +92,7 @@
         showDropDown = true;
         updateHighlightFromSelection();
 
-        requestAnimationFrame(() => {
-            focusHighlightedItem();
-        });
+        void tick().then(focusHighlightedItem);
     }
 
     function closeDropDown(options?: { restoreFocus?: boolean }) {
@@ -148,9 +147,7 @@
             (current + delta + navigableEntries.length) %
             navigableEntries.length;
 
-        requestAnimationFrame(() => {
-            focusHighlightedItem();
-        });
+        void tick().then(focusHighlightedItem);
     }
 
     function handleButtonKeyDown(event: KeyboardEvent) {
@@ -190,16 +187,12 @@
             case "Home":
                 event.preventDefault();
                 highlightIndex = 0;
-                requestAnimationFrame(() => {
-                    focusHighlightedItem();
-                });
+                void tick().then(focusHighlightedItem);
                 break;
             case "End":
                 event.preventDefault();
                 highlightIndex = Math.max(navigableEntries.length - 1, 0);
-                requestAnimationFrame(() => {
-                    focusHighlightedItem();
-                });
+                void tick().then(focusHighlightedItem);
                 break;
         }
     }

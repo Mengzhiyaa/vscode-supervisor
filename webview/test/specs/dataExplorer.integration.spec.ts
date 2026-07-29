@@ -173,6 +173,100 @@ test('data explorer initializes, renders schema, and requests visible data', asy
     await expect(page.locator('.status-bar')).toContainText('2');
 });
 
+test('data explorer keeps scrollbar thumbs synchronized without changing the other axis', async ({ page }) => {
+    const backend = await openWebviewPage(page, 'dataExplorer');
+    await expect(page.locator('.positron-data-explorer')).toBeVisible({ timeout: 15_000 });
+
+    const columns = Array.from({ length: 20 }, (_, columnIndex) =>
+        createDataExplorerSchemaColumn({
+            column_name: `column_${columnIndex}`,
+            column_index: columnIndex,
+            type_name: 'INTEGER',
+            type_display: 'integer',
+        }),
+    );
+
+    backend.onNotification(DataExplorerMethods.requestData, async (notification) => {
+        const params = notification.params as DataRequestParams;
+        const rowCount = Math.max(0, params.endRow - params.startRow);
+        await backend.notify(DataExplorerMethods.data, {
+            startRow: params.startRow,
+            endRow: params.endRow,
+            columnIndices: params.columns,
+            requestId: params.requestId,
+            generation: params.generation,
+            columns: params.columns.map((columnIndex) =>
+                Array.from({ length: rowCount }, (_, rowOffset) =>
+                    `${columnIndex}:${params.startRow + rowOffset}`,
+                ),
+            ),
+        });
+    });
+
+    await backend.notify(DataExplorerMethods.initialize, {
+        identifier: 'scrollbar-fixture',
+        displayName: 'Scrollbar Fixture',
+        backendState: createDataExplorerBackendState({
+            table_shape: { num_rows: 100, num_columns: columns.length },
+            table_unfiltered_shape: { num_rows: 100, num_columns: columns.length },
+        }),
+    });
+    await backend.notify(DataExplorerMethods.schema, { columns });
+
+    const tableGrid = page.locator('.data-grid[data-grid-role="table"]');
+    const waffle = tableGrid.locator('.data-grid-waffle');
+    const horizontalScrollbar = tableGrid.locator(
+        '[role="scrollbar"][aria-orientation="horizontal"]',
+    );
+    const verticalScrollbar = tableGrid.locator(
+        '[role="scrollbar"][aria-orientation="vertical"]',
+    );
+    const horizontalThumb = horizontalScrollbar.locator('.thumb');
+    const verticalThumb = verticalScrollbar.locator('.thumb');
+
+    await expect(horizontalScrollbar).toBeVisible();
+    await expect(verticalScrollbar).toBeVisible();
+    await expect(horizontalScrollbar).toHaveAttribute('aria-valuenow', '0');
+    await expect(verticalScrollbar).toHaveAttribute('aria-valuenow', '0');
+
+    await waffle.hover();
+    await page.mouse.wheel(600, 0);
+
+    await expect
+        .poll(async () => Number(await horizontalScrollbar.getAttribute('aria-valuenow')))
+        .toBeGreaterThan(0);
+    await expect
+        .poll(async () =>
+            horizontalThumb.evaluate((element) =>
+                Number.parseFloat(getComputedStyle(element).left),
+            ),
+        )
+        .toBeGreaterThan(0);
+    await expect(verticalScrollbar).toHaveAttribute('aria-valuenow', '0');
+
+    const horizontalPosition = await horizontalScrollbar.getAttribute('aria-valuenow');
+    const verticalThumbBox = await verticalThumb.boundingBox();
+    expect(verticalThumbBox).not.toBeNull();
+    await page.mouse.move(
+        verticalThumbBox!.x + verticalThumbBox!.width / 2,
+        verticalThumbBox!.y + verticalThumbBox!.height / 2,
+    );
+    await page.mouse.down();
+    await page.mouse.move(
+        verticalThumbBox!.x + verticalThumbBox!.width / 2,
+        verticalThumbBox!.y + verticalThumbBox!.height / 2 + 80,
+    );
+    await page.mouse.up();
+
+    await expect
+        .poll(async () => Number(await verticalScrollbar.getAttribute('aria-valuenow')))
+        .toBeGreaterThan(0);
+    await expect(horizontalScrollbar).toHaveAttribute(
+        'aria-valuenow',
+        horizontalPosition!,
+    );
+});
+
 test('data explorer preserves numeric special-value sentinels without reclassifying literal strings', async ({ page }) => {
     const backend = await openWebviewPage(page, 'dataExplorer');
     await expect(page.locator('.positron-data-explorer')).toBeVisible({ timeout: 15_000 });

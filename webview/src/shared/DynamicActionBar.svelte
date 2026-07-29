@@ -6,7 +6,6 @@
   and overflows excess actions into a context menu.
 -->
 <script lang="ts">
-    import { onMount } from 'svelte';
     import '../shared/actionBar.css';
     import ContextMenu, {
         type ContextMenuEntry,
@@ -65,23 +64,11 @@
         borderBottom = false,
     }: Props = $props();
 
-    let barEl = $state<HTMLDivElement | null>(null);
     let exemplarEl = $state<HTMLDivElement | null>(null);
     let overflowBtnEl = $state<HTMLButtonElement | null>(null);
     let containerWidth = $state(0);
     let showOverflowMenu = $state(false);
     let suppressOverflowClick = $state(false);
-
-    // --- ResizeObserver to track container width ---
-    onMount(() => {
-        if (!barEl) return;
-        containerWidth = barEl.offsetWidth;
-        const ro = new ResizeObserver(() => {
-            if (barEl) containerWidth = barEl.offsetWidth;
-        });
-        ro.observe(barEl);
-        return () => ro.disconnect();
-    });
 
     // --- Text measurement helper using Canvas ---
     function measureTextWidth(text: string): number {
@@ -413,7 +400,7 @@
 ></div>
 
 <div
-    bind:this={barEl}
+    bind:clientWidth={containerWidth}
     class="positron-dynamic-action-bar"
     class:border-top={borderTop}
     class:border-bottom={borderBottom}

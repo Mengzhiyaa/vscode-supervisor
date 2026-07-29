@@ -4,7 +4,6 @@
   Mirrors: positron/positronPlots/browser/components/actionBars.tsx
 -->
 <script lang="ts">
-    import { createEventDispatcher } from "svelte";
     import ActionBarButton from "../shared/ActionBarButton.svelte";
     import DynamicActionBar, {
         type DynamicAction,
@@ -41,6 +40,29 @@
         selectedPlotSessionId?: string;
         selectedPlotLanguageId?: string;
         selectedPlotHasOriginFile?: boolean;
+        onPrevious?: () => void;
+        onNext?: () => void;
+        onSave?: () => void;
+        onCopy?: () => void;
+        onZoomChange?: (zoomLevel: ZoomLevel) => void;
+        onDarkFilterChange?: (mode: DarkFilter) => void;
+        onSelectSizingPolicy?: (policyId: string) => void;
+        onSetCustomSize?: () => void;
+        onClearAll?: () => void;
+        onOpenInEditor?: (target: OpenInEditorTarget) => void;
+        onPopoutPlot?: () => void;
+        onRevealPlotCodeInConsole?: (data: {
+            sessionId: string;
+            executionId: string;
+        }) => void;
+        onRunPlotCodeAgain?: (data: {
+            code: string;
+            sessionId: string;
+            languageId: string;
+        }) => void;
+        onOpenSourceFile?: () => void;
+        onOpenGalleryInNewWindow?: () => void;
+        onOpenDarkFilterSettings?: () => void;
     }
 
     let {
@@ -60,30 +82,23 @@
         selectedPlotSessionId,
         selectedPlotLanguageId,
         selectedPlotHasOriginFile = false,
+        onPrevious,
+        onNext,
+        onSave,
+        onCopy,
+        onZoomChange,
+        onDarkFilterChange,
+        onSelectSizingPolicy,
+        onSetCustomSize,
+        onClearAll,
+        onOpenInEditor,
+        onPopoutPlot,
+        onRevealPlotCodeInConsole,
+        onRunPlotCodeAgain,
+        onOpenSourceFile,
+        onOpenGalleryInNewWindow,
+        onOpenDarkFilterSettings,
     }: Props = $props();
-
-    const dispatch = createEventDispatcher<{
-        previous: void;
-        next: void;
-        save: void;
-        copy: void;
-        zoomChange: { zoomLevel: ZoomLevel };
-        darkFilterChange: { mode: DarkFilter };
-        selectSizingPolicy: { policyId: string };
-        setCustomSize: void;
-        clearAll: void;
-        openInEditor: { target: OpenInEditorTarget };
-        popoutPlot: void;
-        revealPlotCodeInConsole: { sessionId: string; executionId: string };
-        runPlotCodeAgain: {
-            code: string;
-            sessionId: string;
-            languageId: string;
-        };
-        openSourceFile: void;
-        openGalleryInNewWindow: void;
-        openDarkFilterSettings: void;
-    }>();
 
     const showPreviousPlot = localize('plots.previous', 'Show previous plot');
     const showNextPlot = localize('plots.next', 'Show next plot');
@@ -130,21 +145,12 @@
         selectedSizingPolicySafe.getName(),
     );
 
-    function handlePrevious() { dispatch("previous"); }
-    function handleNext() { dispatch("next"); }
-    function handleSave() { dispatch("save"); }
-    function handleCopy() { dispatch("copy"); }
-    function handleZoomChange(event: CustomEvent<{ zoomLevel: ZoomLevel }>) {
-        dispatch("zoomChange", { zoomLevel: event.detail.zoomLevel });
-    }
-    function handleDarkFilterChange(event: CustomEvent<{ mode: DarkFilter }>) {
-        dispatch("darkFilterChange", { mode: event.detail.mode });
-    }
-    function handleSizingPolicySelect(event: CustomEvent<{ policyId: string }>) {
-        dispatch("selectSizingPolicy", { policyId: event.detail.policyId });
-    }
-    function handleCustomSize() { dispatch("setCustomSize"); }
-    function handleClearAll() { dispatch("clearAll"); }
+    function handlePrevious() { onPrevious?.(); }
+    function handleNext() { onNext?.(); }
+    function handleSave() { onSave?.(); }
+    function handleCopy() { onCopy?.(); }
+    function handleCustomSize() { onSetCustomSize?.(); }
+    function handleClearAll() { onClearAll?.(); }
 
     function mapEditorTarget(target: EditorTarget): OpenInEditorTarget {
         switch (target) {
@@ -156,10 +162,10 @@
     }
 
     function handleOpenInEditor(target: EditorTarget) {
-        dispatch("openInEditor", { target: mapEditorTarget(target) });
+        onOpenInEditor?.(mapEditorTarget(target));
     }
 
-    function handlePopoutPlot() { dispatch("popoutPlot"); }
+    function handlePopoutPlot() { onPopoutPlot?.(); }
 
     function handleCopyPlotCode(code: string) {
         if (!code) return;
@@ -169,18 +175,18 @@
     }
 
     function handleRevealPlotCodeInConsole(data: { sessionId: string; executionId: string }) {
-        dispatch("revealPlotCodeInConsole", data);
+        onRevealPlotCodeInConsole?.(data);
     }
 
     function handleRunPlotCodeAgain(data: { code: string; sessionId: string; languageId: string }) {
-        dispatch("runPlotCodeAgain", data);
+        onRunPlotCodeAgain?.(data);
     }
 
     function handleOpenSourceFile() {
-        dispatch("openSourceFile");
+        onOpenSourceFile?.();
     }
 
-    function handleOpenGalleryInNewWindow() { dispatch("openGalleryInNewWindow"); }
+    function handleOpenGalleryInNewWindow() { onOpenGalleryInNewWindow?.(); }
 
     function getOpenInEditorTooltip(target: EditorTarget): string {
         switch (target) {
@@ -365,15 +371,15 @@
 {/snippet}
 
 {#snippet zoomSnippet()}
-    <ZoomPlotMenuButton {zoomLevel} on:zoomChange={handleZoomChange} />
+    <ZoomPlotMenuButton {zoomLevel} {onZoomChange} />
 {/snippet}
 
 {#snippet sizingSnippet()}
     <SizingPolicyMenuButton
         selectedPolicy={selectedSizingPolicySafe} policies={sizingPolicies}
         {hasIntrinsicSize} {customSize}
-        on:selectPolicy={handleSizingPolicySelect}
-        on:setCustomSize={handleCustomSize} />
+        onSelectPolicy={onSelectSizingPolicy}
+        onSetCustomSize={handleCustomSize} />
 {/snippet}
 
 {#snippet popoutSnippet()}
@@ -407,8 +413,8 @@
 {#snippet darkFilterSnippet()}
     <DarkFilterMenuButton
         {darkFilterMode}
-        on:darkFilterChange={handleDarkFilterChange}
-        on:openSettings={() => dispatch("openDarkFilterSettings")}
+        {onDarkFilterChange}
+        onOpenSettings={onOpenDarkFilterSettings}
     />
 {/snippet}
 

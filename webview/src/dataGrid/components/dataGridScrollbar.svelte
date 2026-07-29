@@ -8,9 +8,7 @@
         totalSize: number;
         viewportSize: number;
         scrollPosition: number;
-        onscroll?: (
-            event: CustomEvent<{ scrollTop: number; scrollLeft: number }>,
-        ) => void;
+        onDidChangeScrollOffset?: (scrollOffset: number) => void;
     }
 
     let {
@@ -18,25 +16,32 @@
         totalSize,
         viewportSize,
         scrollPosition,
-        onscroll,
+        onDidChangeScrollOffset,
     }: Props = $props();
 
-    // Calculate thumb size and position
+    const maximumScrollPosition = $derived(
+        Math.max(0, totalSize - viewportSize),
+    );
     const thumbSize = $derived(
-        totalSize > 0
-            ? Math.max(30, (viewportSize / totalSize) * viewportSize)
+        maximumScrollPosition > 0
+            ? Math.min(
+                  viewportSize,
+                  Math.max(30, (viewportSize / totalSize) * viewportSize),
+              )
             : 0,
     );
     const thumbPosition = $derived(
-        totalSize > viewportSize
-            ? (scrollPosition / (totalSize - viewportSize)) *
+        maximumScrollPosition > 0
+            ? (pinToRange(scrollPosition, 0, maximumScrollPosition) /
+                  maximumScrollPosition) *
                   (viewportSize - thumbSize)
             : 0,
     );
-    const showScrollbar = $derived(totalSize > viewportSize);
+    const showScrollbar = $derived(maximumScrollPosition > 0);
 
     let trackRef: HTMLDivElement;
     let isDragging = $state(false);
+    let dragPointerId = $state<number | undefined>(undefined);
     let dragStartPos = $state(0);
     let dragStartScroll = $state(0);
 
@@ -48,10 +53,11 @@
                     ? event.clientX - rect.left
                     : event.clientY - rect.top;
 
-            const newScrollRatio = clickPos / viewportSize;
-            const newScroll = newScrollRatio * (totalSize - viewportSize);
-
-            emitScroll(newScroll);
+            if (clickPos < thumbPosition) {
+                emitScroll(scrollPosition - viewportSize);
+            } else if (clickPos > thumbPosition + thumbSize) {
+                emitScroll(scrollPosition + viewportSize);
+            }
         }
     }
 
@@ -62,64 +68,81 @@
             emitScroll(Math.max(0, scrollPosition - step));
         } else if (event.key === "ArrowDown" || event.key === "ArrowRight") {
             event.preventDefault();
-            emitScroll(
-                Math.min(totalSize - viewportSize, scrollPosition + step),
-            );
+            emitScroll(scrollPosition + step);
         }
     }
 
-    function handleThumbMouseDown(event: MouseEvent) {
+    function handleThumbPointerDown(event: PointerEvent) {
+        if (event.pointerType === "mouse" && event.buttons !== 1) {
+            return;
+        }
+
         event.preventDefault();
+        event.stopPropagation();
         isDragging = true;
+        dragPointerId = event.pointerId;
         dragStartPos =
             orientation === "horizontal" ? event.clientX : event.clientY;
         dragStartScroll = scrollPosition;
-
-        window.addEventListener("mousemove", handleMouseMove);
-        window.addEventListener("mouseup", handleMouseUp);
+        const target = event.currentTarget as HTMLButtonElement;
+        target.setPointerCapture(event.pointerId);
     }
 
-    function handleMouseMove(event: MouseEvent) {
-        if (!isDragging) return;
+    function handleThumbPointerMove(event: PointerEvent) {
+        if (!isDragging || event.pointerId !== dragPointerId) {
+            return;
+        }
 
         const currentPos =
             orientation === "horizontal" ? event.clientX : event.clientY;
         const delta = currentPos - dragStartPos;
-        const scrollDelta =
-            (delta / (viewportSize - thumbSize)) * (totalSize - viewportSize);
-        const newScroll = Math.max(
-            0,
-            Math.min(totalSize - viewportSize, dragStartScroll + scrollDelta),
-        );
+        const draggableSize = viewportSize - thumbSize;
+        if (draggableSize <= 0) {
+            return;
+        }
 
-        emitScroll(newScroll);
+        emitScroll(
+            dragStartScroll +
+                (delta / draggableSize) * maximumScrollPosition,
+        );
     }
 
-    function handleMouseUp() {
+    function handleThumbPointerUp(event: PointerEvent) {
+        if (event.pointerId !== dragPointerId) {
+            return;
+        }
+
+        handleThumbPointerMove(event);
         isDragging = false;
-        window.removeEventListener("mousemove", handleMouseMove);
-        window.removeEventListener("mouseup", handleMouseUp);
+        dragPointerId = undefined;
+        const target = event.currentTarget as HTMLButtonElement;
+        if (target.hasPointerCapture(event.pointerId)) {
+            target.releasePointerCapture(event.pointerId);
+        }
+    }
+
+    function handleLostPointerCapture(event: PointerEvent) {
+        if (event.pointerId === dragPointerId) {
+            isDragging = false;
+            dragPointerId = undefined;
+        }
+    }
+
+    function pinToRange(value: number, min: number, max: number): number {
+        return Math.max(min, Math.min(max, value));
     }
 
     function emitScroll(newPosition: number) {
-        if (onscroll) {
-            const detail =
-                orientation === "horizontal"
-                    ? { scrollTop: scrollPosition, scrollLeft: newPosition }
-                    : { scrollTop: newPosition, scrollLeft: scrollPosition };
-            onscroll(new CustomEvent("scroll", { detail }));
-        }
+        onDidChangeScrollOffset?.(
+            pinToRange(newPosition, 0, maximumScrollPosition),
+        );
     }
 
     function handleWheel(event: WheelEvent) {
         event.preventDefault();
         const delta =
             orientation === "horizontal" ? event.deltaX : event.deltaY;
-        const newScroll = Math.max(
-            0,
-            Math.min(totalSize - viewportSize, scrollPosition + delta),
-        );
-        emitScroll(newScroll);
+        emitScroll(scrollPosition + delta);
     }
 </script>
 
@@ -134,9 +157,9 @@
     onwheel={handleWheel}
     role="scrollbar"
     aria-orientation={orientation}
-    aria-valuenow={scrollPosition}
+    aria-valuenow={pinToRange(scrollPosition, 0, maximumScrollPosition)}
     aria-valuemin={0}
-    aria-valuemax={totalSize - viewportSize}
+    aria-valuemax={maximumScrollPosition}
     aria-controls="grid-data-area"
     tabindex="0"
 >
@@ -150,7 +173,11 @@
             : 'height'}: {thumbSize}px;"
         tabindex="-1"
         aria-label="Scroll thumb"
-        onmousedown={handleThumbMouseDown}
+        onpointerdown={handleThumbPointerDown}
+        onpointermove={handleThumbPointerMove}
+        onpointerup={handleThumbPointerUp}
+        onpointercancel={handleThumbPointerUp}
+        onlostpointercapture={handleLostPointerCapture}
     ></button>
 </div>
 

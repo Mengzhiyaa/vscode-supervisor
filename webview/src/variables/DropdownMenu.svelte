@@ -49,14 +49,9 @@
         }
     }
 
-    $effect(() => {
-        if (isOpen) {
-            document.addEventListener("click", handleClickOutside);
-            return () =>
-                document.removeEventListener("click", handleClickOutside);
-        }
-    });
 </script>
+
+<svelte:document onclick={handleClickOutside} />
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->

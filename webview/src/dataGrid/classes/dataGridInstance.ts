@@ -1126,6 +1126,9 @@ export abstract class DataGridInstance {
             this._width = width;
             this._height = height;
 
+            if (this._horizontalScrollOffset > this.maximumHorizontalScrollOffset) {
+                this._horizontalScrollOffset = this.maximumHorizontalScrollOffset;
+            }
             if (this._verticalScrollOffset > this.maximumVerticalScrollOffset) {
                 this._verticalScrollOffset = this.maximumVerticalScrollOffset;
             }
@@ -1136,18 +1139,30 @@ export abstract class DataGridInstance {
     }
 
     async setScrollOffsets(horizontalScrollOffset: number, verticalScrollOffset: number): Promise<void> {
-        if (horizontalScrollOffset !== this._horizontalScrollOffset ||
-            verticalScrollOffset !== this._verticalScrollOffset) {
-            this._horizontalScrollOffset = horizontalScrollOffset;
-            this._verticalScrollOffset = verticalScrollOffset;
+        const nextHorizontalScrollOffset = Math.max(
+            0,
+            Math.min(horizontalScrollOffset, this.maximumHorizontalScrollOffset),
+        );
+        const nextVerticalScrollOffset = Math.max(
+            0,
+            Math.min(verticalScrollOffset, this.maximumVerticalScrollOffset),
+        );
+        if (nextHorizontalScrollOffset !== this._horizontalScrollOffset ||
+            nextVerticalScrollOffset !== this._verticalScrollOffset) {
+            this._horizontalScrollOffset = nextHorizontalScrollOffset;
+            this._verticalScrollOffset = nextVerticalScrollOffset;
             await this.fetchData();
             this.fireOnDidUpdateEvent();
         }
     }
 
     async setHorizontalScrollOffset(horizontalScrollOffset: number): Promise<void> {
-        if (horizontalScrollOffset !== this._horizontalScrollOffset) {
-            this._horizontalScrollOffset = horizontalScrollOffset;
+        const nextHorizontalScrollOffset = Math.max(
+            0,
+            Math.min(horizontalScrollOffset, this.maximumHorizontalScrollOffset),
+        );
+        if (nextHorizontalScrollOffset !== this._horizontalScrollOffset) {
+            this._horizontalScrollOffset = nextHorizontalScrollOffset;
             await this.fetchData();
             this.fireOnDidUpdateEvent();
         }
@@ -1227,12 +1242,19 @@ export abstract class DataGridInstance {
     }
 
     setVerticalScrollOffset(verticalScrollOffset: number): void {
-        this._verticalScrollOffset = verticalScrollOffset;
+        this._verticalScrollOffset = Math.max(
+            0,
+            Math.min(verticalScrollOffset, this.maximumVerticalScrollOffset),
+        );
     }
 
     async updateVerticalScrollOffset(verticalScrollOffset: number): Promise<void> {
-        if (verticalScrollOffset !== this._verticalScrollOffset) {
-            this._verticalScrollOffset = verticalScrollOffset;
+        const nextVerticalScrollOffset = Math.max(
+            0,
+            Math.min(verticalScrollOffset, this.maximumVerticalScrollOffset),
+        );
+        if (nextVerticalScrollOffset !== this._verticalScrollOffset) {
+            this._verticalScrollOffset = nextVerticalScrollOffset;
             await this.fetchData();
             this.fireOnDidUpdateEvent();
         }

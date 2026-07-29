@@ -5,7 +5,6 @@
     Mirrors: positron/.../components/historyBrowserPopup.tsx
 -->
 <script lang="ts">
-    import { onMount, onDestroy } from "svelte";
     import type { HistoryMatch } from "./history";
     import HistoryCompletionItem from "./HistoryCompletionItem.svelte";
 
@@ -53,16 +52,10 @@
         }
     }
 
-    onMount(() => {
-        window.addEventListener("click", handleWindowClick);
-    });
-
-    onDestroy(() => {
-        window.removeEventListener("click", handleWindowClick);
-    });
-
     const noMatchMessage = "No matching history items";
 </script>
+
+<svelte:window onclick={handleWindowClick} />
 
 <div
     bind:this={popupRef}

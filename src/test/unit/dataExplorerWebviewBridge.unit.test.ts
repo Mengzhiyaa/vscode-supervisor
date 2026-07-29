@@ -83,9 +83,11 @@ function createBridge(options: {
         selected_num_rows: number;
         had_errors?: boolean;
     }>;
+    updateBackendState?: () => Promise<void>;
     openAsSpreadsheet?: () => Promise<void>;
 }) {
     const rpc = createConnection();
+    const logs: Array<{ level: string; message: string }> = [];
     let dataRequests = 0;
     let generation = 0;
     let lastDataRequest: DataExplorerDataRequest | undefined;
@@ -133,6 +135,7 @@ function createBridge(options: {
         clientInstance: {
             status: options.status ?? DataExplorerClientStatus.Idle,
             updateBackendState: async () => {
+                await options.updateBackendState?.();
                 backendStateListeners.forEach(listener => listener(state));
                 return state;
             },
@@ -173,10 +176,10 @@ function createBridge(options: {
         panel: { active: false, visible: true, dispose: () => undefined } as unknown as vscode.WebviewPanel,
         instance,
         logChannel: {
-            debug: () => undefined,
-            info: () => undefined,
-            warn: () => undefined,
-            error: () => undefined,
+            debug: (message: string) => logs.push({ level: 'debug', message }),
+            info: (message: string) => logs.push({ level: 'info', message }),
+            warn: (message: string) => logs.push({ level: 'warn', message }),
+            error: (message: string) => logs.push({ level: 'error', message }),
         } as unknown as vscode.LogOutputChannel,
         isInstanceActive: () => false,
         isInstanceInNewWindow: () => false,
@@ -188,6 +191,7 @@ function createBridge(options: {
     return {
         bridge,
         ...rpc,
+        logs,
         get dataRequests() { return dataRequests; },
     };
 }
@@ -202,6 +206,33 @@ suite('[Unit] Data Explorer webview bridge P0 protocol', () => {
         assert.strictEqual(fixture.dataRequests, 0);
         assert.ok(fixture.notifications.some(({ method }) => method === 'dataExplorer/initialize'));
         assert.ok(!fixture.notifications.some(({ method }) => method === 'dataExplorer/data'));
+        fixture.bridge.dispose();
+    });
+
+    test('ready logs the real backend state error and still initializes', async () => {
+        let attempts = 0;
+        const fixture = createBridge({
+            rows: 10,
+            columns: 2,
+            updateBackendState: async () => {
+                attempts += 1;
+                if (attempts === 1) {
+                    throw Object.assign(new Error('RPC timed out'), {
+                        code: -32603,
+                    });
+                }
+            },
+        });
+        fixture.bridge.registerNotificationHandlers();
+
+        await fixture.handlers.get('dataExplorer/ready')?.();
+
+        assert.strictEqual(attempts, 1);
+        assert.ok(fixture.logs.some(({ level, message }) =>
+            level === 'error' &&
+            message.includes('Backend state update failed: Error: RPC timed out')));
+        assert.ok(fixture.notifications.some(({ method }) =>
+            method === 'dataExplorer/initialize'));
         fixture.bridge.dispose();
     });
 

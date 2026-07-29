@@ -5,7 +5,6 @@
      * Structured to match Positron's PlotsContainer responsibilities.
      */
 
-    import { onMount } from "svelte";
     import type { MessageConnection } from "vscode-jsonrpc/browser";
     import DynamicPlotInstance from "./DynamicPlotInstance.svelte";
     import StaticPlotInstance from "./StaticPlotInstance.svelte";
@@ -75,6 +74,10 @@
         containerElement?: HTMLDivElement;
         plotViewportElement?: HTMLDivElement;
         historyScrollerElement?: HTMLDivElement;
+        containerWidth?: number;
+        containerHeight?: number;
+        viewportWidth?: number;
+        viewportHeight?: number;
     }
 
     let {
@@ -104,6 +107,10 @@
         containerElement = $bindable(),
         plotViewportElement = $bindable(),
         historyScrollerElement = $bindable(),
+        containerWidth = $bindable(1),
+        containerHeight = $bindable(1),
+        viewportWidth = $bindable(1),
+        viewportHeight = $bindable(1),
     }: Props = $props();
 
     const selectedPlot = $derived(
@@ -142,45 +149,14 @@
         onopenOriginFile?.();
     }
 
-    let viewportWidth = $state(1);
-    let viewportHeight = $state(1);
-
-    function updateViewportSize() {
-        if (!plotViewportElement) {
-            return;
-        }
-
-        viewportWidth = Math.max(1, plotViewportElement.clientWidth);
-        viewportHeight = Math.max(1, plotViewportElement.clientHeight);
-    }
-
-    onMount(() => {
-        updateViewportSize();
-    });
-
-    $effect(() => {
-        if (!plotViewportElement) {
-            return;
-        }
-
-        updateViewportSize();
-
-        const resizeObserver = new ResizeObserver(() => {
-            updateViewportSize();
-        });
-
-        resizeObserver.observe(plotViewportElement);
-
-        return () => {
-            resizeObserver.disconnect();
-        };
-    });
 </script>
 
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 <div
     bind:this={containerElement}
+    bind:clientWidth={containerWidth}
+    bind:clientHeight={containerHeight}
     class="plots-container dark-filter-{darkFilterMode}"
     class:history-bottom={historyBottom}
     class:history-right={!historyBottom}
@@ -226,7 +202,12 @@
                 </span>
             </div>
         {/if}
-        <div class="selected-plot" bind:this={plotViewportElement}>
+        <div
+            class="selected-plot"
+            bind:this={plotViewportElement}
+            bind:clientWidth={viewportWidth}
+            bind:clientHeight={viewportHeight}
+        >
             {#key selectedPlot?.id}
                 {#if plots.length === 0}
                     <div class="plot-placeholder"></div>

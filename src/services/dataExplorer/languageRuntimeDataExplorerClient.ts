@@ -107,6 +107,31 @@ const DEFAULT_PROFILE_FORMAT_OPTIONS: FormatOptions = {
     thousands_sep: ',',
 };
 
+const BACKEND_STATE_MAX_ATTEMPTS = 2;
+
+function formatError(error: unknown): string {
+    if (error instanceof Error) {
+        return `${error.name}: ${error.message}`;
+    }
+    if (
+        typeof error === 'object' &&
+        error !== null &&
+        'message' in error &&
+        typeof error.message === 'string'
+    ) {
+        const name =
+            'name' in error && typeof error.name === 'string'
+                ? `${error.name}: `
+                : '';
+        return `${name}${error.message}`;
+    }
+    try {
+        return JSON.stringify(error) ?? String(error);
+    } catch {
+        return String(error);
+    }
+}
+
 /**
  * A data explorer client instance that wraps an IDataExplorerComm
  * and provides a high-level API for data explorer operations.
@@ -267,20 +292,29 @@ export class DataExplorerClientInstance implements vscode.Disposable {
             await this._waitForPendingTasks();
         }
 
-        this._backendPromise = this._runBackendTask(
-            () => this._comm.getState(),
+        const backendPromise = this._runBackendTask(
+            () => this._requestBackendState(),
             () => DATA_EXPLORER_DISCONNECTED_STATE
         );
+        this._backendPromise = backendPromise;
 
-        this._cachedBackendState = await this._backendPromise;
-        this._backendPromise = undefined;
+        try {
+            this._cachedBackendState = await backendPromise;
 
-        if (this._cachedBackendState.connected === false) {
-            this._status = DataExplorerClientStatus.Disconnected;
+            if (this._cachedBackendState.connected === false) {
+                this._status = DataExplorerClientStatus.Disconnected;
+            }
+
+            this._onDidUpdateBackendState.fire(this._cachedBackendState);
+            return this._cachedBackendState;
+        } finally {
+            // A rejected get_state request must not poison future refreshes.
+            // Only clear the request that this invocation installed so a newer
+            // request can never be removed by an older completion.
+            if (this._backendPromise === backendPromise) {
+                this._backendPromise = undefined;
+            }
         }
-
-        this._onDidUpdateBackendState.fire(this._cachedBackendState);
-        return this._cachedBackendState;
     }
 
     /**
@@ -555,6 +589,29 @@ export class DataExplorerClientInstance implements vscode.Disposable {
         this._closeNotified = true;
         this._setStatus(DataExplorerClientStatus.Disconnected);
         this._onDidClose.fire();
+    }
+
+    private async _requestBackendState(): Promise<BackendState> {
+        for (let attempt = 1; attempt <= BACKEND_STATE_MAX_ATTEMPTS; attempt++) {
+            try {
+                const state = await this._comm.getState();
+                if (attempt > 1) {
+                    this._logChannel.info(
+                        `DataExplorerClientInstance: get_state recovered on attempt ${attempt}.`,
+                    );
+                }
+                return state;
+            } catch (error) {
+                if (attempt === BACKEND_STATE_MAX_ATTEMPTS) {
+                    throw error;
+                }
+                this._logChannel.warn(
+                    `DataExplorerClientInstance: get_state attempt ${attempt}/${BACKEND_STATE_MAX_ATTEMPTS} failed: ${formatError(error)}; retrying.`,
+                );
+            }
+        }
+
+        throw new Error('Data Explorer get_state retry loop exited unexpectedly.');
     }
 
     private async _runBackendTask<T>(

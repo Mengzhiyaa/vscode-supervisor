@@ -10,3 +10,5 @@ webview/dist/
 webview/test-results/
 webview/playwright-report/
 docs/*
+# Added by code-review-graph
+.code-review-graph/

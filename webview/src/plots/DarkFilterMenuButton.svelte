@@ -1,18 +1,18 @@
 <script lang="ts">
-    import { createEventDispatcher } from "svelte";
     import ActionBarMenuButton from "../shared/ActionBarMenuButton.svelte";
     import { DarkFilter } from "./types";
 
     interface Props {
         darkFilterMode: DarkFilter;
+        onDarkFilterChange?: (mode: DarkFilter) => void;
+        onOpenSettings?: () => void;
     }
 
-    let { darkFilterMode }: Props = $props();
-
-    const dispatch = createEventDispatcher<{
-        darkFilterChange: { mode: DarkFilter };
-        openSettings: void;
-    }>();
+    let {
+        darkFilterMode,
+        onDarkFilterChange,
+        onOpenSettings,
+    }: Props = $props();
 
     const darkFilterLabels = new Map<DarkFilter, string>([
         [DarkFilter.On, "Dark Filter"],
@@ -51,7 +51,7 @@
             label: darkFilterLabels.get(mode) ?? mode,
             checked: darkFilterMode === mode,
             onSelected: () => {
-                dispatch("darkFilterChange", { mode });
+                onDarkFilterChange?.(mode);
             },
         })),
         {
@@ -64,7 +64,7 @@
             id: "open-settings",
             label: openDarkFilterSettings,
             onSelected: () => {
-                dispatch("openSettings");
+                onOpenSettings?.();
             },
         },
     ]}

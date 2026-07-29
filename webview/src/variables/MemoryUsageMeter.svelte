@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { tick } from "svelte";
     import type {
         MemorySessionUsage,
         MemoryUsageSnapshot,
@@ -264,6 +265,10 @@
     }
 
     function handleDocumentMouseDown(event: MouseEvent) {
+        if (!expanded) {
+            return;
+        }
+
         const target = event.target;
         if (!(target instanceof Node)) {
             return;
@@ -298,24 +303,16 @@
             return;
         }
 
-        document.addEventListener("mousedown", handleDocumentMouseDown, true);
-        window.addEventListener("resize", updateDropdownPosition);
-        window.addEventListener("scroll", updateDropdownPosition, true);
-        requestAnimationFrame(updateDropdownPosition);
-
-        return () => {
-            document.removeEventListener("mousedown", handleDocumentMouseDown, true);
-            window.removeEventListener("resize", updateDropdownPosition);
-            window.removeEventListener("scroll", updateDropdownPosition, true);
-        };
+        void tick().then(updateDropdownPosition);
     });
 
-    $effect(() => {
-        if (expanded) {
-            requestAnimationFrame(updateDropdownPosition);
-        }
-    });
 </script>
+
+<svelte:document onmousedowncapture={handleDocumentMouseDown} />
+<svelte:window
+    onresize={updateDropdownPosition}
+    onscrollcapture={updateDropdownPosition}
+/>
 
 {#snippet memoryBar(compact = false)}
     <div

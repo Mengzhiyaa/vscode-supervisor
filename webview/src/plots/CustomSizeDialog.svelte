@@ -3,24 +3,21 @@
      * CustomSizeDialog.svelte - Dialog for setting custom plot dimensions
      * Follows Positron's modal dialog pattern for custom size input.
      */
-    import { createEventDispatcher } from "svelte";
-
     interface Props {
         show: boolean;
         initialWidth?: number;
         initialHeight?: number;
+        onSubmit?: (size: { width: number; height: number }) => void;
+        onCancel?: () => void;
     }
 
     let {
         show = $bindable(),
         initialWidth = 800,
         initialHeight = 600,
+        onSubmit,
+        onCancel,
     }: Props = $props();
-
-    const dispatch = createEventDispatcher<{
-        submit: { width: number; height: number };
-        cancel: void;
-    }>();
 
     // svelte-ignore state_referenced_locally
     let width = $state(initialWidth);
@@ -46,13 +43,13 @@
     function handleSubmit(e: Event) {
         e.preventDefault();
         if (width > 0 && height > 0) {
-            dispatch("submit", { width, height });
+            onSubmit?.({ width, height });
             show = false;
         }
     }
 
     function handleCancel() {
-        dispatch("cancel");
+        onCancel?.();
         show = false;
     }
 

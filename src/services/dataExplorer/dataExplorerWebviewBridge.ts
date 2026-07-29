@@ -106,6 +106,29 @@ export interface DataExplorerWebviewBridgeOptions {
     openAsSpreadsheet: () => Promise<void>;
 }
 
+function formatError(error: unknown): string {
+    if (error instanceof Error) {
+        return `${error.name}: ${error.message}`;
+    }
+    if (
+        typeof error === 'object' &&
+        error !== null &&
+        'message' in error &&
+        typeof error.message === 'string'
+    ) {
+        const name =
+            'name' in error && typeof error.name === 'string'
+                ? `${error.name}: `
+                : '';
+        return `${name}${error.message}`;
+    }
+    try {
+        return JSON.stringify(error);
+    } catch {
+        return String(error);
+    }
+}
+
 function normalizeColumnDisplayType(
     typeDisplay: string | undefined,
     typeName?: string,
@@ -280,13 +303,7 @@ export class DataExplorerWebviewBridge {
         connection.onNotification(DataExplorerReadyNotification.type, async () => {
             logChannel.debug('[DataExplorerEditor] Received: dataExplorer/ready');
             await instance.runWithForegroundLoading(async () => {
-                try {
-                    await instance.clientInstance.updateBackendState();
-                } catch (error) {
-                    logChannel.warn(
-                        `[DataExplorerEditor] Backend state update failed: ${error}`,
-                    );
-                }
+                await this._refreshInitialBackendState();
                 await this.sendInitialize();
             });
         });
@@ -1475,6 +1492,17 @@ export class DataExplorerWebviewBridge {
     private _isBackendDisconnected(): boolean {
         return this._options.instance.clientInstance.status ===
             DataExplorerClientStatus.Disconnected;
+    }
+
+    private async _refreshInitialBackendState(): Promise<void> {
+        const { instance, logChannel } = this._options;
+        try {
+            await instance.clientInstance.updateBackendState();
+        } catch (error) {
+            logChannel.error(
+                `[DataExplorerEditor] Backend state update failed: ${formatError(error)}`,
+            );
+        }
     }
 
     private _notifyLayoutChanged(layout: DataExplorerLayoutState): void {

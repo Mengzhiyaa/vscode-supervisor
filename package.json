@@ -52,7 +52,7 @@
     "test:prepare": "npm run compile-tests && npm run build",
     "test": "npm run test:prepare && node scripts/run-vscode-tests.mjs --label all",
     "test:unit:ext": "npm run test:prepare && node scripts/run-vscode-tests.mjs --label unit",
-    "lint": "eslint src",
+    "lint": "eslint src && cd webview && npm run check",
     "vsce:package": "vsce package"
   },
   "positron": {
