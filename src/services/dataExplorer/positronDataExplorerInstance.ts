@@ -29,6 +29,8 @@ import {
 } from './languageRuntimeDataExplorerClient';
 import { createDefaultDataExplorerUiState } from './positronDataExplorerSummary';
 
+const SCHEMA_CACHE_TRIM_TIMEOUT = 3_000;
+
 export class PositronDataExplorerInstance implements IPositronDataExplorerInstance {
     private readonly _disposables: vscode.Disposable[] = [];
     private _clientDisposables: vscode.Disposable[] = [];
@@ -41,6 +43,7 @@ export class PositronDataExplorerInstance implements IPositronDataExplorerInstan
     private readonly _onDidInvalidateData = this._registerEmitter(new vscode.EventEmitter<{ generation: number; schemaChanged: boolean }>());
     private readonly _onDidChangeSelection = this._registerEmitter(new vscode.EventEmitter<PositronDataExplorerSelection | undefined>());
     private readonly _schemaCache = new Map<number, TableSchema['columns'][number]>();
+    private _schemaCacheTrimHandle: ReturnType<typeof setTimeout> | undefined;
     private readonly _visibilityOwners = new Set<string>();
     private readonly _tableDataCache: TableDataCache;
     private readonly _tableSummaryCache: TableSummaryCache;
@@ -177,6 +180,7 @@ export class PositronDataExplorerInstance implements IPositronDataExplorerInstan
         this._tableSummaryCache.invalidate(generation);
         if (schemaChanged) {
             this._schemaCache.clear();
+            this._clearSchemaCacheTrimTimeout();
         }
         this._lastDataRequest = undefined;
         this._onDidInvalidateData.fire({ generation, schemaChanged });
@@ -233,6 +237,7 @@ export class PositronDataExplorerInstance implements IPositronDataExplorerInstan
             const schema = await this._clientInstance.getSchema(missing);
             schema.columns.forEach(column => this._schemaCache.set(column.column_index, column));
         }
+        this._scheduleSchemaCacheTrim(uniqueColumnIndices);
         return {
             columns: columnIndices
                 .map(index => this._schemaCache.get(index))
@@ -282,6 +287,7 @@ export class PositronDataExplorerInstance implements IPositronDataExplorerInstan
         this._disposeClientBindings();
         this._tableDataCache.dispose();
         this._tableSummaryCache.dispose();
+        this._clearSchemaCacheTrimTimeout();
         this._clientInstance.dispose();
         this._onDidDispose.fire();
         this._disposables.forEach(disposable => disposable.dispose());
@@ -323,6 +329,29 @@ export class PositronDataExplorerInstance implements IPositronDataExplorerInstan
         }
         this._loading = loading;
         this._onDidChangeForegroundLoading.fire(loading);
+    }
+
+    private _scheduleSchemaCacheTrim(columnIndices: number[]): void {
+        this._clearSchemaCacheTrimTimeout();
+        if (columnIndices.length === 0) {
+            return;
+        }
+        const retainedColumnIndices = new Set(columnIndices);
+        this._schemaCacheTrimHandle = setTimeout(() => {
+            this._schemaCacheTrimHandle = undefined;
+            for (const columnIndex of this._schemaCache.keys()) {
+                if (!retainedColumnIndices.has(columnIndex)) {
+                    this._schemaCache.delete(columnIndex);
+                }
+            }
+        }, SCHEMA_CACHE_TRIM_TIMEOUT);
+    }
+
+    private _clearSchemaCacheTrimTimeout(): void {
+        if (this._schemaCacheTrimHandle) {
+            clearTimeout(this._schemaCacheTrimHandle);
+            this._schemaCacheTrimHandle = undefined;
+        }
     }
 
 }

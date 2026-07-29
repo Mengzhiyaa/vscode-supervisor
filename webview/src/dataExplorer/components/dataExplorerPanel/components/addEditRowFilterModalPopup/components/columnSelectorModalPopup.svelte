@@ -3,22 +3,22 @@
   Port from Positron's columnSelectorModalPopup.tsx
 -->
 <script lang="ts">
-    import { onDestroy, tick } from "svelte";
+    import { onDestroy, tick, untrack } from "svelte";
     import { PositronDataGrid } from "../../../../../../dataGrid";
     import type { SchemaColumn } from "../../../../../../dataGrid/types";
     import ModalPopup from "../../../../../../shared/ModalPopup.svelte";
+    import { getDataExplorerContext } from "../../../../../positronDataExplorerContext";
     import ColumnSearch from "./columnSearch.svelte";
     import { ColumnSelectorDataGridInstance } from "./columnSelectorDataGridInstance";
 
     const SEARCH_AREA_HEIGHT = 34;
-    const DEFAULT_ROW_HEIGHT = 26;
-    const DEFAULT_ROWS_MARGIN = 4;
     const FOCUSABLE_ELEMENT_SELECTORS =
         'input[type="text"], .column-selector-data-grid .data-grid';
 
     interface Props {
         anchorElement: HTMLElement;
         columns: SchemaColumn[];
+        totalColumns: number;
         selectedColumnSchema?: SchemaColumn;
         focusInput?: boolean;
         initialSearchText?: string;
@@ -29,6 +29,7 @@
     let {
         anchorElement,
         columns,
+        totalColumns,
         selectedColumnSchema,
         focusInput = false,
         initialSearchText,
@@ -38,14 +39,21 @@
 
     let searchText = $state("");
     let gridContainerRef = $state<HTMLDivElement | null>(null);
-    let selectorInstance = $state<ColumnSelectorDataGridInstance | undefined>(
-        undefined,
+    const { instance } = getDataExplorerContext();
+    const selectorInstance = untrack(
+        () =>
+            new ColumnSelectorDataGridInstance(
+                totalColumns,
+                columns,
+                instance.schemaClient,
+                onItemSelected,
+            ),
     );
-    let totalRows = $state(0);
-    let rowHeight = $state(DEFAULT_ROW_HEIGHT);
-    let rowsMargin = $state(DEFAULT_ROWS_MARGIN);
+    let displayedRows = $state(selectorInstance.rows);
+    const rowHeight = selectorInstance.defaultRowHeight;
+    const rowsMargin = selectorInstance.rowsMargin;
 
-    const enableSearch = $derived(columns.length > 10);
+    const enableSearch = $derived(totalColumns > 10);
 
     const minPopupHeight = $derived.by(() => {
         const baseHeight =
@@ -60,7 +68,7 @@
             (enableSearch ? SEARCH_AREA_HEIGHT : 0) +
             2 * rowsMargin +
             2;
-        return baseHeight + totalRows * rowHeight;
+        return baseHeight + Math.max(displayedRows, 2) * rowHeight;
     });
 
     $effect(() => {
@@ -68,40 +76,31 @@
     });
 
     $effect(() => {
-        if (!selectorInstance) {
-            selectorInstance = new ColumnSelectorDataGridInstance(
-                columns,
-                onItemSelected,
-            );
-        } else {
-            selectorInstance.setColumns(columns);
-        }
-
-        rowHeight = selectorInstance.defaultRowHeight;
-        rowsMargin = selectorInstance.rowsMargin;
-        totalRows = selectorInstance.totalRows;
-        selectorInstance.setSelectedColumn(selectedColumnSchema?.column_index);
-        void selectorInstance.setSearchText(searchText);
+        selectorInstance.setSchema(columns);
     });
 
     $effect(() => {
-        if (!selectorInstance) {
-            return;
-        }
-
         selectorInstance.setSelectedColumn(selectedColumnSchema?.column_index);
     });
 
     $effect(() => {
-        if (!selectorInstance) {
-            return;
-        }
-
         void selectorInstance.setSearchText(searchText);
     });
 
     $effect(() => {
-        if (focusInput || !gridContainerRef || !selectorInstance) {
+        const updateDisplayedRows = () => {
+            displayedRows = selectorInstance.rows;
+        };
+        const disposable = selectorInstance.onDidUpdate(updateDisplayedRows);
+        updateDisplayedRows();
+
+        return () => {
+            disposable.dispose();
+        };
+    });
+
+    $effect(() => {
+        if (focusInput || !gridContainerRef) {
             return;
         }
 
@@ -114,7 +113,7 @@
             const gridElement = gridContainer.querySelector<HTMLElement>(
                 ".data-grid",
             );
-            selectorInstance?.ensureCursorVisible();
+            selectorInstance.ensureCursorVisible();
             gridElement?.focus();
         });
     });
@@ -138,14 +137,10 @@
     });
 
     onDestroy(() => {
-        selectorInstance?.dispose();
+        selectorInstance.dispose();
     });
 
     function selectCurrentItem() {
-        if (!selectorInstance) {
-            return;
-        }
-
         const columnSchema = selectorInstance.selectItem(
             selectorInstance.cursorRowIndex,
         );
@@ -158,7 +153,7 @@
         const gridElement = gridContainerRef?.querySelector<HTMLElement>(
             ".data-grid",
         );
-        selectorInstance?.ensureCursorVisible();
+        selectorInstance.ensureCursorVisible();
         gridElement?.focus();
     }
 
@@ -212,12 +207,10 @@
             class="column-selector-data-grid"
             bind:this={gridContainerRef}
         >
-            {#if selectorInstance}
-                <PositronDataGrid
-                    instance={selectorInstance}
-                    gridRole="column-selector"
-                />
-            {/if}
+            <PositronDataGrid
+                instance={selectorInstance}
+                gridRole="column-selector"
+            />
         </div>
     </div>
 </ModalPopup>

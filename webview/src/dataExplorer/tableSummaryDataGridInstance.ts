@@ -28,6 +28,8 @@ import {
 } from './columnDisplayTypeUtils';
 import ColumnSummaryCell from './components/columnSummaryCell.svelte';
 import { TableSummaryCache } from './common/tableSummaryCache';
+import { ColumnSchemaCache } from './common/columnSchemaCache';
+import type { DataExplorerSchemaClient } from './common/dataExplorerSchemaClient';
 
 /**
  * Constants.
@@ -35,6 +37,7 @@ import { TableSummaryCache } from './common/tableSummaryCache';
 const SUMMARY_HEIGHT = 34;
 const PROFILE_LINE_HEIGHT = 20;
 const OVERSCAN_FACTOR = 3;
+const INITIAL_SCHEMA_PAGE_SIZE = 50;
 
 const COLUMN_PROFILE_NUMBER_LINE_COUNT = 6;
 const COLUMN_PROFILE_BOOLEAN_LINE_COUNT = 3;
@@ -49,7 +52,6 @@ const COLUMN_PROFILE_OBJECT_LINE_COUNT = 3;
 export class TableSummaryDataGridInstance extends DataGridInstance {
     //#region Private Properties
 
-    private _visibleColumns: SchemaColumn[] = [];
     private _rows = 0;
     private _searchText = '';
     private _sortOption: SearchSchemaSortOrder = 'original';
@@ -64,6 +66,7 @@ export class TableSummaryDataGridInstance extends DataGridInstance {
     private _pendingProfileRefresh = false;
     private _activeSearchRequestId = 0;
     private readonly _summaryCache: TableSummaryCache;
+    private readonly _columnSchemaCache: ColumnSchemaCache;
     private readonly _disposables: Array<() => void> = [];
     private readonly _hoverManager = new SimpleHoverManager(0);
 
@@ -80,7 +83,8 @@ export class TableSummaryDataGridInstance extends DataGridInstance {
 
     constructor(
         private readonly _stores: DataExplorerStores,
-        private readonly _postMessage: (message: WebviewMessage) => void,
+        postMessage: (message: WebviewMessage) => void,
+        private readonly _schemaClient: DataExplorerSchemaClient,
         pinnedColumnsStore?: Readable<number[]>,
     ) {
         const options: DataGridOptions = {
@@ -105,7 +109,12 @@ export class TableSummaryDataGridInstance extends DataGridInstance {
         };
         super(options);
 
-        this._summaryCache = new TableSummaryCache(_stores, _postMessage);
+        this._summaryCache = new TableSummaryCache(_stores, postMessage);
+        this._columnSchemaCache = new ColumnSchemaCache(_schemaClient);
+        const schemaCacheListener = this._columnSchemaCache.onDidUpdateCache(
+            () => this.fireOnDidUpdateEvent(),
+        );
+        this._disposables.push(() => schemaCacheListener.dispose());
 
         // Always a single column.
         this._columnLayoutManager.setEntries(1);
@@ -216,7 +225,9 @@ export class TableSummaryDataGridInstance extends DataGridInstance {
             return undefined;
         }
 
-        const columnSchema = this._summaryCache.getColumnSchema(rowIndex);
+        const columnSchema =
+            this._columnSchemaCache.getColumnSchema(rowIndex) ??
+            this._summaryCache.getColumnSchema(rowIndex);
         if (!columnSchema) {
             return undefined;
         }
@@ -233,15 +244,40 @@ export class TableSummaryDataGridInstance extends DataGridInstance {
     }
 
     protected async fetchData(): Promise<void> {
-        if (!this._supportsColumnProfiles || !this._visible) {
+        if (!this._visible) {
             return;
         }
 
-        const columnIndices = this._rowLayoutManager.getLayoutIndexes(
+        let columnIndices = this._rowLayoutManager.getLayoutIndexes(
             this.verticalScrollOffset,
             this.layoutHeight,
             OVERSCAN_FACTOR,
         );
+        // The Svelte data grid can receive its backend state one render before
+        // its measured height. Keep the first summary load moving, then let
+        // the normal measured 3x viewport replace this descriptor.
+        if (columnIndices.length === 0 && this._rows > 0) {
+            columnIndices =
+                this._rowLayoutManager.mapPositionsToIndexes(
+                    0,
+                    Math.min(this._rows, INITIAL_SCHEMA_PAGE_SIZE) - 1,
+                ) ?? [];
+        }
+        await this._columnSchemaCache.update({
+            columnIndices,
+            invalidateCache: false,
+        });
+        if (!this._visible) {
+            return;
+        }
+        this._summaryCache.setSchema(
+            this._columnSchemaCache.getColumnSchemas(columnIndices),
+        );
+        this.fireOnDidUpdateEvent();
+
+        if (!this._supportsColumnProfiles) {
+            return;
+        }
         this._summaryCache.requestColumnProfiles(
             columnIndices,
             this._expandedColumns,
@@ -296,7 +332,18 @@ export class TableSummaryDataGridInstance extends DataGridInstance {
             nextState?.table_shape.num_rows ?? 0,
         );
 
-        if (!nextState || !previousState) {
+        if (!nextState) {
+            this._summaryCache.clear();
+            this._columnSchemaCache.clear();
+            this._applyColumnIndices([]);
+            this._initialSummaryLoaded = false;
+            this._pendingSearchRefresh = false;
+            return;
+        }
+
+        if (!previousState) {
+            this._initialSummaryLoaded = false;
+            this._queueSearchRefresh();
             return;
         }
 
@@ -315,7 +362,8 @@ export class TableSummaryDataGridInstance extends DataGridInstance {
 
         if (columnsChanged || searchSupportChanged) {
             this._summaryCache.clear();
-            this._applyVisibleColumns([]);
+            this._columnSchemaCache.clear();
+            this._applyColumnIndices([]);
             this._initialSummaryLoaded = false;
             this._queueSearchRefresh();
             return;
@@ -336,15 +384,38 @@ export class TableSummaryDataGridInstance extends DataGridInstance {
         }
     }
 
-    handleSchemaUpdated(): void {
-        this._summaryCache.clear();
-        this._applyVisibleColumns([]);
+    handleSchemaUpdated(generation?: number): void {
+        this._summaryCache.clear(generation);
+        this._columnSchemaCache.clear();
+        this._applyColumnIndices([]);
         this._initialSummaryLoaded = false;
         this._queueSearchRefresh();
     }
 
-    handleDataUpdated(): void {
-        this._summaryCache.invalidateProfiles();
+    handleSchema(columns: SchemaColumn[]): void {
+        this._columnSchemaCache.setColumnSchema(columns);
+        this._summaryCache.setSchema(columns);
+
+        if (
+            this._hasNoSearchOrSort() &&
+            this._rows === 0 &&
+            get(this._stores.numColumns) > 0
+        ) {
+            this._initialSummaryLoaded = true;
+            this._pendingSearchRefresh = false;
+            this._applyColumnIndices();
+            return;
+        }
+
+        if (this._visible) {
+            void this.fetchData();
+        } else {
+            this._pendingProfileRefresh = true;
+        }
+    }
+
+    handleDataUpdated(generation?: number): void {
+        this._summaryCache.invalidateProfiles(generation);
         this._queueProfileRefresh();
     }
 
@@ -355,23 +426,10 @@ export class TableSummaryDataGridInstance extends DataGridInstance {
             requestId?: number;
         },
     ): void {
-        if (
-            params.requestId !== undefined &&
-            params.requestId !== this._activeSearchRequestId
-        ) {
-            return;
-        }
-
-        const columnMap = new Map(
-            params.columns.map((column) => [column.column_index, column]),
-        );
-        const ordered = params.columnIndices
-            .map((columnIndex) => columnMap.get(columnIndex))
-            .filter((column): column is SchemaColumn => Boolean(column));
-
+        this._columnSchemaCache.setColumnSchema(params.columns);
         this._initialSummaryLoaded = true;
         this._pendingSearchRefresh = false;
-        this._applyVisibleColumns(ordered);
+        this._applyColumnIndices(params.columnIndices);
     }
 
     handleColumnProfiles(
@@ -405,7 +463,9 @@ export class TableSummaryDataGridInstance extends DataGridInstance {
             return false;
         }
 
-        const schema = this._summaryCache.getColumnSchema(columnIndex);
+        const schema =
+            this._columnSchemaCache.getColumnSchema(columnIndex) ??
+            this._summaryCache.getColumnSchema(columnIndex);
         if (!schema) {
             return false;
         }
@@ -435,7 +495,10 @@ export class TableSummaryDataGridInstance extends DataGridInstance {
     }
 
     getColumnSchema(columnIndex: number): SchemaColumn | undefined {
-        return this._summaryCache.getColumnSchema(columnIndex);
+        return (
+            this._columnSchemaCache.getColumnSchema(columnIndex) ??
+            this._summaryCache.getColumnSchema(columnIndex)
+        );
     }
 
     getColumnProfile(columnIndex: number) {
@@ -524,16 +587,7 @@ export class TableSummaryDataGridInstance extends DataGridInstance {
             return;
         }
 
-        if (supportedTypes.length === 0) {
-            this._supportsSummaryStats = true;
-            return;
-        }
-
         this._supportsSummaryStats = supportedTypes.some((typeSupport) => {
-            if (typeof typeSupport === 'string') {
-                return typeSupport === 'summary_stats';
-            }
-
             if (
                 typeSupport &&
                 typeof typeSupport === 'object' &&
@@ -579,14 +633,28 @@ export class TableSummaryDataGridInstance extends DataGridInstance {
         }
 
         this._pendingSearchRefresh = true;
-        this._activeSearchRequestId += 1;
-        this._postMessage({
-            type: 'searchSchema',
-            text: this._searchText,
-            sortOrder: this._sortOption,
+        const requestId = ++this._activeSearchRequestId;
+        if (this._hasNoSearchOrSort()) {
+            if (requestId !== this._activeSearchRequestId) {
+                return;
+            }
+            this._initialSummaryLoaded = true;
+            this._pendingSearchRefresh = false;
+            this._applyColumnIndices();
+            return;
+        }
+
+        const columnIndices = await this._schemaClient.searchSchema({
+            searchText: this._searchText,
+            sortOption: this._sortOption,
             pinnedColumns: [...this._pinnedColumns],
-            requestId: this._activeSearchRequestId,
         });
+        if (requestId !== this._activeSearchRequestId) {
+            return;
+        }
+        this._initialSummaryLoaded = true;
+        this._pendingSearchRefresh = false;
+        this._applyColumnIndices(columnIndices);
     }
 
     private _queueSearchRefresh(): void {
@@ -605,10 +673,8 @@ export class TableSummaryDataGridInstance extends DataGridInstance {
         void this.fetchData();
     }
 
-    private _applyVisibleColumns(columns: SchemaColumn[]): void {
-        this._visibleColumns = columns;
-        this._summaryCache.setSchema(columns);
-        this._updateLayoutEntries();
+    private _applyColumnIndices(columnIndices?: number[]): void {
+        this._updateLayoutEntries(columnIndices);
         this._resetScrollOffset();
         if (this._visible) {
             void this.fetchData();
@@ -617,11 +683,18 @@ export class TableSummaryDataGridInstance extends DataGridInstance {
         }
     }
 
-    private _updateLayoutEntries(): void {
-        const entryMap = this._visibleColumns.map((column) => column.column_index);
-
-        this._rows = entryMap.length;
-        this._rowLayoutManager.setEntries(this._rows, undefined, entryMap);
+    private _updateLayoutEntries(columnIndices?: number[]): void {
+        if (columnIndices) {
+            this._rows = columnIndices.length;
+            this._rowLayoutManager.setEntries(
+                this._rows,
+                undefined,
+                columnIndices,
+            );
+        } else {
+            this._rows = get(this._stores.numColumns);
+            this._rowLayoutManager.setEntries(this._rows);
+        }
         this._updatePinnedRows();
         this._applyExpandedRowHeights();
         this.fireOnDidUpdateEvent();
@@ -630,6 +703,10 @@ export class TableSummaryDataGridInstance extends DataGridInstance {
     private _updatePinnedRows(): void {
         this._rowLayoutManager.setPinnedIndexes(this._pinnedColumns);
         this.fireOnDidUpdateEvent();
+    }
+
+    private _hasNoSearchOrSort(): boolean {
+        return this._searchText === '' && this._sortOption === 'original';
     }
 
     private _syncExpandedRows(expanded: Set<number>): void {
@@ -750,6 +827,7 @@ export class TableSummaryDataGridInstance extends DataGridInstance {
             dispose();
         }
         this._disposables.length = 0;
+        this._columnSchemaCache.dispose();
         this._hoverManager.dispose();
         this._summaryCache.dispose();
         super.dispose();

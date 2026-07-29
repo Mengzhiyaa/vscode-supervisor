@@ -74,9 +74,23 @@ export const DEFAULT_TABLE_DATA_DATA_GRID_OPTIONS: DataGridOptions = {
     cursorOffset: 0.5,
 };
 
-const VISIBLE_DATA_PAGE_SIZE = 50;
+const OVERSCAN_FACTOR = 3;
 const CACHE_TRIM_TIMEOUT = 3_000;
-const CACHE_TRIM_ROW_BUFFER = VISIBLE_DATA_PAGE_SIZE;
+const MAX_AUTO_SIZE_COLUMNS = 1_000;
+const AUTO_SIZE_COLUMNS_PAGE_SIZE = 250;
+const AUTO_SIZE_SAMPLE_ROWS = 10;
+
+interface UpdateDescriptor {
+    columnIndices: number[];
+    rowIndices: number[];
+}
+
+interface ActiveTableDataRequest {
+    requestId: number;
+    generation: number;
+    updateDescriptor: UpdateDescriptor;
+    kind: 'viewport' | 'columnWidths';
+}
 
 function normalizeSortKeys(
     sortKeys: Iterable<{
@@ -109,10 +123,6 @@ function sortKeysSignature(
 export class TableDataDataGridInstance extends DataGridInstance {
     private readonly _tableDataCache: TableDataCache;
     private readonly _hoverManager = new SimpleHoverManager();
-    private readonly _pendingRequests = new Map<
-        string,
-        { requestId: number; generation: number }
-    >();
     private readonly _disposables: Array<{ dispose: () => void }> = [];
     private _widthCalculators: WidthCalculators | undefined;
     private _autoSizingEnabled = true;
@@ -120,7 +130,12 @@ export class TableDataDataGridInstance extends DataGridInstance {
     private _lastSortKeysSignature = '';
     private _dataGeneration = 0;
     private _nextDataRequestId = 0;
-    private _requestVisibleDataHandle: ReturnType<typeof setTimeout> | undefined;
+    private _updating = false;
+    private _pendingUpdateDescriptor: UpdateDescriptor | undefined;
+    private _activeRequest: ActiveTableDataRequest | undefined;
+    private _columnWidthCalculationPending = false;
+    private _columnWidthCalculationColumnIndex = 0;
+    private _columnWidthsCalculatedGeneration = -1;
     private _trimCacheHandle: ReturnType<typeof setTimeout> | undefined;
     private _selectionSyncEnabled = false;
     private _lastSelectionSignature = '';
@@ -189,10 +204,14 @@ export class TableDataDataGridInstance extends DataGridInstance {
         );
         this._disposables.push(
             this.onDidUpdate(() => {
+                const firstColumnIndex = this.firstColumn?.columnIndex ?? 0;
+                const firstRowIndex = this.firstRow?.rowIndex ?? 0;
                 this.viewport.update((viewport) => ({
                     ...viewport,
                     scrollTop: this.verticalScrollOffset,
                     scrollLeft: this.horizontalScrollOffset,
+                    firstRowIndex,
+                    firstColumnIndex,
                 }));
             }),
         );
@@ -204,7 +223,7 @@ export class TableDataDataGridInstance extends DataGridInstance {
         this._disposables.push(
             {
                 dispose: this.viewport.subscribe(() => {
-                    this._scheduleVisibleDataRequest();
+                    this._updateVisibleDataCache();
                 }),
             },
         );
@@ -333,11 +352,14 @@ export class TableDataDataGridInstance extends DataGridInstance {
         this._rowLayoutManager.setEntries(rows);
 
         if (previousColumns !== columns) {
+            this._columnWidthsCalculatedGeneration = -1;
+            this._columnWidthCalculationColumnIndex = 0;
             this.clearSchema();
         } else if (previousRows !== rows) {
             this.invalidateCache(InvalidateCacheFlags.Data);
         }
 
+        this._scheduleColumnWidthCalculation();
         this.fireOnDidUpdateEvent();
     }
 
@@ -353,6 +375,7 @@ export class TableDataDataGridInstance extends DataGridInstance {
 
     handleDataUpdate(params: {
         startRow: number;
+        rowIndices?: number[];
         columns: ColumnValue[][];
         columnIndices?: number[];
         rowLabels?: string[];
@@ -360,15 +383,11 @@ export class TableDataDataGridInstance extends DataGridInstance {
         requestId: number;
         generation: number;
     }): void {
-        const requestKey = this._getRequestKey(
-            params.startRow,
-            params.columnIndices,
-        );
-        const pendingRequest = this._pendingRequests.get(requestKey);
+        const activeRequest = this._activeRequest;
         if (
             params.generation !== this._dataGeneration ||
-            pendingRequest?.requestId !== params.requestId ||
-            pendingRequest.generation !== params.generation
+            activeRequest?.requestId !== params.requestId ||
+            activeRequest.generation !== params.generation
         ) {
             return;
         }
@@ -379,13 +398,39 @@ export class TableDataDataGridInstance extends DataGridInstance {
 
         this._tableDataCache.applyDataUpdate({
             startRow: params.startRow,
+            rowIndices: params.rowIndices,
             columns: params.columns,
             columnIndices: params.columnIndices,
             rowLabels: params.rowLabels,
         });
 
-        this._pendingRequests.delete(requestKey);
         this._applyAutoColumnWidths(params.columnIndices);
+        this._activeRequest = undefined;
+        this._updating = false;
+
+        if (activeRequest.kind === 'columnWidths') {
+            this._columnWidthCalculationColumnIndex +=
+                params.columnIndices?.length ?? 0;
+            if (this._requestNextColumnWidthPage()) {
+                return;
+            }
+            this._columnWidthCalculationPending = false;
+            this._columnWidthCalculationColumnIndex = 0;
+            this._columnWidthsCalculatedGeneration = this._dataGeneration;
+        } else if (
+            this._columnWidthCalculationPending &&
+            this._requestNextColumnWidthPage()
+        ) {
+            return;
+        }
+
+        const nextUpdateDescriptor =
+            this._pendingUpdateDescriptor ??
+            (activeRequest.kind === 'columnWidths'
+                ? this._createUpdateDescriptor()
+                : activeRequest.updateDescriptor);
+        this._pendingUpdateDescriptor = undefined;
+        this._updateCache(nextUpdateDescriptor);
     }
 
     handleDataInvalidated(generation: number, schemaChanged: boolean): void {
@@ -394,11 +439,13 @@ export class TableDataDataGridInstance extends DataGridInstance {
         }
 
         this._dataGeneration = generation;
+        this._columnWidthsCalculatedGeneration = -1;
         this.clearPinnedRows();
         this.invalidateCache(
             schemaChanged ? InvalidateCacheFlags.All : InvalidateCacheFlags.Data,
         );
-        this._scheduleVisibleDataRequest();
+        this._scheduleColumnWidthCalculation();
+        this._updateVisibleDataCache();
     }
 
     handleBackendStateChanged(
@@ -461,7 +508,11 @@ export class TableDataDataGridInstance extends DataGridInstance {
         if (invalidateCache & InvalidateCacheFlags.ColumnSchema) {
             this.schemaStore.set([]);
         }
-        this._pendingRequests.clear();
+        this._updating = false;
+        this._pendingUpdateDescriptor = undefined;
+        this._activeRequest = undefined;
+        this._columnWidthCalculationPending = false;
+        this._columnWidthCalculationColumnIndex = 0;
         this.fireOnDidUpdateEvent();
     }
 
@@ -498,6 +549,7 @@ export class TableDataDataGridInstance extends DataGridInstance {
         this._widthCalculators = widthCalculators;
         this._tableDataCache.setWidthCalculators(widthCalculators);
         this._applyAutoColumnWidths();
+        this._scheduleColumnWidthCalculation();
     }
 
     setWidthCalculator(calculator: WidthCalculator | undefined): void {
@@ -539,7 +591,7 @@ export class TableDataDataGridInstance extends DataGridInstance {
             return;
         }
 
-        this._scheduleVisibleDataRequest();
+        this._updateVisibleDataCache();
     }
 
     override async setColumnWidth(
@@ -601,7 +653,7 @@ export class TableDataDataGridInstance extends DataGridInstance {
     }
 
     protected async fetchData(): Promise<void> {
-        this._scheduleVisibleDataRequest();
+        this._updateVisibleDataCache();
     }
 
     protected async doSortData(): Promise<void> {
@@ -959,9 +1011,6 @@ export class TableDataDataGridInstance extends DataGridInstance {
     }
 
     override dispose(): void {
-        if (this._requestVisibleDataHandle) {
-            clearTimeout(this._requestVisibleDataHandle);
-        }
         this._clearTrimCacheTimeout();
         for (const disposable of this._disposables) {
             disposable.dispose();
@@ -971,72 +1020,101 @@ export class TableDataDataGridInstance extends DataGridInstance {
         super.dispose();
     }
 
-    private _scheduleVisibleDataRequest(): void {
+    private _updateVisibleDataCache(): void {
         if (!this._visible) {
             return;
         }
 
-        if (this._requestVisibleDataHandle) {
-            clearTimeout(this._requestVisibleDataHandle);
-        }
-
-        this._requestVisibleDataHandle = setTimeout(() => {
-            this._requestVisibleDataHandle = undefined;
-            this._requestVisibleData();
-            this._scheduleCacheTrim();
-        }, 50);
+        this._updateCache(this._createUpdateDescriptor());
     }
 
-    private _requestVisibleData(): void {
-        if (this.columns === 0) {
+    private _createUpdateDescriptor(): UpdateDescriptor {
+        const columnDescriptor = this.firstColumn;
+        const rowDescriptor = this.firstRow;
+        return {
+            columnIndices: columnDescriptor
+                ? this._columnLayoutManager
+                      .getLayoutIndexes(
+                          this.horizontalScrollOffset,
+                          this.layoutWidth,
+                          OVERSCAN_FACTOR,
+                      )
+                      .sort((left, right) => left - right)
+                : [],
+            rowIndices: rowDescriptor
+                ? this._rowLayoutManager
+                      .getLayoutIndexes(
+                          this.verticalScrollOffset,
+                          this.layoutHeight,
+                          OVERSCAN_FACTOR,
+                      )
+                      .sort((left, right) => left - right)
+                : [],
+        };
+    }
+
+    private _updateCache(updateDescriptor: UpdateDescriptor): void {
+        if (
+            updateDescriptor.columnIndices.length === 0 ||
+            (this.rows > 0 && updateDescriptor.rowIndices.length === 0)
+        ) {
             return;
         }
 
-        const viewport = get(this.viewport);
-        const visibleColumns = get(this.visibleColumns);
-        const startRow =
-            Math.floor(viewport.firstRowIndex / VISIBLE_DATA_PAGE_SIZE) *
-            VISIBLE_DATA_PAGE_SIZE;
-        const endRow = Math.min(startRow + VISIBLE_DATA_PAGE_SIZE, this.rows);
-        const columnIndices = visibleColumns.map((column) => column.columnIndex);
-        if (columnIndices.length === 0) {
-            return;
-        }
-        const requestKey = this._getRequestKey(startRow, columnIndices);
-
-        if (this._pendingRequests.has(requestKey)) {
+        if (this._updating) {
+            // Match Positron's cache scheduler: rapid viewport changes overwrite
+            // one another so only the latest pending viewport is processed.
+            this._pendingUpdateDescriptor = updateDescriptor;
             return;
         }
 
-        const hasCachedData = columnIndices.length
-            ? columnIndices.every((columnIndex) =>
-                  this._tableDataCache.hasDataCell(startRow, columnIndex),
-              )
-            : this._tableDataCache.hasDataCell(startRow, 0);
-        const hasCachedRowLabels = this._tableDataCache.hasRowLabelsInRange(
-            startRow,
-            endRow,
+        this._clearTrimCacheTimeout();
+
+        const { columnIndices, rowIndices } = updateDescriptor;
+        const missingRowIndices = rowIndices.filter(
+            (rowIndex) =>
+                columnIndices.some(
+                    (columnIndex) =>
+                        !this._tableDataCache.hasDataCell(rowIndex, columnIndex),
+                ) ||
+                (this._tableDataCache.hasRowLabels &&
+                    !this._tableDataCache.hasRowLabel(rowIndex)),
         );
-        if (hasCachedData && hasCachedRowLabels) {
+        const hasMissingSchema = columnIndices.some(
+            (columnIndex) => !this._tableDataCache.getSchemaColumn(columnIndex),
+        );
+        if (missingRowIndices.length === 0 && !hasMissingSchema) {
+            this._scheduleCacheTrim(updateDescriptor);
             return;
         }
 
+        const startRow = missingRowIndices[0] ?? 0;
+        const endRow =
+            missingRowIndices.length > 0
+                ? missingRowIndices[missingRowIndices.length - 1] + 1
+                : startRow;
         const requestId = ++this._nextDataRequestId;
-        this._pendingRequests.set(requestKey, {
+        this._updating = true;
+        this._activeRequest = {
             requestId,
             generation: this._dataGeneration,
-        });
+            updateDescriptor,
+            kind: 'viewport',
+        };
         this._postMessage({
             type: 'requestData',
             startRow,
             endRow,
+            rowIndices: missingRowIndices,
             columns: columnIndices,
             requestId,
             generation: this._dataGeneration,
         });
     }
 
-    private _scheduleCacheTrim(): void {
+    private _scheduleCacheTrim(
+        updateDescriptor: UpdateDescriptor,
+    ): void {
         this._clearTrimCacheTimeout();
 
         if (!this._visible) {
@@ -1045,8 +1123,69 @@ export class TableDataDataGridInstance extends DataGridInstance {
 
         this._trimCacheHandle = setTimeout(() => {
             this._trimCacheHandle = undefined;
-            this._trimCache();
+            this._trimCache(updateDescriptor);
         }, CACHE_TRIM_TIMEOUT);
+    }
+
+    private _scheduleColumnWidthCalculation(): void {
+        if (
+            !this._autoSizingEnabled ||
+            !this._widthCalculators ||
+            this.columns === 0 ||
+            this.columns > MAX_AUTO_SIZE_COLUMNS ||
+            this._columnWidthsCalculatedGeneration === this._dataGeneration
+        ) {
+            return;
+        }
+        this._columnWidthCalculationPending = true;
+        if (!this._updating) {
+            this._columnWidthCalculationColumnIndex = 0;
+            this._requestNextColumnWidthPage();
+        }
+    }
+
+    private _requestNextColumnWidthPage(): boolean {
+        if (
+            !this._columnWidthCalculationPending ||
+            !this._autoSizingEnabled ||
+            !this._widthCalculators ||
+            this.columns === 0 ||
+            this.columns > MAX_AUTO_SIZE_COLUMNS ||
+            this._columnWidthCalculationColumnIndex >= this.columns
+        ) {
+            return false;
+        }
+
+        const pageSize = Math.min(
+            AUTO_SIZE_COLUMNS_PAGE_SIZE,
+            this.columns - this._columnWidthCalculationColumnIndex,
+        );
+        const columnIndices = Array.from(
+            { length: pageSize },
+            (_, index) => this._columnWidthCalculationColumnIndex + index,
+        );
+        const rowIndices = Array.from(
+            { length: Math.min(AUTO_SIZE_SAMPLE_ROWS, this.rows) },
+            (_, index) => index,
+        );
+        const requestId = ++this._nextDataRequestId;
+        this._updating = true;
+        this._activeRequest = {
+            requestId,
+            generation: this._dataGeneration,
+            updateDescriptor: this._createUpdateDescriptor(),
+            kind: 'columnWidths',
+        };
+        this._postMessage({
+            type: 'requestData',
+            startRow: 0,
+            endRow: rowIndices.length,
+            rowIndices,
+            columns: columnIndices,
+            requestId,
+            generation: this._dataGeneration,
+        });
+        return true;
     }
 
     private _clearTrimCacheTimeout(): void {
@@ -1056,43 +1195,15 @@ export class TableDataDataGridInstance extends DataGridInstance {
         }
     }
 
-    private _trimCache(): void {
-        if (!this._visible || this.rows === 0) {
+    private _trimCache(updateDescriptor: UpdateDescriptor): void {
+        if (!this._visible) {
             return;
         }
 
-        const visibleColumns = get(this.visibleColumns).map(
-            (column) => column.columnIndex,
+        this._tableDataCache.trimData(
+            updateDescriptor.columnIndices,
+            updateDescriptor.rowIndices,
         );
-        if (visibleColumns.length === 0) {
-            return;
-        }
-
-        const viewport = get(this.viewport);
-        const firstVisibleRow = Math.max(0, viewport.firstRowIndex);
-        const lastVisibleRow = Math.min(
-            this.rows,
-            firstVisibleRow + Math.max(viewport.visibleRowCount, 1),
-        );
-        const keepStartRow = Math.max(
-            0,
-            Math.floor(firstVisibleRow / VISIBLE_DATA_PAGE_SIZE) *
-                VISIBLE_DATA_PAGE_SIZE -
-                CACHE_TRIM_ROW_BUFFER,
-        );
-        const keepEndRow = Math.min(
-            this.rows,
-            Math.ceil(lastVisibleRow / VISIBLE_DATA_PAGE_SIZE) *
-                VISIBLE_DATA_PAGE_SIZE +
-                CACHE_TRIM_ROW_BUFFER,
-        );
-
-        this._tableDataCache.trimData(visibleColumns, keepStartRow, keepEndRow);
-    }
-
-    private _getRequestKey(startRow: number, columnIndices?: number[]): string {
-        const columnKey = columnIndices?.join(',') ?? '';
-        return `${this._dataGeneration}:${startRow}:${columnKey}`;
     }
 
     private _requestAddFilter(columnIndex: number): void {

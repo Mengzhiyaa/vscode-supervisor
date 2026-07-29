@@ -9,6 +9,7 @@
 
     interface Props {
         columns: SchemaColumn[];
+        totalColumns: number;
         title?: string;
         selectedColumnSchema?: SchemaColumn;
         onSelectedColumnSchemaChanged: (
@@ -18,6 +19,7 @@
 
     let {
         columns,
+        totalColumns,
         title = "Select Column",
         selectedColumnSchema = undefined,
         onSelectedColumnSchemaChanged,
@@ -112,6 +114,7 @@
         anchorElement={buttonRef}
         {columns}
         {selectedColumnSchema}
+        {totalColumns}
         {focusInput}
         {initialSearchText}
         onItemSelected={handleItemSelected}

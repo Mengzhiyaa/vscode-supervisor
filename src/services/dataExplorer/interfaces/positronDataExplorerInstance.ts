@@ -27,6 +27,7 @@ export interface PositronDataExplorerUiState {
 export interface PositronDataExplorerDataRequest {
     startRow: number;
     endRow: number;
+    rowIndices?: number[];
     columns: number[];
     requestId: number;
     generation: number;

@@ -13,6 +13,7 @@ import {
 } from '../../services/dataExplorer/positronDataExplorerResolveDataFrame';
 import { PositronDataExplorerCodeActionProvider } from '../../services/dataExplorer/positronDataExplorerEditorContribution';
 import { formatDataExplorerEditorTitle } from '../../services/dataExplorer/positronDataExplorerEditorProvider';
+import { POSITRON_DATA_EXPLORER_CUSTOM_EDITOR_OPTIONS } from '../../services/dataExplorer/positronDataExplorerCustomEditorProvider';
 import {
     createDefaultDataExplorerUiState,
     DataExplorerPreviewEnabled,
@@ -193,6 +194,15 @@ suite('[Unit] Data Explorer editor contribution', () => {
             formatDataExplorerEditorTitle('a'.repeat(31)),
             `Data: ${'a'.repeat(27)}...`,
         );
+    });
+
+    test('retains the Data Explorer webview when its editor is hidden', () => {
+        assert.deepStrictEqual(POSITRON_DATA_EXPLORER_CUSTOM_EDITOR_OPTIONS, {
+            supportsMultipleEditorsPerDocument: false,
+            webviewOptions: {
+                retainContextWhenHidden: true,
+            },
+        });
     });
 
     test('recognizes only Excel-backed Data Explorer resources as spreadsheets', () => {

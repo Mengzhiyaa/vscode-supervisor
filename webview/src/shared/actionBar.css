@@ -305,6 +305,42 @@ body.vscode-high-contrast-light .action-bar-menu-button:hover:not(:disabled),
     margin-left: auto;
 }
 
+.action-bar-region.action-bar-region-left {
+    flex: 1;
+    overflow: visible;
+    display: flex;
+    margin-right: 4px;
+    align-items: center;
+}
+
+.action-bar-region.action-bar-region-center {
+    flex: 1;
+    overflow: visible;
+    display: flex;
+    margin: 0 4px;
+    align-items: center;
+}
+
+.action-bar-region.action-bar-region-right {
+    flex: 1;
+    overflow: visible;
+    display: flex;
+    margin-left: 4px;
+    align-items: center;
+}
+
+.action-bar-region-justify-left {
+    justify-content: left;
+}
+
+.action-bar-region-justify-center {
+    justify-content: center;
+}
+
+.action-bar-region-justify-right {
+    justify-content: right;
+}
+
 /* ==============================
    Context Menu (overflow)
    ============================== */

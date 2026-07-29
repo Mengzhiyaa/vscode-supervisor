@@ -21,6 +21,12 @@ type ProfileCoverage =
     | typeof BASIC_PROFILE_COVERAGE
     | typeof EXPANDED_PROFILE_COVERAGE;
 
+interface ProfileRequestChunk {
+    readonly columnIndices: number[];
+    readonly expandedColumnIndices: number[];
+    readonly coverage: Map<number, ProfileCoverage>;
+}
+
 export class TableSummaryCache {
     private _columns = 0;
     private _rows = 0;
@@ -34,6 +40,9 @@ export class TableSummaryCache {
         Map<number, ProfileCoverage>
     >();
     private readonly _pendingRequestGenerations = new Map<number, number>();
+    private _profileRequestQueue: ProfileRequestChunk[] = [];
+    private _activeProfileRequestId: number | undefined;
+    private _activeProfilePassSignature: string | undefined;
     private _nextRequestId = 0;
     private _generation = 0;
 
@@ -58,32 +67,21 @@ export class TableSummaryCache {
     }
 
     setSchema(columns: SchemaColumn[]): boolean {
-        const nextSchema = new Map(
-            columns.map((column) => [column.column_index, column]),
-        );
-        let changed = nextSchema.size !== this._schemaCache.size;
-
-        if (!changed) {
-            for (const [columnIndex, column] of nextSchema) {
-                const previous = this._schemaCache.get(columnIndex);
-                if (
-                    !previous ||
-                    previous.column_name !== column.column_name ||
-                    previous.type_name !== column.type_name ||
-                    previous.type_display !== column.type_display ||
-                    previous.description !== column.description
-                ) {
-                    changed = true;
-                    break;
-                }
+        let changed = false;
+        for (const column of columns) {
+            const columnIndex = column.column_index;
+            const previous = this._schemaCache.get(columnIndex);
+            if (
+                !previous ||
+                previous.column_name !== column.column_name ||
+                previous.type_name !== column.type_name ||
+                previous.type_display !== column.type_display ||
+                previous.description !== column.description
+            ) {
+                changed = true;
             }
-        }
-
-        this._schemaCache.clear();
-        for (const [columnIndex, column] of nextSchema) {
             this._schemaCache.set(columnIndex, column);
         }
-        this.trimToColumns(nextSchema.keys());
         return changed;
     }
 
@@ -97,7 +95,8 @@ export class TableSummaryCache {
         );
     }
 
-    clear(): void {
+    clear(generation?: number): void {
+        this._synchronizeGeneration(generation);
         this._clearTrimCacheTimeout();
         this._columns = 0;
         this._rows = 0;
@@ -148,8 +147,11 @@ export class TableSummaryCache {
         return this._profiles.get(columnIndex);
     }
 
-    invalidateProfiles(columnIndices?: Iterable<number>): void {
-        this._generation += 1;
+    invalidateProfiles(
+        generation?: number,
+        columnIndices?: Iterable<number>,
+    ): void {
+        this._synchronizeGeneration(generation);
         if (!columnIndices) {
             this._clearTrimCacheTimeout();
         }
@@ -176,6 +178,15 @@ export class TableSummaryCache {
         // against the previous row/filter state.
         this._cancelPendingRequests([...this._pendingRequests.keys()]);
         this._stores.columnProfiles.set(nextProfiles);
+
+    }
+
+    private _synchronizeGeneration(generation?: number): void {
+        // The host owns the generation shared by its summary cache and this
+        // webview cache. Local cache maintenance must not advance it.
+        if (generation !== undefined) {
+            this._generation = generation;
+        }
     }
 
     scheduleProfileTrim(columnIndices: Iterable<number>): void {
@@ -259,6 +270,15 @@ export class TableSummaryCache {
         }
 
         this._stores.columnProfiles.set(nextProfiles);
+        if (this._activeProfileRequestId === requestId) {
+            this._activeProfileRequestId = undefined;
+            if (error) {
+                this._profileRequestQueue = [];
+                this._activeProfilePassSignature = undefined;
+            } else {
+                this._requestNextProfileChunk();
+            }
+        }
     }
 
     requestColumnProfiles(
@@ -270,22 +290,33 @@ export class TableSummaryCache {
             return;
         }
 
-        const visibleColumns = new Set(columnIndices);
-        const requestsToCancel = [...this._pendingRequests]
-            .filter(([, coverageByColumn]) =>
-                [...coverageByColumn.keys()].some(
-                    (columnIndex) => !visibleColumns.has(columnIndex),
-                ),
-            )
-            .map(([requestId]) => requestId);
-        this._cancelPendingRequests(requestsToCancel);
+        const uniqueColumnIndices = [...new Set(columnIndices)];
+        const passSignature = JSON.stringify({
+            generation: this._generation,
+            columnIndices: uniqueColumnIndices,
+            expandedColumnIndices: uniqueColumnIndices.filter((columnIndex) =>
+                expandedColumns.has(columnIndex),
+            ),
+        });
+        if (this._activeProfilePassSignature === passSignature) {
+            return;
+        }
+        if (
+            this._activeProfileRequestId !== undefined ||
+            this._profileRequestQueue.length > 0
+        ) {
+            this._cancelPendingRequests([...this._pendingRequests.keys()]);
+            this._profileRequestQueue = [];
+            this._activeProfileRequestId = undefined;
+            this._activeProfilePassSignature = undefined;
+        }
 
         const requestColumnIndices: number[] = [];
         const expandedColumnIndices: number[] = [];
         const requestCoverage = new Map<number, ProfileCoverage>();
         const seen = new Set<number>();
 
-        for (const columnIndex of columnIndices) {
+        for (const columnIndex of uniqueColumnIndices) {
             if (seen.has(columnIndex)) {
                 continue;
             }
@@ -321,6 +352,7 @@ export class TableSummaryCache {
             return;
         }
 
+        const chunks: ProfileRequestChunk[] = [];
         for (
             let offset = 0;
             offset < requestColumnIndices.length;
@@ -335,28 +367,49 @@ export class TableSummaryCache {
                 const coverage = requestCoverage.get(columnIndex);
                 if (coverage !== undefined) {
                     chunkCoverage.set(columnIndex, coverage);
-                    const currentPending =
-                        this._pendingCoverage.get(columnIndex) ?? 0;
-                    this._pendingCoverage.set(
-                        columnIndex,
-                        Math.max(currentPending, coverage) as ProfileCoverage,
-                    );
                 }
             }
 
-            const requestId = ++this._nextRequestId;
-            this._pendingRequests.set(requestId, chunkCoverage);
-            this._pendingRequestGenerations.set(requestId, this._generation);
-            this._postMessage({
-                type: 'requestColumnProfiles',
+            chunks.push({
                 columnIndices: chunkColumnIndices,
                 expandedColumnIndices: expandedColumnIndices.filter(
                     (columnIndex) => chunkCoverage.has(columnIndex),
                 ),
-                requestId,
-                generation: this._generation,
+                coverage: chunkCoverage,
             });
         }
+        this._activeProfilePassSignature = passSignature;
+        this._profileRequestQueue = chunks;
+        this._requestNextProfileChunk();
+    }
+
+    private _requestNextProfileChunk(): void {
+        const chunk = this._profileRequestQueue.shift();
+        if (!chunk) {
+            this._activeProfileRequestId = undefined;
+            this._activeProfilePassSignature = undefined;
+            return;
+        }
+
+        for (const [columnIndex, coverage] of chunk.coverage) {
+            const currentPending = this._pendingCoverage.get(columnIndex) ?? 0;
+            this._pendingCoverage.set(
+                columnIndex,
+                Math.max(currentPending, coverage) as ProfileCoverage,
+            );
+        }
+
+        const requestId = ++this._nextRequestId;
+        this._activeProfileRequestId = requestId;
+        this._pendingRequests.set(requestId, chunk.coverage);
+        this._pendingRequestGenerations.set(requestId, this._generation);
+        this._postMessage({
+            type: 'requestColumnProfiles',
+            columnIndices: chunk.columnIndices,
+            expandedColumnIndices: chunk.expandedColumnIndices,
+            requestId,
+            generation: this._generation,
+        });
     }
 
     private _recomputePendingCoverage(columnIndices: Iterable<number>): void {
@@ -390,6 +443,13 @@ export class TableSummaryCache {
     private _trimProfilesToColumns(columnIndices: Set<number>): void {
         const nextProfiles = new Map(get(this._stores.columnProfiles));
         let didChange = false;
+
+        for (const columnIndex of [...this._schemaCache.keys()]) {
+            if (!columnIndices.has(columnIndex)) {
+                this._schemaCache.delete(columnIndex);
+                didChange = true;
+            }
+        }
 
         for (const columnIndex of [...this._profiles.keys()]) {
             if (columnIndices.has(columnIndex)) {
@@ -436,6 +496,14 @@ export class TableSummaryCache {
             }
             this._pendingRequests.delete(requestId);
             this._pendingRequestGenerations.delete(requestId);
+        }
+        if (
+            this._activeProfileRequestId !== undefined &&
+            activeRequestIds.includes(this._activeProfileRequestId)
+        ) {
+            this._activeProfileRequestId = undefined;
+            this._profileRequestQueue = [];
+            this._activeProfilePassSignature = undefined;
         }
         this._recomputePendingCoverage(affectedColumns);
         this._postMessage({

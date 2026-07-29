@@ -46,6 +46,7 @@
     interface Props {
         anchorElement: HTMLElement;
         columns: SchemaColumn[];
+        totalColumns: number;
         selectedColumn?: SchemaColumn;
         editFilter?: RowFilterDescriptor;
         onApply: (filter: RowFilterDescriptor) => void;
@@ -55,6 +56,7 @@
     let {
         anchorElement,
         columns,
+        totalColumns,
         selectedColumn,
         editFilter,
         onApply,
@@ -723,6 +725,7 @@
         <DropDownColumnSelector
             bind:this={dropDownColumnSelectorRef}
             {columns}
+            {totalColumns}
             {selectedColumnSchema}
             title={localize(
                 "positron.addEditRowFilter.selectColumn",

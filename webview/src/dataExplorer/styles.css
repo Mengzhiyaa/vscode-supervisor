@@ -7,9 +7,9 @@
 }
 
 :root {
-    --positron-data-explorer-font-family: var(--vscode-editor-font-family, var(--vscode-font-family));
-    --positron-data-explorer-font-size: var(--vscode-editor-font-size, var(--vscode-font-size));
-    --positron-data-explorer-font-weight: var(--vscode-editor-font-weight, var(--vscode-font-weight));
+    --positron-data-explorer-font-family: var(--vscode-font-family);
+    --positron-data-explorer-font-size: var(--vscode-font-size, 13px);
+    --positron-data-explorer-font-weight: var(--vscode-font-weight, 400);
     --positron-data-grid-column-header-title-font-weight: 600;
     --positron-data-grid-column-header-description-font-size: 90%;
     --positron-data-grid-column-header-sort-index-font-size: 80%;

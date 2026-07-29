@@ -33,6 +33,11 @@
               "type": "number"
             },
             {
+              "name": "rowIndices",
+              "optional": true,
+              "type": "number[]"
+            },
+            {
               "name": "columns",
               "optional": true,
               "type": "number[]"
@@ -62,6 +67,10 @@
             {
               "name": "columns",
               "type": "number[]"
+            },
+            {
+              "name": "requestId",
+              "type": "number"
             }
           ]
         }
@@ -738,6 +747,11 @@
             {
               "name": "columns",
               "type": "unknown[]"
+            },
+            {
+              "name": "requestId",
+              "optional": true,
+              "type": "number"
             }
           ]
         }
@@ -849,6 +863,11 @@
             {
               "name": "endRow",
               "type": "number"
+            },
+            {
+              "name": "rowIndices",
+              "optional": true,
+              "type": "number[]"
             },
             {
               "name": "columnIndices",

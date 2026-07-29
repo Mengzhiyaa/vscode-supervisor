@@ -113,7 +113,6 @@
             return;
         }
 
-        requestCompleteSchema();
         editingFilter = undefined;
         editingFilterId = undefined;
         selectedColumn = undefined;
@@ -204,7 +203,6 @@
         editingFilterId = filter.filter_id;
         editingFilter = descriptor;
         selectedColumn = filter.column_schema;
-        requestCompleteSchema();
         modalAnchorElement = anchor ?? addFilterButtonRef ?? null;
         showModal = true;
     }
@@ -293,17 +291,6 @@
             .sort((left, right) => left.column_index - right.column_index),
     );
 
-    function requestCompleteSchema() {
-        if (!canFilter || totalColumns === 0 || schemaColumns.length >= totalColumns) {
-            return;
-        }
-
-        postMessage({
-            type: "requestSchema",
-            columns: Array.from({ length: totalColumns }, (_, index) => index),
-        });
-    }
-
     $effect(() => {
         const { columnIndex, columnSchema, requestId } =
             $pendingAddFilterRequest;
@@ -324,8 +311,6 @@
             showFilterLimitMessage();
             return;
         }
-
-        requestCompleteSchema();
 
         const match =
             columnSchema ??
@@ -506,6 +491,7 @@
         <AddEditRowFilterModalPopup
             anchorElement={modalAnchorElement}
             columns={schemaColumns}
+            {totalColumns}
             {selectedColumn}
             editFilter={editingFilter}
             onApply={handleApplyFilter}

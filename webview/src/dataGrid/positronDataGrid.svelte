@@ -68,8 +68,6 @@
         width: 100%;
         height: 100%;
         overflow: hidden;
-        font-family: var(--vscode-editor-font-family, monospace);
-        font-size: var(--vscode-editor-font-size, 13px);
         background: var(--vscode-editor-background);
         color: var(--vscode-editor-foreground);
         outline: none;

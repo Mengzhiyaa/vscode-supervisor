@@ -163,7 +163,7 @@ suite('[Unit] P0 rich output and compatibility contracts', () => {
         emitter.dispose();
     });
 
-    test('forwards managed comm close messages to runtime clients', () => {
+    test('does not promote Jupyter comm_close to a runtime message', () => {
         const emitter = new RuntimeMessageEmitter();
         const received: any[] = [];
         const listener = emitter.event(message => received.push(message));
@@ -188,16 +188,10 @@ suite('[Unit] P0 rich output and compatibility contracts', () => {
             buffers: [],
         });
 
-        assert.deepStrictEqual(received, [{
-            id: 'comm-close-1',
-            event_clock: 0,
-            parent_id: 'comm-open-1',
-            when: '2026-07-29T00:00:00.000Z',
-            type: 'comm_closed',
-            comm_id: 'data-explorer-1',
-            data: { reason: 'binding-changed' },
-            metadata: { reason: 'backend-closed' },
-        }]);
+        // Positron's supervisor handles unmanaged comm closures locally and
+        // does not translate managed Jupyter comm_close packets into runtime
+        // CommClosed messages.
+        assert.deepStrictEqual(received, []);
         listener.dispose();
         emitter.dispose();
     });

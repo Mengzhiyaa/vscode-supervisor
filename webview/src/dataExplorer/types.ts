@@ -44,8 +44,8 @@ export enum PositronDataExplorerLayout {
 export type WebviewMessage =
     | { type: 'ready' }
     | { type: 'close' }
-    | { type: 'requestData'; startRow: number; endRow: number; columns: number[]; requestId: number; generation: number }
-    | { type: 'requestSchema'; columns: number[] }
+    | { type: 'requestData'; startRow: number; endRow: number; rowIndices?: number[]; columns: number[]; requestId: number; generation: number }
+    | { type: 'requestSchema'; columns: number[]; requestId: number }
     | { type: 'searchSchema'; text: string; sortOrder: SearchSchemaSortOrder; pinnedColumns?: number[]; requestId?: number }
     | { type: 'requestColumnProfiles'; columnIndices: number[]; expandedColumnIndices?: number[]; requestId: number; generation: number }
     | { type: 'cancelColumnProfiles'; requestIds: number[] }

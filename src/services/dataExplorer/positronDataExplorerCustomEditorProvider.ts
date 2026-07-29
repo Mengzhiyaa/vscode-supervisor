@@ -10,6 +10,22 @@ import { PositronDataExplorerEditorProvider } from './positronDataExplorerEditor
 import { getDataExplorerIdentifier } from './dataExplorerUri';
 
 /**
+ * Keep the Data Explorer app mounted while its editor tab is hidden.
+ *
+ * Positron keeps the editor's React tree alive across editor visibility
+ * changes and only pauses expensive data operations. A custom editor webview
+ * needs retainContextWhenHidden to provide the same lifecycle.
+ */
+export const POSITRON_DATA_EXPLORER_CUSTOM_EDITOR_OPTIONS = {
+    supportsMultipleEditorsPerDocument: false,
+    webviewOptions: {
+        retainContextWhenHidden: true,
+    },
+} satisfies NonNullable<
+    Parameters<typeof vscode.window.registerCustomEditorProvider>[2]
+>;
+
+/**
  * A lightweight CustomReadonlyEditorProvider that delegates to the existing
  * PositronDataExplorerEditorProvider for all panel lifecycle management.
  *

@@ -192,8 +192,8 @@
             <div class="action-bar-region right">
                 <ActionBarFilter
                     width={150}
-                    {filterText}
-                    onfilterTextChanged={handleFilterTextChanged}
+                    initialFilterText={filterText}
+                    onFilterTextChanged={handleFilterTextChanged}
                 />
             </div>
         </div>

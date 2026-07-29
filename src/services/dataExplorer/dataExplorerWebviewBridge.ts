@@ -13,6 +13,7 @@ import type {
     SearchSchemaSortOrder,
     CodeSyntaxName,
     DatasetImportOptions,
+    ArraySelection,
 } from '../../runtime/comms/positronDataExplorerComm';
 import {
     ColumnFilterType,
@@ -363,6 +364,7 @@ export class DataExplorerWebviewBridge {
                 const request: DataExplorerDataRequest = {
                     startRow: params.startRow,
                     endRow: params.endRow,
+                    rowIndices: params.rowIndices,
                     columns: params.columns ?? [],
                     requestId: params.requestId,
                     generation: params.generation,
@@ -378,8 +380,13 @@ export class DataExplorerWebviewBridge {
                 const schema = await instance.getSchema(params.columns);
                 connection.sendNotification(DataExplorerSchemaNotification.type, {
                     columns: schema.columns,
+                    requestId: params.requestId,
                 });
             } catch (error) {
+                connection.sendNotification(DataExplorerSchemaNotification.type, {
+                    columns: [],
+                    requestId: params.requestId,
+                });
                 this._sendError(String(error));
             }
         });
@@ -411,13 +418,6 @@ export class DataExplorerWebviewBridge {
                         params.sortOrder as SearchSchemaSortOrder,
                     );
                     columnIndices = result.matches ?? [];
-                    const schema = await instance.getSchema(columnIndices);
-                    const schemaByColumnIndex = new Map(
-                        schema.columns.map((column) => [column.column_index, column]),
-                    );
-                    schemaColumns = columnIndices
-                        .map((columnIndex) => schemaByColumnIndex.get(columnIndex))
-                        .filter((column): column is ColumnSchema => Boolean(column));
                 } else {
                     const allColumnIndices = Array.from(
                         { length: backendState.table_shape.num_columns },
@@ -445,27 +445,22 @@ export class DataExplorerWebviewBridge {
                     );
                     columnIndices = [...pinned, ...rest];
                 }
-                const schemaByColumnIndex = new Map(
-                    schemaColumns.map((column) => [column.column_index, column]),
-                );
-                const missingColumnIndices = columnIndices.filter(
-                    (columnIndex) => !schemaByColumnIndex.has(columnIndex),
-                );
-                if (missingColumnIndices.length > 0) {
-                    const missingSchema = await instance.getSchema(missingColumnIndices);
-                    for (const column of missingSchema.columns) {
-                        schemaByColumnIndex.set(column.column_index, column);
-                    }
-                }
-                schemaColumns = columnIndices
-                    .map((columnIndex) => schemaByColumnIndex.get(columnIndex))
-                    .filter((column): column is ColumnSchema => Boolean(column));
                 connection.sendNotification(DataExplorerSummarySchemaNotification.type, {
-                    columns: schemaColumns,
+                    // Positron's search_schema returns matching indices. Column
+                    // schema is paged separately by each visible grid cache.
+                    columns: [],
                     columnIndices,
                     requestId: params.requestId,
                 });
             } catch (error) {
+                connection.sendNotification(
+                    DataExplorerSummarySchemaNotification.type,
+                    {
+                        columns: [],
+                        columnIndices: [],
+                        requestId: params.requestId,
+                    },
+                );
                 this._sendError(String(error));
             }
         });
@@ -533,12 +528,9 @@ export class DataExplorerWebviewBridge {
                             )
                             .map((typeSupport) => typeSupport.profile_type),
                     );
-                    const hasDeclaredSupportedTypes =
-                        supportedTypes.length > 0;
                     const isProfileTypeSupported = (
                         profileType: ColumnProfileType,
                     ) =>
-                        !hasDeclaredSupportedTypes ||
                         supportedProfileTypes.has(profileType);
                     const expandedColumnIndices = new Set(
                         params.expandedColumnIndices ?? [],
@@ -558,17 +550,11 @@ export class DataExplorerWebviewBridge {
                     const requests: ColumnProfileRequest[] =
                         params.columnIndices.map((columnIndex) => {
                             const columnSchema = schemaByIndex.get(columnIndex);
-                            const profiles: ColumnProfileSpec[] = [];
-
-                            if (
-                                isProfileTypeSupported(
-                                    ColumnProfileType.NullCount,
-                                )
-                            ) {
-                                profiles.push({
-                                    profile_type: ColumnProfileType.NullCount,
-                                });
-                            }
+                            // Positron always requests the null count whenever
+                            // column profiles are globally supported.
+                            const profiles: ColumnProfileSpec[] = [{
+                                profile_type: ColumnProfileType.NullCount,
+                            }];
 
                             const expanded =
                                 expandedColumnIndices.has(columnIndex);
@@ -613,7 +599,7 @@ export class DataExplorerWebviewBridge {
                                 if (
                                     expanded &&
                                     isProfileTypeSupported(
-                                        ColumnProfileType.LargeHistogram,
+                                        ColumnProfileType.SmallHistogram,
                                     )
                                 ) {
                                     profiles.push({
@@ -655,7 +641,7 @@ export class DataExplorerWebviewBridge {
                                 if (
                                     expanded &&
                                     isProfileTypeSupported(
-                                        ColumnProfileType.LargeFrequencyTable,
+                                        ColumnProfileType.SmallFrequencyTable,
                                     )
                                 ) {
                                     profiles.push({
@@ -1342,14 +1328,30 @@ export class DataExplorerWebviewBridge {
                     columnIndex >= 0 &&
                     columnIndex < numColumns,
             );
-            const displayStartRow = Math.max(
-                0,
-                Math.min(request.startRow, numRows),
-            );
-            const displayEndRow = Math.max(
-                displayStartRow,
-                Math.min(request.endRow, numRows),
-            );
+            const rowIndices =
+                request.rowIndices === undefined
+                    ? undefined
+                    : [...new Set(request.rowIndices)]
+                          .filter(
+                              (rowIndex) =>
+                                  Number.isInteger(rowIndex) &&
+                                  rowIndex >= 0 &&
+                                  rowIndex < numRows,
+                          )
+                          .sort((left, right) => left - right);
+            const displayStartRow =
+                rowIndices !== undefined
+                    ? (rowIndices[0] ?? 0)
+                    : Math.max(0, Math.min(request.startRow, numRows));
+            const displayEndRow =
+                rowIndices !== undefined
+                    ? rowIndices.length > 0
+                        ? rowIndices[rowIndices.length - 1] + 1
+                        : displayStartRow
+                    : Math.max(
+                          displayStartRow,
+                          Math.min(request.endRow, numRows),
+                      );
 
             if (columns.length === 0) {
                 connection.sendNotification(DataExplorerDataNotification.type, {
@@ -1357,6 +1359,7 @@ export class DataExplorerWebviewBridge {
                     schema: [],
                     startRow: displayStartRow,
                     endRow: displayEndRow,
+                    rowIndices,
                     columnIndices: [],
                     totalRows: numRows,
                     totalColumns: numColumns,
@@ -1375,13 +1378,21 @@ export class DataExplorerWebviewBridge {
             });
 
             let dataColumns = columns.map(() => [] as Array<number | string>);
-            if (displayEndRow > displayStartRow) {
+            const rowSelection: ArraySelection | undefined =
+                rowIndices !== undefined
+                    ? rowIndices.length > 0
+                        ? { indices: rowIndices }
+                        : undefined
+                    : displayEndRow > displayStartRow
+                      ? {
+                            first_index: displayStartRow,
+                            last_index: displayEndRow - 1,
+                        }
+                      : undefined;
+            if (rowSelection) {
                 const columnSelections = columns.map((columnIndex) => ({
                     column_index: columnIndex,
-                    spec: {
-                        first_index: displayStartRow,
-                        last_index: displayEndRow - 1,
-                    },
+                    spec: rowSelection,
                 }));
                 const tableData =
                     await instance.getDataValues(columnSelections, request.generation);
@@ -1394,12 +1405,10 @@ export class DataExplorerWebviewBridge {
             let rowLabels: string[] | undefined;
             if (
                 backendState.has_row_labels &&
-                displayEndRow > displayStartRow
+                rowSelection
             ) {
-                const rowLabelResult = await instance.clientInstance.getRowLabels({
-                    first_index: displayStartRow,
-                    last_index: displayEndRow - 1,
-                });
+                const rowLabelResult =
+                    await instance.clientInstance.getRowLabels(rowSelection);
                 if (!canPublish()) {
                     return;
                 }
@@ -1411,6 +1420,7 @@ export class DataExplorerWebviewBridge {
                 schema: schema.columns,
                 startRow: displayStartRow,
                 endRow: displayEndRow,
+                rowIndices,
                 columnIndices: columns,
                 rowLabels,
                 totalRows: numRows,
@@ -1467,10 +1477,10 @@ export class DataExplorerWebviewBridge {
         return {
             ...backendState,
             connected: !disconnected,
-            error_message:
-                disconnected
-                    ? backendState.error_message ?? 'The Data Explorer backend has closed.'
-                    : backendState.error_message,
+            // Match Positron's distinction between a normal backend closure and
+            // a backend-reported error. A disconnected client without an
+            // explicit error is presented as unavailable, not as an error.
+            error_message: backendState.error_message,
             __ark_file_options: {
                 supportsFileOptions:
                     instance.supportsFileOptions &&

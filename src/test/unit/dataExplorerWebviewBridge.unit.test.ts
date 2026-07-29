@@ -1,7 +1,10 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
 import type { MessageConnection } from 'vscode-jsonrpc';
-import { SupportStatus } from '../../runtime/comms/positronDataExplorerComm';
+import {
+    SupportStatus,
+    type ColumnSelection,
+} from '../../runtime/comms/positronDataExplorerComm';
 import {
     DataExplorerWebviewBridge,
     type DataExplorerDataRequest,
@@ -89,6 +92,7 @@ function createBridge(options: {
     const rpc = createConnection();
     const logs: Array<{ level: string; message: string }> = [];
     let dataRequests = 0;
+    let dataSelections: ColumnSelection[] = [];
     let generation = 0;
     let lastDataRequest: DataExplorerDataRequest | undefined;
     let mutationQueue = Promise.resolve();
@@ -140,8 +144,9 @@ function createBridge(options: {
                 return state;
             },
             getBackendState: async () => state,
-            getDataValues: async () => {
+            getDataValues: async (columns: ColumnSelection[]) => {
                 dataRequests += 1;
+                dataSelections = columns;
                 return options.getDataValues?.() ?? { columns: [['value']] };
             },
             getRowLabels: async () => ({ row_labels: [[]] }),
@@ -166,8 +171,9 @@ function createBridge(options: {
                 type_display: 'string',
             })),
         }),
-        getDataValues: async () => {
+        getDataValues: async (columns: ColumnSelection[]) => {
             dataRequests += 1;
+            dataSelections = columns;
             return options.getDataValues?.() ?? { columns: [['value']] };
         },
     } as unknown as IPositronDataExplorerInstance;
@@ -193,6 +199,7 @@ function createBridge(options: {
         ...rpc,
         logs,
         get dataRequests() { return dataRequests; },
+        get dataSelections() { return dataSelections; },
     };
 }
 
@@ -258,11 +265,63 @@ suite('[Unit] Data Explorer webview bridge P0 protocol', () => {
             ],
             startRow: 0,
             endRow: 0,
+            rowIndices: undefined,
             columnIndices: [0, 1],
             rowLabels: undefined,
             totalRows: 0,
             totalColumns: 2,
             requestId: 7,
+            generation: 0,
+        });
+        fixture.bridge.dispose();
+    });
+
+    test('preserves sparse overscan row indices through the host request and response', async () => {
+        const fixture = createBridge({
+            rows: 20,
+            columns: 1,
+            getDataValues: async () => ({
+                columns: [['row-2', 'row-8', 'row-13']],
+            }),
+        });
+        const request: DataExplorerDataRequest = {
+            startRow: 2,
+            endRow: 14,
+            rowIndices: [13, 2, 8],
+            columns: [0],
+            requestId: 8,
+            generation: 0,
+        };
+
+        await fixture.bridge.sendData(request);
+
+        assert.deepStrictEqual(fixture.dataSelections, [
+            {
+                column_index: 0,
+                spec: { indices: [2, 8, 13] },
+            },
+        ]);
+        const data = fixture.notifications.find(
+            ({ method }) => method === 'dataExplorer/data',
+        );
+        assert.deepStrictEqual(data?.params, {
+            columns: [['row-2', 'row-8', 'row-13']],
+            schema: [
+                {
+                    column_name: 'column_0',
+                    column_index: 0,
+                    type_name: 'string',
+                    type_display: 'string',
+                },
+            ],
+            startRow: 2,
+            endRow: 14,
+            rowIndices: [2, 8, 13],
+            columnIndices: [0],
+            rowLabels: undefined,
+            totalRows: 20,
+            totalColumns: 1,
+            requestId: 8,
             generation: 0,
         });
         fixture.bridge.dispose();
@@ -369,10 +428,16 @@ suite('[Unit] Data Explorer webview bridge P0 protocol', () => {
         const notification = fixture.notifications.find(
             ({ method }) => method === 'dataExplorer/backendState',
         );
+        const state = (
+            notification?.params as {
+                state?: { connected?: boolean; error_message?: string };
+            }
+        )?.state;
         assert.strictEqual(
-            (notification?.params as { state?: { connected?: boolean } })?.state?.connected,
+            state?.connected,
             false,
         );
+        assert.strictEqual(state?.error_message, undefined);
         fixture.bridge.dispose();
     });
 });

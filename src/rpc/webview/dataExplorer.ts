@@ -19,6 +19,7 @@ export namespace DataExplorerRequestDataNotification {
     export interface Params {
         startRow: number;
         endRow: number;
+        rowIndices?: number[];
         columns?: number[];
         requestId: number;
         generation: number;
@@ -31,6 +32,7 @@ export namespace DataExplorerRequestSchemaNotification {
 
     export interface Params {
         columns: number[];
+        requestId: number;
     }
 
     export const type = new NotificationType<Params>('dataExplorer/requestSchema');
@@ -367,6 +369,7 @@ export namespace DataExplorerSchemaNotification {
 
     export interface Params {
         columns: unknown[];
+        requestId?: number;
     }
 
     export const type = new NotificationType<Params>('dataExplorer/schema');
@@ -412,6 +415,7 @@ export namespace DataExplorerDataNotification {
         schema?: unknown[];
         startRow: number;
         endRow: number;
+        rowIndices?: number[];
         columnIndices?: number[];
         rowLabels?: string[];
         totalRows?: number;

@@ -650,6 +650,7 @@
 
     <div
         class="data-grid-rows-container"
+        class:use-editor-font={instance.useEditorFont}
         style:width="{width - instance.rowHeadersWidth}px"
         style:height="{height - instance.columnHeadersHeight}px"
     >
@@ -718,6 +719,12 @@
         box-sizing: border-box;
         grid-row: waffle / end-waffle;
         grid-column: waffle / end-waffle;
+    }
+
+    .data-grid-rows-container.use-editor-font {
+        font-family: var(--vscode-editor-font-family, monospace);
+        font-size: var(--vscode-editor-font-size, 13px);
+        font-weight: var(--vscode-editor-font-weight, normal);
     }
 
     .data-grid-rows {

@@ -10,10 +10,12 @@ import {
     type IDataColumn,
 } from "../../../../../../dataGrid/classes/dataGridInstance";
 import type { SchemaColumn } from "../../../../../../dataGrid/types";
-import { matchesColumnSchemaSearch } from "../../../../../columnSchemaUtils";
+import { ColumnSchemaCache } from "../../../../../common/columnSchemaCache";
+import type { DataExplorerSchemaClient } from "../../../../../common/dataExplorerSchemaClient";
 import ColumnSelectorCell from "./columnSelectorCell.svelte";
 
 const DEFAULT_ROW_HEIGHT = 26;
+const OVERSCAN_FACTOR = 3;
 
 const OPTIONS: DataGridOptions = {
     columnHeaders: false,
@@ -39,19 +41,28 @@ const OPTIONS: DataGridOptions = {
 };
 
 export class ColumnSelectorDataGridInstance extends DataGridInstance {
-    private readonly _columnsByIndex = new Map<number, SchemaColumn>();
-    private _columns: SchemaColumn[] = [];
-    private _filteredColumnIndices: number[] = [];
-    private _rows = 0;
+    private readonly _columnSchemaCache: ColumnSchemaCache;
+    private readonly _schemaCacheDisposable: { dispose(): void };
+    private _rows: number;
     private _searchText = "";
+    private _searchRequestId = 0;
 
     constructor(
-        columns: SchemaColumn[],
+        private readonly _totalColumns: number,
+        initialSchema: SchemaColumn[],
+        private readonly _schemaClient: DataExplorerSchemaClient,
         private readonly _onSelect: (columnSchema: SchemaColumn) => void,
     ) {
         super(OPTIONS);
+        this._rows = _totalColumns;
+        this._columnSchemaCache = new ColumnSchemaCache(_schemaClient);
+        this._columnSchemaCache.setColumnSchema(initialSchema);
+        this._schemaCacheDisposable =
+            this._columnSchemaCache.onDidUpdateCache(() =>
+                this.fireOnDidUpdateEvent(),
+            );
         this._columnLayoutManager.setEntries(1);
-        this.setColumns(columns);
+        this._rowLayoutManager.setEntries(_totalColumns);
     }
 
     get columns(): number {
@@ -62,12 +73,16 @@ export class ColumnSelectorDataGridInstance extends DataGridInstance {
         return this._rows;
     }
 
-    get totalRows(): number {
-        return this._columns.length;
-    }
-
     override get scrollWidth(): number {
         return 0;
+    }
+
+    override get firstColumn() {
+        return {
+            columnIndex: 0,
+            left: 0,
+            width: 0,
+        };
     }
 
     override getCustomColumnWidth(columnIndex: number): number | undefined {
@@ -87,7 +102,7 @@ export class ColumnSelectorDataGridInstance extends DataGridInstance {
             return undefined;
         }
 
-        const columnSchema = this._columnsByIndex.get(rowIndex);
+        const columnSchema = this._columnSchemaCache.getColumnSchema(rowIndex);
         if (!columnSchema) {
             return undefined;
         }
@@ -109,27 +124,34 @@ export class ColumnSelectorDataGridInstance extends DataGridInstance {
         };
     }
 
-    protected async fetchData(): Promise<void> {
-        // Column selector works entirely with local schema data.
+    protected async fetchData(invalidateCache = false): Promise<void> {
+        const rowDescriptor = this.firstRow;
+        if (!rowDescriptor && !invalidateCache) {
+            return;
+        }
+        const columnIndices = rowDescriptor
+            ? this._rowLayoutManager.getLayoutIndexes(
+                  this.verticalScrollOffset,
+                  this.layoutHeight,
+                  OVERSCAN_FACTOR,
+              )
+            : [];
+        await this._columnSchemaCache.update({
+            columnIndices,
+            invalidateCache,
+        });
     }
 
     protected async doSortData(): Promise<void> {
         // Sorting is not supported in the selector.
     }
 
-    setColumns(columns: SchemaColumn[]): void {
-        this._columns = [...columns].sort(
-            (left, right) => left.column_index - right.column_index,
-        );
-        this._columnsByIndex.clear();
-        for (const column of this._columns) {
-            this._columnsByIndex.set(column.column_index, column);
-        }
-        this._applyFilter();
+    setSchema(columns: SchemaColumn[]): void {
+        this._columnSchemaCache.setColumnSchema(columns);
     }
 
     setSelectedColumn(columnIndex: number | undefined): void {
-        if (columnIndex === undefined || !this._columnsByIndex.has(columnIndex)) {
+        if (columnIndex === undefined) {
             this.ensureCursorVisible();
             return;
         }
@@ -151,11 +173,11 @@ export class ColumnSelectorDataGridInstance extends DataGridInstance {
     }
 
     getColumnSchema(columnIndex: number): SchemaColumn | undefined {
-        return this._columnsByIndex.get(columnIndex);
+        return this._columnSchemaCache.getColumnSchema(columnIndex);
     }
 
     selectItem(columnIndex: number): SchemaColumn | undefined {
-        return this._columnsByIndex.get(columnIndex);
+        return this._columnSchemaCache.getColumnSchema(columnIndex);
     }
 
     async setSearchText(searchText: string): Promise<void> {
@@ -165,18 +187,35 @@ export class ColumnSelectorDataGridInstance extends DataGridInstance {
 
         this._searchText = searchText;
         this.setVerticalScrollOffset(0);
-        this._applyFilter(true);
+        const requestId = ++this._searchRequestId;
+        let columnIndices: number[] | undefined;
+        if (searchText.trim()) {
+            columnIndices = await this._schemaClient.searchSchema({
+                searchText,
+            });
+        }
+        if (requestId !== this._searchRequestId) {
+            return;
+        }
+        this._applyFilter(columnIndices, true);
+        await this.fetchData(true);
     }
 
-    private _applyFilter(forceFirstVisibleRow = false): void {
-        this._filteredColumnIndices = this._columns
-            .filter((column) => matchesColumnSchemaSearch(column, this._searchText))
-            .map((column) => column.column_index);
-        this._rows = this._filteredColumnIndices.length;
+    override dispose(): void {
+        this._schemaCacheDisposable.dispose();
+        this._columnSchemaCache.dispose();
+        super.dispose();
+    }
+
+    private _applyFilter(
+        columnIndices: number[] | undefined,
+        forceFirstVisibleRow = false,
+    ): void {
+        this._rows = columnIndices?.length ?? this._totalColumns;
         this._rowLayoutManager.setEntries(
             this._rows,
             undefined,
-            this._filteredColumnIndices,
+            columnIndices,
         );
         this._resetScrollOffset(forceFirstVisibleRow);
         this._ensureCursorIsVisible(forceFirstVisibleRow);
@@ -208,6 +247,9 @@ export class ColumnSelectorDataGridInstance extends DataGridInstance {
             return;
         }
 
-        this.setCursorPosition(0, this._filteredColumnIndices[0]);
+        this.setCursorPosition(
+            0,
+            this._rowLayoutManager.mapPositionToIndex(0) ?? -1,
+        );
     }
 }

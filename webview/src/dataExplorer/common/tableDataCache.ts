@@ -265,11 +265,12 @@ export class TableDataCache {
 
     applyDataUpdate(params: {
         startRow: number;
+        rowIndices?: number[];
         columns: ColumnValue[][];
         columnIndices?: number[];
         rowLabels?: string[];
     }): boolean {
-        const { startRow, columns, columnIndices, rowLabels } = params;
+        const { startRow, rowIndices, columns, columnIndices, rowLabels } = params;
         let didChange = false;
 
         if (columns.length > 0) {
@@ -289,7 +290,8 @@ export class TableDataCache {
                 let maxValueLength = this._columnValueLengths.get(columnIndex) ?? 0;
                 for (let rowOffset = 0; rowOffset < values.length; rowOffset++) {
                     const dataCell = decodeColumnValue(values[rowOffset] ?? '');
-                    columnCache.set(startRow + rowOffset, dataCell);
+                    const rowIndex = rowIndices?.[rowOffset] ?? startRow + rowOffset;
+                    columnCache.set(rowIndex, dataCell);
                     maxValueLength = Math.max(
                         maxValueLength,
                         dataCell.formatted.length,
@@ -303,7 +305,8 @@ export class TableDataCache {
 
         if (rowLabels && rowLabels.length > 0) {
             for (let rowOffset = 0; rowOffset < rowLabels.length; rowOffset++) {
-                this._rowLabelCache.set(startRow + rowOffset, rowLabels[rowOffset] ?? '');
+                const rowIndex = rowIndices?.[rowOffset] ?? startRow + rowOffset;
+                this._rowLabelCache.set(rowIndex, rowLabels[rowOffset] ?? '');
             }
             didChange = true;
         }
@@ -343,12 +346,10 @@ export class TableDataCache {
 
     trimData(
         columnIndices: Iterable<number>,
-        startRow: number,
-        endRow: number,
+        rowIndices: Iterable<number>,
     ): void {
         const keepColumns = new Set(columnIndices);
-        const clampedStartRow = Math.max(0, startRow);
-        const clampedEndRow = Math.max(clampedStartRow, endRow);
+        const keepRows = new Set(rowIndices);
 
         for (const [columnIndex, columnCache] of this._dataColumnCache) {
             if (!keepColumns.has(columnIndex)) {
@@ -358,7 +359,7 @@ export class TableDataCache {
             }
 
             for (const rowIndex of [...columnCache.keys()]) {
-                if (rowIndex < clampedStartRow || rowIndex >= clampedEndRow) {
+                if (!keepRows.has(rowIndex)) {
                     columnCache.delete(rowIndex);
                 }
             }
@@ -370,7 +371,7 @@ export class TableDataCache {
         }
 
         for (const rowIndex of [...this._rowLabelCache.keys()]) {
-            if (rowIndex < clampedStartRow || rowIndex >= clampedEndRow) {
+            if (!keepRows.has(rowIndex)) {
                 this._rowLabelCache.delete(rowIndex);
             }
         }

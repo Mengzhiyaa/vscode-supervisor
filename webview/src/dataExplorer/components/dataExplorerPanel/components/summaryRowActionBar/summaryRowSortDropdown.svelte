@@ -15,9 +15,29 @@
 
     let { currentSort, disabled = false, onSortChanged }: Props = $props();
 
-    const sortSummaryLabel = localize(
+    const positronDataExplorerSummarySort = localize(
         "positron.dataExplorer.sort",
         "Sort summary row data",
+    );
+    const positronSortByOriginal = localize(
+        "positron.dataExplorer.sortByOriginal",
+        "Sort by Original",
+    );
+    const positronSortByNameAsc = localize(
+        "positron.dataExplorer.sortByNameAsc",
+        "Sort by Name, Ascending",
+    );
+    const positronSortByNameDesc = localize(
+        "positron.dataExplorer.sortByNameDesc",
+        "Sort by Name, Descending",
+    );
+    const positronSortByTypeAsc = localize(
+        "positron.dataExplorer.sortByTypeAsc",
+        "Sort by Type, Ascending",
+    );
+    const positronSortByTypeDesc = localize(
+        "positron.dataExplorer.sortByTypeDesc",
+        "Sort by Type, Descending",
     );
 
     const sortOptions: Array<{
@@ -27,42 +47,27 @@
     }> = [
         {
             id: "original",
-            label: localize(
-                "positron.dataExplorer.sortByOriginal",
-                "Sort by Original",
-            ),
+            label: positronSortByOriginal,
             option: "original",
         },
         {
             id: "ascending_name",
-            label: localize(
-                "positron.dataExplorer.sortByNameAsc",
-                "Sort by Name, Ascending",
-            ),
+            label: positronSortByNameAsc,
             option: "ascending_name",
         },
         {
             id: "descending_name",
-            label: localize(
-                "positron.dataExplorer.sortByNameDesc",
-                "Sort by Name, Descending",
-            ),
+            label: positronSortByNameDesc,
             option: "descending_name",
         },
         {
             id: "ascending_type",
-            label: localize(
-                "positron.dataExplorer.sortByTypeAsc",
-                "Sort by Type, Ascending",
-            ),
+            label: positronSortByTypeAsc,
             option: "ascending_type",
         },
         {
             id: "descending_type",
-            label: localize(
-                "positron.dataExplorer.sortByTypeDesc",
-                "Sort by Type, Descending",
-            ),
+            label: positronSortByTypeDesc,
             option: "descending_type",
         },
     ];
@@ -72,18 +77,14 @@
     );
 
     const currentSortLabel = $derived(
-        sortLabelMap.get(currentSort) ??
-            localize(
-                "positron.dataExplorer.sortByOriginal",
-                "Sort by Original",
-            ),
+        sortLabelMap.get(currentSort) ?? positronSortByOriginal,
     );
 </script>
 
 <ActionBarMenuButton
     label={currentSortLabel}
-    tooltip={sortSummaryLabel}
-    ariaLabel={sortSummaryLabel}
+    tooltip={positronDataExplorerSummarySort}
+    ariaLabel={positronDataExplorerSummarySort}
     {disabled}
     buttonClass="summary-sort-button"
     actions={() =>

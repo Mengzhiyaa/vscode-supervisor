@@ -440,9 +440,10 @@
         );
         connection.onNotification(
             "dataExplorer/schema",
-            (params: { columns: unknown[] }) => {
+            (params: { columns: unknown[]; requestId?: number }) => {
                 instance.handleSchema({
                     columns: params.columns as never[],
+                    requestId: params.requestId,
                 });
             },
         );
@@ -483,6 +484,7 @@
                 columns: ColumnValue[][];
                 startRow: number;
                 endRow: number;
+                rowIndices?: number[];
                 columnIndices?: number[];
                 rowLabels?: string[];
                 schema?: unknown[];

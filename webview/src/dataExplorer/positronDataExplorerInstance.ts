@@ -7,6 +7,7 @@ import { createDataExplorerStores, type DataExplorerStores } from './stores';
 import { TableSummaryDataGridInstance } from './tableSummaryDataGridInstance';
 import { TableDataDataGridInstance } from './tableDataDataGridInstance';
 import { TableDataCache } from './common/tableDataCache';
+import { DataExplorerSchemaClient } from './common/dataExplorerSchemaClient';
 import type { BackendState, SchemaColumn } from '../dataGrid/types';
 import {
     PositronDataExplorerLayout,
@@ -47,6 +48,7 @@ function mergeSchemaColumns(
 export class PositronDataExplorerInstance {
     readonly stores: DataExplorerStores;
     readonly tableDataCache: TableDataCache;
+    readonly schemaClient: DataExplorerSchemaClient;
     readonly tableDataDataGridInstance: TableDataDataGridInstance;
     readonly tableSchemaDataGridInstance: TableSummaryDataGridInstance;
 
@@ -54,6 +56,7 @@ export class PositronDataExplorerInstance {
         private readonly _postMessage: (message: WebviewMessage) => void,
     ) {
         this.stores = createDataExplorerStores();
+        this.schemaClient = new DataExplorerSchemaClient(this._postMessage);
         this.tableDataCache = new TableDataCache();
         this.tableDataDataGridInstance = new TableDataDataGridInstance(
             this.stores,
@@ -63,6 +66,7 @@ export class PositronDataExplorerInstance {
         this.tableSchemaDataGridInstance = new TableSummaryDataGridInstance(
             this.stores,
             this._postMessage,
+            this.schemaClient,
             this.tableDataDataGridInstance.pinnedColumns,
         );
     }
@@ -105,6 +109,7 @@ export class PositronDataExplorerInstance {
     dispose(): void {
         this.tableSchemaDataGridInstance.dispose();
         this.tableDataDataGridInstance.dispose();
+        this.schemaClient.dispose();
     }
 
     invalidateTableData(): void {
@@ -185,8 +190,13 @@ export class PositronDataExplorerInstance {
         );
     }
 
-    handleSchema(params: { columns: SchemaColumn[] }): void {
+    handleSchema(params: {
+        columns: SchemaColumn[];
+        requestId?: number;
+    }): void {
+        this.schemaClient.handleSchema(params);
         this.tableDataDataGridInstance.handleSchemaUpdate(params.columns);
+        this.tableSchemaDataGridInstance.handleSchema(params.columns);
         this.stores.state.update((state) => ({
             ...state,
             schema: mergeSchemaColumns(state.schema, params.columns),
@@ -198,7 +208,7 @@ export class PositronDataExplorerInstance {
         columnIndices: number[];
         requestId?: number;
     }): void {
-        this.tableSchemaDataGridInstance.handleSummarySchema(params);
+        this.schemaClient.handleSearchSchema(params);
     }
 
     handleColumnProfiles(params: {
@@ -225,6 +235,7 @@ export class PositronDataExplorerInstance {
         columns: ColumnValue[][];
         startRow: number;
         endRow: number;
+        rowIndices?: number[];
         columnIndices?: number[];
         rowLabels?: string[];
         schema?: SchemaColumn[];
@@ -249,9 +260,13 @@ export class PositronDataExplorerInstance {
             params.schemaChanged,
         );
         if (params.schemaChanged) {
-            this.tableSchemaDataGridInstance.handleSchemaUpdated();
+            this.tableSchemaDataGridInstance.handleSchemaUpdated(
+                params.generation,
+            );
         } else {
-            this.tableSchemaDataGridInstance.handleDataUpdated();
+            this.tableSchemaDataGridInstance.handleDataUpdated(
+                params.generation,
+            );
         }
     }
 

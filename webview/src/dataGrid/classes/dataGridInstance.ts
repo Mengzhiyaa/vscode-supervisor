@@ -1133,6 +1133,13 @@ export abstract class DataGridInstance {
                 this._verticalScrollOffset = this.maximumVerticalScrollOffset;
             }
 
+            this.viewport.update((viewport) => ({
+                ...viewport,
+                width,
+                height,
+                scrollTop: this._verticalScrollOffset,
+                scrollLeft: this._horizontalScrollOffset,
+            }));
             await this.fetchData();
             this.fireOnDidUpdateEvent();
         }

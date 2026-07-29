@@ -59,6 +59,7 @@ import {
     PositronDataExplorerService,
     PositronDataExplorerEditorProvider,
     PositronDataExplorerCustomEditorProvider,
+    POSITRON_DATA_EXPLORER_CUSTOM_EDITOR_OPTIONS,
     PositronDataExplorerEditorContribution,
 } from './services/dataExplorer';
 import { DuckDBInstance } from './services/duckdb/duckdbInstance';
@@ -405,7 +406,7 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
             vscode.window.registerCustomEditorProvider(
                 PositronDataExplorerCustomEditorProvider.viewType,
                 dataExplorerCustomEditorProvider,
-                { supportsMultipleEditorsPerDocument: false }
+                POSITRON_DATA_EXPLORER_CUSTOM_EDITOR_OPTIONS,
             )
         );
 

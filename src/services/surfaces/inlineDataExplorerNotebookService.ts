@@ -10,14 +10,22 @@ import {
 } from './surfaceLifecycleService';
 
 export const InlineDataExplorerRendererId = 'supervisor.inlineDataExplorerRenderer';
-const MaxInlineColumns = 50;
-const MaxInlineRows = 100;
+const MAX_INLINE_REQUEST_COLUMNS = 50;
+const MAX_INLINE_REQUEST_ROWS = 200;
 
 interface RendererMessage {
     readonly type?: string;
     readonly requestId?: string;
     readonly outputId?: string;
     readonly commId?: string;
+    readonly firstRow?: number;
+    readonly numRows?: number;
+    readonly firstColumn?: number;
+    readonly numColumns?: number;
+    readonly sortKeys?: Array<{
+        readonly columnIndex: number;
+        readonly ascending: boolean;
+    }>;
 }
 
 interface InlineAttachment {
@@ -65,7 +73,10 @@ export class InlineDataExplorerNotebookService implements vscode.Disposable {
             await vscode.commands.executeCommand(CoreCommandIds.dataExplorerOpenInline, message.commId);
             return;
         }
-        if (message.type !== 'inlineDataExplorer/load') {
+        if (
+            message.type !== 'inlineDataExplorer/load' &&
+            message.type !== 'inlineDataExplorer/sort'
+        ) {
             return;
         }
 
@@ -76,17 +87,60 @@ export class InlineDataExplorerNotebookService implements vscode.Disposable {
             }
 
             this._attach(instance.identifier, notebookUri, message.outputId);
+            if (message.type === 'inlineDataExplorer/sort') {
+                await instance.setSortColumns(
+                    (message.sortKeys ?? []).map(sortKey => ({
+                        column_index: sortKey.columnIndex,
+                        ascending: sortKey.ascending,
+                    })),
+                );
+            }
             const backend = await instance.clientInstance.getBackendState(true);
-            const columnCount = Math.min(backend.table_shape.num_columns, MaxInlineColumns);
-            const rowCount = Math.min(backend.table_shape.num_rows, MaxInlineRows);
-            const columnIndices = Array.from({ length: columnCount }, (_, index) => index);
+            const firstColumn = Math.max(
+                0,
+                Math.min(
+                    Math.trunc(message.firstColumn ?? 0),
+                    backend.table_shape.num_columns,
+                ),
+            );
+            const columnCount = Math.min(
+                Math.max(0, Math.trunc(message.numColumns ?? 12)),
+                MAX_INLINE_REQUEST_COLUMNS,
+                backend.table_shape.num_columns - firstColumn,
+            );
+            const firstRow = Math.max(
+                0,
+                Math.min(
+                    Math.trunc(message.firstRow ?? 0),
+                    backend.table_shape.num_rows,
+                ),
+            );
+            const rowCount = Math.min(
+                Math.max(0, Math.trunc(message.numRows ?? 60)),
+                MAX_INLINE_REQUEST_ROWS,
+                backend.table_shape.num_rows - firstRow,
+            );
+            const columnIndices = Array.from(
+                { length: columnCount },
+                (_, index) => firstColumn + index,
+            );
             const schema = await instance.getSchema(columnIndices);
             const values = rowCount > 0
                 ? await instance.clientInstance.getDataValues(columnIndices.map(columnIndex => ({
                     column_index: columnIndex,
-                    spec: { first_index: 0, last_index: rowCount - 1 },
+                    spec: {
+                        first_index: firstRow,
+                        last_index: firstRow + rowCount - 1,
+                    },
                 })))
                 : { columns: columnIndices.map(() => []) };
+            const rowLabels =
+                backend.has_row_labels && rowCount > 0
+                    ? await instance.clientInstance.getRowLabels({
+                          first_index: firstRow,
+                          last_index: firstRow + rowCount - 1,
+                      })
+                    : undefined;
 
             await this._messaging.postMessage({
                 type: 'inlineDataExplorer/data',
@@ -97,12 +151,19 @@ export class InlineDataExplorerNotebookService implements vscode.Disposable {
                     rows: backend.table_shape.num_rows,
                     columns: backend.table_shape.num_columns,
                 },
+                firstRow,
+                firstColumn,
+                columnIndices,
                 columns: schema.columns.map(column => ({
                     name: column.column_label || column.column_name,
                     type: column.type_name,
                 })),
                 values: values.columns,
-                truncated: columnCount < backend.table_shape.num_columns || rowCount < backend.table_shape.num_rows,
+                rowLabels: rowLabels?.row_labels[0],
+                sortKeys: backend.sort_keys.map(sortKey => ({
+                    columnIndex: sortKey.column_index,
+                    ascending: sortKey.ascending,
+                })),
             }, editor);
         } catch (error) {
             const detail = error instanceof Error ? error.message : String(error);

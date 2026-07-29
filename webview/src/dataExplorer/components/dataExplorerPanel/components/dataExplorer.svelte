@@ -420,6 +420,17 @@
         grid-column: splitter / collapsed-right-spacer;
     }
 
+    :global(.data-explorer-panel)
+        .data-explorer
+        .splitter
+        :global(.vertical-splitter) {
+        border-left: 1px solid var(--vscode-positronDataExplorer-border);
+        border-right: 1px solid var(--vscode-positronDataExplorer-border);
+        background-color: var(
+            --vscode-positronDataExplorer-contrastBackground
+        );
+    }
+
     :global(.data-explorer-panel) .data-explorer .collapsed-right-spacer {
         width: 10px;
         grid-row: main-row / end-rows;

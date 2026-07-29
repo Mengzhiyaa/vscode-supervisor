@@ -24,8 +24,8 @@
     const { summarySearchText, summarySortOrder, state: explorerState } = stores;
 
     let searchText = $state("");
+    let debouncedSearchText = $state("");
     let sortOption = $state<SearchSchemaSortOrder>("original");
-    let searchDebounceHandle: ReturnType<typeof setTimeout> | undefined;
 
     const disabled = $derived.by(() => {
         const backendState = $explorerState.backendState;
@@ -42,11 +42,25 @@
         }
 
         searchText = instance.searchText || "";
+        debouncedSearchText = instance.searchText || "";
         sortOption = instance.sortOption || "original";
-        if (searchDebounceHandle) {
-            clearTimeout(searchDebounceHandle);
-            searchDebounceHandle = undefined;
+    });
+
+    $effect(() => {
+        const nextSearchText = searchText;
+        const debounce = setTimeout(() => {
+            debouncedSearchText = nextSearchText;
+        }, SEARCH_DEBOUNCE_TIMEOUT);
+
+        return () => clearTimeout(debounce);
+    });
+
+    $effect(() => {
+        if (!instance) {
+            return;
         }
+
+        void instance.setSearchText(debouncedSearchText);
     });
 
     $effect(() => {
@@ -63,35 +77,28 @@
 
     function handleFilterTextChanged(filterText: string) {
         searchText = filterText;
-
-        if (searchDebounceHandle) {
-            clearTimeout(searchDebounceHandle);
-        }
-
-        searchDebounceHandle = setTimeout(() => {
-            searchDebounceHandle = undefined;
-            if (instance) {
-                void instance.setSearchText(filterText);
-            }
-        }, SEARCH_DEBOUNCE_TIMEOUT);
     }
 </script>
 
 <div class="summary-row-filter-bar">
     <div class="positron-action-bar summary-row-action-bar">
-        <div class="action-bar-region left">
+        <div
+            class="action-bar-region action-bar-region-left action-bar-region-justify-left"
+        >
             <SummaryRowSortDropdown
                 currentSort={sortOption}
                 disabled={disabled || !instance}
                 onSortChanged={handleSortChanged}
             />
         </div>
-        <div class="action-bar-region right">
+        <div
+            class="action-bar-region action-bar-region-right action-bar-region-justify-right"
+        >
             <ActionBarFilter
                 width={140}
-                filterText={searchText}
+                initialFilterText={searchText}
                 disabled={disabled || !instance}
-                onfilterTextChanged={handleFilterTextChanged}
+                onFilterTextChanged={handleFilterTextChanged}
             />
         </div>
     </div>
@@ -114,7 +121,6 @@
     .summary-row-filter-bar .positron-action-bar {
         width: 100%;
         align-items: center;
-        justify-content: space-between;
         background: var(--vscode-positronDataExplorer-contrastBackground, var(--vscode-editor-background));
     }
 

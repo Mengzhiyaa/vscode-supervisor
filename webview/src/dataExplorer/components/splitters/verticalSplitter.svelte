@@ -302,116 +302,149 @@
     });
 </script>
 
-<div class="vertical-splitter" style={`width: ${splitterWidth}px;`}>
-    {#if showSash}
-        <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-        <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-        <div
-            bind:this={sashRef}
-            class="sash"
-            class:hovering
-            class:resizing
-            class:collapsible
-            style={sashStyle}
-            onpointerenter={handleSashPointerEnter}
-            onpointerleave={handleSashPointerLeave}
-            onpointerdown={handleSashPointerDown}
-            ondblclick={handleSashDoubleClick}
-            onkeydown={handleSashKeyDown}
-            role="separator"
-            aria-orientation="vertical"
-            aria-label={resizeAriaLabel}
-            aria-valuemin={sashResizeParams.minimumWidth}
-            aria-valuemax={sashResizeParams.maximumWidth}
-            aria-valuenow={collapsed
-                ? sashResizeParams.minimumWidth
-                : sashResizeParams.startingWidth}
-            tabindex="0"
-        >
+<div
+    class="vertical-splitter"
+    class:collapsible
+    style={`width: ${splitterWidth}px;`}
+>
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+    <div
+        bind:this={sashRef}
+        class="sash"
+        style={sashStyle}
+        onpointerenter={handleSashPointerEnter}
+        onpointerleave={handleSashPointerLeave}
+        onpointerdown={handleSashPointerDown}
+        ondblclick={handleSashDoubleClick}
+        onkeydown={handleSashKeyDown}
+        role="separator"
+        aria-orientation="vertical"
+        aria-label={resizeAriaLabel}
+        aria-valuemin={sashResizeParams.minimumWidth}
+        aria-valuemax={sashResizeParams.maximumWidth}
+        aria-valuenow={collapsed
+            ? sashResizeParams.minimumWidth
+            : sashResizeParams.startingWidth}
+        tabindex="0"
+    >
+        {#if showSash && (hovering || resizing)}
             <div
                 class="sash-indicator"
+                class:hovering
+                class:resizing
                 style={`width: ${sashIndicatorWidth}px;`}
             ></div>
+        {/if}
+    </div>
 
-            {#if showExpandCollapseButton}
-                <button
-                    bind:this={buttonRef}
-                    type="button"
-                    class="expand-collapse-button"
-                    class:highlight={highlightExpandCollapse}
-                    onclick={handleExpandCollapsePressed}
-                    onpointerenter={handleButtonPointerEnter}
-                    onpointerleave={handleButtonPointerLeave}
-                    aria-label={
-                        collapsed ? expandAriaLabel : collapseAriaLabel
-                    }
-                >
-                    <span class={`codicon ${buttonChevronClass}`}></span>
-                </button>
-            {/if}
-        </div>
+    {#if showExpandCollapseButton}
+        <button
+            bind:this={buttonRef}
+            type="button"
+            class="expand-collapse-button"
+            onclick={handleExpandCollapsePressed}
+            aria-label={collapsed ? expandAriaLabel : collapseAriaLabel}
+        >
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
+            <span
+                class="expand-collapse-button-face codicon {buttonChevronClass}"
+                class:highlighted={highlightExpandCollapse}
+                onpointerenter={handleButtonPointerEnter}
+                onpointerleave={handleButtonPointerLeave}
+            ></span>
+        </button>
     {/if}
 </div>
 
 <style>
     .vertical-splitter {
-        position: relative;
         height: 100%;
-        flex: 0 0 auto;
+        position: relative;
+        background-origin: border-box;
     }
 
     .sash {
-        position: absolute;
-        inset: 0 auto 0 50%;
-        transform: translateX(-50%);
+        z-index: 25;
+        height: 100%;
         display: flex;
+        position: relative;
         justify-content: center;
         cursor: ew-resize;
         touch-action: none;
     }
 
-    .sash::before {
-        content: "";
-        position: absolute;
-        inset: 0;
-        background: transparent;
-    }
-
     .sash-indicator {
         height: 100%;
-        background: transparent;
+        position: relative;
     }
 
-    .sash.hovering .sash-indicator,
-    .sash.resizing .sash-indicator,
-    .sash:focus-visible .sash-indicator {
-        background: var(--vscode-sash-hoverBorder, var(--vscode-focusBorder));
+    .sash-indicator.hovering {
+        transition: background-color 0.1s ease-out;
+        background-color: var(
+            --vscode-sash-hoverBorder,
+            var(--vscode-focusBorder)
+        );
+    }
+
+    .sash-indicator.resizing {
+        background-color: var(
+            --vscode-sash-hoverBorder,
+            var(--vscode-focusBorder)
+        );
     }
 
     .expand-collapse-button {
-        position: absolute;
+        right: 50%;
+        z-index: 100;
         top: 4px;
-        left: 50%;
         width: 25px;
         height: 25px;
-        border: 0;
-        display: flex;
+        border: none;
         padding: 0;
         cursor: pointer;
-        border-radius: 4px;
-        align-items: center;
-        justify-content: center;
-        transform: translateX(-50%);
-        color: var(--vscode-icon-foreground, var(--vscode-foreground));
+        overflow: visible;
+        position: absolute;
+        transform: translateX(50%);
         background: transparent;
     }
 
-    .expand-collapse-button:hover,
-    .expand-collapse-button.highlight {
-        background: var(
-            --vscode-toolbar-hoverBackground,
-            rgba(127, 127, 127, 0.15)
+    .expand-collapse-button .expand-collapse-button-face {
+        top: 0;
+        left: 0;
+        width: 25px;
+        height: 25px;
+        display: flex;
+        position: absolute;
+        border-radius: 50%;
+        font-weight: bolder;
+        align-items: center;
+        box-sizing: border-box;
+        justify-content: center;
+        color: var(
+            --vscode-positronSplitterExpandCollapseButton-foreground,
+            #3b79b3
+        );
+        border: 1px solid
+            var(
+                --vscode-positronSplitterExpandCollapseButton-foreground,
+                #3b79b3
+            );
+        background-color: var(
+            --vscode-positronSplitterExpandCollapseButton-background,
+            var(--vscode-editor-background)
+        );
+    }
+
+    .expand-collapse-button .expand-collapse-button-face.highlighted {
+        color: var(
+            --vscode-positronSplitterExpandCollapseButton-background,
+            var(--vscode-editor-background)
+        );
+        background-color: var(
+            --vscode-positronSplitterExpandCollapseButton-foreground,
+            #3b79b3
         );
     }
 
@@ -420,14 +453,14 @@
     }
 
     .expand-collapse-button:focus-visible {
-        outline-offset: 2px;
         outline: 1px solid var(--vscode-focusBorder);
+        outline-offset: 2px;
     }
 
     @media (forced-colors: active) {
         .sash:hover .sash-indicator,
         .sash:focus-visible .sash-indicator,
-        .sash.resizing .sash-indicator {
+        .sash-indicator.resizing {
             background: Highlight;
         }
         .expand-collapse-button:focus-visible {
