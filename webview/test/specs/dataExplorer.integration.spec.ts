@@ -1153,9 +1153,14 @@ test('data explorer bridges copy, open, and data-grid context menu notifications
         }),
     });
 
-    await page
-        .locator('.right-column .data-grid-row-cell[data-column-index="0"][data-row-index="0"]')
-        .click();
+    const firstCell = page.locator(
+        '.right-column .data-grid-row-cell[data-column-index="0"][data-row-index="0"]',
+    );
+    await firstCell.click();
+
+    await firstCell.click({ button: 'right' });
+    await expect(page.getByText('Add Filter')).toBeVisible();
+    await page.keyboard.press('Escape');
 
     const copyCurrentSelection = backend.waitForNextNotification(DataExplorerMethods.copyToClipboard);
     await backend.notify(DataExplorerMethods.copy);

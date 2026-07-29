@@ -8,6 +8,20 @@ const OVERSCAN_FACTOR = 3;
 const MAX_REQUEST_ROWS = 200;
 const MAX_REQUEST_COLUMNS = 50;
 
+document.addEventListener(
+    'contextmenu',
+    event => {
+        const target =
+            event.target instanceof Element
+                ? event.target.closest('.supervisor-inline-data-explorer')
+                : null;
+        if (target) {
+            event.preventDefault();
+        }
+    },
+    { capture: true },
+);
+
 function ensureStyles() {
     if (document.getElementById(STYLE_ID)) {
         return;

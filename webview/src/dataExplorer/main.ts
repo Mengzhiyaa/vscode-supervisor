@@ -4,8 +4,11 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { mount } from 'svelte';
+import { installWebviewContextMenuGuard } from '$lib/webviewContextMenu';
 import PositronDataExplorer from './positronDataExplorer.svelte';
 import './styles.css';
+
+installWebviewContextMenuGuard();
 
 // Mount the Data Explorer component using Svelte 5 API
 const app = mount(PositronDataExplorer, {

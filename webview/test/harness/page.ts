@@ -11,6 +11,7 @@ export async function openWebviewPage(
         | 'plots'
         | 'viewer'
         | 'help'
+        | 'packages'
         | 'dataExplorer'
         | 'plotEditor',
     options: {
@@ -22,6 +23,13 @@ export async function openWebviewPage(
     if (domain === 'viewer') {
         backend.onRequest('viewer/getDefaultOpenTarget', () => ({ target: 'browser' }));
         backend.onRequest('viewer/open', () => ({ success: true }));
+    }
+    if (domain === 'packages') {
+        backend.onRequest('packages/getState', () => ({
+            packages: [],
+            busy: false,
+            itemSize: 'card',
+        }));
     }
     options.configure?.(backend);
     await page.goto(`${TEST_BASE_URL}/test-pages/${domain}.html`);
