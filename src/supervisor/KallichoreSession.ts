@@ -354,8 +354,15 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 		//
 		// This is done after the contributed variables so that the kernel spec
 		// variables take precedence.
-		if (this._kernelSpec?.env) {
-			for (const [key, value] of Object.entries(this._kernelSpec.env)) {
+		//
+		// For a restored session (reconnected after e.g. an extension host
+		// restart) we no longer hold the original kernel spec, so fall back to
+		// the environment the session was launched with, as recorded by the
+		// supervisor. Without this, a restart rebuilds the environment without
+		// spec-provided entries such as R_HOME or the selected Python path.
+		const specEnv = this._kernelSpec?.env ?? this._activeSession?.initial_env;
+		if (specEnv) {
+			for (const [key, value] of Object.entries(specEnv)) {
 				if (typeof value === 'string') {
 					const action: VarAction = {
 						action: VarActionType.Replace,

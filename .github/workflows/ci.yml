@@ -53,8 +53,8 @@ jobs:
           POSITRON_ROOT: .positron-upstream
         run: npm run verify:positron-contracts
 
-      - name: Run unit tests
-        run: npm run test:unit:ext
+      - name: Run extension host tests
+        run: npm test
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
