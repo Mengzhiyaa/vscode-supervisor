@@ -1,13 +1,37 @@
 import * as vscode from 'vscode';
+import type { SerializedConsoleState } from '../../shared/consoleState';
 
 const SessionHistoryKeyPrefix = 'vscode-supervisor.inputHistory.session.';
 const LanguageHistoryKeyPrefix = 'vscode-supervisor.inputHistory.language.';
+const ExecutionHistoryKeyPrefix = 'vscode-supervisor.executionHistory.v1.';
 const DefaultHistorySize = 1000;
 
 export interface InputHistoryEntry {
     readonly when: number;
     readonly input: string;
     readonly debug?: string;
+}
+
+export enum ExecutionEntryType {
+    Startup = 'startup',
+    Execution = 'execution',
+}
+
+export interface ExecutionHistoryError {
+    readonly name: string;
+    readonly message: string;
+    readonly traceback: string[];
+}
+
+export interface ExecutionHistoryEntry {
+    readonly id: string;
+    readonly when: number;
+    prompt: string;
+    input: string;
+    outputType: ExecutionEntryType;
+    output: string | { banner: string; version: string };
+    error?: ExecutionHistoryError;
+    durationMs: number;
 }
 
 /**
@@ -17,6 +41,7 @@ export interface InputHistoryEntry {
 export class ExecutionHistoryService implements vscode.Disposable {
     private readonly _sessionEntries = new Map<string, InputHistoryEntry[]>();
     private readonly _languageEntries = new Map<string, InputHistoryEntry[]>();
+    private readonly _executionEntries = new Map<string, ExecutionHistoryEntry[]>();
     private readonly _knownEmptySessions = new Set<string>();
     private _writeQueue: Promise<void> = Promise.resolve();
     private _disposed = false;
@@ -53,6 +78,151 @@ export class ExecutionHistoryService implements vscode.Disposable {
         this._knownEmptySessions.delete(sessionId);
         this._persist(this._sessionKey(sessionId), sessionEntries);
         this._persist(this._languageKey(languageId), languageEntries);
+    }
+
+    getExecutionEntries(sessionId: string): ExecutionHistoryEntry[] {
+        return this._loadExecutionEntries(sessionId).map(entry => ({ ...entry }));
+    }
+
+    restoreLegacyExecutionEntries(
+        sessionId: string,
+        state: SerializedConsoleState,
+    ): ExecutionHistoryEntry[] {
+        if (this._storage.get(this._executionKey(sessionId)) !== undefined) {
+            return this.getExecutionEntries(sessionId);
+        }
+        const entries: ExecutionHistoryEntry[] = [];
+        for (const item of state.items) {
+            if (item.type === 'startup') {
+                entries.push({
+                    id: item.id,
+                    when: item.when,
+                    prompt: '',
+                    input: '',
+                    outputType: ExecutionEntryType.Startup,
+                    output: { banner: item.banner, version: item.version },
+                    durationMs: 0,
+                });
+                continue;
+            }
+            if (item.type !== 'activity') {
+                continue;
+            }
+            const input = item.items.find(entry => entry.type === 'input');
+            const error = item.items.find(entry => entry.type === 'error');
+            const output = item.items.map(entry => {
+                if (entry.type === 'stream') {
+                    return entry.text;
+                }
+                if (entry.type === 'output' || entry.type === 'outputPlot') {
+                    return entry.data['text/plain'] ?? '';
+                }
+                return '';
+            }).join('');
+            entries.push({
+                id: item.parentId,
+                when: input?.when ?? item.items[0]?.when ?? Date.now(),
+                prompt: input?.inputPrompt ?? '',
+                input: input?.code ?? '',
+                outputType: ExecutionEntryType.Execution,
+                output,
+                error: error && error.type === 'error'
+                    ? {
+                        name: error.name,
+                        message: error.message,
+                        traceback: error.traceback,
+                    }
+                    : undefined,
+                durationMs: 0,
+            });
+        }
+        this._executionEntries.set(sessionId, entries);
+        this._persist(this._executionKey(sessionId), entries);
+        return this.getExecutionEntries(sessionId);
+    }
+
+    recordExecutionInput(
+        sessionId: string,
+        executionId: string,
+        prompt: string,
+        input: string,
+        when: number = Date.now(),
+    ): void {
+        const entry = this._getOrCreateExecution(sessionId, executionId, when);
+        entry.prompt = prompt;
+        entry.input = input;
+        this._persistExecutionEntries(sessionId);
+    }
+
+    recordExecutionOutput(
+        sessionId: string,
+        executionId: string,
+        output: string,
+        when: number = Date.now(),
+        replace = false,
+    ): void {
+        if (!output) {
+            return;
+        }
+        const entry = this._getOrCreateExecution(sessionId, executionId, when);
+        const current = typeof entry.output === 'string' ? entry.output : '';
+        entry.output = replace ? output : current + output;
+        this._persistExecutionEntries(sessionId);
+    }
+
+    clearExecutionOutput(sessionId: string, executionId: string): void {
+        const entry = this._loadExecutionEntries(sessionId)
+            .find(candidate => candidate.id === executionId);
+        if (!entry) {
+            return;
+        }
+        entry.output = '';
+        this._persistExecutionEntries(sessionId);
+    }
+
+    recordExecutionError(
+        sessionId: string,
+        executionId: string,
+        error: ExecutionHistoryError,
+        when: number = Date.now(),
+    ): void {
+        const entry = this._getOrCreateExecution(sessionId, executionId, when);
+        entry.error = error;
+        this._persistExecutionEntries(sessionId);
+    }
+
+    completeExecution(sessionId: string, executionId: string): void {
+        const entry = this._loadExecutionEntries(sessionId)
+            .find(candidate => candidate.id === executionId);
+        if (!entry) {
+            return;
+        }
+        entry.durationMs = Math.max(0, Date.now() - entry.when);
+        this._persistExecutionEntries(sessionId);
+    }
+
+    recordStartup(sessionId: string, id: string, banner: string, version: string): void {
+        const entries = this._loadExecutionEntries(sessionId);
+        const existing = entries.find(entry => entry.id === id);
+        if (existing) {
+            existing.output = { banner, version };
+        } else {
+            entries.push({
+                id,
+                when: Date.now(),
+                prompt: '',
+                input: '',
+                outputType: ExecutionEntryType.Startup,
+                output: { banner, version },
+                durationMs: 0,
+            });
+        }
+        this._persistExecutionEntries(sessionId);
+    }
+
+    clearExecutionEntries(sessionId: string): void {
+        this._executionEntries.set(sessionId, []);
+        this._persist(this._executionKey(sessionId), []);
     }
 
     /**
@@ -110,6 +280,8 @@ export class ExecutionHistoryService implements vscode.Disposable {
         this._sessionEntries.delete(sessionId);
         this._knownEmptySessions.delete(sessionId);
         this._persist(this._sessionKey(sessionId), undefined);
+        this._executionEntries.delete(sessionId);
+        this._persist(this._executionKey(sessionId), undefined);
     }
 
     async flush(): Promise<void> {
@@ -141,6 +313,55 @@ export class ExecutionHistoryService implements vscode.Disposable {
         const entries = this._read(this._languageKey(languageId));
         this._languageEntries.set(languageId, entries);
         return entries;
+    }
+
+    private _loadExecutionEntries(sessionId: string): ExecutionHistoryEntry[] {
+        const cached = this._executionEntries.get(sessionId);
+        if (cached) {
+            return cached;
+        }
+        const key = this._executionKey(sessionId);
+        const stored = this._storage.get<unknown>(key, []);
+        const entries = Array.isArray(stored)
+            ? stored.filter((entry): entry is ExecutionHistoryEntry => (
+                typeof entry === 'object' &&
+                entry !== null &&
+                typeof (entry as ExecutionHistoryEntry).id === 'string' &&
+                typeof (entry as ExecutionHistoryEntry).when === 'number' &&
+                typeof (entry as ExecutionHistoryEntry).input === 'string'
+            ))
+            : [];
+        this._executionEntries.set(sessionId, entries);
+        return entries;
+    }
+
+    private _getOrCreateExecution(
+        sessionId: string,
+        executionId: string,
+        when: number,
+    ): ExecutionHistoryEntry {
+        const entries = this._loadExecutionEntries(sessionId);
+        let entry = entries.find(candidate => candidate.id === executionId);
+        if (!entry) {
+            entry = {
+                id: executionId,
+                when,
+                prompt: '',
+                input: '',
+                outputType: ExecutionEntryType.Execution,
+                output: '',
+                durationMs: 0,
+            };
+            entries.push(entry);
+        }
+        return entry;
+    }
+
+    private _persistExecutionEntries(sessionId: string): void {
+        this._persist(
+            this._executionKey(sessionId),
+            this._loadExecutionEntries(sessionId),
+        );
     }
 
     private _read(key: string): InputHistoryEntry[] {
@@ -182,7 +403,10 @@ export class ExecutionHistoryService implements vscode.Disposable {
             : DefaultHistorySize;
     }
 
-    private _persist(key: string, value: InputHistoryEntry[] | undefined): void {
+    private _persist(
+        key: string,
+        value: InputHistoryEntry[] | ExecutionHistoryEntry[] | undefined,
+    ): void {
         this._writeQueue = this._writeQueue
             .then(() => this._storage.update(key, value))
             .catch(error => {
@@ -198,5 +422,9 @@ export class ExecutionHistoryService implements vscode.Disposable {
 
     private _languageKey(languageId: string): string {
         return `${LanguageHistoryKeyPrefix}${languageId}`;
+    }
+
+    private _executionKey(sessionId: string): string {
+        return `${ExecutionHistoryKeyPrefix}${sessionId}`;
     }
 }

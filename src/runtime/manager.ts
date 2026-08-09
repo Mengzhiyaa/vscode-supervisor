@@ -1,4 +1,3 @@
-import { promises as fs } from 'fs';
 import * as vscode from 'vscode';
 import {
     type IDiscoveredLanguageRuntime,
@@ -6,33 +5,13 @@ import {
     type ILanguageRuntimeProvider,
     LanguageRuntimeSessionMode,
     type LanguageRuntimeMetadata,
+    type RuntimeRootSignature,
 } from '../api';
 import { RuntimeStartMode } from '../internal/runtimeTypes';
 import { RuntimeSessionService } from './runtimeSession';
+import { RuntimeDiscoveryCache } from './runtimeDiscoveryCache';
 
-const DISCOVERY_CACHE_KEY = 'vscode-supervisor.runtimeDiscoveryCache.v1';
-const DISCOVERY_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
-
-interface RuntimePathFingerprint {
-    size: number;
-    mtimeMs: number;
-    ctimeMs: number;
-}
-
-interface CachedRuntime {
-    metadata: LanguageRuntimeMetadata;
-    fingerprint?: RuntimePathFingerprint;
-}
-
-interface CachedLanguageDiscovery {
-    discoveredAt: number;
-    runtimes: CachedRuntime[];
-}
-
-interface RuntimeDiscoveryCache {
-    version: 1;
-    languages: Record<string, CachedLanguageDiscovery>;
-}
+const DISCOVERY_CACHE_REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Manages discovery and registration of language runtimes.
@@ -50,7 +29,6 @@ export class RuntimeManager implements vscode.Disposable, IRuntimeManager {
     private _discoveryComplete = false;
     private _discoveryPromise: Promise<void> | undefined;
     private readonly _discoveryCache: RuntimeDiscoveryCache;
-    private _cacheWriteChain = Promise.resolve();
 
     readonly id = RuntimeManager._nextRuntimeManagerId++;
 
@@ -65,9 +43,9 @@ export class RuntimeManager implements vscode.Disposable, IRuntimeManager {
         private readonly _sessionManager: RuntimeSessionService,
         private readonly _outputChannel: vscode.LogOutputChannel
     ) {
-        this._discoveryCache = this._context.globalState.get<RuntimeDiscoveryCache>(
-            DISCOVERY_CACHE_KEY,
-            { version: 1, languages: {} },
+        this._discoveryCache = new RuntimeDiscoveryCache(
+            this._context.globalState,
+            this._outputChannel,
         );
         this._disposables.push(this._onDidDiscoverRuntime);
         this._disposables.push(this._onDidFinishDiscovery);
@@ -152,16 +130,23 @@ export class RuntimeManager implements vscode.Disposable, IRuntimeManager {
             );
             await this._runWithConcurrency(providers, concurrency, async provider => {
                 try {
-                    const cached = force
-                        ? { restored: false, needsRevalidation: false }
-                        : await this._restoreCachedProvider(provider);
+                    const plan = await this._createDiscoveryPlan(provider, force);
+                    if (!plan.useCache) {
+                        this._outputChannel.debug(
+                            `Running ${plan.reason} discovery for ${provider.languageName}.`,
+                        );
+                        await this._discoverProvider(provider, plan.discoveryRootSignature);
+                        return;
+                    }
+
+                    const cached = await this._restoreCachedProvider(provider);
                     if (!cached.restored) {
-                        await this._discoverProvider(provider);
+                        await this._discoverProvider(provider, plan.discoveryRootSignature);
                     } else if (cached.needsRevalidation) {
                         this._outputChannel.debug(
                             `Revalidating cached ${provider.languageName} runtimes in the background.`,
                         );
-                        void this._discoverProvider(provider).catch(error => {
+                        void this._discoverProvider(provider, plan.discoveryRootSignature).catch(error => {
                             this._outputChannel.error(
                                 `Error revalidating runtimes for ${provider.languageId}: ${error}`,
                             );
@@ -200,8 +185,8 @@ export class RuntimeManager implements vscode.Disposable, IRuntimeManager {
                 continue;
             }
 
-            const installation = this.getBestInstallation(provider.languageId) ??
-                await provider.resolveInitialInstallation(this._outputChannel);
+            const installation = await provider.resolveInitialInstallation(this._outputChannel) ??
+                this.getBestInstallation(provider.languageId);
             if (!installation) {
                 continue;
             }
@@ -316,8 +301,11 @@ export class RuntimeManager implements vscode.Disposable, IRuntimeManager {
     }
 
     private async _discoverProvider<TInstallation>(
-        provider: ILanguageRuntimeProvider<TInstallation>
+        provider: ILanguageRuntimeProvider<TInstallation>,
+        discoveryRootSignature?: RuntimeRootSignature,
     ): Promise<void> {
+        const rootSignature = discoveryRootSignature ??
+            await this._getDiscoveryRootSignature(provider);
         const discovered: Array<{
             installation: TInstallation;
             metadata: LanguageRuntimeMetadata;
@@ -373,44 +361,48 @@ export class RuntimeManager implements vscode.Disposable, IRuntimeManager {
             );
         }
 
-        const cachedRuntimes = await Promise.all(discovered.map(async entry => ({
-            metadata: entry.metadata,
-            fingerprint: await this._fingerprint(entry.runtimePath),
-        })));
-        this._discoveryCache.languages[provider.languageId] = {
-            discoveredAt: Date.now(),
-            runtimes: cachedRuntimes,
-        };
-        await this._writeDiscoveryCache();
+        await this._discoveryCache.replaceBucket(
+            this._getProviderId(provider),
+            provider.languageId,
+            discovered.map(entry => entry.metadata),
+            rootSignature,
+        );
     }
 
     private async _restoreCachedProvider<TInstallation>(
         provider: ILanguageRuntimeProvider<TInstallation>,
     ): Promise<{ restored: boolean; needsRevalidation: boolean }> {
-        const cached = this._discoveryCache.languages[provider.languageId];
-        if (!cached || cached.runtimes.length === 0 || !provider.restoreInstallationFromMetadata) {
+        const providerId = this._getProviderId(provider);
+        const cached = this._discoveryCache.getBucket(providerId, provider.languageId);
+        if (!cached || cached.entries.length === 0 || !provider.restoreInstallationFromMetadata) {
             return { restored: false, needsRevalidation: false };
         }
 
         let restored = false;
-        let needsRevalidation =
-            Date.now() - cached.discoveredAt > DISCOVERY_CACHE_MAX_AGE_MS;
-        for (const entry of cached.runtimes) {
+        let needsRevalidation = false;
+        for (const entry of cached.entries) {
             const installation = provider.restoreInstallationFromMetadata(entry.metadata);
             if (!installation) {
                 needsRevalidation = true;
                 continue;
             }
             const runtimePath = provider.getRuntimePath(installation);
-            const fingerprint = await this._fingerprint(runtimePath);
-            if (!fingerprint) {
+            const stat = await this._discoveryCache.statRuntimePath(runtimePath);
+            if (!stat) {
                 needsRevalidation = true;
                 continue;
             }
-            if (!entry.fingerprint || !this._fingerprintsEqual(entry.fingerprint, fingerprint)) {
+            if (!this._discoveryCache.fingerprintsEqual(entry.fingerprint, stat.fingerprint)) {
                 needsRevalidation = true;
+                continue;
             }
             this.registerDiscoveredRuntime(provider.languageId, installation, entry.metadata);
+            await this._discoveryCache.markValidated(
+                providerId,
+                provider.languageId,
+                entry.metadata.runtimePath,
+                stat.fingerprint,
+            );
             restored = true;
         }
 
@@ -422,34 +414,79 @@ export class RuntimeManager implements vscode.Disposable, IRuntimeManager {
         return { restored, needsRevalidation };
     }
 
-    private async _fingerprint(runtimePath: string): Promise<RuntimePathFingerprint | undefined> {
-        try {
-            const stat = await fs.stat(runtimePath);
-            return {
-                size: stat.size,
-                mtimeMs: stat.mtimeMs,
-                ctimeMs: stat.ctimeMs,
-            };
-        } catch {
-            return undefined;
+    private async _createDiscoveryPlan<TInstallation>(
+        provider: ILanguageRuntimeProvider<TInstallation>,
+        bypassCache: boolean,
+    ): Promise<{
+        useCache: boolean;
+        reason: 'always-rediscover' | 'cold-start' | 'periodic' | 'roots-changed' | 'user-bypass' | 'warm-cache';
+        discoveryRootSignature?: RuntimeRootSignature;
+    }> {
+        const providerId = this._getProviderId(provider);
+        const bucket = this._discoveryCache.getBucket(providerId, provider.languageId);
+        const discoveryRootSignature = await this._getDiscoveryRootSignature(provider);
+        if (bypassCache) {
+            return { useCache: false, reason: 'user-bypass', discoveryRootSignature };
         }
+        if (provider.alwaysRediscover) {
+            return { useCache: false, reason: 'always-rediscover', discoveryRootSignature };
+        }
+        if (!bucket || bucket.entries.length === 0) {
+            return { useCache: false, reason: 'cold-start', discoveryRootSignature };
+        }
+        if (
+            discoveryRootSignature !== undefined &&
+            !this._discoveryRootSignaturesEqual(bucket.discoveryRootSignature, discoveryRootSignature)
+        ) {
+            return { useCache: false, reason: 'roots-changed', discoveryRootSignature };
+        }
+        if (Date.now() - bucket.lastFullDiscovery > DISCOVERY_CACHE_REFRESH_INTERVAL_MS) {
+            return { useCache: false, reason: 'periodic', discoveryRootSignature };
+        }
+        return { useCache: true, reason: 'warm-cache', discoveryRootSignature };
     }
 
-    private _fingerprintsEqual(
-        left: RuntimePathFingerprint,
-        right: RuntimePathFingerprint,
+    private _getProviderId<TInstallation>(provider: ILanguageRuntimeProvider<TInstallation>): string {
+        return provider.extensionId ?? `vscode-supervisor.${provider.languageId}`;
+    }
+
+    private async _getDiscoveryRootSignature<TInstallation>(
+        provider: ILanguageRuntimeProvider<TInstallation>,
+    ): Promise<RuntimeRootSignature | undefined> {
+        if (provider.getDiscoveryRootSignature) {
+            try {
+                const signature = await Promise.race([
+                    provider.getDiscoveryRootSignature(),
+                    new Promise<undefined>(resolve =>
+                        setTimeout(() => resolve(undefined), 500),
+                    ),
+                ]);
+                if (signature !== undefined) {
+                    return signature;
+                }
+            } catch (error) {
+                this._outputChannel.warn(
+                    `Failed to compute discovery root signature for ${provider.languageName}: ${error}`,
+                );
+            }
+        }
+
+        return undefined;
+    }
+
+    private _discoveryRootSignaturesEqual(
+        left: RuntimeRootSignature | undefined,
+        right: RuntimeRootSignature | undefined,
     ): boolean {
-        return left.size === right.size &&
-            left.mtimeMs === right.mtimeMs &&
-            left.ctimeMs === right.ctimeMs;
-    }
-
-    private async _writeDiscoveryCache(): Promise<void> {
-        const write = this._cacheWriteChain.then(() =>
-            this._context.globalState.update(DISCOVERY_CACHE_KEY, this._discoveryCache),
-        );
-        this._cacheWriteChain = write.then(() => undefined, () => undefined);
-        await write;
+        if (!left || !right || left.opaque !== right.opaque || left.entries.length !== right.entries.length) {
+            return false;
+        }
+        return left.entries.every((entry, index) => {
+            const other = right.entries[index];
+            return entry.path === other.path &&
+                entry.exists === other.exists &&
+                entry.mtimeMs === other.mtimeMs;
+        });
     }
 
     private async _runWithConcurrency<T>(

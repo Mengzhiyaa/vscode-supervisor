@@ -5,7 +5,10 @@ import {
     decodeImageDataUri,
     imageExtension,
 } from '../../editor/PlotEditorProvider';
-import { ExecutionHistoryService } from '../../services/console/executionHistoryService';
+import {
+    ExecutionEntryType,
+    ExecutionHistoryService,
+} from '../../services/console/executionHistoryService';
 import {
     injectViewerBridge,
     VIEWER_BRIDGE_PATH,
@@ -90,6 +93,51 @@ suite('[Unit] P3 Workbench and UX equivalence', () => {
         );
         assert.deepStrictEqual(restored.map(entry => entry.input), ['print(1)', 'print(2)']);
         history.dispose();
+    });
+
+    test('persists and reloads semantic execution history independently of console UI state', async () => {
+        const storage = new MemoryMemento();
+        const history = new ExecutionHistoryService(storage, createLog());
+        const when = Date.now() - 10;
+
+        history.recordExecutionOutput('semantic-session', 'execution-1', 'early ', when);
+        history.recordExecutionInput('semantic-session', 'execution-1', '> ', 'print(42)', when);
+        history.recordExecutionOutput('semantic-session', 'execution-1', '42', when);
+        history.recordExecutionError('semantic-session', 'execution-1', {
+            name: 'Warning',
+            message: 'example',
+            traceback: ['trace'],
+        });
+        history.completeExecution('semantic-session', 'execution-1');
+        history.recordStartup('semantic-session', 'startup-semantic-session', 'Python', '3.12');
+        await history.flush();
+        history.dispose();
+
+        const restored = new ExecutionHistoryService(storage, createLog());
+        const entries = restored.getExecutionEntries('semantic-session');
+        assert.strictEqual(entries.length, 2);
+        assert.deepStrictEqual(entries[0], {
+            id: 'execution-1',
+            when,
+            prompt: '> ',
+            input: 'print(42)',
+            outputType: ExecutionEntryType.Execution,
+            output: 'early 42',
+            error: {
+                name: 'Warning',
+                message: 'example',
+                traceback: ['trace'],
+            },
+            durationMs: entries[0].durationMs,
+        });
+        assert.ok(entries[0].durationMs >= 0);
+        assert.strictEqual(entries[1].outputType, ExecutionEntryType.Startup);
+        assert.deepStrictEqual(entries[1].output, { banner: 'Python', version: '3.12' });
+
+        restored.clearExecutionEntries('semantic-session');
+        await restored.flush();
+        assert.deepStrictEqual(restored.getExecutionEntries('semantic-session'), []);
+        restored.dispose();
     });
 
     test('injects the Viewer bridge once and under the proxy base path', () => {

@@ -290,7 +290,7 @@ export class PositronConnectionsService implements vscode.Disposable {
             this._onDidFocusConnection,
             this.driverManager,
             this.profileStore,
-            this.driverManager.onDidChangeDrivers(() => void this._restoreProfiles()),
+            this.driverManager.onDidChangeDrivers(() => this._loadProfiles()),
             this.profileStore.onDidChangeProfiles(() => this._onDidChangeConnections.fire(this.connections)),
         );
     }
@@ -307,7 +307,7 @@ export class PositronConnectionsService implements vscode.Disposable {
         for (const profile of this.profileStore.getProfiles()) {
             this._registerProfileDescriptor(profile);
         }
-        void this._restoreProfiles();
+        this._loadProfiles();
         this._sessionManager.sessions.forEach(session => this._attachSession(session));
         this._disposables.push(
             this._sessionManager.onDidCreateSession(session => this._attachSession(session)),
@@ -478,7 +478,7 @@ export class PositronConnectionsService implements vscode.Disposable {
             title: profile.connectionName,
             source: { kind: SurfaceSourceKind.Extension, id: profile.driverId },
             retention: 'persistent',
-            backendState: 'pending',
+            backendState: 'ready',
             payload: {
                 profileId: profile.id,
                 driverId: profile.driverId,
@@ -493,20 +493,9 @@ export class PositronConnectionsService implements vscode.Disposable {
         }
     }
 
-    private async _restoreProfiles(): Promise<void> {
+    private _loadProfiles(): void {
         for (const profile of this.profileStore.getProfiles()) {
             this._registerProfileDescriptor(profile);
-            if (profile.autoConnect === false || !this.driverManager.getDriver(profile.driverId)) {
-                continue;
-            }
-            if (this._instances.get(`profile:${profile.id}`)?.active || this._pendingProfiles.has(profile.id)) {
-                continue;
-            }
-            try {
-                await this.connectProfile(profile.id);
-            } catch (error) {
-                this._outputChannel.warn(`[Connections] Failed to restore profile '${profile.id}': ${error}`);
-            }
         }
     }
 

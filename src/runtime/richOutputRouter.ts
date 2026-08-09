@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import type {
     IRuntimeOutputRenderer,
+    RuntimeClearOutputMessage,
     RuntimeOutputMessage,
     RuntimeRenderedOutput,
 } from '../api';
@@ -61,6 +62,12 @@ interface RichPayload {
     readonly path?: string;
     readonly html?: string;
     readonly title?: string;
+}
+
+interface ManagedRichOutput {
+    readonly session: RuntimeSession;
+    message: RichOutputMessage;
+    rendererId?: string;
 }
 
 function asString(value: unknown): string | undefined {
@@ -135,6 +142,8 @@ export class RichOutputRouter implements vscode.Disposable {
     private readonly _routeChains = new Map<string, Promise<void>>();
     private readonly _reportedFailures = new Set<string>();
     private readonly _renderers = new Map<string, IRuntimeOutputRenderer>();
+    private readonly _managedOutputs = new Map<string, ManagedRichOutput>();
+    private readonly _pendingClears = new Set<string>();
     private readonly _onDidRouteOutputEmitter = new vscode.EventEmitter<RichOutputRouteRecord>();
 
     readonly onDidRouteOutput = this._onDidRouteOutputEmitter.event;
@@ -190,9 +199,19 @@ export class RichOutputRouter implements vscode.Disposable {
             throw new Error(`Runtime output renderer '${renderer.id}' is already registered.`);
         }
         this._renderers.set(renderer.id, renderer);
+        for (const managed of this._managedOutputs.values()) {
+            if (!managed.rendererId) {
+                this._replayWithRenderer(renderer, managed);
+            }
+        }
         return new vscode.Disposable(() => {
             if (this._renderers.get(renderer.id) === renderer) {
                 this._renderers.delete(renderer.id);
+                for (const managed of this._managedOutputs.values()) {
+                    if (managed.rendererId === renderer.id) {
+                        managed.rendererId = undefined;
+                    }
+                }
             }
         });
     }
@@ -206,6 +225,9 @@ export class RichOutputRouter implements vscode.Disposable {
             session.onDidReceiveRuntimeMessageOutput(message => this._enqueue(session, message)),
             session.onDidReceiveRuntimeMessageResult(message => this._enqueue(session, message)),
             session.onDidReceiveRuntimeMessageUpdateOutput(message => this._enqueue(session, message)),
+            session.onDidReceiveRuntimeMessageClearOutput(message => {
+                this._handleClearOutput(session, message);
+            }),
             session.onDidReceiveRuntimeMessageIPyWidget(message => {
                 this._enqueue(session, this._toRichIPyWidgetMessage(message));
             }),
@@ -221,20 +243,107 @@ export class RichOutputRouter implements vscode.Disposable {
                 this._routeChains.delete(key);
             }
         }
+        this._clearManagedOutputs(sessionId);
+        for (const key of this._pendingClears) {
+            if (key.startsWith(`${sessionId}:`)) {
+                this._pendingClears.delete(key);
+            }
+        }
     }
 
     private _enqueue(session: RuntimeSession, message: RichOutputMessage): void {
+        const pendingClearKey = `${session.sessionId}:${message.parent_id}`;
+        if (this._pendingClears.delete(pendingClearKey)) {
+            this._clearManagedOutputs(session.sessionId, message.parent_id);
+        }
         if (!RoutedRichOutputKinds.has(message.kind)) {
             return;
         }
 
-        const outputKey = message.output_id ?? message.id;
-        const key = `${session.sessionId}:${outputKey}`;
+        const key = this._managedOutputKey(session.sessionId, message);
+        if (
+            message.kind === RuntimeOutputKind.IPyWidget ||
+            message.kind === RuntimeOutputKind.WebviewPreload
+        ) {
+            const previousOutput = this._managedOutputs.get(key);
+            this._managedOutputs.set(key, {
+                session,
+                message,
+                rendererId: previousOutput?.rendererId,
+            });
+        }
         const previous = this._routeChains.get(key) ?? Promise.resolve();
         const current = previous
             .catch(() => undefined)
             .then(() => this._routeOutput(session, message))
             .catch(error => this._handleRouteFailure(session, message, error))
+            .finally(() => {
+                if (this._routeChains.get(key) === current) {
+                    this._routeChains.delete(key);
+                }
+            });
+        this._routeChains.set(key, current);
+    }
+
+    private _handleClearOutput(
+        session: RuntimeSession,
+        message: RuntimeClearOutputMessage,
+    ): void {
+        const key = `${session.sessionId}:${message.parent_id}`;
+        if (message.wait) {
+            this._pendingClears.add(key);
+            return;
+        }
+        this._pendingClears.delete(key);
+        this._clearManagedOutputs(session.sessionId, message.parent_id);
+    }
+
+    private _clearManagedOutputs(sessionId: string, parentId?: string): void {
+        for (const [key, managed] of this._managedOutputs) {
+            if (
+                managed.session.sessionId !== sessionId ||
+                (parentId !== undefined && managed.message.parent_id !== parentId)
+            ) {
+                continue;
+            }
+            this._managedOutputs.delete(key);
+            const renderer = managed.rendererId
+                ? this._renderers.get(managed.rendererId)
+                : undefined;
+            if (renderer?.disposeOutput) {
+                void Promise.resolve()
+                    .then(() => renderer.disposeOutput!(this._rendererContext(managed)))
+                    .catch(error => this._outputChannel.warn(
+                        `[RichOutputRouter] Renderer '${renderer.id}' failed to dispose output: ${error}`,
+                    ));
+            }
+            this._surfaceLifecycle?.disposeModel(
+                createSurfaceModelId(
+                    SurfaceModelKind.Widget,
+                    managed.session.sessionId,
+                    managed.message.output_id ?? managed.message.id,
+                ),
+                'runtime-clear-output',
+            );
+        }
+    }
+
+    private _replayWithRenderer(
+        renderer: IRuntimeOutputRenderer,
+        managed: ManagedRichOutput,
+    ): void {
+        const key = this._managedOutputKey(managed.session.sessionId, managed.message);
+        const previous = this._routeChains.get(key) ?? Promise.resolve();
+        const current = previous
+            .catch(() => undefined)
+            .then(async () => {
+                const latest = this._managedOutputs.get(key);
+                if (latest !== managed || latest.rendererId) {
+                    return;
+                }
+                await this._routeWithRenderer(renderer, latest.session, latest.message);
+            })
+            .catch(error => this._handleRouteFailure(managed.session, managed.message, error))
             .finally(() => {
                 if (this._routeChains.get(key) === current) {
                     this._routeChains.delete(key);
@@ -307,53 +416,87 @@ export class RichOutputRouter implements vscode.Disposable {
         session: RuntimeSession,
         message: RichOutputMessage,
     ): Promise<boolean> {
-        const mimeTypes = Object.keys(message.data);
         for (const renderer of this._renderers.values()) {
-            if (
-                renderer.outputKinds?.length &&
-                !renderer.outputKinds.includes(message.kind)
-            ) {
-                continue;
+            if (await this._routeWithRenderer(renderer, session, message)) {
+                return true;
             }
-            if (
-                renderer.mimeTypes?.length &&
-                !renderer.mimeTypes.some(mimeType => mimeTypes.includes(mimeType))
-            ) {
-                continue;
-            }
-
-            let rendered: RuntimeRenderedOutput | undefined;
-            try {
-                rendered = await renderer.render(
-                    message as unknown as RuntimeOutputMessage,
-                    { session, outputKind: message.kind },
-                );
-            } catch (error) {
-                this._outputChannel.error(
-                    `[RichOutputRouter] Renderer '${renderer.id}' failed: ${error}`,
-                );
-                continue;
-            }
-            if (!rendered) {
-                continue;
-            }
-            if (!rendered.uri && !rendered.html) {
-                this._outputChannel.warn(
-                    `[RichOutputRouter] Renderer '${renderer.id}' returned no URI or HTML.`,
-                );
-                continue;
-            }
-
-            await this._showRenderedOutput(session, message, renderer.id, rendered);
-            if (
-                message.kind === RuntimeOutputKind.IPyWidget ||
-                message.kind === RuntimeOutputKind.WebviewPreload
-            ) {
-                this._registerWidgetModel(session, message, true);
-            }
-            return true;
         }
         return false;
+    }
+
+    private _rendererMatches(
+        renderer: IRuntimeOutputRenderer,
+        message: RichOutputMessage,
+    ): boolean {
+        const mimeTypes = Object.keys(message.data);
+        return !(
+            renderer.outputKinds?.length &&
+            !renderer.outputKinds.includes(message.kind)
+        ) && !(
+            renderer.mimeTypes?.length &&
+            !renderer.mimeTypes.some(mimeType => mimeTypes.includes(mimeType))
+        );
+    }
+
+    private async _routeWithRenderer(
+        renderer: IRuntimeOutputRenderer,
+        session: RuntimeSession,
+        message: RichOutputMessage,
+    ): Promise<boolean> {
+        if (!this._rendererMatches(renderer, message)) {
+            return false;
+        }
+
+        let rendered: RuntimeRenderedOutput | undefined;
+        try {
+            rendered = await renderer.render(
+                message as unknown as RuntimeOutputMessage,
+                this._rendererContext({ session, message }),
+            );
+        } catch (error) {
+            this._outputChannel.error(
+                `[RichOutputRouter] Renderer '${renderer.id}' failed: ${error}`,
+            );
+            return false;
+        }
+        if (!rendered) {
+            return false;
+        }
+        if (!rendered.uri && !rendered.html) {
+            this._outputChannel.warn(
+                `[RichOutputRouter] Renderer '${renderer.id}' returned no URI or HTML.`,
+            );
+            return false;
+        }
+
+        await this._showRenderedOutput(session, message, renderer.id, rendered);
+        if (
+            message.kind === RuntimeOutputKind.IPyWidget ||
+            message.kind === RuntimeOutputKind.WebviewPreload
+        ) {
+            const managed = this._managedOutputs.get(
+                this._managedOutputKey(session.sessionId, message),
+            );
+            if (managed) {
+                managed.rendererId = renderer.id;
+            }
+            this._registerWidgetModel(session, message, true);
+        }
+        return true;
+    }
+
+    private _rendererContext(
+        managed: Pick<ManagedRichOutput, 'session' | 'message'>,
+    ) {
+        return {
+            session: managed.session,
+            outputKind: managed.message.kind,
+            outputId: managed.message.output_id ?? managed.message.id,
+        };
+    }
+
+    private _managedOutputKey(sessionId: string, message: RichOutputMessage): string {
+        return `${sessionId}:${message.output_id ?? message.id}`;
     }
 
     private async _showRenderedOutput(
@@ -731,11 +874,18 @@ ${plainText ? `<pre>${escapeHtml(plainText)}</pre>` : ''}
     }
 
     dispose(): void {
+        const sessionIds = new Set(
+            [...this._managedOutputs.values()].map(output => output.session.sessionId),
+        );
+        sessionIds.forEach(sessionId => this._clearManagedOutputs(sessionId));
         for (const disposables of this._sessionDisposables.values()) {
             disposables.forEach(disposable => disposable.dispose());
         }
         this._sessionDisposables.clear();
         this._routeChains.clear();
+        this._managedOutputs.clear();
+        this._pendingClears.clear();
+        this._renderers.clear();
         this._disposables.forEach(disposable => disposable.dispose());
     }
 }

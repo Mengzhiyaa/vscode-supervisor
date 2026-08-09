@@ -118,7 +118,6 @@ export class RuntimeStartupService implements vscode.Disposable {
                     session.runtimeMetadata,
                 );
                 void this._warnAboutArchitectureMismatch(session);
-                void this._saveRuntimeAffiliation(session.runtimeMetadata);
                 void this.saveWorkspaceSessions();
             }),
             this._sessionManager.onDidFailStartRuntime((session) => {
@@ -337,16 +336,7 @@ export class RuntimeStartupService implements vscode.Disposable {
 
         await this._sessionManager.restorePersistedSessionsInBackground();
 
-        if (this._sessionManager.sessions.length > 0) {
-            this._setStartupPhase(RuntimeStartupPhase.Reconnecting);
-            const restoredSession =
-                this._sessionManager.activeSession ?? this._sessionManager.sessions[0];
-            if (restoredSession) {
-                this._fireRuntimeStartupEvent(
-                    this._createRuntimeStartupEventForSession(restoredSession, false),
-                );
-            }
-        } else {
+        if (this._sessionManager.sessions.length === 0) {
             this._setStartupPhase(RuntimeStartupPhase.Starting);
         }
 
@@ -358,7 +348,7 @@ export class RuntimeStartupService implements vscode.Disposable {
             }
 
             if (!this._sessionManager.hasStartingOrRunningConsole()) {
-                await this._startRecommendedLanguageRuntime();
+                await this._startRecommendedLanguageRuntimes();
             }
         } catch (error) {
             this._outputChannel.error(`[RuntimeStartup] Error while auto-starting runtimes: ${error}`);
@@ -643,7 +633,10 @@ export class RuntimeStartupService implements vscode.Disposable {
             CoreConfigurationSections.supervisor,
             { languageId: session.runtimeMetadata.languageId },
         );
-        if (!config.get<boolean>('interpreters.restartOnCrash', true)) {
+        const restartOnCrash = config.get<boolean>('interpreters.restartOnCrash', true);
+
+        if (!restartOnCrash) {
+            await this._notifySessionCrash(session, exitCode, false);
             return;
         }
 
@@ -655,23 +648,39 @@ export class RuntimeStartupService implements vscode.Disposable {
                 'automatic crash recovery',
                 false,
             );
-            const choice = await vscode.window.showWarningMessage(
-                `${session.runtimeMetadata.runtimeName} exited unexpectedly ` +
-                `(code ${exitCode}) and was restarted.`,
+            await this._notifySessionCrash(session, exitCode, true);
+        } catch (error) {
+            this._outputChannel.error(
+                `[RuntimeStartup] Failed to restart crashed session ${session.sessionId}: ${error}`,
+            );
+            const choice = await vscode.window.showErrorMessage(
+                `${session.runtimeMetadata.runtimeName} exited unexpectedly and could not be restarted. ` +
+                `You may have lost unsaved work.\nExit code: ${exitCode}`,
                 'Open Kernel Log',
             );
             if (choice === 'Open Kernel Log') {
                 session.showOutput(LanguageRuntimeSessionChannel.Kernel);
             }
-        } catch (error) {
-            this._outputChannel.error(
-                `[RuntimeStartup] Failed to restart crashed session ${session.sessionId}: ${error}`,
-            );
-            void vscode.window.showErrorMessage(
-                `${session.runtimeMetadata.runtimeName} exited unexpectedly and could not be restarted.`,
-            );
         } finally {
             this._crashRestartsInProgress.delete(session.sessionId);
+        }
+    }
+
+    private async _notifySessionCrash(
+        session: RuntimeSession,
+        exitCode: number,
+        restarted: boolean,
+    ): Promise<void> {
+        const action = restarted
+            ? 'and was automatically restarted'
+            : 'and was not automatically restarted';
+        const choice = await vscode.window.showWarningMessage(
+            `${session.runtimeMetadata.runtimeName} exited unexpectedly ${action}. ` +
+            `You may have lost unsaved work.\nExit code: ${exitCode}`,
+            'Open Kernel Log',
+        );
+        if (choice === 'Open Kernel Log') {
+            session.showOutput(LanguageRuntimeSessionChannel.Kernel);
         }
     }
 
@@ -720,7 +729,23 @@ export class RuntimeStartupService implements vscode.Disposable {
 
         this._outputChannel.info(`[RuntimeStartup] Found ${sessions.length} persisted session(s) to restore`);
 
-        const validSessions = await Promise.all(sessions.map(async (persisted) => {
+        const sortedSessions = sessions
+            .map((persisted, index) => ({ persisted, index }))
+            .sort((left, right) =>
+                (right.persisted.lastUsed ?? 0) - (left.persisted.lastUsed ?? 0) ||
+                left.index - right.index,
+            )
+            .map(({ persisted }) => persisted);
+
+        // Match Positron's restore contract: notify the UI once for the
+        // restore operation, rather than once for every persisted session.
+        const startupSession = sortedSessions[0];
+        this._fireRuntimeStartupEvent({
+            ...this._createRuntimeStartupEventFromSerializedSession(startupSession, false),
+            activate: true,
+        });
+
+        const validSessions = await Promise.all(sortedSessions.map(async (persisted) => {
             const provider = this._runtimeManager.getRuntimeProvider(persisted.runtimeMetadata.languageId);
             if (!provider) {
                 this._outputChannel.debug(
@@ -780,18 +805,16 @@ export class RuntimeStartupService implements vscode.Disposable {
             reconnectableSessions.map((session) => session.persisted.sessionName).join(', '),
         );
 
-        let firstConsole = true;
+        const foregroundSessionId = reconnectableSessions.find(
+            ({ persisted }) => !persisted.metadata.notebookUri,
+        )?.persisted.metadata.sessionId;
 
         await Promise.all(reconnectableSessions.map(async ({ persisted, runtimeMetadata }, index) => {
             const marker = `[Reconnect ${persisted.metadata.sessionId} (${index + 1}/${reconnectableSessions.length})]`;
-            const activate = firstConsole;
-            if (!persisted.metadata.notebookUri) {
-                firstConsole = false;
-            }
+            const activate = persisted.metadata.sessionId === foregroundSessionId;
 
             try {
                 this._outputChannel.debug(`${marker}: Restoring session for ${persisted.sessionName}`);
-                this._fireRuntimeStartupEvent(this._createRuntimeStartupEventFromSerializedSession(persisted, false));
 
                 await this._sessionManager.restoreRuntimeSession(
                     runtimeMetadata,
@@ -1028,20 +1051,19 @@ export class RuntimeStartupService implements vscode.Disposable {
             })
             .sort((a, b) => b.lastUsed - a.lastUsed);
 
-        for (let index = 0; index < affiliations.length; index += 1) {
-            const affiliation = affiliations[index];
-            try {
-                await this._startAffiliatedRuntime(affiliation, index === 0);
-            } catch (error) {
+        if (affiliations.length === 0) {
+            return;
+        }
+
+        const primary = affiliations[0];
+        await this._startAffiliatedRuntime(primary, true);
+
+        for (const affiliation of affiliations.slice(1)) {
+            void this._startAffiliatedRuntime(affiliation, false).catch(error => {
                 this._outputChannel.warn(
                     `[RuntimeStartup] Failed to start affiliated runtime ${affiliation.metadata.runtimeName}: ${error}`,
                 );
-                continue;
-            }
-
-            if (this._sessionManager.hasStartingOrRunningConsole(affiliation.metadata.languageId)) {
-                break;
-            }
+            });
         }
     }
 
@@ -1064,22 +1086,34 @@ export class RuntimeStartupService implements vscode.Disposable {
         );
     }
 
-    private async _startRecommendedLanguageRuntime(): Promise<void> {
+    private async _startRecommendedLanguageRuntimes(): Promise<void> {
         const recommendedRuntimes = await this._getRecommendedRuntimes(this._getDisabledLanguageIds());
-        for (const recommendedRuntime of recommendedRuntimes) {
+        await Promise.all(recommendedRuntimes.map(async (recommendedRuntime, index) => {
             const startupBehavior = this._getStartupBehavior(recommendedRuntime.languageId);
-            if (startupBehavior === LanguageStartupBehavior.Disabled ||
-                startupBehavior === LanguageStartupBehavior.Manual) {
-                continue;
+            if (startupBehavior === LanguageStartupBehavior.Disabled) {
+                return;
             }
 
-            await this._autoStartRuntime(
-                recommendedRuntime,
-                'Recommended runtime for workspace',
-                true,
-            );
-            return;
-        }
+            if (recommendedRuntime.startupBehavior === LanguageRuntimeStartupBehavior.Immediate) {
+                await this._autoStartRuntime(
+                    recommendedRuntime,
+                    'Recommended runtime for workspace',
+                    index === 0,
+                );
+                return;
+            }
+
+            if (!this._getAffiliatedRuntime(recommendedRuntime.languageId)) {
+                await this._context.workspaceState.update(
+                    this._storageKeyForLanguage(recommendedRuntime.languageId),
+                    {
+                        metadata: recommendedRuntime,
+                        lastUsed: 0,
+                        lastStarted: 0,
+                    } satisfies IAffiliatedRuntimeMetadata,
+                );
+            }
+        }));
     }
 
     private async _autoStartAfterDiscovery(): Promise<void> {
@@ -1147,7 +1181,7 @@ export class RuntimeStartupService implements vscode.Disposable {
         source: string,
         activate: boolean,
     ): Promise<void> {
-        if (!this._isAutoStartupAllowed(metadata.languageId)) {
+        if (this._getStartupBehavior(metadata.languageId) === LanguageStartupBehavior.Disabled) {
             return;
         }
 
@@ -1211,23 +1245,6 @@ export class RuntimeStartupService implements vscode.Disposable {
         );
     }
 
-    private _createRuntimeStartupEventForSession(
-        session: RuntimeSession,
-        newSession: boolean,
-    ): IRuntimeAutoStartEvent {
-        return {
-            runtime: {
-                ...session.runtimeMetadata,
-                runtimeName:
-                    session.dynState.sessionName ||
-                    session.sessionMetadata.sessionName ||
-                    session.runtimeMetadata.runtimeName,
-            },
-            newSession,
-            activate: session.sessionMetadata.sessionMode === LanguageRuntimeSessionMode.Console,
-        };
-    }
-
     private _createRuntimeStartupEventFromSerializedSession(
         session: SerializedSessionMetadata,
         newSession: boolean,
@@ -1250,14 +1267,7 @@ export class RuntimeStartupService implements vscode.Disposable {
         const metadataGroups = await Promise.all(
             this._runtimeManagers.map((manager) => manager.recommendWorkspaceRuntimes(disabledLanguageIds)),
         );
-        const deduped = new Map<string, LanguageRuntimeMetadata>();
-
-        for (const metadata of metadataGroups.flat()) {
-            deduped.set(`${metadata.languageId}:${metadata.runtimeId}`, metadata);
-        }
-
-        return Array.from(deduped.values())
-            .sort((left, right) => this._getRecommendationScore(right) - this._getRecommendationScore(left));
+        return metadataGroups.flat();
     }
 
     private async _startEncounteredLanguageRuntime(): Promise<void> {
@@ -1362,28 +1372,6 @@ export class RuntimeStartupService implements vscode.Disposable {
     private _hasEncounteredLanguage(languageId: string): boolean {
         return this._sessionManager.hasEncounteredLanguage(languageId) ||
             this._workspaceRecommendedLanguagesByLanguageId.has(languageId);
-    }
-
-    private _getRecommendationScore(metadata: LanguageRuntimeMetadata): number {
-        let score = 0;
-
-        if (this._workspaceRecommendedLanguagesByLanguageId.has(metadata.languageId)) {
-            score += 100;
-        }
-
-        if (this._hasEncounteredLanguage(metadata.languageId)) {
-            score += 50;
-        }
-
-        if (metadata.startupBehavior === LanguageRuntimeStartupBehavior.Immediate) {
-            score += 10;
-        }
-
-        if (this.getPreferredRuntime(metadata.languageId)?.runtimeId === metadata.runtimeId) {
-            score += 5;
-        }
-
-        return score;
     }
 
     dispose(): void {

@@ -188,7 +188,7 @@ suite('[Unit] Connections surface', () => {
         manager.dispose();
     });
 
-    test('restores a saved profile through driver, secret, backend, and model layers', async () => {
+    test('restores a saved profile definition without reconnecting until explicitly requested', async () => {
         const profileState = new MemoryMemento();
         const lifecycleState = new MemoryMemento();
         const secrets = new MemorySecretStorage();
@@ -257,20 +257,22 @@ suite('[Unit] Connections surface', () => {
             sessionManager, secondLifecycle, output, profileState, secrets,
         );
         second.initialize();
-        const restored = new Promise<void>(resolve => {
-            const subscription = second.onDidChangeConnections(connections => {
-                if (connections.some(connection => connection.id === 'profile:warehouse-profile' && connection.active)) {
-                    subscription.dispose();
-                    resolve();
-                }
-            });
-        });
         second.registerDriver(driver);
-        await restored;
 
-        assert.deepStrictEqual(passwords, ['secret', 'secret']);
+        assert.deepStrictEqual(passwords, ['secret']);
+        assert.strictEqual(
+            second.connections.find(connection => connection.id === 'profile:warehouse-profile')?.active,
+            false,
+        );
         assert.strictEqual(secondLifecycle.getModel(modelId)?.restore.backend, 'ready');
         assert.strictEqual(secondLifecycle.getModel(modelId)?.restore.surface, 'pending');
+
+        await second.connectProfile('warehouse-profile');
+        assert.deepStrictEqual(passwords, ['secret', 'secret']);
+        assert.strictEqual(
+            second.connections.find(connection => connection.id === 'profile:warehouse-profile')?.active,
+            true,
+        );
         second.dispose();
         secondLifecycle.dispose();
         createSession.dispose();

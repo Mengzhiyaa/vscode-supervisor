@@ -822,6 +822,7 @@
         "supervisor.interpreters.startupBehavior": {
           "type": "string",
           "default": "auto",
+          "scope": "language-overridable",
           "enum": [
             "always",
             "auto",

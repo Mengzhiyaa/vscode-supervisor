@@ -196,6 +196,7 @@ function createBridge(options: {
     });
     return {
         bridge,
+        instance,
         ...rpc,
         logs,
         get dataRequests() { return dataRequests; },
@@ -349,6 +350,115 @@ suite('[Unit] Data Explorer webview bridge P0 protocol', () => {
         await pending;
 
         assert.ok(!fixture.notifications.some(({ method }) => method === 'dataExplorer/data'));
+        fixture.bridge.dispose();
+    });
+
+    test('coalesces rapid viewport updates with latest-wins publication', async () => {
+        const firstResult = deferred<{ columns: Array<Array<number | string>> }>();
+        let requestCount = 0;
+        const fixture = createBridge({
+            rows: 100,
+            columns: 1,
+            getDataValues: () => {
+                requestCount += 1;
+                return requestCount === 1
+                    ? firstResult.promise
+                    : Promise.resolve({ columns: [['latest']] });
+            },
+        });
+        fixture.bridge.registerNotificationHandlers();
+        const handler = fixture.handlers.get('dataExplorer/requestData')!;
+
+        const first = handler({
+            startRow: 0,
+            endRow: 1,
+            columns: [0],
+            requestId: 1,
+            generation: 0,
+        });
+        await Promise.resolve();
+        await Promise.resolve();
+        const second = handler({
+            startRow: 20,
+            endRow: 21,
+            columns: [0],
+            requestId: 2,
+            generation: 0,
+        });
+        firstResult.resolve({ columns: [['stale']] });
+        await Promise.all([first, second]);
+
+        const published = fixture.notifications.filter(
+            ({ method }) => method === 'dataExplorer/data',
+        );
+        assert.deepStrictEqual(
+            published.map(({ params }) => (params as { requestId: number }).requestId),
+            [2],
+        );
+        assert.strictEqual(fixture.dataRequests, 2);
+        fixture.bridge.dispose();
+    });
+
+    test('coordinates latest viewport publication across surfaces for the same instance', async () => {
+        const firstResult = deferred<{ columns: Array<Array<number | string>> }>();
+        let requestCount = 0;
+        const fixture = createBridge({
+            rows: 100,
+            columns: 1,
+            getDataValues: () => {
+                requestCount += 1;
+                return requestCount === 1
+                    ? firstResult.promise
+                    : Promise.resolve({ columns: [['latest-surface']] });
+            },
+        });
+        const secondRpc = createConnection();
+        const secondBridge = new DataExplorerWebviewBridge({
+            connection: secondRpc.connection,
+            panel: { active: false, visible: true, dispose: () => undefined } as any,
+            instance: fixture.instance,
+            logChannel: { debug: () => undefined } as any,
+            isInstanceActive: () => false,
+            isInstanceInNewWindow: () => false,
+            onSyncActiveContexts: () => undefined,
+            onMoveToNewWindow: async () => undefined,
+            openAsPlaintext: async () => undefined,
+            openAsSpreadsheet: async () => undefined,
+        });
+        fixture.bridge.registerNotificationHandlers();
+        secondBridge.registerNotificationHandlers();
+
+        const first = fixture.handlers.get('dataExplorer/requestData')!({
+            startRow: 0,
+            endRow: 1,
+            columns: [0],
+            requestId: 10,
+            generation: 0,
+        });
+        await Promise.resolve();
+        await Promise.resolve();
+        const second = secondRpc.handlers.get('dataExplorer/requestData')!({
+            startRow: 50,
+            endRow: 51,
+            columns: [0],
+            requestId: 11,
+            generation: 0,
+        });
+        firstResult.resolve({ columns: [['stale-surface']] });
+        await Promise.all([first, second]);
+
+        assert.strictEqual(
+            fixture.notifications.filter(({ method }) => method === 'dataExplorer/data').length,
+            0,
+        );
+        assert.deepStrictEqual(
+            secondRpc.notifications
+                .filter(({ method }) => method === 'dataExplorer/data')
+                .map(({ params }) => (params as { requestId: number }).requestId),
+            [11],
+        );
+        assert.strictEqual(fixture.dataRequests, 2);
+        secondBridge.dispose();
         fixture.bridge.dispose();
     });
 

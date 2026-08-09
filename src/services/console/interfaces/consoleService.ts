@@ -172,6 +172,8 @@ export interface IPositronConsoleService extends vscode.Disposable {
         mode?: RuntimeCodeExecutionMode,
         errorBehavior?: RuntimeErrorBehavior,
         executionId?: string,
+        documentUri?: vscode.Uri,
+        executionMetadata?: Record<string, unknown>,
     ): Promise<string>;
     getConsoleInstance(sessionId: string): IPositronConsoleInstance | undefined;
 
@@ -255,6 +257,7 @@ export interface IPositronConsoleInstance extends vscode.Disposable {
         mode?: RuntimeCodeExecutionMode,
         errorBehavior?: RuntimeErrorBehavior,
         executionId?: string,
+        executionMetadata?: Record<string, unknown>,
     ): Promise<void>;
     executeCode(
         code: string,
@@ -262,6 +265,7 @@ export interface IPositronConsoleInstance extends vscode.Disposable {
         mode?: RuntimeCodeExecutionMode,
         errorBehavior?: RuntimeErrorBehavior,
         executionId?: string,
+        executionMetadata?: Record<string, unknown>,
     ): void;
     replyToPrompt(value: string): void;
     attachRuntimeSession(session: RuntimeSession | undefined, mode: SessionAttachMode): void;

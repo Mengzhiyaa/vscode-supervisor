@@ -256,7 +256,6 @@ export class ConnectionsTreeProvider implements vscode.TreeDataProvider<Connecti
             connectionName,
             mechanismId: mechanism.id,
             parameterValues,
-            autoConnect: true,
         });
     }
 

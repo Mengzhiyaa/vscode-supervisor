@@ -156,9 +156,6 @@ export class PositronConsoleService implements IPositronConsoleService {
                     this._outputChannel.debug(`[PositronConsoleService] Active session changed: ${session.sessionId}`);
                     // Just activate the console, instance should already exist from onWillStartSession
                     this.setActivePositronConsoleSession(session.sessionId);
-                } else {
-                    this._activeConsoleInstance = undefined;
-                    this._onDidChangeActivePositronConsoleInstanceEmitter.fire(undefined);
                 }
             })
         );
@@ -264,6 +261,8 @@ export class PositronConsoleService implements IPositronConsoleService {
         mode: RuntimeCodeExecutionMode = RuntimeCodeExecutionMode.Interactive,
         errorBehavior: RuntimeErrorBehavior = RuntimeErrorBehavior.Continue,
         executionId?: string,
+        _documentUri?: vscode.Uri,
+        executionMetadata?: Record<string, unknown>,
     ): Promise<string> {
         await this.revealConsole(!focus);
 
@@ -291,6 +290,7 @@ export class PositronConsoleService implements IPositronConsoleService {
             mode,
             errorBehavior,
             executionId,
+            executionMetadata,
         );
 
         return instance.sessionId;
@@ -625,7 +625,23 @@ export class PositronConsoleService implements IPositronConsoleService {
             activate,
         );
 
-        this._consoleStateStore?.restore(instance, SessionAttachMode.Reconnecting);
+        const executionEntries = this._executionHistoryService?.getExecutionEntries(
+            instance.sessionId,
+        ) ?? [];
+        if (executionEntries.length > 0) {
+            instance.replayExecutions(executionEntries);
+        } else {
+            const legacyState = this._consoleStateStore?.restore(
+                instance,
+                SessionAttachMode.Reconnecting,
+            );
+            if (legacyState) {
+                this._executionHistoryService?.restoreLegacyExecutionEntries(
+                    instance.sessionId,
+                    legacyState,
+                );
+            }
+        }
         this._consoleStateStore?.bind(instance);
         return instance;
     }

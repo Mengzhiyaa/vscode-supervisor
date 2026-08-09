@@ -687,13 +687,31 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
                 getConsoleWidth: () => {
                     return this._consoleService.getConsoleWidth();
                 },
-                executeCode: (languageId, sessionId, code, attribution, focus) =>
+                executeCode: (
+                    languageId,
+                    sessionId,
+                    code,
+                    attribution,
+                    focus,
+                    allowIncomplete,
+                    mode,
+                    errorBehavior,
+                    executionId,
+                    documentUri,
+                    executionMetadata,
+                ) =>
                     this._consoleService.executeCode(
                         languageId,
                         sessionId,
                         code,
                         attribution,
-                        focus
+                        focus,
+                        allowIncomplete,
+                        mode,
+                        errorBehavior,
+                        executionId,
+                        documentUri,
+                        executionMetadata,
                     ),
             },
             positronHelpService: this._helpService,

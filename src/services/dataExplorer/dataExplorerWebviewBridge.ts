@@ -107,6 +107,18 @@ export interface DataExplorerWebviewBridgeOptions {
     openAsSpreadsheet: () => Promise<void>;
 }
 
+interface DataUpdateDescriptor {
+    readonly bridge: DataExplorerWebviewBridge;
+    readonly request: DataExplorerDataRequest;
+}
+
+interface DataUpdateCoordinator {
+    pending?: DataUpdateDescriptor;
+    promise?: Promise<void>;
+}
+
+const dataUpdateCoordinators = new WeakMap<object, DataUpdateCoordinator>();
+
 function formatError(error: unknown): string {
     if (error instanceof Error) {
         return `${error.name}: ${error.message}`;
@@ -357,20 +369,16 @@ export class DataExplorerWebviewBridge {
             if (!this._surfaceVisible || params.columns?.length === 0) {
                 return;
             }
-            await instance.runWithForegroundLoading(async () => {
-                if (params.generation !== instance.dataGeneration) {
-                    return;
-                }
-                const request: DataExplorerDataRequest = {
-                    startRow: params.startRow,
-                    endRow: params.endRow,
-                    rowIndices: params.rowIndices,
-                    columns: params.columns ?? [],
-                    requestId: params.requestId,
-                    generation: params.generation,
-                };
-                instance.setLastDataRequest(request);
-                await this.sendData(request);
+            if (params.generation !== instance.dataGeneration) {
+                return;
+            }
+            await this._updateData({
+                startRow: params.startRow,
+                endRow: params.endRow,
+                rowIndices: params.rowIndices,
+                columns: params.columns ?? [],
+                requestId: params.requestId,
+                generation: params.generation,
             });
         });
 
@@ -1373,10 +1381,6 @@ export class DataExplorerWebviewBridge {
             if (!canPublish()) {
                 return;
             }
-            connection.sendNotification(DataExplorerSchemaNotification.type, {
-                columns: schema.columns,
-            });
-
             let dataColumns = columns.map(() => [] as Array<number | string>);
             const rowSelection: ArraySelection | undefined =
                 rowIndices !== undefined
@@ -1415,6 +1419,15 @@ export class DataExplorerWebviewBridge {
                 rowLabels = rowLabelResult.row_labels?.[0] ?? [];
             }
 
+            if (!canPublish()) {
+                return;
+            }
+            // Publish schema and data together after every backend request has
+            // completed so the Webview cannot combine different viewports.
+            connection.sendNotification(DataExplorerSchemaNotification.type, {
+                columns: schema.columns,
+                requestId: request.requestId,
+            });
             connection.sendNotification(DataExplorerDataNotification.type, {
                 columns: dataColumns,
                 schema: schema.columns,
@@ -1446,6 +1459,29 @@ export class DataExplorerWebviewBridge {
         await this.sendData(lastRequest, shouldPublish);
     }
 
+    private _updateData(request: DataExplorerDataRequest): Promise<void> {
+        const instance = this._options.instance;
+        const coordinator = dataUpdateCoordinators.get(instance as object) ?? {};
+        dataUpdateCoordinators.set(instance as object, coordinator);
+        coordinator.pending = { bridge: this, request };
+        instance.setLastDataRequest(request);
+        if (!coordinator.promise) {
+            coordinator.promise = instance.runWithForegroundLoading(async () => {
+                while (coordinator.pending) {
+                    const current = coordinator.pending;
+                    coordinator.pending = undefined;
+                    await current.bridge.sendData(
+                        current.request,
+                        () => coordinator.pending === undefined,
+                    );
+                }
+            }).finally(() => {
+                coordinator.promise = undefined;
+            });
+        }
+        return coordinator.promise;
+    }
+
     invalidateData(
         schemaChanged: boolean,
         shouldPublish: () => boolean = () => true,
@@ -1457,6 +1493,10 @@ export class DataExplorerWebviewBridge {
     }
 
     dispose(): void {
+        const coordinator = dataUpdateCoordinators.get(this._options.instance as object);
+        if (coordinator?.pending?.bridge === this) {
+            coordinator.pending = undefined;
+        }
         for (const tokenSource of this._profileRequestTokens.values()) {
             tokenSource.cancel();
             tokenSource.dispose();

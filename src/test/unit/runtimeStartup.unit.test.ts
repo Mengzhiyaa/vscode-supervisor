@@ -91,7 +91,9 @@ function createDeferred<T = void>(): {
     return { promise, resolve, reject };
 }
 
-function makeRuntimeMetadata(): LanguageRuntimeMetadata {
+function makeRuntimeMetadata(
+    overrides: Partial<LanguageRuntimeMetadata> = {},
+): LanguageRuntimeMetadata {
     return {
         runtimeId: 'r-4.4.1-test',
         runtimeName: 'R 4.4.1',
@@ -107,6 +109,7 @@ function makeRuntimeMetadata(): LanguageRuntimeMetadata {
             homepath: '/usr/lib/R',
             binpath: '/usr/bin/R',
         },
+        ...overrides,
     };
 }
 
@@ -121,7 +124,9 @@ function makeStoredSession(
     options?: {
         lastUsed?: number;
         localWindowId?: string;
+        notebookUri?: vscode.Uri;
         runtimeMetadata?: ReturnType<typeof makeRuntimeMetadata>;
+        sessionMode?: LanguageRuntimeSessionMode;
         sessionName?: string;
         workingDirectory?: string;
     },
@@ -136,7 +141,8 @@ function makeStoredSession(
         metadata: {
             sessionId,
             sessionName,
-            sessionMode: LanguageRuntimeSessionMode.Console,
+            sessionMode: options?.sessionMode ?? LanguageRuntimeSessionMode.Console,
+            notebookUri: options?.notebookUri,
             workingDirectory,
             createdTimestamp: 1,
             startReason: 'restoreRuntimeSession',
@@ -486,6 +492,277 @@ suite('[Unit] runtime startup', () => {
         startupService.dispose();
     });
 
+    test('restores newest sessions first and never activates a notebook session', async () => {
+        const context = makeContext({}, {
+            [WORKSPACE_SESSION_LIST_KEY]: [
+                makeStoredSession('console-old', { lastUsed: 10 }),
+                makeStoredSession('notebook-new', {
+                    lastUsed: 30,
+                    notebookUri: vscode.Uri.file('/tmp/notebook.ipynb'),
+                    sessionMode: LanguageRuntimeSessionMode.Notebook,
+                }),
+                makeStoredSession('console-new', { lastUsed: 20 }),
+            ],
+        });
+        const logChannel = makeNoopLogChannel();
+        const localSessionManager = makeSessionManager();
+        const restoreCalls: Array<{ sessionId: string; activate: boolean }> = [];
+        const startupEvents: Array<{
+            runtimeName: string;
+            newSession: boolean;
+            activate: boolean;
+        }> = [];
+        localSessionManager.value.restoreRuntimeSession = async (
+            _runtimeMetadata: unknown,
+            metadata: { sessionId: string },
+            _sessionName: string,
+            _hasConsole: boolean,
+            activate: boolean,
+        ) => {
+            restoreCalls.push({ sessionId: metadata.sessionId, activate });
+        };
+
+        const startupService = new RuntimeStartupService(
+            context,
+            {
+                ...makeRuntimeManager(),
+                getRuntimeProvider: () => makeRuntimeProvider(),
+            } as any,
+            localSessionManager.value,
+            makeNewFolderService(context, logChannel),
+            logChannel,
+            createMemento(),
+        );
+        startupService.onWillAutoStartRuntime((event) => {
+            startupEvents.push({
+                runtimeName: event.runtime.runtimeName,
+                newSession: event.newSession,
+                activate: event.activate,
+            });
+        });
+
+        await startupService.getRestoredSessions();
+        await localSessionManager.value.restorePersistedSessionsInBackground();
+
+        assert.deepStrictEqual(startupEvents, [{
+            runtimeName: 'notebook-new',
+            newSession: false,
+            activate: true,
+        }]);
+        assert.deepStrictEqual(restoreCalls, [
+            { sessionId: 'notebook-new', activate: false },
+            { sessionId: 'console-new', activate: true },
+            { sessionId: 'console-old', activate: false },
+        ]);
+        startupService.dispose();
+    });
+
+    test('does not mark a background affiliated runtime as used when it starts', async () => {
+        const rRuntime = makeRuntimeMetadata({
+            runtimeId: 'r-primary-used',
+            startupBehavior: LanguageRuntimeStartupBehavior.Implicit,
+        });
+        const pythonRuntime = makeRuntimeMetadata({
+            runtimeId: 'python-secondary-unused',
+            runtimeName: 'Python',
+            languageId: 'python',
+            languageName: 'Python',
+            startupBehavior: LanguageRuntimeStartupBehavior.Implicit,
+        });
+        const rAffiliationKey = 'vscode-supervisor.affiliatedRuntimeMetadata.v1.r';
+        const pythonAffiliationKey = 'vscode-supervisor.affiliatedRuntimeMetadata.v1.python';
+        const context = makeContext({}, {
+            [rAffiliationKey]: {
+                metadata: rRuntime,
+                lastUsed: 20,
+                lastStarted: 10,
+            },
+            [pythonAffiliationKey]: {
+                metadata: pythonRuntime,
+                lastUsed: 15,
+                lastStarted: 10,
+            },
+        });
+        const logChannel = makeNoopLogChannel();
+        const localSessionManager = makeSessionManager();
+        const onDidStartRuntime = new vscode.EventEmitter<ReturnType<typeof makeLiveSession>>();
+        const onDidChangeForegroundSession = new vscode.EventEmitter<ReturnType<typeof makeLiveSession>>();
+        const starts: Array<{ runtimeId: string; activate: boolean }> = [];
+        const secondaryStarted = createDeferred<void>();
+
+        localSessionManager.value.onDidStartRuntime = onDidStartRuntime.event;
+        localSessionManager.value.onDidChangeForegroundSession = onDidChangeForegroundSession.event;
+        localSessionManager.value.autoStartRuntime = async (
+            metadata: LanguageRuntimeMetadata,
+            _source: string,
+            activate: boolean,
+        ) => {
+            starts.push({ runtimeId: metadata.runtimeId, activate });
+            const session = makeLiveSession(`${metadata.runtimeId}-session`, {
+                runtimeMetadata: metadata,
+                created: Date.now(),
+            });
+            onDidStartRuntime.fire(session);
+            if (activate) {
+                localSessionManager.value.activeSessionId = session.sessionId;
+                onDidChangeForegroundSession.fire(session);
+            } else {
+                secondaryStarted.resolve();
+            }
+            return session.sessionId;
+        };
+
+        const startupService = new RuntimeStartupService(
+            context,
+            {
+                ...makeRuntimeManager(),
+                getSupportedLanguageIds: () => ['r', 'python'],
+            } as any,
+            localSessionManager.value,
+            makeNewFolderService(context, logChannel),
+            logChannel,
+            createMemento(),
+        );
+
+        await (startupService as any)._startAffiliatedLanguageRuntimes();
+        await secondaryStarted.promise;
+        await Promise.resolve();
+
+        const primaryAffiliation = context.workspaceState.get<{
+            lastUsed: number;
+            lastStarted: number;
+        }>(rAffiliationKey)!;
+        const secondaryAffiliation = context.workspaceState.get<{
+            lastUsed: number;
+            lastStarted: number;
+        }>(pythonAffiliationKey)!;
+        assert.ok(primaryAffiliation.lastUsed >= primaryAffiliation.lastStarted);
+        assert.strictEqual(secondaryAffiliation.lastUsed, 15);
+        assert.ok(secondaryAffiliation.lastStarted > secondaryAffiliation.lastUsed);
+
+        starts.length = 0;
+        await (startupService as any)._startAffiliatedLanguageRuntimes();
+        await Promise.resolve();
+
+        assert.deepStrictEqual(starts, [
+            { runtimeId: rRuntime.runtimeId, activate: true },
+        ]);
+
+        startupService.dispose();
+        onDidStartRuntime.dispose();
+        onDidChangeForegroundSession.dispose();
+    });
+
+    test('recommended runtimes only start immediately when their metadata requests it', async () => {
+        const context = makeContext();
+        const logChannel = makeNoopLogChannel();
+        const localSessionManager = makeSessionManager();
+        const starts: Array<{ runtimeId: string; activate: boolean }> = [];
+        localSessionManager.value.autoStartRuntime = async (
+            metadata: LanguageRuntimeMetadata,
+            _source: string,
+            activate: boolean,
+        ) => {
+            starts.push({ runtimeId: metadata.runtimeId, activate });
+        };
+        const explicit = makeRuntimeMetadata({
+            runtimeId: 'r-explicit',
+            startupBehavior: LanguageRuntimeStartupBehavior.Explicit,
+        });
+        const immediate = makeRuntimeMetadata({
+            runtimeId: 'python-immediate',
+            runtimeName: 'Python',
+            languageId: 'python',
+            languageName: 'Python',
+            startupBehavior: LanguageRuntimeStartupBehavior.Immediate,
+        });
+        const startupService = new RuntimeStartupService(
+            context,
+            {
+                ...makeRuntimeManager(),
+                getSupportedLanguageIds: () => ['r', 'python'],
+            } as any,
+            localSessionManager.value,
+            makeNewFolderService(context, logChannel),
+            logChannel,
+            createMemento(),
+        );
+        startupService.registerRuntimeManager({
+            id: 1,
+            discoverAllRuntimes: async () => undefined,
+            recommendWorkspaceRuntimes: async () => [explicit, immediate],
+        });
+
+        await (startupService as any)._startRecommendedLanguageRuntimes();
+
+        assert.deepStrictEqual(starts, [{ runtimeId: 'python-immediate', activate: false }]);
+        assert.deepStrictEqual(
+            startupService.getAffiliatedRuntimeMetadata('r'),
+            explicit,
+        );
+        startupService.dispose();
+    });
+
+    test('starts the primary affiliated runtime synchronously and secondary runtimes in background', async () => {
+        const rRuntime = makeRuntimeMetadata({
+            runtimeId: 'r-primary',
+            startupBehavior: LanguageRuntimeStartupBehavior.Implicit,
+        });
+        const pythonRuntime = makeRuntimeMetadata({
+            runtimeId: 'python-secondary',
+            runtimeName: 'Python',
+            languageId: 'python',
+            languageName: 'Python',
+            startupBehavior: LanguageRuntimeStartupBehavior.Implicit,
+        });
+        const context = makeContext({}, {
+            'vscode-supervisor.affiliatedRuntimeMetadata.v1.r': {
+                metadata: rRuntime,
+                lastUsed: 20,
+                lastStarted: 10,
+            },
+            'vscode-supervisor.affiliatedRuntimeMetadata.v1.python': {
+                metadata: pythonRuntime,
+                lastUsed: 15,
+                lastStarted: 10,
+            },
+        });
+        const logChannel = makeNoopLogChannel();
+        const localSessionManager = makeSessionManager();
+        const starts: Array<{ runtimeId: string; activate: boolean }> = [];
+        const secondaryStarted = createDeferred<void>();
+        localSessionManager.value.autoStartRuntime = async (
+            metadata: LanguageRuntimeMetadata,
+            _source: string,
+            activate: boolean,
+        ) => {
+            starts.push({ runtimeId: metadata.runtimeId, activate });
+            if (metadata.runtimeId === pythonRuntime.runtimeId) {
+                secondaryStarted.resolve();
+            }
+        };
+        const startupService = new RuntimeStartupService(
+            context,
+            {
+                ...makeRuntimeManager(),
+                getSupportedLanguageIds: () => ['r', 'python'],
+            } as any,
+            localSessionManager.value,
+            makeNewFolderService(context, logChannel),
+            logChannel,
+            createMemento(),
+        );
+
+        await (startupService as any)._startAffiliatedLanguageRuntimes();
+        await secondaryStarted.promise;
+
+        assert.deepStrictEqual(starts, [
+            { runtimeId: 'r-primary', activate: true },
+            { runtimeId: 'python-secondary', activate: false },
+        ]);
+        startupService.dispose();
+    });
+
     test('drops failed restored sessions from persistence and deletes partially restored runtime sessions', async () => {
         const context = makeContext({}, {
             [WORKSPACE_SESSION_LIST_KEY]: [
@@ -781,6 +1058,41 @@ suite('[Unit] runtime startup', () => {
                 .some(session => session.metadata.sessionId === 'session-browser'),
         );
 
+        startupService.dispose();
+    });
+
+    test('notifies about crashes even when the session was not automatically restarted', async () => {
+        const context = makeContext();
+        const logChannel = makeNoopLogChannel();
+        const startupService = new RuntimeStartupService(
+            context,
+            makeRuntimeManager(),
+            makeSessionManager().value,
+            makeNewFolderService(context, logChannel),
+            logChannel,
+            createMemento(),
+        );
+        const originalShowWarningMessage = vscode.window.showWarningMessage;
+        let warning = '';
+        let showOutputCalls = 0;
+        (vscode.window as { showWarningMessage: typeof vscode.window.showWarningMessage })
+            .showWarningMessage = (async (message: string) => {
+                warning = message;
+                return 'Open Kernel Log';
+            }) as typeof vscode.window.showWarningMessage;
+        try {
+            await (startupService as any)._notifySessionCrash({
+                runtimeMetadata: makeRuntimeMetadata(),
+                showOutput: () => { showOutputCalls++; },
+            }, 137, false);
+        } finally {
+            (vscode.window as { showWarningMessage: typeof vscode.window.showWarningMessage })
+                .showWarningMessage = originalShowWarningMessage;
+        }
+
+        assert.match(warning, /was not automatically restarted/);
+        assert.match(warning, /137/);
+        assert.strictEqual(showOutputCalls, 1);
         startupService.dispose();
     });
 });

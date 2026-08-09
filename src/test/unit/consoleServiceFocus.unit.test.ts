@@ -27,6 +27,10 @@ function makeNoopLogChannel(): vscode.LogOutputChannel {
     };
 }
 
+function createEventStub<T>(): vscode.Event<T> {
+    return () => ({ dispose: () => undefined });
+}
+
 suite('[Unit] console service focus preservation', () => {
     const originalActiveTextEditor = Object.getOwnPropertyDescriptor(vscode.window, 'activeTextEditor');
     const originalShowTextDocument = vscode.window.showTextDocument.bind(vscode.window);
@@ -381,6 +385,48 @@ suite('[Unit] console service focus preservation', () => {
         assert.strictEqual(service.activePositronConsoleInstance?.sessionId, 'r-active-session');
 
         service.dispose();
+    });
+
+    test('keeps the active console when the foreground session is temporarily cleared', () => {
+        const onDidChangeForegroundSession = new vscode.EventEmitter<any>();
+        const sessionManager = {
+            sessions: [],
+            activeSessionId: undefined,
+            onDidReceiveRuntimeEvent: createEventStub(),
+            onWillStartSession: createEventStub(),
+            onDidChangeForegroundSession: onDidChangeForegroundSession.event,
+            onDidDeleteRuntimeSession: createEventStub(),
+        } as any;
+        const service = new PositronConsoleService(sessionManager, makeNoopLogChannel());
+        service.initialize();
+
+        const instance = (service as any)._createPositronConsoleInstance(
+            {
+                sessionId: 'r-active-session',
+                sessionName: 'R',
+                sessionMode: LanguageRuntimeSessionMode.Console,
+                createdTimestamp: 1,
+            },
+            {
+                runtimeId: 'r-runtime',
+                runtimeName: 'R 4.4.1',
+                runtimePath: '/usr/bin/R',
+                runtimeVersion: '4.4.1',
+                runtimeShortName: '4.4.1',
+                runtimeSource: 'system',
+                languageId: 'r',
+                languageName: 'R',
+                languageVersion: '4.4.1',
+            },
+            true,
+        );
+
+        onDidChangeForegroundSession.fire(undefined);
+
+        assert.strictEqual(service.activePositronConsoleInstance, instance);
+
+        service.dispose();
+        onDidChangeForegroundSession.dispose();
     });
 
     test('executeCode rejects languages without a registered runtime provider before fallback startup', async () => {

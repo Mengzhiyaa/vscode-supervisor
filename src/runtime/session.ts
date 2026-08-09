@@ -847,19 +847,23 @@ export class RuntimeSession implements vscode.Disposable {
         mode: RuntimeCodeExecutionMode = RuntimeCodeExecutionMode.Interactive,
         errorBehavior: RuntimeErrorBehavior = RuntimeErrorBehavior.Continue,
         attribution?: ICodeExecutionAttribution,
+        executionMetadata?: Record<string, unknown>,
     ): void {
         if (!this._kernel) {
             throw new Error('Kernel not attached');
         }
         const codePreview = code.length > 100 ? code.substring(0, 100) + '...' : code;
         this.log(`>>> SEND execute_request [${id}]: ${codePreview}`, vscode.LogLevel.Debug);
+        const kernelExecutionMetadata = attribution?.metadata || executionMetadata
+            ? { ...attribution?.metadata, ...executionMetadata }
+            : undefined;
         this._kernel.execute(
             code,
             id,
             mode,
             errorBehavior,
             this._toCodeLocation(attribution),
-            attribution?.metadata,
+            kernelExecutionMetadata,
         );
     }
 

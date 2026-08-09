@@ -57,22 +57,27 @@ export class ConsoleStateStore implements vscode.Disposable {
     // Public API
     // -----------------------------------------------------------------------
 
-    restore(instance: PositronConsoleInstance, attachMode: SessionAttachMode): void {
+    restore(
+        instance: PositronConsoleInstance,
+        attachMode: SessionAttachMode,
+    ): SerializedConsoleState | undefined {
         if (attachMode === SessionAttachMode.Starting || attachMode === SessionAttachMode.Restarting) {
             this.delete(instance.sessionId);
-            return;
+            return undefined;
         }
 
         const state = this._storage.get<SerializedConsoleState>(this._key(instance.sessionId));
         if (!state) {
-            return;
+            return undefined;
         }
 
         try {
             instance.restoreState(state);
+            return state;
         } catch (error) {
             this._logChannel.warn(`[ConsoleStateStore] Failed to restore state for ${instance.sessionId}: ${error}`);
         }
+        return undefined;
     }
 
     bind(instance: PositronConsoleInstance): void {

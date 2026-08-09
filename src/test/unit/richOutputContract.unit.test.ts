@@ -317,6 +317,75 @@ suite('[Unit] P0 rich output and compatibility contracts', () => {
         await vscode.workspace.fs.delete(storageUri, { recursive: true, useTrash: false });
     });
 
+    test('replays managed widget output when a renderer registers late and disposes it on clear', async () => {
+        const storageUri = vscode.Uri.file('/tmp/vscode-supervisor-renderer-replay-test');
+        let fallbackCount = 0;
+        let renderCount = 0;
+        let disposeCount = 0;
+        let renderedOutputId: string | undefined;
+        const router = new RichOutputRouter(
+            { globalStorageUri: storageUri } as any,
+            {
+                sessions: [],
+                onDidCreateSession: createEventStub(),
+                onDidDeleteRuntimeSession: createEventStub(),
+            } as any,
+            { addHtmlOutputPlot: () => undefined } as any,
+            {
+                showRuntimeOutputHtml: async (
+                    _sessionId: string,
+                    _uri: vscode.Uri,
+                    options: { fallbackReason?: string },
+                ) => {
+                    if (options.fallbackReason) {
+                        fallbackCount++;
+                    }
+                },
+                resolveRuntimeOutputHtmlUri: async (uri: vscode.Uri) => uri,
+            } as any,
+            makeNoopLogChannel(),
+        );
+        const session = { sessionId: 'renderer-replay-session' } as any;
+        const message = output(RuntimeOutputKind.IPyWidget, {
+            [RuntimeOutputMime.widgetView]: { model_id: 'widget-replay-1' },
+        });
+        const key = `${session.sessionId}:${message.output_id}`;
+
+        (router as any)._enqueue(session, message);
+        await (router as any)._routeChains.get(key);
+        assert.strictEqual(fallbackCount, 1);
+
+        const registration = router.registerRenderer({
+            id: 'late-widget-renderer',
+            outputKinds: [RuntimeOutputKind.IPyWidget],
+            render: async (_message, context) => {
+                renderCount++;
+                renderedOutputId = context.outputId;
+                return { target: 'plot', html: '<div>interactive widget</div>' };
+            },
+            disposeOutput: async context => {
+                assert.strictEqual(context.outputId, message.output_id);
+                disposeCount++;
+            },
+        });
+        await (router as any)._routeChains.get(key);
+
+        assert.strictEqual(renderCount, 1);
+        assert.strictEqual(renderedOutputId, message.output_id);
+        (router as any)._handleClearOutput(session, {
+            parent_id: message.parent_id,
+            wait: false,
+        });
+        await Promise.resolve();
+        await Promise.resolve();
+        assert.strictEqual(disposeCount, 1);
+        assert.strictEqual((router as any)._managedOutputs.size, 0);
+
+        registration.dispose();
+        router.dispose();
+        await vscode.workspace.fs.delete(storageUri, { recursive: true, useTrash: false });
+    });
+
     test('confirms data explorer acceptance, instance creation, and editor attachment separately', async () => {
         const commId = 'data-explorer-console-1';
         const model = {

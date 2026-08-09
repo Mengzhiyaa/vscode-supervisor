@@ -134,6 +134,7 @@ suite('[Unit] console execution alignment', () => {
             RuntimeCodeExecutionMode.Interactive,
             RuntimeErrorBehavior.Continue,
             'console-execution',
+            { requestId: 'request-direct' },
         );
 
         assert.deepStrictEqual(pendingCodeChanges, [')', undefined]);
@@ -143,6 +144,7 @@ suite('[Unit] console execution alignment', () => {
             RuntimeCodeExecutionMode.Interactive,
             RuntimeErrorBehavior.Continue,
             { source: 'console' },
+            { requestId: 'request-direct' },
         ]]);
     });
 
@@ -187,5 +189,30 @@ suite('[Unit] console execution alignment', () => {
 
         assert.deepStrictEqual(executeCalls, []);
         assert.deepStrictEqual(pendingCodeChanges, []);
+    });
+
+    test('preserves execution metadata while code is pending', async () => {
+        const executeCalls: unknown[][] = [];
+        const instance = createConsoleInstance();
+        const runtimeSession = createRuntimeSession(executeCalls, RuntimeState.Busy);
+        instance.attachRuntimeSession(runtimeSession, SessionAttachMode.Connected);
+        const executionMetadata = { cellId: 'cell-1', documentVersion: 7 };
+
+        await instance.enqueueCode(
+            '1 + 1',
+            { source: 'editor' },
+            false,
+            RuntimeCodeExecutionMode.Interactive,
+            RuntimeErrorBehavior.Continue,
+            'queued-execution',
+            executionMetadata,
+        );
+        assert.deepStrictEqual(executeCalls, []);
+
+        runtimeSession.state = RuntimeState.Ready;
+        await (instance as any).processPendingInput();
+
+        assert.strictEqual(executeCalls[0][5], executionMetadata);
+        instance.dispose();
     });
 });

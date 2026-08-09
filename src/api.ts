@@ -160,7 +160,26 @@ export interface LanguageRuntimeMetadata {
     base64EncodedIconSvg?: string;
     sessionLocation?: LanguageRuntimeSessionLocation;
     startupBehavior?: LanguageRuntimeStartupBehavior;
+    cacheable?: boolean;
     extraRuntimeData?: unknown;
+}
+
+/**
+ * One root that a runtime provider scans for interpreters. The path should be
+ * resolved before it is returned; `mtimeMs` is zero when the path is absent.
+ */
+export interface RuntimeRootEntry {
+    readonly path: string;
+    readonly exists: boolean;
+    readonly mtimeMs: number;
+}
+
+/**
+ * Cheap fingerprint of the roots that influence runtime discovery.
+ */
+export interface RuntimeRootSignature {
+    readonly entries: readonly RuntimeRootEntry[];
+    readonly opaque?: string;
 }
 
 export interface IRuntimeSessionMetadata {
@@ -276,8 +295,11 @@ export interface ILanguageLspFactory {
 export type LanguageSessionMode = 'console' | 'notebook' | 'background';
 
 export interface ILanguageRuntimeProvider<TInstallation = unknown> {
+    /** Stable owner used to partition discovery cache entries. */
+    readonly extensionId?: string;
     readonly languageId: string;
     readonly languageName: string;
+    readonly alwaysRediscover?: boolean;
     readonly lspFactory?: ILanguageLspFactory;
     discoverInstallations(
         logChannel: vscode.LogOutputChannel
@@ -316,6 +338,7 @@ export interface ILanguageRuntimeProvider<TInstallation = unknown> {
         workingDirectory: string
     ): Promise<void>;
     shouldRecommendForWorkspace?(): Promise<boolean>;
+    getDiscoveryRootSignature?(): Promise<RuntimeRootSignature>;
     getSessionIdPrefix?(sessionMode: LanguageSessionMode): string;
 }
 
@@ -476,6 +499,7 @@ export interface RuntimeDebugReplyMessage extends RuntimeProtocolMessage {
 export interface RuntimeOutputRendererContext {
     readonly session: ILanguageRuntimeSession;
     readonly outputKind: string;
+    readonly outputId: string;
 }
 
 export interface RuntimeRenderedOutput {
@@ -498,6 +522,8 @@ export interface IRuntimeOutputRenderer {
         output: RuntimeOutputMessage,
         context: RuntimeOutputRendererContext
     ): Promise<RuntimeRenderedOutput | undefined>;
+    /** Releases renderer state associated with a cleared or disposed output. */
+    disposeOutput?(context: RuntimeOutputRendererContext): void | Promise<void>;
 }
 
 export enum LanguageRuntimeClientType {
@@ -823,7 +849,13 @@ export interface IPositronConsoleService {
         sessionId: string | undefined,
         code: string,
         attribution: ICodeExecutionAttribution,
-        focus: boolean
+        focus: boolean,
+        allowIncomplete?: boolean,
+        mode?: RuntimeCodeExecutionMode,
+        errorBehavior?: RuntimeErrorBehavior,
+        executionId?: string,
+        documentUri?: vscode.Uri,
+        executionMetadata?: Record<string, unknown>,
     ): Promise<string>;
 }
 
