@@ -120,12 +120,6 @@ export class PlotClientInstance extends RuntimeClientInstance {
     // The sizing policy for this plot
     private _sizingPolicy: IPositronPlotSizingPolicy;
 
-    // Cached intrinsic size
-    private _intrinsicSize?: IntrinsicSize;
-
-    // Whether we have received the intrinsic size
-    private _receivedIntrinsicSize: boolean = false;
-
     // Emitters
     private readonly _onDidRenderPlot = new vscode.EventEmitter<RenderedPlot>();
     private readonly _onDidUpdatePlot = new vscode.EventEmitter<void>();
@@ -301,8 +295,6 @@ export class PlotClientInstance extends RuntimeClientInstance {
 
         // Listen for intrinsic size changes from the comm proxy
         commProxy.onDidSetIntrinsicSize((size) => {
-            this._intrinsicSize = size;
-            this._receivedIntrinsicSize = true;
             this._intrinsicSizeEmitter.fire(size);
         });
 
@@ -330,35 +322,22 @@ export class PlotClientInstance extends RuntimeClientInstance {
      *
      * @returns A promise that resolves to the intrinsic size of the plot, if known.
      */
-    async getIntrinsicSize(): Promise<IntrinsicSize | undefined> {
-        if (this._receivedIntrinsicSize) {
-            return this._intrinsicSize;
-        }
-
-        try {
-            const result = await this._commProxy.getIntrinsicSize();
-            this._intrinsicSize = result;
-            this._receivedIntrinsicSize = true;
-            this._intrinsicSizeEmitter.fire(result);
-            return result;
-        } catch (e) {
-            this._receivedIntrinsicSize = true;
-            return undefined;
-        }
+    getIntrinsicSize(): Promise<IntrinsicSize | undefined> {
+        return this._commProxy.getIntrinsicSize();
     }
 
     /**
      * Returns the cached intrinsic size.
      */
     get intrinsicSize(): IntrinsicSize | undefined {
-        return this._intrinsicSize;
+        return this._commProxy.intrinsicSize;
     }
 
     /**
      * Returns whether we have received the intrinsic size.
      */
     get receivedIntrinsicSize(): boolean {
-        return this._receivedIntrinsicSize;
+        return this._commProxy.receivedIntrinsicSize;
     }
 
     /**

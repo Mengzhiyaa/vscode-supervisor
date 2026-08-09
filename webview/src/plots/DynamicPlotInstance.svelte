@@ -14,7 +14,19 @@
     import type { MessageConnection } from "vscode-jsonrpc/browser";
     import PanZoomImage from "./PanZoomImage.svelte";
     import PlotProgressBar from "./PlotProgressBar.svelte";
-    import { ZoomLevel, PlotClientState } from "./types";
+    import {
+        ZoomLevel,
+        PlotClientState,
+        type IntrinsicSize,
+    } from "./types";
+
+    const PlotSizingPolicyAuto = {
+        ID: "auto",
+    } as const;
+
+    const PlotSizingPolicyIntrinsic = {
+        ID: "intrinsic",
+    } as const;
 
     interface Props {
         width: number;
@@ -91,7 +103,7 @@
         return `${plotId}:${targetWidth}x${targetHeight}@${ratio}:${sizingPolicyId ?? ""}`;
     }
 
-    async function render() {
+    async function render(policy = sizingPolicyId) {
         if (!connection || !plotId) {
             return;
         }
@@ -108,6 +120,23 @@
 
             const startTime = Date.now();
             const ratio = window.devicePixelRatio || 1;
+
+            const intrinsicSizeResult = (await connection.sendRequest(
+                "plots/getIntrinsicSize",
+                { plotId },
+            )) as { intrinsicSize?: IntrinsicSize } | undefined;
+            const intrinsicSize = intrinsicSizeResult?.intrinsicSize;
+
+            // If using the intrinsic sizing policy, and the plot has no intrinsic size,
+            // fall back to the auto sizing policy.
+            if (
+                policy === PlotSizingPolicyIntrinsic.ID &&
+                !intrinsicSize
+            ) {
+                await connection.sendRequest("plots/selectSizingPolicy", {
+                    policyId: PlotSizingPolicyAuto.ID,
+                });
+            }
 
             const result = (await connection.sendRequest("plots/render", {
                 plotId,

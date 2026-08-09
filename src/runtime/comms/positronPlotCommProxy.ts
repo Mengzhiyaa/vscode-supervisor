@@ -109,7 +109,10 @@ export class PositronPlotCommProxy implements vscode.Disposable {
         private readonly _sessionRenderQueue: PositronPlotRenderQueue
     ) {
         // Create the PositronPlotCommClass instance
-        this._comm = new PositronPlotCommClass(_client);
+        this._comm = new PositronPlotCommClass(_client, {
+            render: { timeout: 30000 },
+            get_intrinsic_size: { timeout: 30000 }
+        });
         this._disposables.push(this._comm);
 
         // Create the IPlotComm adapter that wraps the comm class

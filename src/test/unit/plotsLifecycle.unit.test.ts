@@ -1,6 +1,19 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
-import { shouldFreezeSlowPlot } from '../../runtime/PlotClientInstance';
+import {
+    LanguageRuntimeMessageType,
+    RuntimeClientType,
+    type LanguageRuntimeMessageCommOpen,
+} from '../../internal/runtimeTypes';
+import { PlotClientInstance, shouldFreezeSlowPlot } from '../../runtime/PlotClientInstance';
+import {
+    type IntrinsicSize,
+    PlotUnit,
+} from '../../runtime/comms/positronPlotComm';
+import {
+    PositronPlotCommProxy,
+    type UpdateEvent,
+} from '../../runtime/comms/positronPlotCommProxy';
 import { HtmlPlotClient } from '../../runtime/htmlPlotClient';
 import {
     PositronPlotsService,
@@ -64,5 +77,75 @@ suite('[Unit] Plot resource and sizing lifecycle', () => {
             language: 'python',
             sizing_policy: { id: square.id },
         }, policies, auto), square);
+    });
+
+    test('delegates intrinsic size state and emits proxy updates exactly once', async () => {
+        const expected: IntrinsicSize = {
+            width: 6,
+            height: 4,
+            unit: PlotUnit.Inches,
+            source: 'Matplotlib',
+        };
+        const closeEmitter = new vscode.EventEmitter<void>();
+        const renderUpdateEmitter = new vscode.EventEmitter<UpdateEvent>();
+        const showPlotEmitter = new vscode.EventEmitter<void>();
+        const intrinsicSizeEmitter = new vscode.EventEmitter<IntrinsicSize | undefined>();
+        let requestCount = 0;
+        const commProxy = {
+            onDidClose: closeEmitter.event,
+            onDidRenderUpdate: renderUpdateEmitter.event,
+            onDidShowPlot: showPlotEmitter.event,
+            onDidSetIntrinsicSize: intrinsicSizeEmitter.event,
+            getIntrinsicSize: async () => {
+                requestCount++;
+                return expected;
+            },
+            get intrinsicSize() {
+                return expected;
+            },
+            get receivedIntrinsicSize() {
+                return true;
+            },
+        } as PositronPlotCommProxy;
+        const message: LanguageRuntimeMessageCommOpen = {
+            id: 'plot-1',
+            event_clock: 0,
+            parent_id: '',
+            when: new Date().toISOString(),
+            type: LanguageRuntimeMessageType.CommOpen,
+            comm_id: 'plot-1',
+            target_name: RuntimeClientType.Plot,
+            data: {},
+        };
+        const plotClient = new PlotClientInstance(
+            message,
+            () => undefined,
+            () => undefined,
+            'session-1',
+            undefined,
+            commProxy,
+        );
+        let eventCount = 0;
+        let emittedSize: IntrinsicSize | undefined;
+        const subscription = plotClient.onDidSetIntrinsicSize(size => {
+            eventCount++;
+            emittedSize = size;
+        });
+
+        assert.strictEqual(await plotClient.getIntrinsicSize(), expected);
+        assert.strictEqual(requestCount, 1);
+        assert.strictEqual(plotClient.intrinsicSize, expected);
+        assert.strictEqual(plotClient.receivedIntrinsicSize, true);
+
+        intrinsicSizeEmitter.fire(expected);
+        assert.strictEqual(eventCount, 1);
+        assert.strictEqual(emittedSize, expected);
+
+        subscription.dispose();
+        plotClient.dispose();
+        closeEmitter.dispose();
+        renderUpdateEmitter.dispose();
+        showPlotEmitter.dispose();
+        intrinsicSizeEmitter.dispose();
     });
 });

@@ -1214,37 +1214,28 @@ export class PlotsViewProvider extends BaseWebviewProvider {
                 // First check if we have a PlotClientInstance (for dynamic re-rendering)
                 const plotClient = this._plotClients.get(params.plotId);
                 if (plotClient) {
-                    try {
-                        const viewportSize = { width: params.width, height: params.height };
-                        const pixelRatio = params.pixelRatio ?? 2;
-                        const format = params.format === 'svg' ? PlotRenderFormat.Svg : PlotRenderFormat.Png;
-                        let policy = this._getSizingPolicyForConnection(state);
-                        if (policy instanceof PlotSizingPolicyIntrinsic) {
-                            policy = new PlotSizingPolicyAuto();
-                        }
-                        const targetSize = policy.getPlotSize(viewportSize) ?? viewportSize;
+                    const policy = this._getSizingPolicyForConnection(state);
+                    const plotSize = policy.getPlotSize({
+                        height: params.height,
+                        width: params.width
+                    });
+                    const pixelRatio = params.pixelRatio ?? 2;
+                    const format = params.format === 'svg' ? PlotRenderFormat.Svg : PlotRenderFormat.Png;
 
-                        const rendered = await plotClient.renderPlot(
-                            {
-                                width: Math.floor(targetSize.width),
-                                height: Math.floor(targetSize.height)
-                            },
-                            pixelRatio,
-                            format,
-                            true  // Suppress completeRenderEmitter — RPC response already carries the data URI
-                        );
+                    const rendered = await plotClient.renderWithSizingPolicy(
+                        plotSize,
+                        pixelRatio,
+                        format,
+                        true  // Suppress completeRenderEmitter — RPC response already carries the data URI
+                    );
 
-                        const plot = this._applyRenderedPlot(params.plotId, rendered);
+                    const plot = this._applyRenderedPlot(params.plotId, rendered);
 
-                        return {
-                            data: rendered.uri,
-                            mimeType: 'image/png',
-                            renderVersion: plot?.renderVersion ?? 0,
-                        };
-                    } catch (e) {
-                        this.log(`Failed to re-render plot ${params.plotId}: ${e}`, vscode.LogLevel.Warning);
-                        // Fall through to return cached data
-                    }
+                    return {
+                        data: rendered.uri,
+                        mimeType: 'image/png',
+                        renderVersion: plot?.renderVersion ?? 0,
+                    };
                 }
 
                 // Fallback to stored data
@@ -1599,12 +1590,8 @@ export class PlotsViewProvider extends BaseWebviewProvider {
         connection.onRequest(PlotsProtocol.GetIntrinsicSizeRequest.type, async (params) => {
             const plotClient = this._plotClients.get(params.plotId);
             if (plotClient) {
-                try {
-                    const intrinsicSize = await plotClient.getIntrinsicSize();
-                    return { intrinsicSize };
-                } catch (e) {
-                    this.log(`Failed to get intrinsic size: ${e}`, vscode.LogLevel.Warning);
-                }
+                const intrinsicSize = await plotClient.getIntrinsicSize();
+                return { intrinsicSize };
             }
             return { intrinsicSize: undefined };
         });

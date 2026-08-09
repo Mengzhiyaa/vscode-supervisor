@@ -230,6 +230,7 @@ export const PlotsMethods = {
     selectZoom: 'plots/selectZoom',
     selectDarkFilterMode: 'plots/selectDarkFilterMode',
     selectSizingPolicy: 'plots/selectSizingPolicy',
+    getIntrinsicSize: 'plots/getIntrinsicSize',
     setCustomSize: 'plots/setCustomSize',
     clear: 'plots/clear',
     delete: 'plots/delete',

@@ -54,17 +54,8 @@ export class PositronPlotCommClass extends PositronBaseComm {
      *
      * @returns The intrinsic size of a plot, if known
      */
-    async getIntrinsicSize(): Promise<IntrinsicSize | undefined> {
-        try {
-            const result = await this.performRpc<IntrinsicSize | null>(
-                'get_intrinsic_size',
-                [],
-                []
-            );
-            return result ?? undefined;
-        } catch {
-            return undefined;
-        }
+    getIntrinsicSize(): Promise<IntrinsicSize | undefined> {
+        return this.performRpc('get_intrinsic_size', [], []);
     }
 
     /**

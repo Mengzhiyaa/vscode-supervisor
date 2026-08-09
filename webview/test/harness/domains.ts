@@ -135,6 +135,9 @@ export interface PlotListItem {
     code?: string;
     parentId?: string;
     languageId?: string;
+    sizingPolicyId?: string;
+    customSize?: { width: number; height: number };
+    hasIntrinsicSize?: boolean;
 }
 
 export function createHelpFixtureUrl(): string {
@@ -273,7 +276,8 @@ export function registerPlotsDefaults(
     backend.onRequest(PlotsMethods.select, () => undefined);
     backend.onRequest(PlotsMethods.selectZoom, () => undefined);
     backend.onRequest(PlotsMethods.selectDarkFilterMode, () => undefined);
-    backend.onRequest(PlotsMethods.selectSizingPolicy, () => undefined);
+    backend.onRequest(PlotsMethods.selectSizingPolicy, () => null);
+    backend.onRequest(PlotsMethods.getIntrinsicSize, () => ({ intrinsicSize: undefined }));
     backend.onRequest(PlotsMethods.setCustomSize, () => undefined);
     backend.onRequest(PlotsMethods.clear, () => undefined);
     backend.onRequest(PlotsMethods.delete, () => undefined);

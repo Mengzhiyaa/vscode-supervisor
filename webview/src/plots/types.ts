@@ -4,6 +4,7 @@ export {
     HistoryPosition,
     PlotClientState,
     ZoomLevel,
+    type IntrinsicSize,
     type SizingPolicyInfo,
 } from "@shared/plots";
 
