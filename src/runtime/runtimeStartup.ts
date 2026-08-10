@@ -737,14 +737,6 @@ export class RuntimeStartupService implements vscode.Disposable {
             )
             .map(({ persisted }) => persisted);
 
-        // Match Positron's restore contract: notify the UI once for the
-        // restore operation, rather than once for every persisted session.
-        const startupSession = sortedSessions[0];
-        this._fireRuntimeStartupEvent({
-            ...this._createRuntimeStartupEventFromSerializedSession(startupSession, false),
-            activate: true,
-        });
-
         const validSessions = await Promise.all(sortedSessions.map(async (persisted) => {
             const provider = this._runtimeManager.getRuntimeProvider(persisted.runtimeMetadata.languageId);
             if (!provider) {
@@ -808,6 +800,23 @@ export class RuntimeStartupService implements vscode.Disposable {
         const foregroundSessionId = reconnectableSessions.find(
             ({ persisted }) => !persisted.metadata.notebookUri,
         )?.persisted.metadata.sessionId;
+
+        // Notify the UI about the same session that the runtime service will
+        // actually make foreground. Falling back to the newest notebook is
+        // useful for notebook-only restores, but it must not be advertised as
+        // an active console session.
+        const startupSession = reconnectableSessions.find(
+            ({ persisted }) => persisted.metadata.sessionId === foregroundSessionId,
+        ) ?? reconnectableSessions[0];
+        if (startupSession) {
+            this._fireRuntimeStartupEvent({
+                ...this._createRuntimeStartupEventFromSerializedSession(
+                    startupSession.persisted,
+                    false,
+                ),
+                activate: startupSession.persisted.metadata.sessionId === foregroundSessionId,
+            });
+        }
 
         await Promise.all(reconnectableSessions.map(async ({ persisted, runtimeMetadata }, index) => {
             const marker = `[Reconnect ${persisted.metadata.sessionId} (${index + 1}/${reconnectableSessions.length})]`;
@@ -1088,19 +1097,20 @@ export class RuntimeStartupService implements vscode.Disposable {
 
     private async _startRecommendedLanguageRuntimes(): Promise<void> {
         const recommendedRuntimes = await this._getRecommendedRuntimes(this._getDisabledLanguageIds());
-        await Promise.all(recommendedRuntimes.map(async (recommendedRuntime, index) => {
+        const immediateRuntimes: LanguageRuntimeMetadata[] = [];
+
+        for (const recommendedRuntime of recommendedRuntimes) {
             const startupBehavior = this._getStartupBehavior(recommendedRuntime.languageId);
             if (startupBehavior === LanguageStartupBehavior.Disabled) {
-                return;
+                continue;
             }
 
-            if (recommendedRuntime.startupBehavior === LanguageRuntimeStartupBehavior.Immediate) {
-                await this._autoStartRuntime(
-                    recommendedRuntime,
-                    'Recommended runtime for workspace',
-                    index === 0,
-                );
-                return;
+            if (
+                startupBehavior !== LanguageStartupBehavior.Manual &&
+                recommendedRuntime.startupBehavior === LanguageRuntimeStartupBehavior.Immediate
+            ) {
+                immediateRuntimes.push(recommendedRuntime);
+                continue;
             }
 
             if (!this._getAffiliatedRuntime(recommendedRuntime.languageId)) {
@@ -1113,7 +1123,32 @@ export class RuntimeStartupService implements vscode.Disposable {
                     } satisfies IAffiliatedRuntimeMetadata,
                 );
             }
-        }));
+        }
+
+        const [foregroundRuntime, ...backgroundRuntimes] = immediateRuntimes;
+        if (foregroundRuntime) {
+            await this._autoStartRuntime(
+                foregroundRuntime,
+                'Recommended runtime for workspace',
+                true,
+            );
+        }
+
+        const backgroundResults = await Promise.allSettled(
+            backgroundRuntimes.map(runtime => this._autoStartRuntime(
+                runtime,
+                'Recommended runtime for workspace',
+                false,
+            )),
+        );
+        backgroundResults.forEach((result, index) => {
+            if (result.status === 'rejected') {
+                this._outputChannel.warn(
+                    `[RuntimeStartup] Failed to start background recommended runtime ` +
+                    `${backgroundRuntimes[index].runtimeName}: ${result.reason}`,
+                );
+            }
+        });
     }
 
     private async _autoStartAfterDiscovery(): Promise<void> {
@@ -1267,7 +1302,16 @@ export class RuntimeStartupService implements vscode.Disposable {
         const metadataGroups = await Promise.all(
             this._runtimeManagers.map((manager) => manager.recommendWorkspaceRuntimes(disabledLanguageIds)),
         );
-        return metadataGroups.flat();
+        const deduped = new Map<string, LanguageRuntimeMetadata>();
+
+        for (const metadata of metadataGroups.flat()) {
+            deduped.set(`${metadata.languageId}:${metadata.runtimeId}`, metadata);
+        }
+
+        return Array.from(deduped.values())
+            .sort((left, right) =>
+                this._getRecommendationScore(right) - this._getRecommendationScore(left)
+            );
     }
 
     private async _startEncounteredLanguageRuntime(): Promise<void> {
@@ -1372,6 +1416,28 @@ export class RuntimeStartupService implements vscode.Disposable {
     private _hasEncounteredLanguage(languageId: string): boolean {
         return this._sessionManager.hasEncounteredLanguage(languageId) ||
             this._workspaceRecommendedLanguagesByLanguageId.has(languageId);
+    }
+
+    private _getRecommendationScore(metadata: LanguageRuntimeMetadata): number {
+        let score = 0;
+
+        if (this._workspaceRecommendedLanguagesByLanguageId.has(metadata.languageId)) {
+            score += 100;
+        }
+
+        if (this._hasEncounteredLanguage(metadata.languageId)) {
+            score += 50;
+        }
+
+        if (metadata.startupBehavior === LanguageRuntimeStartupBehavior.Immediate) {
+            score += 10;
+        }
+
+        if (this.getPreferredRuntime(metadata.languageId)?.runtimeId === metadata.runtimeId) {
+            score += 5;
+        }
+
+        return score;
     }
 
     dispose(): void {

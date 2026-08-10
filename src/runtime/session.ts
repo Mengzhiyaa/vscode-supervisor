@@ -218,7 +218,8 @@ export class RuntimeSession implements vscode.Disposable {
 
     // LSP/DAP support (from positron-r)
     private _lsp: ILanguageLsp;
-    private readonly _supportsLsp: boolean;
+    private _lspFactory: ILanguageLspFactory | undefined;
+    private _supportsLsp: boolean;
     private _dapComm?: Promise<DapComm>;
     private _lspActivationPromise?: Promise<void>;
     private _lspStartingPromise: Promise<number> = Promise.resolve(0);
@@ -277,6 +278,7 @@ export class RuntimeSession implements vscode.Disposable {
         this._workingDirectory = this.dynState.currentWorkingDirectory;
 
         // Initialize LSP and services queue
+        this._lspFactory = lspFactory;
         this._supportsLsp = !!lspFactory;
         this._lsp = lspFactory?.create(
             runtimeMetadata,
@@ -1338,6 +1340,48 @@ export class RuntimeSession implements vscode.Disposable {
      */
     public get lsp(): ILanguageLsp {
         return this._lsp;
+    }
+
+    /**
+     * Attaches an LSP factory that was registered after this session was
+     * created. Language extensions are activated independently from session
+     * restore, so late registration must be recoverable rather than leaving a
+     * permanent NullLanguageLsp on the session.
+     */
+    public async attachLspFactory(factory: ILanguageLspFactory): Promise<void> {
+        if (this._disposed || this._lspFactory === factory) {
+            return;
+        }
+
+        if (this._supportsLsp) {
+            this.log(
+                `Ignoring replacement LSP factory for ${factory.languageId}; ` +
+                'this session already owns an LSP factory',
+                vscode.LogLevel.Warning,
+            );
+            return;
+        }
+
+        await this._lsp.dispose();
+        this._lspFactory = factory;
+        this._supportsLsp = true;
+        this._lsp = factory.create(
+            this.runtimeMetadata,
+            this.sessionMetadata,
+            this.dynState,
+            this._logChannel,
+        );
+
+        if (
+            this.isForeground &&
+            (
+                this.state === RuntimeState.Ready ||
+                this.state === RuntimeState.Idle ||
+                this.state === RuntimeState.Busy
+            )
+        ) {
+            await this.activateLsp();
+        }
     }
 
     public activateLsp(): Promise<void> {

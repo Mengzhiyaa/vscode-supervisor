@@ -76,10 +76,11 @@ import {
     setForegroundSessionProvider,
 } from './supervisor/positron';
 import { ensureBinaries } from './binaryManager';
-
-interface RuntimeQuickPickItem extends vscode.QuickPickItem {
-    installation: unknown;
-}
+import {
+    buildRuntimeQuickPickItems,
+    type RuntimeQuickPickCandidate,
+    type RuntimeQuickPickItem,
+} from './runtime/runtimeQuickPick';
 
 interface SessionQuickLaunchPickItem extends vscode.QuickPickItem {
     installation?: unknown;
@@ -167,6 +168,7 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
     private readonly _pendingLspFactories = new Map<string, ILanguageLspFactory>();
     private readonly _languageWebviewAssets = new Map<string, ILanguageWebviewAssets>();
     private readonly _activatedLanguageContributionIds = new Set<string>();
+    private readonly _languageContributionActivationPromises = new Map<string, Promise<void>>();
     private _activated = false;
     private _runtimeStartupStarted = false;
     readonly version = '0.1.0';
@@ -564,6 +566,14 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
                 existing.binaryProvider === registration.binaryProvider &&
                 existing.languageContribution === registration.languageContribution &&
                 existing.webviewAssets === registration.webviewAssets) {
+                if (
+                    this._activated &&
+                    existing.languageContribution &&
+                    !this._activatedLanguageContributionIds.has(runtimeProvider.languageId)
+                ) {
+                    await this._initializeLanguageSupportAfterActivation(existing);
+                    this._startDeferredActivationTasks();
+                }
                 return;
             }
 
@@ -741,36 +751,84 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
             return;
         }
 
-        const contributionDisposables = this._normalizeContributionRegistrationResult(
-            await languageContribution.registerContributions(this._getLanguageContributionServices())
-        );
-        this._activatedLanguageContributionIds.add(runtimeProvider.languageId);
-        this._disposables.push(...contributionDisposables);
+        const pendingActivation = this._languageContributionActivationPromises.get(runtimeProvider.languageId);
+        if (pendingActivation) {
+            return pendingActivation;
+        }
+
+        const activationPromise = (async () => {
+            const contributionDisposables = this._normalizeContributionRegistrationResult(
+                await languageContribution.registerContributions(this._getLanguageContributionServices())
+            );
+            this._activatedLanguageContributionIds.add(runtimeProvider.languageId);
+            this._disposables.push(...contributionDisposables);
+        })().finally(() => {
+            if (this._languageContributionActivationPromises.get(runtimeProvider.languageId) === activationPromise) {
+                this._languageContributionActivationPromises.delete(runtimeProvider.languageId);
+            }
+        });
+
+        this._languageContributionActivationPromises.set(runtimeProvider.languageId, activationPromise);
+        return activationPromise;
     }
 
     private async _activateRegisteredLanguageContributions(): Promise<void> {
-        for (const registration of this._languageSupport.values()) {
-            await this._activateLanguageContribution(registration);
-        }
+        const registrations = Array.from(this._languageSupport.values());
+        const results = await Promise.allSettled(
+            registrations.map(registration => this._activateLanguageContribution(registration)),
+        );
+        results.forEach((result, index) => {
+            if (result.status === 'rejected') {
+                this._outputChannel.error(
+                    `[LanguageSupport] Failed to activate contributions for ` +
+                    `${registrations[index].runtimeProvider.languageId}: ${result.reason}`,
+                );
+            }
+        });
     }
 
     private async _initializeLanguageSupportAfterActivation(
         registration: ILanguageSupportRegistration<any>
     ): Promise<void> {
-        await this._activateLanguageContribution(registration);
-        await this._ensureRegisteredBinaries();
-
         const { runtimeProvider } = registration;
+        try {
+            await this._activateLanguageContribution(registration);
+        } catch (error) {
+            this._outputChannel.error(
+                `[LanguageSupport] Failed to activate contributions for ${runtimeProvider.languageId}: ${error}`,
+            );
+        }
+
+        try {
+            await this._ensureRegisteredBinaries();
+        } catch (error) {
+            this._outputChannel.error(
+                `[LanguageSupport] Failed to register binaries for ${runtimeProvider.languageId}: ${error}`,
+            );
+        }
+
         if (this._sessionManager.isInitialized &&
             !this._sessionManager.getDefaultInstallation(runtimeProvider.languageId)) {
-            const installation = await runtimeProvider.resolveInitialInstallation(this._outputChannel);
-            if (installation) {
-                this._sessionManager.setDefaultInstallation(runtimeProvider.languageId, installation);
+            try {
+                const installation = await runtimeProvider.resolveInitialInstallation(this._outputChannel);
+                if (installation) {
+                    this._sessionManager.setDefaultInstallation(runtimeProvider.languageId, installation);
+                }
+            } catch (error) {
+                this._outputChannel.error(
+                    `[LanguageSupport] Failed to resolve the initial ${runtimeProvider.languageId} installation: ${error}`,
+                );
             }
         }
 
         if (this._runtimeManager.discoveryComplete) {
-            await this._runtimeStartupService.rediscoverAllRuntimes();
+            try {
+                await this._runtimeStartupService.rediscoverAllRuntimes();
+            } catch (error) {
+                this._outputChannel.error(
+                    `[Discovery] Failed to refresh runtime discovery: ${error}`,
+                );
+            }
         } else {
             void this._runtimeManager.discoverAllRuntimes([]).catch((error) => {
                 this._outputChannel.error(`[Discovery] Failed to refresh runtime discovery: ${error}`);
@@ -909,46 +967,94 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
     }
 
     private _buildRuntimeQuickPickItems(): RuntimeQuickPickItem[] {
-        const provider = this._requireRuntimeProvider(this._getPreferredLanguageId());
-        const installations = this._runtimeManager.getInstallations(provider.languageId);
+        const activeRuntime = this._sessionManager.activeSession?.runtimeMetadata;
+        const runtimes = this._runtimeManager.runtimes;
+        const candidates: RuntimeQuickPickCandidate[] = [];
 
-        return installations.map(installation => ({
-            label: provider.formatRuntimeName(installation),
-            iconPath: provider.getRuntimeIconPath?.(installation),
-            description: this._toRuntimeSourceLabel(provider.getRuntimeSource(installation)),
-            detail: provider.getRuntimePath(installation),
-            picked: provider.getRuntimePath(installation) === this._sessionManager.activeSession?.runtimeMetadata.runtimePath,
-            installation,
-        }));
+        for (const languageId of this._runtimeManager.getSupportedLanguageIds()) {
+            const provider = this._requireRuntimeProvider(languageId);
+            const preferredRuntime = this._runtimeStartupService.getPreferredRuntime(languageId);
+            const runtimeMetadataByPath = new Map(
+                runtimes
+                    .filter(runtime => runtime.languageId === languageId)
+                    .map(runtime => [runtime.runtimePath, runtime]),
+            );
+
+            for (const installation of this._runtimeManager.getInstallations(languageId)) {
+                const runtimePath = provider.getRuntimePath(installation);
+                const metadata = runtimeMetadataByPath.get(runtimePath);
+                candidates.push({
+                    languageId,
+                    languageName: provider.languageName,
+                    languageVersion: metadata?.languageVersion,
+                    runtimeName: metadata?.runtimeName ?? provider.formatRuntimeName(installation),
+                    runtimePath,
+                    runtimeSource: this._toRuntimeSourceLabel(
+                        metadata?.runtimeSource ?? provider.getRuntimeSource(installation),
+                    ),
+                    iconPath: provider.getRuntimeIconPath?.(installation),
+                    installation,
+                    preferred:
+                        metadata?.runtimeId === preferredRuntime?.runtimeId ||
+                        runtimePath === preferredRuntime?.runtimePath,
+                    active:
+                        languageId === activeRuntime?.languageId &&
+                        runtimePath === activeRuntime.runtimePath,
+                });
+            }
+        }
+
+        return buildRuntimeQuickPickItems(candidates);
     }
 
-    private async _pickRuntimeFromCache(): Promise<unknown | undefined> {
-        const provider = this._requireRuntimeProvider(this._getPreferredLanguageId());
-        let items = this._buildRuntimeQuickPickItems();
+    private async _pickRuntimeFromCache(): Promise<RuntimeQuickPickItem | undefined> {
+        const quickPick = vscode.window.createQuickPick<RuntimeQuickPickItem>();
+        quickPick.title = 'Start New Interpreter Session';
+        quickPick.canSelectMany = false;
 
-        // Positron-style behavior: quick pick should be responsive and cache-driven.
-        // If cache is still empty, wait once for background discovery to complete.
-        if (items.length === 0 && this._runtimeManager.isDiscovering) {
-            await new Promise<void>(resolve => {
-                const disposable = this._runtimeManager.onDidFinishDiscovery(() => {
-                    disposable.dispose();
-                    resolve();
-                });
-            });
-            items = this._buildRuntimeQuickPickItems();
-        }
+        const rebuildItems = () => {
+            const activeKey = quickPick.activeItems[0]
+                ? `${quickPick.activeItems[0].languageId}:${quickPick.activeItems[0].runtimePath}`
+                : undefined;
+            quickPick.items = this._buildRuntimeQuickPickItems();
+            const activeItem = activeKey
+                ? quickPick.items.find(item => `${item.languageId}:${item.runtimePath}` === activeKey)
+                : quickPick.items.find(item => item.picked);
+            if (activeItem) {
+                quickPick.activeItems = [activeItem];
+            }
 
-        if (items.length === 0) {
-            return undefined;
-        }
+            quickPick.busy = this._runtimeManager.isDiscovering;
+            quickPick.placeholder = quickPick.busy
+                ? 'Discovering interpreters...'
+                : quickPick.items.some(item => item.kind !== vscode.QuickPickItemKind.Separator)
+                    ? undefined
+                    : 'No interpreters found';
+        };
 
-        const selected = await vscode.window.showQuickPick<RuntimeQuickPickItem>(items, {
-            title: `Start New ${provider.languageName} Session`,
-            placeHolder: `Select ${provider.languageName} installation to start`,
-            canPickMany: false,
+        return new Promise<RuntimeQuickPickItem | undefined>(resolve => {
+            let accepted: RuntimeQuickPickItem | undefined;
+            const disposables = [
+                this._runtimeManager.onDidDiscoverRuntime(rebuildItems),
+                this._runtimeManager.onDidFinishDiscovery(rebuildItems),
+                quickPick.onDidAccept(() => {
+                    const selected = quickPick.activeItems[0];
+                    if (!selected?.languageId || selected.installation === undefined) {
+                        return;
+                    }
+                    accepted = selected;
+                    quickPick.hide();
+                }),
+                quickPick.onDidHide(() => {
+                    disposables.forEach(disposable => disposable.dispose());
+                    quickPick.dispose();
+                    resolve(accepted);
+                }),
+            ];
+
+            rebuildItems();
+            quickPick.show();
         });
-
-        return selected?.installation;
     }
 
     private _resolveInstallationForSession(session: RuntimeSession): unknown | undefined {
@@ -1118,20 +1224,16 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
 
     private async _startNewSessionFromDiscoveredRuntimes(): Promise<void> {
         try {
-            const provider = this._requireRuntimeProvider(this._getPreferredLanguageId());
-            const installation = await this._pickRuntimeFromCache();
-            if (!installation) {
-                this._outputChannel.warn('[Ark] No discovered runtimes available in cache');
-                void vscode.window.showWarningMessage(
-                    `No discovered ${provider.languageName} installations available yet. Wait for discovery to finish or configure the language runtime.`
-                );
+            const selected = await this._pickRuntimeFromCache();
+            if (!selected?.languageId || selected.installation === undefined) {
                 return;
             }
 
+            const provider = this._requireRuntimeProvider(selected.languageId);
             await this._startSessionForInstallation(
-                provider.languageId,
-                installation,
-                provider.formatRuntimeName(installation)
+                selected.languageId,
+                selected.installation,
+                provider.formatRuntimeName(selected.installation)
             );
         } catch (error) {
             this._outputChannel.error(`[Ark] Failed to create session: ${error}`);
@@ -1334,11 +1436,10 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
         factory: ILanguageLspFactory
     ): void {
         const mutableProvider = runtimeProvider as IMutableLanguageRuntimeProvider<TInstallation>;
-        if (mutableProvider.lspFactory === factory) {
-            return;
+        if (mutableProvider.lspFactory !== factory) {
+            mutableProvider.lspFactory = factory;
         }
-
-        mutableProvider.lspFactory = factory;
+        this._sessionManager.registerLspFactory(factory);
     }
 
     private async _ensureRegisteredBinaries(): Promise<void> {

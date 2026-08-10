@@ -231,6 +231,8 @@ function makeSessionManager() {
         updateActiveLanguages: () => {
             sessionManager.updateActiveLanguagesCalls += 1;
         },
+        hasEncounteredLanguage: (languageId: string) =>
+            sessionManager.value.encounteredLanguages.includes(languageId),
         hasStartingOrRunningConsole: () => false,
         autoStartRuntime: async () => {
             throw new Error('autoStartRuntime should not be called in this test');
@@ -545,7 +547,7 @@ suite('[Unit] runtime startup', () => {
         await localSessionManager.value.restorePersistedSessionsInBackground();
 
         assert.deepStrictEqual(startupEvents, [{
-            runtimeName: 'notebook-new',
+            runtimeName: 'console-new',
             newSession: false,
             activate: true,
         }]);
@@ -695,11 +697,65 @@ suite('[Unit] runtime startup', () => {
 
         await (startupService as any)._startRecommendedLanguageRuntimes();
 
-        assert.deepStrictEqual(starts, [{ runtimeId: 'python-immediate', activate: false }]);
+        assert.deepStrictEqual(starts, [{ runtimeId: 'python-immediate', activate: true }]);
         assert.deepStrictEqual(
             startupService.getAffiliatedRuntimeMetadata('r'),
             explicit,
         );
+        startupService.dispose();
+    });
+
+    test('deduplicates recommendations and isolates background startup failures', async () => {
+        const context = makeContext();
+        const logChannel = makeNoopLogChannel();
+        const localSessionManager = makeSessionManager();
+        const starts: Array<{ runtimeId: string; activate: boolean }> = [];
+        localSessionManager.value.autoStartRuntime = async (
+            metadata: LanguageRuntimeMetadata,
+            _source: string,
+            activate: boolean,
+        ) => {
+            starts.push({ runtimeId: metadata.runtimeId, activate });
+            if (!activate) {
+                throw new Error('background start failed');
+            }
+        };
+
+        const primary = makeRuntimeMetadata({
+            runtimeId: 'r-immediate',
+            startupBehavior: LanguageRuntimeStartupBehavior.Immediate,
+        });
+        const duplicatePrimary = { ...primary, runtimeName: 'R duplicate recommendation' };
+        const background = makeRuntimeMetadata({
+            runtimeId: 'python-immediate',
+            runtimeName: 'Python',
+            languageId: 'python',
+            languageName: 'Python',
+            startupBehavior: LanguageRuntimeStartupBehavior.Immediate,
+        });
+        const startupService = new RuntimeStartupService(
+            context,
+            {
+                ...makeRuntimeManager(),
+                getSupportedLanguageIds: () => ['r', 'python'],
+            } as any,
+            localSessionManager.value,
+            makeNewFolderService(context, logChannel),
+            logChannel,
+            createMemento(),
+        );
+        startupService.registerRuntimeManager({
+            id: 1,
+            discoverAllRuntimes: async () => undefined,
+            recommendWorkspaceRuntimes: async () => [primary, duplicatePrimary, background],
+        });
+
+        await (startupService as any)._startRecommendedLanguageRuntimes();
+
+        assert.deepStrictEqual(starts, [
+            { runtimeId: 'r-immediate', activate: true },
+            { runtimeId: 'python-immediate', activate: false },
+        ]);
         startupService.dispose();
     });
 

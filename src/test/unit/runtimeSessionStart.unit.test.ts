@@ -2,6 +2,8 @@ import * as assert from 'assert';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import {
+    type ILanguageLsp,
+    LanguageLspState,
     LanguageRuntimeSessionMode,
     type LanguageRuntimeMetadata,
     type IRuntimeSessionMetadata,
@@ -163,7 +165,11 @@ function makeAttachableConsoleSession(
         onDidChangeRuntimeState: vscode.Event<RuntimeState>;
         onDidChangeWorkingDirectory: vscode.Event<string>;
         onDidEndSession: vscode.Event<unknown>;
+        readonly isForeground: boolean;
+        start: () => Promise<void>;
         setForeground: (_foreground: boolean) => void;
+        activateLsp: () => Promise<void>;
+        deactivateLsp: () => Promise<void>;
         dispose: () => Promise<void>;
     };
     fireRuntimeState: (state: RuntimeState) => void;
@@ -180,6 +186,7 @@ function makeAttachableConsoleSession(
         createdTimestamp: Date.now(),
         startReason: 'unit-test',
     };
+    let isForeground = false;
 
     const session = {
         sessionId,
@@ -200,7 +207,11 @@ function makeAttachableConsoleSession(
         onDidChangeRuntimeState: onDidChangeRuntimeState.event,
         onDidChangeWorkingDirectory: onDidChangeWorkingDirectory.event,
         onDidEndSession: onDidEndSession.event,
-        setForeground: (_foreground: boolean) => undefined,
+        get isForeground() { return isForeground; },
+        start: async () => undefined,
+        setForeground: (foreground: boolean) => { isForeground = foreground; },
+        activateLsp: async () => undefined,
+        deactivateLsp: async () => undefined,
         dispose: async () => undefined,
     };
 
@@ -426,6 +437,87 @@ suite('[Unit] runtime session start semantics', () => {
 
         dispose();
         service.dispose();
+    });
+
+    test('finalizes and activates a console session that becomes ready after the startup wait times out', async () => {
+        const service = new RuntimeSessionService(makeContext(), makeNoopLogChannel());
+        const runtimeMetadata = makeRuntimeMetadata();
+        const { session, fireRuntimeState, dispose } = makeAttachableConsoleSession(
+            runtimeMetadata,
+            'late-ready-session',
+        );
+        session.state = RuntimeState.Starting;
+        let activateLspCalls = 0;
+        session.activateLsp = async () => { activateLspCalls++; };
+        (service as any)._sessions.set(session.sessionId, session);
+        (service as any)._waitForSessionReady = async () => {
+            const error = new Error('ready observation timed out');
+            error.name = 'RuntimeSessionReadyTimeoutError';
+            throw error;
+        };
+        const startedSessionIds: string[] = [];
+        const failedSessionIds: string[] = [];
+        service.onDidStartRuntime(startedSession => startedSessionIds.push(startedSession.sessionId));
+        service.onDidFailStartRuntime(failedSession => failedSessionIds.push(failedSession.sessionId));
+
+        await (service as any).doStartRuntimeSession(
+            session,
+            RuntimeStartMode.Starting,
+            true,
+            true,
+        );
+        assert.deepStrictEqual(startedSessionIds, []);
+        assert.deepStrictEqual(failedSessionIds, []);
+
+        fireRuntimeState(RuntimeState.Ready);
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        assert.deepStrictEqual(startedSessionIds, [session.sessionId]);
+        assert.deepStrictEqual(failedSessionIds, []);
+        assert.strictEqual(service.activeSessionId, session.sessionId);
+        assert.ok(activateLspCalls >= 1);
+
+        (service as any)._sessions.delete(session.sessionId);
+        dispose();
+        service.dispose();
+    });
+
+    test('attaches an LSP factory to a session created before language registration', async () => {
+        const runtimeMetadata = makeRuntimeMetadata();
+        const sessionMetadata: IRuntimeSessionMetadata = {
+            sessionId: 'late-lsp-session',
+            sessionMode: LanguageRuntimeSessionMode.Console,
+            sessionName: 'late-lsp-session',
+            createdTimestamp: Date.now(),
+            startReason: 'unit-test',
+        };
+        let disposed = 0;
+        const lsp: ILanguageLsp = {
+            state: LanguageLspState.Stopped,
+            activate: async () => undefined,
+            deactivate: async () => undefined,
+            wait: async () => false,
+            showOutput: () => undefined,
+            requestCompletion: async () => [],
+            requestHover: async () => null,
+            requestSignatureHelp: async () => null,
+            dispose: () => { disposed++; },
+        };
+        const session = new RuntimeSession(
+            sessionMetadata.sessionId,
+            runtimeMetadata,
+            sessionMetadata,
+            makeNoopLogChannel(),
+        );
+
+        await session.attachLspFactory({
+            languageId: runtimeMetadata.languageId,
+            create: () => lsp,
+        });
+
+        assert.strictEqual(session.lsp, lsp);
+        await session.dispose();
+        assert.strictEqual(disposed, 1);
     });
 
     test('delegates working-directory changes to the language-owned hook', async () => {

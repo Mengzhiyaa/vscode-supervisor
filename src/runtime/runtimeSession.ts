@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import {
     type ILanguageInstallationPickerOptions,
+    type ILanguageLspFactory,
     type IUiClientInstance,
     type ILanguageRuntimeSessionManager,
     type INotebookSessionUriChangedEvent,
@@ -49,6 +50,13 @@ interface SessionStartOptions {
 interface RuntimeStateWatchdog {
     timer: ReturnType<typeof setTimeout>;
     expectedStates: readonly RuntimeState[];
+}
+
+class RuntimeSessionReadyTimeoutError extends Error {
+    constructor(sessionName: string) {
+        super(`Timed out waiting for runtime '${sessionName}' to become ready`);
+        this.name = 'RuntimeSessionReadyTimeoutError';
+    }
 }
 
 function getNotebookSessionMapKey(notebookUri: vscode.Uri): string {
@@ -183,6 +191,24 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
 
     registerRuntimeProvider<TInstallation>(provider: ILanguageRuntimeProvider<TInstallation>): void {
         this._runtimeProviders.set(provider.languageId, provider as ILanguageRuntimeProvider<any>);
+        if (provider.lspFactory) {
+            this.registerLspFactory(provider.lspFactory);
+        }
+    }
+
+    /** Backfills an LSP factory into sessions created before language activation completed. */
+    registerLspFactory(factory: ILanguageLspFactory): void {
+        for (const session of this._sessions.values()) {
+            if (session.runtimeMetadata.languageId !== factory.languageId) {
+                continue;
+            }
+            void session.attachLspFactory(factory).catch(error => {
+                this._outputChannel.error(
+                    `[RuntimeSession] Failed to attach late LSP factory to ` +
+                    `${session.sessionId}: ${error}`,
+                );
+            });
+        }
     }
 
     registerNotebookController(
@@ -1266,15 +1292,23 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
     ): Promise<void> {
         this.prepareSessionStart(session, startMode, activate, hasConsole);
         const readyPromise = this._waitForSessionReady(session, 10000);
+        let finalized = false;
+        let failed = false;
 
-        try {
-            await session.start();
-            await readyPromise;
+        const clearStartingState = () => {
             this.clearStartingSessionMaps(
                 session.sessionMetadata.sessionMode,
                 session.runtimeMetadata,
                 session.sessionMetadata.notebookUri,
             );
+        };
+
+        const finalizeStart = async () => {
+            if (finalized || failed) {
+                return;
+            }
+            finalized = true;
+            clearStartingState();
 
             if (session.sessionMetadata.sessionMode === LanguageRuntimeSessionMode.Console) {
                 this.addSessionToConsoleSessionMap(session);
@@ -1297,13 +1331,63 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
             ) {
                 await this._setForegroundSession(session.sessionId);
             }
-        } catch (error) {
-            this.clearStartingSessionMaps(
-                session.sessionMetadata.sessionMode,
-                session.runtimeMetadata,
-                session.sessionMetadata.notebookUri,
-            );
+        };
+
+        const failStart = () => {
+            if (finalized || failed) {
+                return;
+            }
+            failed = true;
+            clearStartingState();
             this._onDidFailStartRuntime.fire(session);
+        };
+
+        try {
+            await session.start();
+            await readyPromise;
+            await finalizeStart();
+        } catch (error) {
+            // If start() failed before the readiness promise settled, consume
+            // its eventual rejection so it cannot become unhandled.
+            void readyPromise.catch(() => undefined);
+
+            if (this._isSessionUsable(session)) {
+                await finalizeStart();
+                return;
+            }
+
+            if (this._isSessionReadyTimeout(error) && session.state !== RuntimeState.Exited) {
+                this._outputChannel.warn(
+                    `[RuntimeSession] ${error.message}; continuing to observe ${session.sessionId} for a late ready event.`,
+                );
+
+                const lateStateDisposable = session.onDidChangeRuntimeState((state) => {
+                    if (this._isUsableRuntimeState(state)) {
+                        lateStateDisposable.dispose();
+                        void finalizeStart().catch(finalizeError => {
+                            this._outputChannel.error(
+                                `[RuntimeSession] Failed to finalize late start for ${session.sessionId}: ${finalizeError}`,
+                            );
+                        });
+                    } else if (state === RuntimeState.Exited) {
+                        lateStateDisposable.dispose();
+                        failStart();
+                    }
+                });
+                this._sessionLifecycleDisposables.get(session.sessionId)?.push(lateStateDisposable);
+
+                // Close the race between the state check above and listener registration.
+                if (this._isSessionUsable(session)) {
+                    lateStateDisposable.dispose();
+                    await finalizeStart();
+                } else if (this._isSessionExited(session)) {
+                    lateStateDisposable.dispose();
+                    failStart();
+                }
+                return;
+            }
+
+            failStart();
             throw error;
         }
     }
@@ -1341,7 +1425,7 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
                 this._onDidStartUiClient.fire({ sessionId: session.sessionId, uiClient });
             }),
             session.onDidChangeRuntimeState((state) => {
-                this._didChangeRuntimeState(session, activeSession, state, activate);
+                this._didChangeRuntimeState(session, activeSession, state);
             }),
             session.onDidEndSession(() => {
                 this.updateSessionMapsAfterExit(session);
@@ -2021,11 +2105,7 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
         return new Promise((resolve, reject) => {
             const timeout = setTimeout(() => {
                 disposable.dispose();
-                reject(
-                    new Error(
-                        `Timed out waiting for runtime '${session.dynState.sessionName}' to become ready`,
-                    ),
-                );
+                reject(new RuntimeSessionReadyTimeoutError(session.dynState.sessionName));
             }, timeoutMs);
 
             const disposable = session.onDidChangeRuntimeState((state) => {
@@ -2048,6 +2128,10 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
 
     private async _setForegroundSessionInternal(sessionId: string | undefined): Promise<void> {
         if (this._foregroundSessionId === sessionId) {
+            const currentSession = this.foregroundSession;
+            if (currentSession && this._isSessionUsable(currentSession)) {
+                this._scheduleSessionLspReconciliation(undefined, currentSession);
+            }
             return;
         }
 
@@ -2072,6 +2156,53 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
 
         this._onDidChangeForegroundSession.fire(newSession);
         this._onDidChangeActiveSession.fire(newSession);
+        this._scheduleSessionLspReconciliation(oldSession, newSession);
+    }
+
+    private _scheduleSessionLspReconciliation(
+        oldSession: RuntimeSession | undefined,
+        newSession: RuntimeSession | undefined,
+    ): void {
+        void this._reconcileSessionLsp(oldSession, newSession).catch(error => {
+            this._outputChannel.error(
+                `[RuntimeSession] Unexpected LSP reconciliation failure: ${error}`,
+            );
+        });
+    }
+
+    private async _reconcileSessionLsp(
+        oldSession: RuntimeSession | undefined,
+        newSession: RuntimeSession | undefined,
+    ): Promise<void> {
+        const operations: Array<{ action: string; promise: Promise<void> }> = [];
+        if (oldSession && oldSession !== newSession) {
+            operations.push({
+                action: `deactivate LSP for ${oldSession.sessionId}`,
+                promise: oldSession.deactivateLsp(),
+            });
+        }
+        if (newSession && this._isSessionUsable(newSession)) {
+            operations.push({
+                action: `activate LSP for ${newSession.sessionId}`,
+                promise: newSession.activateLsp().then(async () => {
+                    // A slow activation may finish after another console became
+                    // foreground. Converge again instead of leaving two active
+                    // language servers behind.
+                    if (!newSession.isForeground) {
+                        await newSession.deactivateLsp();
+                    }
+                }),
+            });
+        }
+
+        const results = await Promise.allSettled(operations.map(operation => operation.promise));
+        results.forEach((result, index) => {
+            if (result.status === 'rejected') {
+                this._outputChannel.error(
+                    `[RuntimeSession] Failed to ${operations[index].action}: ${result.reason}`,
+                );
+            }
+        });
     }
 
     private async _enqueueActiveSessionSwitch(task: () => Promise<void>): Promise<void> {
@@ -2087,7 +2218,6 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
         session: RuntimeSession,
         activeSession: ActiveRuntimeSession,
         state: RuntimeState,
-        activate: boolean,
     ): void {
         const oldState = activeSession.state;
         activeSession.state = state;
@@ -2116,11 +2246,42 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
             void activeSession.startUiClient().catch(() => undefined);
         }
 
+        if (
+            this._isUsableRuntimeState(state) &&
+            session.sessionMetadata.sessionMode === LanguageRuntimeSessionMode.Console &&
+            (!this.foregroundSession || session.isForeground)
+        ) {
+            void this._setForegroundSession(session.sessionId).catch(error => {
+                this._outputChannel.error(
+                    `[RuntimeSession] Failed to reconcile foreground session ${session.sessionId}: ${error}`,
+                );
+            });
+        }
+
         if (state === RuntimeState.Exited) {
             this.updateSessionMapsAfterExit(session);
         } else {
             this._startStateWatchdog(session, state);
         }
+    }
+
+    private _isSessionUsable(session: RuntimeSession): boolean {
+        return this._isUsableRuntimeState(session.state);
+    }
+
+    private _isSessionExited(session: RuntimeSession): boolean {
+        return session.state === RuntimeState.Exited;
+    }
+
+    private _isUsableRuntimeState(state: RuntimeState): boolean {
+        return state === RuntimeState.Ready ||
+            state === RuntimeState.Idle ||
+            state === RuntimeState.Busy;
+    }
+
+    private _isSessionReadyTimeout(error: unknown): error is RuntimeSessionReadyTimeoutError {
+        return error instanceof RuntimeSessionReadyTimeoutError ||
+            (error instanceof Error && error.name === 'RuntimeSessionReadyTimeoutError');
     }
 
     private _startStateWatchdog(session: RuntimeSession, state: RuntimeState): void {
