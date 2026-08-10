@@ -25,7 +25,7 @@ import {
 	type EphemeralMemento,
 } from '../runtime/ephemeralState';
 
-export const KALLICHORE_STATE_KEY = 'positron-supervisor.v2';
+export const KALLICHORE_STATE_KEY = 'positron-supervisor';
 const HANDSHAKE_SOCKET_ENV_VAR = 'POSITRON_SUPERVISOR_HANDSHAKE_SOCKET';
 
 /**

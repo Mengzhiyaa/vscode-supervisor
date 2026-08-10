@@ -78,7 +78,7 @@ export class RuntimeDiscoveryCache {
             if (unpackBucketKey(key)) {
                 this._buckets.set(key, {
                     ...bucket,
-                    // Early schema-v2 builds stored this as a string. Treat it
+                    // Early builds of the current schema stored this as a string. Treat it
                     // as absent so the next provider signature forces a clean
                     // discovery and rewrites the bucket in structured form.
                     discoveryRootSignature: this._isRootSignature(bucket.discoveryRootSignature)

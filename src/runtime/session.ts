@@ -156,6 +156,7 @@ export interface RuntimeSessionProvisioningOptions {
     kernelSpec?: JupyterKernelSpec;
     kernelExtra?: JupyterKernelExtra;
     dynState?: LanguageRuntimeDynState;
+    lspGeneration?: number;
     setWorkingDirectory?: (workingDirectory: string) => Promise<void>;
 }
 
@@ -220,6 +221,7 @@ export class RuntimeSession implements vscode.Disposable {
     private _lsp: ILanguageLsp;
     private _lspFactory: ILanguageLspFactory | undefined;
     private _supportsLsp: boolean;
+    private _boundLspGeneration: number;
     private _dapComm?: Promise<DapComm>;
     private _lspActivationPromise?: Promise<void>;
     private _lspStartingPromise: Promise<number> = Promise.resolve(0);
@@ -280,6 +282,7 @@ export class RuntimeSession implements vscode.Disposable {
         // Initialize LSP and services queue
         this._lspFactory = lspFactory;
         this._supportsLsp = !!lspFactory;
+        this._boundLspGeneration = provisioning?.lspGeneration ?? 0;
         this._lsp = lspFactory?.create(
             runtimeMetadata,
             sessionMetadata,
@@ -1342,6 +1345,10 @@ export class RuntimeSession implements vscode.Disposable {
         return this._lsp;
     }
 
+    public get boundLspGeneration(): number {
+        return this._boundLspGeneration;
+    }
+
     /**
      * Attaches an LSP factory that was registered after this session was
      * created. Language extensions are activated independently from session
@@ -1349,20 +1356,26 @@ export class RuntimeSession implements vscode.Disposable {
      * permanent NullLanguageLsp on the session.
      */
     public async attachLspFactory(factory: ILanguageLspFactory): Promise<void> {
-        if (this._disposed || this._lspFactory === factory) {
+        await this.bindLspFactory(factory, this._boundLspGeneration + 1);
+    }
+
+    /** Replaces the LSP binding only when the requested generation is current or newer. */
+    public async bindLspFactory(factory: ILanguageLspFactory, generation: number): Promise<void> {
+        if (this._disposed || generation < this._boundLspGeneration ||
+            (this._lspFactory === factory && generation === this._boundLspGeneration)) {
             return;
         }
-
-        if (this._supportsLsp) {
-            this.log(
-                `Ignoring replacement LSP factory for ${factory.languageId}; ` +
-                'this session already owns an LSP factory',
-                vscode.LogLevel.Warning,
-            );
+        this._boundLspGeneration = generation;
+        const previousLsp = this._lsp;
+        this._lspActivationPromise = undefined;
+        try {
+            await previousLsp.deactivate();
+        } finally {
+            previousLsp.dispose();
+        }
+        if (this._disposed || this._boundLspGeneration !== generation) {
             return;
         }
-
-        await this._lsp.dispose();
         this._lspFactory = factory;
         this._supportsLsp = true;
         this._lsp = factory.create(
@@ -1381,6 +1394,25 @@ export class RuntimeSession implements vscode.Disposable {
             )
         ) {
             await this.activateLsp();
+            if (this._boundLspGeneration !== generation || !this.isForeground) {
+                await this._deactivateLsp();
+            }
+        }
+    }
+
+    public async removeLspFactory(generation: number): Promise<void> {
+        if (this._disposed || this._boundLspGeneration !== generation) {
+            return;
+        }
+        const previousLsp = this._lsp;
+        this._lspActivationPromise = undefined;
+        this._lspFactory = undefined;
+        this._supportsLsp = false;
+        this._lsp = new NullLanguageLsp();
+        try {
+            await previousLsp.deactivate();
+        } finally {
+            previousLsp.dispose();
         }
     }
 
@@ -1459,7 +1491,8 @@ export class RuntimeSession implements vscode.Disposable {
             return;
         }
 
-        if (this._lsp.state !== LanguageLspState.Stopped && this._lsp.state !== LanguageLspState.Uninitialized) {
+        const lsp = this._lsp;
+        if (lsp.state !== LanguageLspState.Stopped && lsp.state !== LanguageLspState.Uninitialized) {
             this.log('LSP already active', vscode.LogLevel.Debug);
             return;
         }
@@ -1480,9 +1513,20 @@ export class RuntimeSession implements vscode.Disposable {
 
         this._lspTransportKind = 'serverComm';
 
+        if (this._disposed || this._lsp !== lsp || !this.isForeground) {
+            if (this._lspClientId) {
+                this._kernel?.removeClient(this._lspClientId);
+                this._lspClientId = undefined;
+            }
+            return;
+        }
+
         this.log(`Starting Positron LSP client on port ${port}`, vscode.LogLevel.Info);
 
-        await this._lsp.activate(port);
+        await lsp.activate(port);
+        if (this._disposed || this._lsp !== lsp || !this.isForeground) {
+            await lsp.deactivate();
+        }
     }
 
     private async _deactivateLsp(): Promise<void> {

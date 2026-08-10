@@ -1,11 +1,9 @@
 import * as vscode from 'vscode';
 import {
     type ILanguageContributionServices,
-    type ILanguageLspFactory,
+    type ILanguageCapabilityRegistry,
+    type ILanguageCapabilitySnapshot,
     type ILanguageRuntimeProvider,
-    type ILanguageRuntimeRegistration,
-    type ILanguageSupportRegistration,
-    type ILanguageWebviewAssets,
     type IDataExplorerBackendProvider,
     type IRuntimeOutputRenderer,
     type IDataConnectionDriver,
@@ -20,7 +18,6 @@ import {
     type JupyterKernelSpec,
     type LanguageRuntimeDynState,
     type LanguageRuntimeMetadata,
-    type LanguageContributionRegistrationResult,
     LanguageRuntimeSessionMode,
     RuntimeStartMode,
 } from './api';
@@ -81,6 +78,8 @@ import {
     type RuntimeQuickPickCandidate,
     type RuntimeQuickPickItem,
 } from './runtime/runtimeQuickPick';
+import { LanguageCapabilityRegistry } from './languageRegistry/languageCapabilityRegistry';
+import { PassiveLanguageAssetCatalog } from './languageRegistry/passiveLanguageAssetCatalog';
 
 interface SessionQuickLaunchPickItem extends vscode.QuickPickItem {
     installation?: unknown;
@@ -146,11 +145,6 @@ interface TestOpenConsoleCodeInEditorParams {
     code: string;
 }
 
-interface IMutableLanguageRuntimeProvider<TInstallation = unknown>
-    extends ILanguageRuntimeProvider<TInstallation> {
-    lspFactory?: ILanguageLspFactory;
-}
-
 /**
  * Main application class that manages all extension components.
  * This centralizes initialization, lifecycle management, and inter-component communication.
@@ -164,14 +158,20 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
     private readonly _runtimeStartupService: RuntimeStartupService;
     private readonly _positronNewFolderService: PositronNewFolderService;
     private readonly _outputChannel: vscode.LogOutputChannel;
-    private readonly _languageSupport = new Map<string, ILanguageSupportRegistration<any>>();
-    private readonly _pendingLspFactories = new Map<string, ILanguageLspFactory>();
-    private readonly _languageWebviewAssets = new Map<string, ILanguageWebviewAssets>();
-    private readonly _activatedLanguageContributionIds = new Set<string>();
-    private readonly _languageContributionActivationPromises = new Map<string, Promise<void>>();
+    private readonly _languageCapabilityRegistry: LanguageCapabilityRegistry;
+    private readonly _languageAssetCatalog: PassiveLanguageAssetCatalog;
     private _activated = false;
     private _runtimeStartupStarted = false;
     readonly version = '0.1.0';
+    readonly apiVersion = 2 as const;
+    readonly protocolVersion = Object.freeze({ major: 2 as const, minor: 0 });
+    readonly capabilities = Object.freeze([
+        'languageCapabilityRegistry',
+        'passiveLanguageAssets',
+        'optionalLanguageCapabilities',
+        'languageCapabilityState',
+        'languageOperationState',
+    ] as const);
 
     // Service-class session management (1:1 Positron pattern)
     private readonly _consoleService: PositronConsoleService;
@@ -208,6 +208,12 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
         // Create log output channel for logging with level support
         this._outputChannel = vscode.window.createOutputChannel('Ark', { log: true });
         this._disposables.push(this._outputChannel);
+        this._languageAssetCatalog = new PassiveLanguageAssetCatalog(
+            () => vscode.extensions.all,
+            vscode.extensions.onDidChange,
+            this._outputChannel,
+        );
+        this._disposables.push(this._languageAssetCatalog);
 
         // Initialize session manager first (webview needs it)
         this._sessionManager = new RuntimeSessionService(_context, this._outputChannel);
@@ -398,6 +404,14 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
             connectionsTreeView,
         );
 
+        this._languageCapabilityRegistry = new LanguageCapabilityRegistry({
+            services: this._getLanguageContributionServices(),
+            validateOwner: ownerExtensionId => !!vscode.extensions.getExtension(ownerExtensionId),
+            installSnapshot: snapshot => this._installLanguageCapabilitySnapshot(snapshot),
+            log: this._outputChannel,
+        });
+        this._disposables.push(this._languageCapabilityRegistry);
+
         // Custom editor provider (enables "Reopen With → Data Explorer" for data files)
         const dataExplorerCustomEditorProvider = new PositronDataExplorerCustomEditorProvider(
             this._positronDataExplorerService,
@@ -430,6 +444,9 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
             (webview) => this._getLanguageTextMateGrammarDefinitions(webview),
         );
         this._disposables.push(this._webviewManager);
+        this._disposables.push(this._languageAssetCatalog.onDidChangeSnapshot(() => {
+            this._refreshLanguageSupportAssetsInWebviews();
+        }));
 
         this._plotsGalleryEditorProvider = new PlotsGalleryEditorProvider(
             this._context.extensionUri,
@@ -445,26 +462,22 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
         this._outputChannel.debug('[Ark] Application initialized');
     }
 
-    get runtimeSessionService(): ISupervisorFrameworkApi['runtimeSessionService'] {
-        return this._sessionManager;
+    get languages(): ILanguageCapabilityRegistry {
+        return this._languageCapabilityRegistry;
     }
 
-    get runtimeStartupService(): ISupervisorFrameworkApi['runtimeStartupService'] {
-        return this._runtimeStartupService;
-    }
-
-    get positronNewFolderService(): ISupervisorFrameworkApi['positronNewFolderService'] {
-        return this._positronNewFolderService;
+    get services(): ILanguageContributionServices {
+        return this._getLanguageContributionServices();
     }
 
     getApi(): ISupervisorFrameworkApi {
         return {
-            runtimeSessionService: this.runtimeSessionService,
-            runtimeStartupService: this.runtimeStartupService,
-            positronNewFolderService: this.positronNewFolderService,
+            apiVersion: this.apiVersion,
+            protocolVersion: this.protocolVersion,
+            capabilities: this.capabilities,
+            services: this.services,
+            languages: this.languages,
             version: this.version,
-            registerNotebookController: (controller, languageIds) =>
-                this.registerNotebookController(controller, languageIds),
             startRuntime: (metadata, source, activate) =>
                 this.startRuntime(metadata, source, activate),
             createSession: (runtimeMetadata, sessionMetadata, kernelSpec, dynState) =>
@@ -472,16 +485,6 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
             restoreSession: (runtimeMetadata, sessionMetadata, dynState) =>
                 this.restoreSession(runtimeMetadata, sessionMetadata, dynState),
             validateSession: (sessionId) => this.validateSession(sessionId),
-            registerLanguageSupport: <TInstallation = unknown>(
-                registration: ILanguageSupportRegistration<TInstallation>
-            ) => this.registerLanguageSupport(registration),
-            registerLanguageRuntime: <TInstallation = unknown>(
-                registration:
-                    | ILanguageRuntimeRegistration<TInstallation>
-                    | ILanguageSupportRegistration<TInstallation>
-                    | ILanguageRuntimeProvider<TInstallation>
-            ) => this.registerLanguageRuntime(registration),
-            registerLspFactory: (factory: ILanguageLspFactory) => this.registerLspFactory(factory),
             registerDataExplorerBackendProvider: (provider: IDataExplorerBackendProvider) =>
                 this._positronDataExplorerService.registerBackendProvider(provider),
             openDataExplorer: async (uri, providerId) => {
@@ -514,13 +517,6 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
         return this._sessionManager.startRuntime(metadata, source, activate);
     }
 
-    registerNotebookController(
-        controller: vscode.NotebookController,
-        languageIds: readonly string[],
-    ): vscode.Disposable {
-        return this._sessionManager.registerNotebookController(controller, languageIds);
-    }
-
     async createSession(
         runtimeMetadata: LanguageRuntimeMetadata,
         sessionMetadata: IRuntimeSessionMetadata,
@@ -549,89 +545,6 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
 
     async validateSession(sessionId: string): Promise<boolean> {
         return this._sessionManager.validateSession(sessionId);
-    }
-
-    async registerLanguageSupport<TInstallation = unknown>(
-        registration: ILanguageSupportRegistration<TInstallation>
-    ): Promise<void> {
-        const { runtimeProvider } = registration;
-        const lspFactory = this._pendingLspFactories.get(runtimeProvider.languageId);
-        if (lspFactory) {
-            this._setLanguageLspFactory(runtimeProvider, lspFactory);
-        }
-
-        const existing = this._languageSupport.get(runtimeProvider.languageId);
-        if (existing) {
-            if (existing.runtimeProvider === runtimeProvider &&
-                existing.binaryProvider === registration.binaryProvider &&
-                existing.languageContribution === registration.languageContribution &&
-                existing.webviewAssets === registration.webviewAssets) {
-                if (
-                    this._activated &&
-                    existing.languageContribution &&
-                    !this._activatedLanguageContributionIds.has(runtimeProvider.languageId)
-                ) {
-                    await this._initializeLanguageSupportAfterActivation(existing);
-                    this._startDeferredActivationTasks();
-                }
-                return;
-            }
-
-            if (existing.runtimeProvider === runtimeProvider) {
-                const updatedRegistration: ILanguageSupportRegistration<TInstallation> = {
-                    runtimeProvider,
-                    binaryProvider: registration.binaryProvider ?? existing.binaryProvider,
-                    languageContribution: registration.languageContribution ?? existing.languageContribution,
-                    webviewAssets: registration.webviewAssets ?? existing.webviewAssets,
-                };
-                this._languageSupport.set(runtimeProvider.languageId, updatedRegistration);
-                this._setLanguageWebviewAssets(runtimeProvider.languageId, updatedRegistration.webviewAssets);
-                this._refreshLanguageSupportAssetsInWebviews();
-
-                if (this._activated) {
-                    await this._initializeLanguageSupportAfterActivation(updatedRegistration);
-                    this._startDeferredActivationTasks();
-                }
-                return;
-            }
-
-            throw new Error(`Language support for '${runtimeProvider.languageId}' is already registered`);
-        }
-
-        this._languageSupport.set(runtimeProvider.languageId, registration);
-        this._setLanguageWebviewAssets(runtimeProvider.languageId, registration.webviewAssets);
-        this._refreshLanguageSupportAssetsInWebviews();
-        this._sessionManager.registerRuntimeProvider(runtimeProvider);
-        this._runtimeManager.registerRuntimeProvider(runtimeProvider);
-
-        if (!this._activated) {
-            return;
-        }
-
-        await this._initializeLanguageSupportAfterActivation(registration);
-        this._startDeferredActivationTasks();
-    }
-
-    async registerLanguageRuntime<TInstallation = unknown>(
-        registration:
-            | ILanguageRuntimeRegistration<TInstallation>
-            | ILanguageSupportRegistration<TInstallation>
-            | ILanguageRuntimeProvider<TInstallation>
-    ): Promise<void> {
-        await this.registerLanguageSupport(
-            this._normalizeRuntimeRegistration(registration)
-        );
-    }
-
-    async registerLspFactory(factory: ILanguageLspFactory): Promise<void> {
-        this._pendingLspFactories.set(factory.languageId, factory);
-
-        const existing = this._languageSupport.get(factory.languageId);
-        if (!existing) {
-            return;
-        }
-
-        this._setLanguageLspFactory(existing.runtimeProvider, factory);
     }
 
     registerDataExplorerBackendProvider(provider: IDataExplorerBackendProvider): vscode.Disposable {
@@ -687,151 +600,110 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
             runtimeSessionService: this._sessionManager,
             runtimeStartupService: this._runtimeStartupService,
             positronNewFolderService: this._positronNewFolderService,
-            runtimeManager: this._runtimeManager,
             positronConsoleService: {
                 onDidChangeConsoleWidth: this._consoleService.onDidChangeConsoleWidth,
-                revealConsole: (preserveFocus?: boolean) =>
-                    this._consoleService.revealConsole(preserveFocus),
+                revealConsole: preserveFocus => this._consoleService.revealConsole(preserveFocus),
                 focusConsole: () => this._consoleService.focusConsole(),
                 showConsole: () => this._consoleService.showConsole(),
-                getConsoleWidth: () => {
-                    return this._consoleService.getConsoleWidth();
-                },
-                executeCode: (
-                    languageId,
-                    sessionId,
-                    code,
-                    attribution,
-                    focus,
-                    allowIncomplete,
-                    mode,
-                    errorBehavior,
-                    executionId,
-                    documentUri,
-                    executionMetadata,
-                ) =>
-                    this._consoleService.executeCode(
-                        languageId,
-                        sessionId,
-                        code,
-                        attribution,
-                        focus,
-                        allowIncomplete,
-                        mode,
-                        errorBehavior,
-                        executionId,
-                        documentUri,
-                        executionMetadata,
-                    ),
+                getConsoleWidth: () => this._consoleService.getConsoleWidth(),
+                executeCode: (...args) => this._consoleService.executeCode(...args),
             },
             positronHelpService: this._helpService,
             positronPackagesService: this._packagesService,
-            registerEnvironmentContributions: (extensionId, actions) =>
-                this.registerEnvironmentContributions(extensionId, actions),
         };
     }
 
-    private _normalizeContributionRegistrationResult(
-        result: LanguageContributionRegistrationResult
-    ): vscode.Disposable[] {
-        if (!result) {
-            return [];
-        }
-
-        return Array.isArray(result)
-            ? [...result]
-            : [result as vscode.Disposable];
-    }
-
-    private async _activateLanguageContribution(
-        registration: ILanguageSupportRegistration<any>
-    ): Promise<void> {
-        const { languageContribution, runtimeProvider } = registration;
-        if (!languageContribution || this._activatedLanguageContributionIds.has(runtimeProvider.languageId)) {
-            return;
-        }
-
-        const pendingActivation = this._languageContributionActivationPromises.get(runtimeProvider.languageId);
-        if (pendingActivation) {
-            return pendingActivation;
-        }
-
-        const activationPromise = (async () => {
-            const contributionDisposables = this._normalizeContributionRegistrationResult(
-                await languageContribution.registerContributions(this._getLanguageContributionServices())
-            );
-            this._activatedLanguageContributionIds.add(runtimeProvider.languageId);
-            this._disposables.push(...contributionDisposables);
-        })().finally(() => {
-            if (this._languageContributionActivationPromises.get(runtimeProvider.languageId) === activationPromise) {
-                this._languageContributionActivationPromises.delete(runtimeProvider.languageId);
-            }
-        });
-
-        this._languageContributionActivationPromises.set(runtimeProvider.languageId, activationPromise);
-        return activationPromise;
-    }
-
-    private async _activateRegisteredLanguageContributions(): Promise<void> {
-        const registrations = Array.from(this._languageSupport.values());
-        const results = await Promise.allSettled(
-            registrations.map(registration => this._activateLanguageContribution(registration)),
-        );
-        results.forEach((result, index) => {
-            if (result.status === 'rejected') {
-                this._outputChannel.error(
-                    `[LanguageSupport] Failed to activate contributions for ` +
-                    `${registrations[index].runtimeProvider.languageId}: ${result.reason}`,
-                );
-            }
-        });
-    }
-
-    private async _initializeLanguageSupportAfterActivation(
-        registration: ILanguageSupportRegistration<any>
-    ): Promise<void> {
-        const { runtimeProvider } = registration;
+    private _installLanguageCapabilitySnapshot(
+        snapshot: ILanguageCapabilitySnapshot,
+    ): readonly vscode.Disposable[] {
+        const disposables: vscode.Disposable[] = [];
         try {
-            await this._activateLanguageContribution(registration);
+            if (snapshot.runtimeProvider) {
+                disposables.push(
+                    this._runtimeManager.registerRuntimeProvider(
+                        snapshot.runtimeProvider,
+                        snapshot.identity,
+                    ),
+                    this._sessionManager.registerRuntimeProvider(snapshot.runtimeProvider),
+                );
+            }
+            if (snapshot.sessionManager) {
+                disposables.push(this._sessionManager.registerSessionManager(snapshot.sessionManager));
+            }
+            if (snapshot.lspFactory) {
+                disposables.push(this._sessionManager.registerLspFactory(
+                    snapshot.lspFactory,
+                    snapshot.generation,
+                ));
+            }
+            for (const capability of snapshot.notebookControllers) {
+                disposables.push(this._sessionManager.registerNotebookController(
+                    capability.controller,
+                    capability.languageIds,
+                ));
+            }
+            if (snapshot.runtimeProvider) {
+                queueMicrotask(() => this._reconcileLanguageDiscovery(snapshot));
+            }
+            if (snapshot.binaryProvider) {
+                queueMicrotask(() => {
+                    void ensureBinaries(this._context, this._outputChannel, [snapshot.binaryProvider!])
+                        .catch(error => this._outputChannel.error(
+                            `[LanguageRegistry] Failed to ensure binaries for ` +
+                            `${snapshot.identity.languageId}: ${error}`,
+                        ));
+                });
+            }
+            return disposables;
         } catch (error) {
-            this._outputChannel.error(
-                `[LanguageSupport] Failed to activate contributions for ${runtimeProvider.languageId}: ${error}`,
-            );
+            for (const disposable of disposables.reverse()) {
+                disposable.dispose();
+            }
+            throw error;
         }
+    }
 
+    private async _reconcileLanguageDiscovery(
+        snapshot: ILanguageCapabilitySnapshot,
+    ): Promise<void> {
+        const operationKey = {
+            ownerExtensionId: snapshot.identity.ownerExtensionId,
+            languageId: snapshot.identity.languageId,
+            operation: 'discovery' as const,
+            entityId: 'initial',
+            generation: snapshot.generation,
+        };
+        this._languageCapabilityRegistry.setOperationState({
+            key: operationKey,
+            phase: 'running',
+            attempt: 1,
+            changedAt: Date.now(),
+        });
         try {
-            await this._ensureRegisteredBinaries();
+            await this._runtimeManager.discoverLanguageRuntime(snapshot.identity.languageId);
+            if (this.languages.getSnapshot(snapshot.identity.languageId)?.generation !== snapshot.generation) {
+                return;
+            }
+            this._languageCapabilityRegistry.setOperationState({
+                key: operationKey,
+                phase: 'succeeded',
+                attempt: 1,
+                changedAt: Date.now(),
+            });
         } catch (error) {
-            this._outputChannel.error(
-                `[LanguageSupport] Failed to register binaries for ${runtimeProvider.languageId}: ${error}`,
-            );
-        }
-
-        if (this._sessionManager.isInitialized &&
-            !this._sessionManager.getDefaultInstallation(runtimeProvider.languageId)) {
-            try {
-                const installation = await runtimeProvider.resolveInitialInstallation(this._outputChannel);
-                if (installation) {
-                    this._sessionManager.setDefaultInstallation(runtimeProvider.languageId, installation);
-                }
-            } catch (error) {
-                this._outputChannel.error(
-                    `[LanguageSupport] Failed to resolve the initial ${runtimeProvider.languageId} installation: ${error}`,
-                );
+            if (this.languages.getSnapshot(snapshot.identity.languageId)?.generation !== snapshot.generation) {
+                return;
             }
-        }
-
-        if (this._runtimeManager.discoveryComplete) {
-            try {
-                await this._runtimeStartupService.rediscoverAllRuntimes();
-            } catch (error) {
-                this._outputChannel.error(
-                    `[Discovery] Failed to refresh runtime discovery: ${error}`,
-                );
-            }
-        } else {
-            void this._runtimeManager.discoverAllRuntimes([]).catch((error) => {
-                this._outputChannel.error(`[Discovery] Failed to refresh runtime discovery: ${error}`);
+            this._languageCapabilityRegistry.setOperationState({
+                key: operationKey,
+                phase: 'degraded',
+                attempt: 1,
+                changedAt: Date.now(),
+                error: {
+                    kind: 'transient-io',
+                    message: error instanceof Error ? error.message : String(error),
+                    stack: error instanceof Error ? error.stack : undefined,
+                },
             });
         }
     }
@@ -841,24 +713,12 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
         void vscode.commands.executeCommand('setContext', ContextKeys.isDevelopment, isDevelopment);
     }
 
-    private _setLanguageWebviewAssets(
-        languageId: string,
-        assets: ILanguageWebviewAssets | undefined
-    ): void {
-        if (!assets) {
-            this._languageWebviewAssets.delete(languageId);
-            return;
-        }
-
-        this._languageWebviewAssets.set(languageId, assets);
-    }
-
     private _refreshLanguageSupportAssetsInWebviews(): void {
         this._webviewManager.refreshLanguageSupportAssets();
     }
 
     private _startDeferredActivationTasks(): void {
-        if (!this._activated || this._languageSupport.size === 0) {
+        if (!this._activated) {
             return;
         }
 
@@ -874,7 +734,7 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
     private _getLanguageWebviewLocalResourceRoots(): vscode.Uri[] {
         const uniqueRoots = new Map<string, vscode.Uri>();
 
-        for (const assets of this._languageWebviewAssets.values()) {
+        for (const { assets } of this._languageAssetCatalog.snapshot.entries) {
             for (const root of assets.localResourceRoots ?? []) {
                 uniqueRoots.set(root.toString(), root);
             }
@@ -887,8 +747,8 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
         webview: vscode.Webview
     ): Readonly<Record<string, string>> {
         return Object.fromEntries(
-            Array.from(this._languageWebviewAssets.entries())
-                .flatMap(([languageId, assets]) => {
+            this._languageAssetCatalog.snapshot.entries
+                .flatMap(({ languageId, assets }) => {
                     if (!assets.monacoSupportModule) {
                         return [];
                     }
@@ -905,8 +765,8 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
         webview: vscode.Webview
     ): Readonly<Record<string, { scopeName: string; grammarUrl: string }>> {
         return Object.fromEntries(
-            Array.from(this._languageWebviewAssets.entries())
-                .flatMap(([languageId, assets]) => {
+            this._languageAssetCatalog.snapshot.entries
+                .flatMap(({ languageId, assets }) => {
                     if (!assets.textMateGrammar) {
                         return [];
                     }
@@ -1321,9 +1181,6 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
             this._outputChannel.warn(`[Plots] Failed to migrate legacy configuration: ${error}`);
         }
 
-        // Ensure binaries are available (downloads on first run for universal VSIX)
-        await this._ensureRegisteredBinaries();
-
         // Initialize service-class services before session restore so they can
         // observe reconnect events fired during session manager initialization.
         await this._surfaceLifecycle.initialize();
@@ -1382,7 +1239,6 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
 
         // Register commands
         this._registerCommands();
-        await this._activateRegisteredLanguageContributions();
 
         // Listen for session changes and keep context keys in sync
         this._disposables.push(
@@ -1408,54 +1264,6 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
         this._activated = true;
         this._outputChannel.info('[Ark] Extension activated');
         this._startDeferredActivationTasks();
-    }
-
-    private _normalizeRuntimeRegistration<TInstallation>(
-        registration:
-            | ILanguageRuntimeRegistration<TInstallation>
-            | ILanguageSupportRegistration<TInstallation>
-            | ILanguageRuntimeProvider<TInstallation>
-    ): ILanguageSupportRegistration<TInstallation> {
-        if ('discoverInstallations' in registration) {
-            return {
-                runtimeProvider: registration,
-            };
-        }
-
-        if ('runtimeProvider' in registration) {
-            return registration;
-        }
-
-        return {
-            runtimeProvider: registration.provider,
-        };
-    }
-
-    private _setLanguageLspFactory<TInstallation>(
-        runtimeProvider: ILanguageRuntimeProvider<TInstallation>,
-        factory: ILanguageLspFactory
-    ): void {
-        const mutableProvider = runtimeProvider as IMutableLanguageRuntimeProvider<TInstallation>;
-        if (mutableProvider.lspFactory !== factory) {
-            mutableProvider.lspFactory = factory;
-        }
-        this._sessionManager.registerLspFactory(factory);
-    }
-
-    private async _ensureRegisteredBinaries(): Promise<void> {
-        const binaryProviders = Array.from(this._languageSupport.values())
-            .map(entry => entry.binaryProvider)
-            .filter((provider): provider is NonNullable<typeof provider> => !!provider);
-
-        if (binaryProviders.length === 0) {
-            return;
-        }
-
-        await ensureBinaries(
-            this._context,
-            this._outputChannel,
-            binaryProviders
-        );
     }
 
     /**
@@ -1984,6 +1792,8 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
         await this._runtimeStartupService.prepareForExtensionHostShutdown();
         await this._sessionManager.detachForExtensionHostShutdown();
         await this._surfaceLifecycle.whenPersisted();
+
+        this._languageCapabilityRegistry.dispose();
 
         this._disposables.forEach(d => {
             if (d !== this._sessionManager) {

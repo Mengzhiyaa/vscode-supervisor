@@ -81,8 +81,17 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
     private readonly _activeSessionsBySessionId = new Map<string, ActiveRuntimeSession>();
     private readonly _sessionLifecycleDisposables = new Map<string, vscode.Disposable[]>();
     private readonly _runtimeProviders = new Map<string, ILanguageRuntimeProvider<any>>();
+    private readonly _runtimeProviderRegistrationTokens = new Map<string, object>();
+    private readonly _lspFactoriesByLanguageId = new Map<string, {
+        readonly factory: ILanguageLspFactory;
+        readonly generation: number;
+        readonly registrationToken: object;
+    }>();
+    private _nextLegacyLspGeneration = 1;
     private readonly _notebookControllersByLanguageId =
         new Map<string, Set<vscode.NotebookController>>();
+    private readonly _notebookControllerLeaseCountsByLanguageId =
+        new Map<string, Map<vscode.NotebookController, number>>();
     private readonly _defaultInstallationsByLanguageId = new Map<string, unknown>();
     private readonly _availableRuntimeMetadataByRuntimeId = new Map<string, LanguageRuntimeMetadata>();
     private readonly _installationsByRuntimeId = new Map<string, unknown>();
@@ -189,26 +198,72 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
         this.updateActiveLanguages();
     }
 
-    registerRuntimeProvider<TInstallation>(provider: ILanguageRuntimeProvider<TInstallation>): void {
+    registerRuntimeProvider<TInstallation>(provider: ILanguageRuntimeProvider<TInstallation>): vscode.Disposable {
+        const registrationToken = {};
         this._runtimeProviders.set(provider.languageId, provider as ILanguageRuntimeProvider<any>);
+        this._runtimeProviderRegistrationTokens.set(provider.languageId, registrationToken);
         if (provider.lspFactory) {
             this.registerLspFactory(provider.lspFactory);
         }
+        let disposed = false;
+        return new vscode.Disposable(() => {
+            if (disposed) {
+                return;
+            }
+            disposed = true;
+            if (this._runtimeProviderRegistrationTokens.get(provider.languageId) === registrationToken) {
+                this._runtimeProviders.delete(provider.languageId);
+                this._runtimeProviderRegistrationTokens.delete(provider.languageId);
+                this._defaultInstallationsByLanguageId.delete(provider.languageId);
+            }
+        });
     }
 
     /** Backfills an LSP factory into sessions created before language activation completed. */
-    registerLspFactory(factory: ILanguageLspFactory): void {
+    registerLspFactory(factory: ILanguageLspFactory, generation?: number): vscode.Disposable {
+        const effectiveGeneration = generation ?? this._nextLegacyLspGeneration++;
+        const registrationToken = {};
+        this._lspFactoriesByLanguageId.set(factory.languageId, {
+            factory,
+            generation: effectiveGeneration,
+            registrationToken,
+        });
         for (const session of this._sessions.values()) {
             if (session.runtimeMetadata.languageId !== factory.languageId) {
                 continue;
             }
-            void session.attachLspFactory(factory).catch(error => {
+            void session.bindLspFactory(factory, effectiveGeneration).catch(error => {
                 this._outputChannel.error(
                     `[RuntimeSession] Failed to attach late LSP factory to ` +
                     `${session.sessionId}: ${error}`,
                 );
             });
         }
+        let disposed = false;
+        return new vscode.Disposable(() => {
+            if (disposed) {
+                return;
+            }
+            disposed = true;
+            const current = this._lspFactoriesByLanguageId.get(factory.languageId);
+            if (current?.registrationToken !== registrationToken) {
+                return;
+            }
+            this._lspFactoriesByLanguageId.delete(factory.languageId);
+            for (const session of this._sessions.values()) {
+                if (session.runtimeMetadata.languageId === factory.languageId) {
+                    void session.removeLspFactory(effectiveGeneration);
+                }
+            }
+        });
+    }
+
+    private _getLspFactory(languageId: string): ILanguageLspFactory | undefined {
+        return this._lspFactoriesByLanguageId.get(languageId)?.factory;
+    }
+
+    private _getLspGeneration(languageId: string): number {
+        return this._lspFactoriesByLanguageId.get(languageId)?.generation ?? 0;
     }
 
     registerNotebookController(
@@ -248,6 +303,10 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
                 new Set<vscode.NotebookController>();
             controllers.add(controller);
             this._notebookControllersByLanguageId.set(languageId, controllers);
+            const leaseCounts = this._notebookControllerLeaseCountsByLanguageId.get(languageId) ??
+                new Map<vscode.NotebookController, number>();
+            leaseCounts.set(controller, (leaseCounts.get(controller) ?? 0) + 1);
+            this._notebookControllerLeaseCountsByLanguageId.set(languageId, leaseCounts);
         }
 
         let disposed = false;
@@ -257,6 +316,16 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
             }
             disposed = true;
             for (const languageId of normalizedLanguageIds) {
+                const leaseCounts = this._notebookControllerLeaseCountsByLanguageId.get(languageId);
+                const remainingLeases = (leaseCounts?.get(controller) ?? 1) - 1;
+                if (remainingLeases > 0) {
+                    leaseCounts?.set(controller, remainingLeases);
+                    continue;
+                }
+                leaseCounts?.delete(controller);
+                if (leaseCounts?.size === 0) {
+                    this._notebookControllerLeaseCountsByLanguageId.delete(languageId);
+                }
                 const controllers = this._notebookControllersByLanguageId.get(languageId);
                 controllers?.delete(controller);
                 if (controllers?.size === 0) {
@@ -298,6 +367,16 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
 
         if (!this._defaultInstallationsByLanguageId.has(languageId)) {
             this._defaultInstallationsByLanguageId.set(languageId, installation);
+        }
+    }
+
+    unregisterDiscoveredRuntime(runtimeId: string): void {
+        const installation = this._installationsByRuntimeId.get(runtimeId);
+        const metadata = this._availableRuntimeMetadataByRuntimeId.get(runtimeId);
+        this._installationsByRuntimeId.delete(runtimeId);
+        this._availableRuntimeMetadataByRuntimeId.delete(runtimeId);
+        if (metadata && this._defaultInstallationsByLanguageId.get(metadata.languageId) === installation) {
+            this._defaultInstallationsByLanguageId.delete(metadata.languageId);
         }
     }
 
@@ -761,8 +840,9 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
         session = this._createRuntimeSession(
             normalizedRuntimeMetadata,
             normalizedSessionMetadata,
-            provider.lspFactory,
+            this._getLspFactory(provider.languageId) ?? provider.lspFactory,
             {
+                lspGeneration: this._getLspGeneration(provider.languageId),
                 localSupervisor: this._requireLocalSupervisor(),
                 kernelSpec,
                 kernelExtra: createJupyterKernelExtra(),
@@ -797,8 +877,9 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
         session = this._createRuntimeSession(
             normalizedRuntimeMetadata,
             normalizedSessionMetadata,
-            provider.lspFactory,
+            this._getLspFactory(provider.languageId) ?? provider.lspFactory,
             {
+                lspGeneration: this._getLspGeneration(provider.languageId),
                 localSupervisor: this._requireLocalSupervisor(),
                 setWorkingDirectory: provider.setWorkingDirectory
                     ? workingDirectory => provider.setWorkingDirectory!(session, workingDirectory)
@@ -1873,8 +1954,9 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
         session = this._createRuntimeSession(
             normalizedRuntimeMetadata,
             normalizedSessionMetadata,
-            provider.lspFactory,
+            this._getLspFactory(provider.languageId) ?? provider.lspFactory,
             {
+                lspGeneration: this._getLspGeneration(provider.languageId),
                 localSupervisor: this._requireLocalSupervisor(),
                 kernelSpec,
                 kernelExtra: createJupyterKernelExtra(),
@@ -1918,8 +2000,9 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
         session = this._createRuntimeSession(
             normalizedRuntimeMetadata,
             normalizedSessionMetadata,
-            provider.lspFactory,
+            this._getLspFactory(provider.languageId) ?? provider.lspFactory,
             {
+                lspGeneration: this._getLspGeneration(provider.languageId),
                 localSupervisor: this._requireLocalSupervisor(),
                 setWorkingDirectory: provider.setWorkingDirectory
                     ? workingDirectory => provider.setWorkingDirectory!(session, workingDirectory)

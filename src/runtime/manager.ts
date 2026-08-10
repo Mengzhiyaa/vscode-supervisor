@@ -22,12 +22,15 @@ export class RuntimeManager implements vscode.Disposable, IRuntimeManager {
 
     private readonly _disposables: vscode.Disposable[] = [];
     private readonly _runtimeProviders = new Map<string, ILanguageRuntimeProvider<any>>();
+    private readonly _runtimeProviderRegistrationTokens = new Map<string, object>();
+    private readonly _runtimeProviderCacheIds = new Map<string, string>();
     private readonly _runtimes = new Map<string, LanguageRuntimeMetadata>();
     private readonly _installationsByLanguageId = new Map<string, unknown[]>();
     private readonly _languagesWithExternalDiscoveryManagers = new Set<string>();
     private _isDiscovering = false;
     private _discoveryComplete = false;
     private _discoveryPromise: Promise<void> | undefined;
+    private readonly _providerDiscoveryPromises = new Map<string, Promise<void>>();
     private readonly _discoveryCache: RuntimeDiscoveryCache;
 
     readonly id = RuntimeManager._nextRuntimeManagerId++;
@@ -51,8 +54,60 @@ export class RuntimeManager implements vscode.Disposable, IRuntimeManager {
         this._disposables.push(this._onDidFinishDiscovery);
     }
 
-    registerRuntimeProvider<TInstallation>(provider: ILanguageRuntimeProvider<TInstallation>): void {
+    registerRuntimeProvider<TInstallation>(
+        provider: ILanguageRuntimeProvider<TInstallation>,
+        identity?: { readonly ownerExtensionId: string; readonly revision: number },
+    ): vscode.Disposable {
+        const registrationToken = {};
         this._runtimeProviders.set(provider.languageId, provider as ILanguageRuntimeProvider<any>);
+        this._runtimeProviderRegistrationTokens.set(provider.languageId, registrationToken);
+        this._runtimeProviderCacheIds.set(
+            provider.languageId,
+            identity
+                ? `${identity.ownerExtensionId}@revision-${identity.revision}`
+                : provider.extensionId ?? `vscode-supervisor.${provider.languageId}`,
+        );
+        const dynamicEventDisposables: vscode.Disposable[] = [];
+        if (provider.onDidDiscoverInstallation) {
+            dynamicEventDisposables.push(provider.onDidDiscoverInstallation(installation => {
+                if (this._runtimeProviderRegistrationTokens.get(provider.languageId) !== registrationToken) {
+                    return;
+                }
+                try {
+                    const metadata = provider.createRuntimeMetadata(
+                        this._context,
+                        installation,
+                        this._outputChannel,
+                    );
+                    this.registerDiscoveredRuntime(provider.languageId, installation, metadata);
+                } catch (error) {
+                    this._outputChannel.error(
+                        `[Discovery] Failed to register dynamic ${provider.languageId} installation: ${error}`,
+                    );
+                }
+            }));
+        }
+        if (provider.onDidRemoveRuntime) {
+            dynamicEventDisposables.push(provider.onDidRemoveRuntime(({ runtimeId }) => {
+                if (this._runtimeProviderRegistrationTokens.get(provider.languageId) !== registrationToken) {
+                    return;
+                }
+                this._removeRuntime(provider, runtimeId);
+            }));
+        }
+        let disposed = false;
+        return new vscode.Disposable(() => {
+            if (disposed) {
+                return;
+            }
+            disposed = true;
+            dynamicEventDisposables.forEach(disposable => disposable.dispose());
+            if (this._runtimeProviderRegistrationTokens.get(provider.languageId) === registrationToken) {
+                this._runtimeProviders.delete(provider.languageId);
+                this._runtimeProviderRegistrationTokens.delete(provider.languageId);
+                this._runtimeProviderCacheIds.delete(provider.languageId);
+            }
+        });
     }
 
     getRuntimeProvider<TInstallation = unknown>(languageId: string): ILanguageRuntimeProvider<TInstallation> | undefined {
@@ -89,6 +144,35 @@ export class RuntimeManager implements vscode.Disposable, IRuntimeManager {
 
     async startDiscovery(): Promise<void> {
         await this.discoverAllRuntimes([]);
+    }
+
+    /** Reconciles one provider independently, including providers registered after global discovery. */
+    discoverLanguageRuntime(languageId: string, force = false): Promise<void> {
+        const existing = this._providerDiscoveryPromises.get(languageId);
+        if (existing) {
+            return existing;
+        }
+        const provider = this._runtimeProviders.get(languageId);
+        if (!provider || this._languagesWithExternalDiscoveryManagers.has(languageId)) {
+            return Promise.resolve();
+        }
+        const promise = (async () => {
+            const plan = await this._createDiscoveryPlan(provider, force);
+            if (!plan.useCache) {
+                await this._discoverProvider(provider, plan.discoveryRootSignature);
+                return;
+            }
+            const cached = await this._restoreCachedProvider(provider);
+            if (!cached.restored || cached.needsRevalidation) {
+                await this._discoverProvider(provider, plan.discoveryRootSignature);
+            }
+        })().finally(() => {
+            if (this._providerDiscoveryPromises.get(languageId) === promise) {
+                this._providerDiscoveryPromises.delete(languageId);
+            }
+        });
+        this._providerDiscoveryPromises.set(languageId, promise);
+        return promise;
     }
 
     async discoverAllRuntimes(
@@ -254,6 +338,24 @@ export class RuntimeManager implements vscode.Disposable, IRuntimeManager {
             metadata,
         });
         return true;
+    }
+
+    private _removeRuntime<TInstallation>(
+        provider: ILanguageRuntimeProvider<TInstallation>,
+        runtimeId: string,
+    ): void {
+        const metadata = this._runtimes.get(runtimeId);
+        if (!metadata || metadata.languageId !== provider.languageId) {
+            return;
+        }
+        this._runtimes.delete(runtimeId);
+        const installations = this._installationsByLanguageId.get(provider.languageId) ?? [];
+        this._installationsByLanguageId.set(
+            provider.languageId,
+            installations.filter(installation =>
+                provider.getRuntimePath(installation as TInstallation) !== metadata.runtimePath),
+        );
+        this._sessionManager.unregisterDiscoveredRuntime(runtimeId);
     }
 
     registerExternalDiscoveryManager(languageId: string): vscode.Disposable {
@@ -447,7 +549,8 @@ export class RuntimeManager implements vscode.Disposable, IRuntimeManager {
     }
 
     private _getProviderId<TInstallation>(provider: ILanguageRuntimeProvider<TInstallation>): string {
-        return provider.extensionId ?? `vscode-supervisor.${provider.languageId}`;
+        return this._runtimeProviderCacheIds.get(provider.languageId) ??
+            provider.extensionId ?? `vscode-supervisor.${provider.languageId}`;
     }
 
     private async _getDiscoveryRootSignature<TInstallation>(

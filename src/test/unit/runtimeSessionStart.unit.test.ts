@@ -520,6 +520,50 @@ suite('[Unit] runtime session start semantics', () => {
         assert.strictEqual(disposed, 1);
     });
 
+    test('replaces and removes LSP factories with generation guards', async () => {
+        const runtimeMetadata = makeRuntimeMetadata();
+        const sessionMetadata: IRuntimeSessionMetadata = {
+            sessionId: 'generation-lsp-session',
+            sessionMode: LanguageRuntimeSessionMode.Console,
+            sessionName: 'generation-lsp-session',
+            createdTimestamp: Date.now(),
+            startReason: 'unit-test',
+        };
+        const disposals = [0, 0];
+        const makeLsp = (index: number): ILanguageLsp => ({
+            state: LanguageLspState.Stopped,
+            activate: async () => undefined,
+            deactivate: async () => undefined,
+            wait: async () => false,
+            showOutput: () => undefined,
+            requestCompletion: async () => [],
+            requestHover: async () => null,
+            requestSignatureHelp: async () => null,
+            dispose: () => { disposals[index]++; },
+        });
+        const first = makeLsp(0);
+        const second = makeLsp(1);
+        const session = new RuntimeSession(
+            sessionMetadata.sessionId,
+            runtimeMetadata,
+            sessionMetadata,
+            makeNoopLogChannel(),
+        );
+
+        await session.bindLspFactory({ languageId: 'r', create: () => first }, 1);
+        await session.bindLspFactory({ languageId: 'r', create: () => second }, 2);
+        await session.removeLspFactory(1);
+
+        assert.strictEqual(session.lsp, second);
+        assert.strictEqual(session.boundLspGeneration, 2);
+        assert.deepStrictEqual(disposals, [1, 0]);
+
+        await session.removeLspFactory(2);
+        assert.notStrictEqual(session.lsp, second);
+        assert.deepStrictEqual(disposals, [1, 1]);
+        await session.dispose();
+    });
+
     test('delegates working-directory changes to the language-owned hook', async () => {
         const runtimeMetadata = makeRuntimeMetadata();
         const sessionMetadata: IRuntimeSessionMetadata = {

@@ -25,10 +25,18 @@ suite('[Integration] Supervisor extension API', () => {
     test('activates with the current framework API', () => {
         assert.strictEqual(typeof api.version, 'string');
         assert.ok(api.version.length > 0, 'Expected the Supervisor API to expose a version');
-        assert.strictEqual(typeof api.registerLanguageSupport, 'function');
+        assert.strictEqual(api.apiVersion, 2);
+        assert.strictEqual(api.protocolVersion.major, 2);
+        assert.ok(api.capabilities.includes('languageCapabilityRegistry'));
+        assert.strictEqual(typeof api.languages.forExtension, 'function');
+        assert.ok(api.services.runtimeSessionService);
         assert.strictEqual(typeof api.startRuntime, 'function');
-        assert.ok(api.runtimeSessionService, 'Expected the runtime session service');
-        assert.ok(api.runtimeStartupService, 'Expected the runtime startup service');
+        assert.strictEqual('registerLanguageSupport' in api, false);
+        assert.strictEqual('registerLanguageRuntime' in api, false);
+        assert.strictEqual('registerLspFactory' in api, false);
+        assert.strictEqual('registerNotebookController' in api, false);
+        assert.strictEqual('runtimeSessionService' in api, false);
+        assert.strictEqual('runtimeStartupService' in api, false);
     });
 
     test('discovers a runtime registered through the public language API', async () => {
@@ -75,20 +83,23 @@ suite('[Integration] Supervisor extension API', () => {
             },
         };
 
-        const countBeforeRegistration = api.runtimeStartupService.discoveredRuntimeCount;
-        await api.registerLanguageRuntime(provider);
+        const sessionManager = {} as any;
+        const beginRegistration = () => api.languages
+            .forExtension(SUPERVISOR_EXTENSION_ID)
+            .begin({ languageId, registrationId: 'integration-test', revision: 1 })
+            .setRuntimeProvider(provider)
+            .setSessionManager(sessionManager);
+        const first = beginRegistration().commit();
 
         await pollForSuccess(() => {
             assert.ok(discoveryCalls > 0, 'Expected registration to trigger runtime discovery');
-            assert.strictEqual(
-                api.runtimeStartupService.discoveredRuntimeCount,
-                countBeforeRegistration + 1,
-                'Expected the fake runtime installation to be discovered',
-            );
         });
 
         const callsAfterRegistration = discoveryCalls;
-        await api.registerLanguageRuntime(provider);
+        const second = beginRegistration().commit();
+        assert.strictEqual(second.generation, first.generation);
         assert.strictEqual(discoveryCalls, callsAfterRegistration, 'Expected duplicate registration to be idempotent');
+        first.dispose();
+        second.dispose();
     });
 });

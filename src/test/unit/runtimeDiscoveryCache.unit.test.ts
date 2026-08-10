@@ -50,7 +50,67 @@ function logChannel(): vscode.LogOutputChannel {
 }
 
 suite('[Unit] Runtime discovery cache', () => {
-    test('invalidates legacy string root signatures within schema v2', async () => {
+    test('does not let an older provider lease remove its replacement', () => {
+        const context = { globalState: new MemoryMemento() } as unknown as vscode.ExtensionContext;
+        const manager = new RuntimeManager(context, {} as any, logChannel());
+        const provider = { languageId: 'r' } as ILanguageRuntimeProvider<unknown>;
+
+        const older = manager.registerRuntimeProvider(provider);
+        const newer = manager.registerRuntimeProvider(provider);
+        older.dispose();
+        assert.strictEqual(manager.getRuntimeProvider('r'), provider);
+
+        newer.dispose();
+        assert.strictEqual(manager.getRuntimeProvider('r'), undefined);
+        manager.dispose();
+    });
+
+    test('ignores dynamic runtime removal events from an old provider generation', () => {
+        const context = { globalState: new MemoryMemento() } as unknown as vscode.ExtensionContext;
+        const removed: string[] = [];
+        const manager = new RuntimeManager(context, {
+            registerDiscoveredRuntime: () => undefined,
+            unregisterDiscoveredRuntime: (runtimeId: string) => removed.push(runtimeId),
+        } as any, logChannel());
+        const oldDiscover = new vscode.EventEmitter<{ path: string }>();
+        const oldRemove = new vscode.EventEmitter<{ runtimeId: string }>();
+        const newDiscover = new vscode.EventEmitter<{ path: string }>();
+        const newRemove = new vscode.EventEmitter<{ runtimeId: string }>();
+        const makeProvider = (
+            discover: vscode.Event<{ path: string }>,
+            remove: vscode.Event<{ runtimeId: string }>,
+        ) => ({
+            languageId: 'r',
+            onDidDiscoverInstallation: discover,
+            onDidRemoveRuntime: remove,
+            getRuntimePath: (installation: { path: string }) => installation.path,
+            createRuntimeMetadata: (_context: unknown, installation: { path: string }) => ({
+                runtimeId: installation.path,
+                runtimePath: installation.path,
+                languageId: 'r',
+            }),
+        } as any);
+
+        const oldLease = manager.registerRuntimeProvider(makeProvider(oldDiscover.event, oldRemove.event));
+        const newLease = manager.registerRuntimeProvider(makeProvider(newDiscover.event, newRemove.event));
+        newDiscover.fire({ path: 'runtime-1' });
+        oldRemove.fire({ runtimeId: 'runtime-1' });
+        assert.ok(manager.getRuntime('runtime-1'));
+
+        newRemove.fire({ runtimeId: 'runtime-1' });
+        assert.strictEqual(manager.getRuntime('runtime-1'), undefined);
+        assert.deepStrictEqual(removed, ['runtime-1']);
+
+        oldLease.dispose();
+        newLease.dispose();
+        oldDiscover.dispose();
+        oldRemove.dispose();
+        newDiscover.dispose();
+        newRemove.dispose();
+        manager.dispose();
+    });
+
+    test('invalidates legacy string root signatures within the current schema', async () => {
         const state = new MemoryMemento();
         await state.update(RUNTIME_DISCOVERY_CACHE_STORAGE_KEY, {
             schemaVersion: 2,

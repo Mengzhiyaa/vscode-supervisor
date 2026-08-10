@@ -340,6 +340,10 @@ export interface ILanguageRuntimeProvider<TInstallation = unknown> {
     shouldRecommendForWorkspace?(): Promise<boolean>;
     getDiscoveryRootSignature?(): Promise<RuntimeRootSignature>;
     getSessionIdPrefix?(sessionMode: LanguageSessionMode): string;
+    /** Publishes installations discovered after the initial enumeration settles. */
+    readonly onDidDiscoverInstallation?: vscode.Event<TInstallation>;
+    /** Publishes runtime removals after the initial enumeration settles. */
+    readonly onDidRemoveRuntime?: vscode.Event<{ readonly runtimeId: string }>;
 }
 
 export type BinaryArchiveType = 'zip' | 'tar.gz';
@@ -913,36 +917,25 @@ export interface IRuntimeStartupService {
     rediscoverAllRuntimes(): Promise<void>;
 }
 
+/**
+ * Runtime-only services exposed to language contributions. Registration
+ * ownership is deliberately absent and must go through `api.languages`.
+ */
 export interface ILanguageContributionServices {
     readonly logChannel: vscode.LogOutputChannel;
-    readonly runtimeSessionService: IRuntimeSessionService;
-    readonly runtimeStartupService: IRuntimeStartupService;
+    readonly runtimeSessionService: Omit<IRuntimeSessionService,
+        'registerNotebookController' | 'registerSessionManager'>;
+    readonly runtimeStartupService: Omit<IRuntimeStartupService, 'registerRuntimeManager'>;
     readonly positronNewFolderService: IPositronNewFolderService;
-    readonly runtimeManager: IRuntimeManager;
     readonly positronConsoleService: IPositronConsoleService;
     readonly positronHelpService: IPositronHelpService;
     readonly positronPackagesService: IPositronPackagesService;
-    registerEnvironmentContributions(
-        extensionId: string,
-        actions: readonly ISupervisorEnvironmentVariableAction[],
-    ): vscode.Disposable;
 }
 
 export interface ISupervisorEnvironmentVariableAction {
     readonly action: vscode.EnvironmentVariableMutatorType;
     readonly name: string;
     readonly value: string;
-}
-
-export type LanguageContributionRegistrationResult =
-    | void
-    | vscode.Disposable
-    | readonly vscode.Disposable[];
-
-export interface ILanguageExtensionContribution {
-    registerContributions(
-        services: ILanguageContributionServices
-    ): LanguageContributionRegistrationResult | Promise<LanguageContributionRegistrationResult>;
 }
 
 export interface ILanguageTextMateGrammarContribution {
@@ -956,15 +949,182 @@ export interface ILanguageWebviewAssets {
     readonly textMateGrammar?: ILanguageTextMateGrammarContribution;
 }
 
-export interface ILanguageSupportRegistration<TInstallation = unknown> {
-    readonly runtimeProvider: ILanguageRuntimeProvider<TInstallation>;
-    readonly binaryProvider?: IBinaryProvider;
-    readonly languageContribution?: ILanguageExtensionContribution;
-    readonly webviewAssets?: ILanguageWebviewAssets;
+export type SupervisorApiCapability =
+    | 'languageCapabilityRegistry'
+    | 'passiveLanguageAssets'
+    | 'optionalLanguageCapabilities'
+    | 'languageCapabilityState'
+    | 'languageOperationState';
+
+export interface ILanguageRegistrationIdentity {
+    readonly ownerExtensionId: string;
+    readonly languageId: string;
+    readonly registrationId: string;
+    readonly revision: number;
 }
 
-export interface ILanguageRuntimeRegistration<TInstallation = unknown> {
-    readonly provider: ILanguageRuntimeProvider<TInstallation>;
+export type LanguageCapabilityKind =
+    | 'runtimeProvider'
+    | 'sessionManager'
+    | 'lspFactory'
+    | 'binaryProvider'
+    | 'notebookController'
+    | 'packageManager'
+    | 'help'
+    | 'dataExplorer'
+    | 'testExplorer'
+    | 'commands';
+
+export type CapabilityErrorKind =
+    | 'conflict'
+    | 'invalid-registration'
+    | 'dependency-missing'
+    | 'transient-io'
+    | 'timeout'
+    | 'unsupported'
+    | 'cancelled'
+    | 'internal';
+
+export interface SerializedCapabilityError {
+    readonly kind: CapabilityErrorKind;
+    readonly message: string;
+    readonly stack?: string;
+}
+
+export interface ILanguageCapabilityKey {
+    readonly ownerExtensionId: string;
+    readonly languageId: string;
+    readonly registrationId: string;
+    readonly capabilityId: string;
+}
+
+export interface ILanguageCapabilityState extends ILanguageCapabilityKey {
+    readonly capability: LanguageCapabilityKind;
+    readonly generation: number;
+    readonly phase: 'registered' | 'activating' | 'ready' | 'degraded' | 'failed' | 'disposed';
+    readonly attempt: number;
+    readonly changedAt: number;
+    readonly error?: SerializedCapabilityError;
+}
+
+export interface ILanguageCapabilityStateChangeEvent {
+    readonly previous: ILanguageCapabilityState | undefined;
+    readonly current: ILanguageCapabilityState;
+}
+
+export type LanguageOperationKind =
+    | 'discovery'
+    | 'recommendation'
+    | 'sessionValidation'
+    | 'sessionRestore'
+    | 'sessionStart'
+    | 'lspBind'
+    | 'notebookInitialize';
+
+export interface ILanguageOperationKey {
+    readonly ownerExtensionId: string;
+    readonly languageId: string;
+    readonly operation: LanguageOperationKind;
+    readonly entityId: string;
+    readonly generation: number;
+}
+
+export interface ILanguageOperationState {
+    readonly key: ILanguageOperationKey;
+    readonly phase: 'pending' | 'running' | 'succeeded' | 'degraded' | 'failed' | 'cancelled';
+    readonly attempt: number;
+    readonly changedAt: number;
+    readonly error?: SerializedCapabilityError;
+}
+
+export interface ILanguageOperationStateChangeEvent {
+    readonly previous: ILanguageOperationState | undefined;
+    readonly current: ILanguageOperationState;
+}
+
+export interface ILanguageCapabilityActivationContext {
+    readonly identity: ILanguageRegistrationIdentity;
+    readonly generation: number;
+    readonly services: ILanguageContributionServices;
+}
+
+export interface ILanguageOptionalCapabilityDescriptor {
+    readonly id: string;
+    readonly revision: number;
+    readonly kind: Exclude<LanguageCapabilityKind,
+        'runtimeProvider' | 'sessionManager' | 'lspFactory' | 'binaryProvider'>;
+    readonly dependencies?: readonly string[];
+    readonly activate: (
+        context: ILanguageCapabilityActivationContext,
+        signal: AbortSignal,
+    ) => vscode.Disposable | readonly vscode.Disposable[] |
+        Promise<vscode.Disposable | readonly vscode.Disposable[]>;
+}
+
+export interface ILanguageNotebookControllerCapability {
+    readonly capabilityId: string;
+    readonly controller: vscode.NotebookController;
+    readonly languageIds: readonly string[];
+}
+
+export interface ILanguageCapabilitySnapshot {
+    readonly identity: ILanguageRegistrationIdentity;
+    readonly generation: number;
+    readonly runtimeProvider?: ILanguageRuntimeProvider<unknown>;
+    readonly lspFactory?: ILanguageLspFactory;
+    readonly binaryProvider?: IBinaryProvider;
+    readonly sessionManager?: ILanguageRuntimeSessionManager;
+    readonly notebookControllers: readonly ILanguageNotebookControllerCapability[];
+    readonly optionalCapabilities: readonly ILanguageOptionalCapabilityDescriptor[];
+}
+
+export interface ILanguageRegistrationState {
+    readonly identity: ILanguageRegistrationIdentity;
+    readonly generation: number;
+    readonly phase: 'active' | 'superseded' | 'disposed';
+}
+
+export interface ILanguageRegistrationHandle extends vscode.Disposable {
+    readonly identity: ILanguageRegistrationIdentity;
+    readonly generation: number;
+    readonly snapshot: ILanguageCapabilitySnapshot;
+    readonly onDidChangeState: vscode.Event<ILanguageRegistrationState>;
+    whenCapabilityReady(
+        capabilityId: string,
+        options?: { timeout?: number; signal?: AbortSignal },
+    ): Promise<ILanguageCapabilityState>;
+    retry(capabilityId?: string): void;
+}
+
+export interface ILanguageRegistrationBuilder {
+    setRuntimeProvider<TInstallation>(provider: ILanguageRuntimeProvider<TInstallation>): this;
+    setLspFactory(factory: ILanguageLspFactory): this;
+    setBinaryProvider(provider: IBinaryProvider): this;
+    setSessionManager(manager: ILanguageRuntimeSessionManager): this;
+    addNotebookController(
+        capabilityId: string,
+        controller: vscode.NotebookController,
+        languageIds?: readonly string[],
+    ): this;
+    addOptionalCapability(descriptor: ILanguageOptionalCapabilityDescriptor): this;
+    commit(): ILanguageRegistrationHandle;
+    rollback(): void;
+}
+
+export interface ILanguageCapabilityRegistrationClient {
+    readonly ownerExtensionId: string;
+    begin(
+        identity: Omit<ILanguageRegistrationIdentity, 'ownerExtensionId'>,
+    ): ILanguageRegistrationBuilder;
+}
+
+export interface ILanguageCapabilityRegistry {
+    forExtension(ownerExtensionId: string): ILanguageCapabilityRegistrationClient;
+    getSnapshot(languageId: string): ILanguageCapabilitySnapshot | undefined;
+    getCapabilityState(key: ILanguageCapabilityKey): ILanguageCapabilityState | undefined;
+    getOperationState(key: ILanguageOperationKey): ILanguageOperationState | undefined;
+    readonly onDidChangeCapabilityState: vscode.Event<ILanguageCapabilityStateChangeEvent>;
+    readonly onDidChangeOperationState: vscode.Event<ILanguageOperationStateChangeEvent>;
 }
 
 export interface IDataExplorerBackendRpcRequest {
@@ -1185,19 +1345,15 @@ export interface IDataConnectionProfile {
 }
 
 export interface ISupervisorFrameworkApi {
-    readonly runtimeSessionService: IRuntimeSessionService;
-    readonly runtimeStartupService: IRuntimeStartupService;
-    readonly positronNewFolderService: IPositronNewFolderService;
+    readonly apiVersion: 2;
+    readonly protocolVersion: {
+        readonly major: 2;
+        readonly minor: number;
+    };
+    readonly capabilities: readonly SupervisorApiCapability[];
+    readonly services: ILanguageContributionServices;
+    readonly languages: ILanguageCapabilityRegistry;
     readonly version: string;
-    /**
-     * Registers a language-extension-owned NotebookController with the
-     * supervisor. Notebook sessions are rejected unless their language has a
-     * registered controller owner.
-     */
-    registerNotebookController(
-        controller: vscode.NotebookController,
-        languageIds: readonly string[]
-    ): vscode.Disposable;
     startRuntime(
         metadata: LanguageRuntimeMetadata,
         source: string,
@@ -1215,16 +1371,6 @@ export interface ISupervisorFrameworkApi {
         dynState: LanguageRuntimeDynState
     ): Promise<ILanguageRuntimeSession>;
     validateSession(sessionId: string): Promise<boolean>;
-    registerLanguageSupport<TInstallation = unknown>(
-        registration: ILanguageSupportRegistration<TInstallation>
-    ): Promise<void>;
-    registerLanguageRuntime<TInstallation = unknown>(
-        registration:
-            | ILanguageRuntimeRegistration<TInstallation>
-            | ILanguageSupportRegistration<TInstallation>
-            | ILanguageRuntimeProvider<TInstallation>
-    ): Promise<void>;
-    registerLspFactory(factory: ILanguageLspFactory): Promise<void>;
     registerDataExplorerBackendProvider(provider: IDataExplorerBackendProvider): vscode.Disposable;
     openDataExplorer(uri: vscode.Uri, providerId?: string): Promise<void>;
     registerRuntimeOutputRenderer(renderer: IRuntimeOutputRenderer): vscode.Disposable;
