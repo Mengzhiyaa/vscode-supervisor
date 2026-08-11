@@ -34,8 +34,8 @@
         opacity: 0.75;
         background-image: repeating-linear-gradient(
             45deg,
-            var(--vscode-positronConsole-ansiBrightBlue),
-            var(--vscode-positronConsole-ansiBrightBlue) 3px,
+            var(--vscode-positronConsole-ansiBrightBlue, var(--vscode-terminal-ansiBrightBlue)),
+            var(--vscode-positronConsole-ansiBrightBlue, var(--vscode-terminal-ansiBrightBlue)) 3px,
             transparent 3px,
             transparent 6px
         );

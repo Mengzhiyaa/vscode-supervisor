@@ -555,7 +555,7 @@ test('console toolbar actions stay aligned with extension-side requests', async 
     });
 
     const restartRequest = backend.waitForNextRequest(SessionMethods.restart);
-    await page.getByLabel('Restart Session').click();
+    await page.getByLabel('Restart R').click();
     await expect.poll(async () => (await restartRequest).params).toEqual({ sessionId: 'session-1' });
 
     const traceRequest = backend.waitForNextRequest(ConsoleMethods.toggleTrace);
@@ -610,7 +610,7 @@ test('console restart repro keeps the prompt visible and defers execute until th
     await expect.poll(() => readConsoleInputPrompts(page)).toContain('>');
 
     const restartRequest = backend.waitForNextRequest(SessionMethods.restart);
-    await page.getByLabel('Restart Session').click();
+    await page.getByLabel('Restart R').click();
     await expect.poll(async () => (await restartRequest).params).toEqual({
         sessionId: readySession.id,
     });
@@ -655,10 +655,10 @@ test('console restart repro keeps the prompt visible and defers execute until th
     });
     await page.waitForTimeout(200);
 
-    const executeCountBeforeReady = backend.requestCount(ConsoleMethods.execute);
+    const executeCountBeforeReady = backend.requestCount(ConsoleMethods.submitCode);
     await monacoInput.press('Enter');
     await page.waitForTimeout(200);
-    expect.soft(backend.requestCount(ConsoleMethods.execute)).toBe(
+    expect.soft(backend.requestCount(ConsoleMethods.submitCode)).toBe(
         executeCountBeforeReady,
     );
 
@@ -668,11 +668,11 @@ test('console restart repro keeps the prompt visible and defers execute until th
     });
     await page.waitForTimeout(300);
 
-    expect.soft(backend.requestCount(ConsoleMethods.execute)).toBe(
+    expect.soft(backend.requestCount(ConsoleMethods.submitCode)).toBe(
         executeCountBeforeReady + 1,
     );
     expect
-        .soft(backend.requests(ConsoleMethods.execute).at(-1)?.params)
+        .soft(backend.requests(ConsoleMethods.submitCode).at(-1)?.params)
         .toEqual(
             expect.objectContaining({
                 sessionId: readySession.id,
@@ -714,7 +714,7 @@ test('console restart repro recovers after a detached runtime frame', async ({ p
     await expect.poll(() => readConsoleInputPrompts(page)).toContain('>');
 
     const restartRequest = backend.waitForNextRequest(SessionMethods.restart);
-    await page.getByLabel('Restart Session').click();
+    await page.getByLabel('Restart R').click();
     await expect.poll(async () => (await restartRequest).params).toEqual({
         sessionId: readySession.id,
     });
@@ -771,10 +771,10 @@ test('console restart repro recovers after a detached runtime frame', async ({ p
     });
     await page.waitForTimeout(200);
 
-    const executeCountBeforeReady = backend.requestCount(ConsoleMethods.execute);
+    const executeCountBeforeReady = backend.requestCount(ConsoleMethods.submitCode);
     await monacoInput.press('Enter');
     await page.waitForTimeout(200);
-    expect.soft(backend.requestCount(ConsoleMethods.execute)).toBe(
+    expect.soft(backend.requestCount(ConsoleMethods.submitCode)).toBe(
         executeCountBeforeReady,
     );
 
@@ -784,11 +784,11 @@ test('console restart repro recovers after a detached runtime frame', async ({ p
     });
     await page.waitForTimeout(300);
 
-    expect.soft(backend.requestCount(ConsoleMethods.execute)).toBe(
+    expect.soft(backend.requestCount(ConsoleMethods.submitCode)).toBe(
         executeCountBeforeReady + 1,
     );
     expect
-        .soft(backend.requests(ConsoleMethods.execute).at(-1)?.params)
+        .soft(backend.requests(ConsoleMethods.submitCode).at(-1)?.params)
         .toEqual(
             expect.objectContaining({
                 sessionId: readySession.id,
@@ -1019,7 +1019,7 @@ test('console stays unlocked after Enter before the first execution output arriv
     });
     await page.waitForTimeout(200);
 
-    const executeRequest = backend.waitForNextRequest(ConsoleMethods.execute);
+    const executeRequest = backend.waitForNextRequest(ConsoleMethods.submitCode);
     await monacoInput.focus();
     await monacoInput.press('Enter');
     await expect.poll(async () => (await executeRequest).params).toEqual(
@@ -1078,7 +1078,7 @@ test('console follows the first execution output while the user stays at the bot
     });
     await page.waitForTimeout(200);
 
-    const executeRequest = backend.waitForNextRequest(ConsoleMethods.execute);
+    const executeRequest = backend.waitForNextRequest(ConsoleMethods.submitCode);
     await monacoInput.focus();
     await monacoInput.press('Enter');
     await expect.poll(async () => (await executeRequest).params).toEqual(
@@ -1145,7 +1145,7 @@ test('console does not force execution output back into view after the user scro
     });
     await page.waitForTimeout(200);
 
-    const executeRequest = backend.waitForNextRequest(ConsoleMethods.execute);
+    const executeRequest = backend.waitForNextRequest(ConsoleMethods.submitCode);
     await monacoInput.focus();
     await monacoInput.press('Enter');
     await expect.poll(async () => (await executeRequest).params).toEqual(
@@ -1192,13 +1192,31 @@ test('console shows startup progress and can create a new session from the empty
     });
 
     await expect.poll(() => backend.notificationCount(ConsoleMethods.ready)).toBeGreaterThan(0);
-    await expect(page.getByText('Starting up...')).toBeVisible();
+    await expect(page.getByText('Waiting for extensions...')).toBeVisible();
+    await expect(page.getByTestId('startup-progress-bar')).toBeVisible();
 
     await backend.notify(ConsoleMethods.runtimeStartupPhase, {
         phase: 'discovering',
         discoveredCount: 2,
+        expectedCount: 4,
+        latestRuntimePath: 'C:\\Python312\\python.exe',
     });
-    await expect(page.getByText('Discovering interpreters (2)...')).toBeVisible();
+    await expect(page.getByText(/Discovering interpreters\s*\.\.\./u)).toBeVisible();
+    await expect(page.getByText('C:\\Python312\\python.exe')).toBeVisible();
+    await expect(page.locator('.progress-bar')).toHaveAttribute('style', /50%/u);
+
+    await backend.notify(ConsoleMethods.runtimeStartupPhase, {
+        phase: 'awaitingTrust',
+    });
+    await expect(page.getByText('Cannot start consoles in Restricted Mode.')).toBeVisible();
+    await expect(page.getByTestId('startup-progress-bar')).toHaveCount(0);
+    await expect(page.getByText('C:\\Python312\\python.exe')).toHaveCount(0);
+    const trustRequest = backend.waitForNextRequest(ConsoleMethods.requestWorkspaceTrust);
+    await page.getByRole('button', { name: 'Trust this folder' }).click();
+    await trustRequest;
+
+    await backend.notify(ConsoleMethods.runtimeStartupPhase, { phase: 'starting' });
+    await expect(page.getByText('Starting...')).toBeVisible();
 
     await backend.notify(ConsoleMethods.runtimeStartupPhase, {
         phase: 'complete',
@@ -1251,6 +1269,31 @@ test('console applies metadata updates and keeps rename and interrupt requests a
         continuationPrompt: '+ ',
     });
     await expect(page.getByLabel('Current Working Directory')).toContainText('/workspace/updated');
+
+    await backend.notify(ConsoleMethods.sessionMetadataChanged, {
+        sessionId: 'session-1',
+        syncSeq: 3,
+        workingDirectory: 'C:\\Users\\me\\project',
+    });
+    const workingDirectory = page.getByLabel('Current Working Directory');
+    await expect(workingDirectory).toContainText('C:/Users/me/project');
+    await page.evaluate(() => {
+        Object.defineProperty(navigator, 'clipboard', {
+            configurable: true,
+            value: {
+                writeText: async (text: string) => {
+                    (globalThis as typeof globalThis & { __copiedCwd?: string })
+                        .__copiedCwd = text;
+                },
+            },
+        });
+    });
+    await workingDirectory.press('Enter');
+    await expect
+        .poll(() => page.evaluate(() =>
+            (globalThis as typeof globalThis & { __copiedCwd?: string }).__copiedCwd,
+        ))
+        .toBe('C:\\Users\\me\\project');
 
     const interruptRequest = backend.waitForNextRequest(ConsoleMethods.interrupt);
     await page.getByLabel('Interrupt Execution').click();
@@ -1311,7 +1354,7 @@ test('console executes pending, pasted, and history-driven input and supports se
     });
     await page.waitForTimeout(200);
 
-    const executePendingCode = backend.waitForNextRequest(ConsoleMethods.execute);
+    const executePendingCode = backend.waitForNextRequest(ConsoleMethods.submitCode);
     await monacoInput.press('Enter');
     await expect.poll(async () => (await executePendingCode).params).toEqual(
         expect.objectContaining({
@@ -1325,7 +1368,7 @@ test('console executes pending, pasted, and history-driven input and supports se
         text: '2 + 2',
     });
     await page.waitForTimeout(200);
-    const executePastedCode = backend.waitForNextRequest(ConsoleMethods.execute);
+    const executePastedCode = backend.waitForNextRequest(ConsoleMethods.submitCode);
     await monacoInput.press('Enter');
     await expect.poll(async () => (await executePastedCode).params).toEqual(
         expect.objectContaining({
@@ -1359,7 +1402,7 @@ test('console executes pending, pasted, and history-driven input and supports se
     });
     await page.waitForTimeout(200);
 
-    const executeHistoryCode = backend.waitForNextRequest(ConsoleMethods.execute);
+    const executeHistoryCode = backend.waitForNextRequest(ConsoleMethods.submitCode);
     await monacoInput.press('Enter');
     await expect.poll(async () => (await executeHistoryCode).params).toEqual(
         expect.objectContaining({
@@ -1465,6 +1508,21 @@ test('console bridges prompt replies, execution reveal, output links, width upda
                     },
                 ],
             },
+            {
+                type: 'activity' as const,
+                parentId: 'activity-4',
+                items: [
+                    {
+                        type: 'prompt' as const,
+                        id: 'prompt-3',
+                        parentId: 'activity-4',
+                        when: now + 5,
+                        prompt: 'Password: ',
+                        password: true,
+                        state: 'Unanswered',
+                    },
+                ],
+            },
         ]),
     });
 
@@ -1481,21 +1539,55 @@ test('console bridges prompt replies, execution reveal, output links, width upda
     });
     await expect(page.locator('[data-execution-id="activity-1"] .activity-input')).toHaveClass(/revealed/);
 
-    const promptInputs = page.locator('.prompt-input');
+    const promptInputs = page.locator('.activity-prompt textarea.inputarea');
     await expect(promptInputs).toHaveCount(2);
 
+    await promptInputs.first().fill('copy-me');
+    await promptInputs.first().press('Control+a');
+    const interruptCountBeforeCopy = backend.requestCount(ConsoleMethods.interrupt);
+    await promptInputs.first().press('Control+c');
+    await page.waitForTimeout(100);
+    expect(backend.requestCount(ConsoleMethods.interrupt)).toBe(interruptCountBeforeCopy);
+
+    await promptInputs.first().press('ArrowRight');
     const interruptPrompt = backend.waitForNextRequest(ConsoleMethods.interrupt);
     await promptInputs.first().press('Control+c');
     expect((await interruptPrompt).params).toEqual({ sessionId: 'session-1' });
 
     const replyPrompt = backend.waitForNextRequest(ConsoleMethods.replyPrompt);
-    await promptInputs.nth(1).fill('42');
+    await promptInputs.nth(1).fill('base');
+    await promptInputs.nth(1).evaluate((element) => {
+        const clipboardData = new DataTransfer();
+        clipboardData.setData('text/plain', 'line-1\nline-2');
+        element.dispatchEvent(
+            new ClipboardEvent('paste', {
+                bubbles: true,
+                composed: true,
+                clipboardData,
+            }),
+        );
+    });
+    await expect(
+        page.locator('.activity-prompt .view-lines').nth(1),
+    ).toContainText('baseline-1 line-2');
+    await promptInputs.nth(1).press('Control+z');
     await promptInputs.nth(1).press('Enter');
     expect((await replyPrompt).params).toEqual({
         id: 'prompt-2',
-        value: '42',
+        value: 'base',
         sessionId: 'session-1',
     });
+
+    const passwordInput = page.locator('.activity-prompt .password-input');
+    const passwordReply = backend.waitForNextRequest(ConsoleMethods.replyPrompt);
+    await passwordInput.fill('secret-value');
+    await passwordInput.press('Enter');
+    expect((await passwordReply).params).toEqual({
+        id: 'prompt-3',
+        value: 'secret-value',
+        sessionId: 'session-1',
+    });
+    await expect(page.getByText('secret-value')).toHaveCount(0);
 
     const listOutputChannels = backend.waitForNextRequest(SessionMethods.listOutputChannels);
     await page.getByLabel('Console Information').click();
@@ -1509,38 +1601,21 @@ test('console bridges prompt replies, execution reveal, output links, width upda
     });
 });
 
-test('console respects isComplete results for incomplete, invalid, unknown, and failing fragments', async ({ page }) => {
+test('console respects host-owned submission results for incomplete, executed, and failing fragments', async ({ page }) => {
     const backend = await openWebviewPage(page, 'console', {
         configure: (mockBackend) => {
             registerConsoleDefaults(mockBackend, {
                 sessions: [createSession({ promptActive: false })],
             });
-            mockBackend.onRequest(ConsoleMethods.isComplete, (request) => {
+            mockBackend.onRequest(ConsoleMethods.submitCode, (request) => {
                 const code = String((request.params as { code?: string }).code ?? '');
                 if (code.includes('needs-more')) {
                     return { status: 'incomplete' };
                 }
-                if (code.includes('invalid-fragment')) {
-                    return { status: 'invalid' };
+                if (code.includes('failing-fragment') || code.includes('rejected-fragment')) {
+                    return { status: 'failed' };
                 }
-                if (code.includes('unknown-fragment')) {
-                    return { status: 'unknown' };
-                }
-                if (code.includes('failing-fragment')) {
-                    throw new Error('completeness unavailable');
-                }
-                return { status: 'complete' };
-            });
-            mockBackend.onRequest(ConsoleMethods.execute, (request) => {
-                const code = String((request.params as { code?: string }).code ?? '');
-                if (code.includes('rejected-fragment')) {
-                    throw new Error('execution unavailable');
-                }
-                return {
-                    executionId:
-                        (request.params as { executionId?: string }).executionId ??
-                        'exec-1',
-                };
+                return { status: 'executed' };
             });
         },
     });
@@ -1556,7 +1631,7 @@ test('console respects isComplete results for incomplete, invalid, unknown, and 
     await expect(monacoInput).toHaveCount(1);
     await monacoInput.focus();
 
-    const initialExecuteCount = backend.requestCount(ConsoleMethods.execute);
+    const initialExecuteCount = backend.requestCount(ConsoleMethods.submitCode);
 
     await backend.notify(ConsoleMethods.setPendingCode, {
         sessionId: 'session-1',
@@ -1565,14 +1640,14 @@ test('console respects isComplete results for incomplete, invalid, unknown, and 
     await page.waitForTimeout(200);
     await monacoInput.press('Enter');
     await page.waitForTimeout(200);
-    expect(backend.requestCount(ConsoleMethods.execute)).toBe(initialExecuteCount);
+    expect(backend.requestCount(ConsoleMethods.submitCode)).toBe(initialExecuteCount + 1);
 
     await backend.notify(ConsoleMethods.setPendingCode, {
         sessionId: 'session-1',
         code: 'invalid-fragment',
     });
     await page.waitForTimeout(200);
-    const invalidExecute = backend.waitForNextRequest(ConsoleMethods.execute);
+    const invalidExecute = backend.waitForNextRequest(ConsoleMethods.submitCode);
     await monacoInput.press('Enter');
     await expect.poll(async () => (await invalidExecute).params).toEqual(
         expect.objectContaining({
@@ -1587,7 +1662,7 @@ test('console respects isComplete results for incomplete, invalid, unknown, and 
         code: 'unknown-fragment',
     });
     await page.waitForTimeout(200);
-    const unknownExecute = backend.waitForNextRequest(ConsoleMethods.execute);
+    const unknownExecute = backend.waitForNextRequest(ConsoleMethods.submitCode);
     await monacoInput.press('Enter');
     await expect.poll(async () => (await unknownExecute).params).toEqual(
         expect.objectContaining({
@@ -1596,7 +1671,7 @@ test('console respects isComplete results for incomplete, invalid, unknown, and 
         }),
     );
 
-    const executedAfterUnknown = backend.requestCount(ConsoleMethods.execute);
+    const executedAfterUnknown = backend.requestCount(ConsoleMethods.submitCode);
     await backend.notify(ConsoleMethods.setPendingCode, {
         sessionId: 'session-1',
         code: 'failing-fragment',
@@ -1604,8 +1679,7 @@ test('console respects isComplete results for incomplete, invalid, unknown, and 
     await page.waitForTimeout(200);
     await monacoInput.press('Enter');
     await page.waitForTimeout(200);
-    expect(backend.requestCount(ConsoleMethods.execute)).toBe(executedAfterUnknown);
-    expect(backend.requestCount(ConsoleMethods.isComplete)).toBeGreaterThanOrEqual(4);
+    expect(backend.requestCount(ConsoleMethods.submitCode)).toBe(executedAfterUnknown + 1);
 
     const getEditorValue = () =>
         page.evaluate(() => {
@@ -1622,13 +1696,118 @@ test('console respects isComplete results for incomplete, invalid, unknown, and 
     });
     await page.waitForTimeout(200);
     const executeCountBeforeRejection =
-        backend.requestCount(ConsoleMethods.execute);
+        backend.requestCount(ConsoleMethods.submitCode);
     await monacoInput.press('Enter');
 
     await expect
-        .poll(() => backend.requestCount(ConsoleMethods.execute))
+        .poll(() => backend.requestCount(ConsoleMethods.submitCode))
         .toBe(executeCountBeforeRejection + 1);
     await expect.poll(getEditorValue).toBe('rejected-fragment');
+});
+
+test('console preserves type-ahead and shows delayed submission feedback with a transcript placeholder', async ({ page }) => {
+    let resolveSubmission!: (result: { status: 'executed' }) => void;
+    const backend = await openWebviewPage(page, 'console', {
+        configure: (mockBackend) => {
+            registerConsoleDefaults(mockBackend, {
+                sessions: [createSession({ promptActive: false })],
+            });
+            mockBackend.onRequest(
+                ConsoleMethods.submitCode,
+                () => new Promise<{ status: 'executed' }>((resolve) => {
+                    resolveSubmission = resolve;
+                }),
+            );
+        },
+    });
+    await expect.poll(() => backend.notificationCount(ConsoleMethods.ready)).toBeGreaterThan(0);
+    await backend.notify(ConsoleMethods.restoreState, {
+        sessionId: 'session-1',
+        syncSeq: 1,
+        state: createConsoleState('existing output'),
+    });
+
+    const input = page.locator('.console-input textarea').last();
+    await backend.notify(ConsoleMethods.setPendingCode, {
+        sessionId: 'session-1',
+        code: 'slow_call()',
+    });
+    const submissionRequest = backend.waitForNextRequest(ConsoleMethods.submitCode);
+    await input.press('Enter');
+    await submissionRequest;
+    await backend.notify(ConsoleMethods.runtimeChanges, {
+        sessionId: 'session-1',
+        syncSeq: 2,
+        changes: [{
+            kind: 'appendRuntimeItem',
+            runtimeItem: {
+                type: 'pendingInput',
+                id: 'submitting-1',
+                when: Date.now(),
+                inputPrompt: '> ',
+                code: 'slow_call()',
+                submitting: true,
+            },
+        }],
+    });
+
+    await expect(page.getByLabel('Submitting code')).toBeVisible();
+    await expect(page.getByTestId('console-submitting-overlay')).toHaveCount(0);
+    await backend.notify(ConsoleMethods.setPendingCode, {
+        sessionId: 'session-1',
+        code: 'type_ahead <- 1',
+    });
+    await expect(page.getByTestId('console-submitting-overlay')).toBeVisible({ timeout: 2_500 });
+    resolveSubmission({ status: 'executed' });
+    await expect(page.getByTestId('console-submitting-overlay')).toHaveCount(0);
+    await expect.poll(() => page.evaluate(() =>
+        (globalThis as any).monaco?.editor?.getEditors?.()[0]?.getValue() ?? null,
+    )).toBe('type_ahead <- 1');
+});
+
+test('console cancels a slow host submission and restores submitted code before type-ahead', async ({ page }) => {
+    let resolveSubmission!: (result: { status: 'cancelled' }) => void;
+    const backend = await openWebviewPage(page, 'console', {
+        configure: (mockBackend) => {
+            registerConsoleDefaults(mockBackend, {
+                sessions: [createSession({ promptActive: false })],
+            });
+            mockBackend.onRequest(
+                ConsoleMethods.submitCode,
+                () => new Promise<{ status: 'cancelled' }>((resolve) => {
+                    resolveSubmission = resolve;
+                }),
+            );
+            mockBackend.onRequest(ConsoleMethods.cancelSubmission, () => {
+                resolveSubmission({ status: 'cancelled' });
+            });
+        },
+    });
+    await expect.poll(() => backend.notificationCount(ConsoleMethods.ready)).toBeGreaterThan(0);
+    await backend.notify(ConsoleMethods.restoreState, {
+        sessionId: 'session-1',
+        syncSeq: 1,
+        state: createConsoleState('existing output'),
+    });
+
+    const input = page.locator('.console-input textarea').last();
+    await backend.notify(ConsoleMethods.setPendingCode, {
+        sessionId: 'session-1',
+        code: 'slow_call()',
+    });
+    await input.press('Enter');
+    await backend.notify(ConsoleMethods.setPendingCode, {
+        sessionId: 'session-1',
+        code: 'type_ahead <- 1',
+    });
+    await expect(page.getByTestId('console-submitting-overlay')).toBeVisible({ timeout: 2_500 });
+    const cancelRequest = backend.waitForNextRequest(ConsoleMethods.cancelSubmission);
+    await page.getByRole('button', { name: 'Cancel' }).click();
+    await cancelRequest;
+    await expect(page.getByTestId('console-submitting-overlay')).toHaveCount(0);
+    await expect.poll(() => page.evaluate(() =>
+        (globalThis as any).monaco?.editor?.getEditors?.()[0]?.getValue() ?? null,
+    )).toBe('slow_call()\ntype_ahead <- 1');
 });
 
 test('console updates pending input, resource usage, and language assets from extension notifications', async ({ page }) => {
@@ -1685,6 +1864,26 @@ test('console updates pending input, resource usage, and language assets from ex
     await expect(page.getByTestId('console-tab-session-1')).toContainText('CPU');
     await expect(page.getByTestId('console-tab-session-1')).toContainText('25%');
     await expect(page.getByTestId('console-tab-session-1')).toContainText('MEM');
+
+    const runtimeIcon = page
+        .getByTestId('console-tab-session-1')
+        .locator('.language-icon');
+    await backend.notify(ConsoleMethods.themeChanged, {
+        theme: {
+            base: 'vs-dark',
+            rules: [],
+            fileIconThemeSettingsId: 'vs-seti',
+        },
+    });
+    await expect(runtimeIcon).toHaveClass(/seti-icon-theme-active/);
+    await backend.notify(ConsoleMethods.themeChanged, {
+        theme: {
+            base: 'vs-dark',
+            rules: [],
+            fileIconThemeSettingsId: 'material-icon-theme',
+        },
+    });
+    await expect(runtimeIcon).not.toHaveClass(/seti-icon-theme-active/);
 
     await backend.notify(ConsoleMethods.languageSupportAssetsChanged, {
         modules: {
@@ -1763,9 +1962,13 @@ test('console aligns single-session resource usage with the red interrupt action
 
     const monitor = page.locator('.console-resource-monitor');
     const interrupt = page.getByLabel('Interrupt Execution');
-    await expect(monitor).toContainText('42%');
+    await expect(monitor).toHaveAttribute(
+        'aria-label',
+        'Runtime resource usage: CPU 42%, memory 2097152 bytes',
+    );
     await expect(monitor).toContainText('2.00MB');
     await expect(interrupt).toBeVisible();
+
 
     const actionPositions = await page.evaluate(() => {
         const interruptElement = document.querySelector(
@@ -1775,7 +1978,7 @@ test('console aligns single-session resource usage with the red interrupt action
             '.console-resource-monitor',
         );
         const restartElement = document.querySelector(
-            '[aria-label="Restart Session"]',
+            '[aria-label="Restart R"]',
         );
         if (!interruptElement || !monitorElement || !restartElement) {
             throw new Error('Expected console action bar controls');
@@ -1814,7 +2017,7 @@ test('console aligns single-session resource usage with the red interrupt action
     expect(interruptColors.actual).toBe(interruptColors.expected);
 
     const toggleRequest = backend.waitForNextRequest(ConsoleMethods.setShowResourceMonitor);
-    await page.locator('.console-action-bar').click({ button: 'right' });
+    await monitor.click({ button: 'right' });
     await page.getByText('Show Resource Monitor', { exact: true }).click();
     await expect.poll(async () => (await toggleRequest).params).toEqual({ visible: false });
 
@@ -1826,6 +2029,84 @@ test('console aligns single-session resource usage with the red interrupt action
         showResourceMonitor: false,
     });
     await expect(monitor).toHaveCount(0);
+});
+
+test('console find caps matches, handles regex edges, navigates in Positron direction, and resizes', async ({ page }) => {
+    const backend = await openWebviewPage(page, 'console', {
+        configure: (mockBackend) => registerConsoleDefaults(mockBackend),
+    });
+    await expect.poll(() => backend.notificationCount(ConsoleMethods.ready)).toBeGreaterThan(0);
+    await backend.notify(ConsoleMethods.restoreState, {
+        sessionId: 'session-1',
+        syncSeq: 1,
+        state: createConsoleState(createLongPlainTextOutput(1001, 'needle')),
+    });
+
+    const panel = page.getByTestId('console-session-1');
+    await panel.focus();
+    await panel.press('Control+f');
+    const findInput = page.getByPlaceholder('Find');
+    await findInput.fill('needle');
+    await expect(page.getByText('1 of 1000+')).toBeVisible();
+    await findInput.press('Shift+Enter');
+    await expect(page.getByText('2 of 1000+')).toBeVisible();
+    await findInput.press('Enter');
+    await expect(page.getByText('1 of 1000+')).toBeVisible();
+
+    await page.getByRole('button', { name: 'Use Regular Expression' }).click();
+    await findInput.fill('(?=needle)');
+    await expect(page.getByText('No results')).toBeVisible();
+    await findInput.fill('[');
+    await expect(page.getByText('Invalid regex')).toBeVisible();
+
+    const shell = page.locator('.search-widget-shell');
+    const before = await shell.boundingBox();
+    const handle = page.getByRole('separator', { name: 'Resize Find' });
+    const box = await handle.boundingBox();
+    if (!before || !box) throw new Error('Find resize geometry unavailable');
+    await page.mouse.move(box.x + box.width / 2, box.y + 8);
+    await page.mouse.down();
+    await page.mouse.move(box.x - 80, box.y + 8);
+    await page.mouse.up();
+    await expect.poll(async () => (await shell.boundingBox())?.width ?? 0).toBeGreaterThan(before.width + 50);
+    await findInput.press('Escape');
+    await expect(findInput).toHaveCount(0);
+
+    await backend.notify(ConsoleMethods.findCommand, { command: 'focus' });
+    await expect(findInput).toBeVisible();
+    await findInput.fill('needle');
+    await expect(page.getByText('1 of 1000+')).toBeVisible();
+    await backend.notify(ConsoleMethods.findCommand, { command: 'next' });
+    await expect(page.getByText('2 of 1000+')).toBeVisible();
+    await backend.notify(ConsoleMethods.findCommand, { command: 'previous' });
+    await expect(page.getByText('1 of 1000+')).toBeVisible();
+    await backend.notify(ConsoleMethods.findCommand, { command: 'close' });
+    await expect(findInput).toHaveCount(0);
+});
+
+test('console splitter enforces the 60px minimum and one-fifth maximum with keyboard resizing', async ({ page }) => {
+    await page.setViewportSize({ width: 1000, height: 700 });
+    const sessions = [
+        createSession({ id: 'session-1', createdTimestamp: 1 }),
+        createSession({ id: 'session-2', name: 'Second', createdTimestamp: 2 }),
+    ];
+    const backend = await openWebviewPage(page, 'console', {
+        configure: (mockBackend) => registerConsoleDefaults(mockBackend, {
+            sessions,
+            activeSessionId: 'session-1',
+        }),
+    });
+    await expect.poll(() => backend.notificationCount(ConsoleMethods.ready)).toBeGreaterThan(0);
+    await backend.notify(SessionMethods.info, { sessions, activeSessionId: 'session-1' });
+
+    const splitter = page.getByRole('button', { name: 'Resize console session list' });
+    const tabs = page.getByRole('tablist');
+    await splitter.press('Home');
+    await expect.poll(async () => (await tabs.boundingBox())?.width ?? 0).toBeLessThanOrEqual(200);
+    await expect.poll(async () => (await tabs.boundingBox())?.width ?? 0).toBeGreaterThanOrEqual(190);
+    await splitter.press('End');
+    await expect.poll(async () => (await tabs.boundingBox())?.width ?? 0).toBeGreaterThanOrEqual(59);
+    await expect.poll(async () => (await tabs.boundingBox())?.width ?? 0).toBeLessThanOrEqual(70);
 });
 
 test('console navigates input history with ArrowUp and ArrowDown keyboard events', async ({ page }) => {
@@ -2016,7 +2297,7 @@ test('console recalls executed code with ArrowUp after Enter execution', async (
     });
     await page.waitForTimeout(200);
 
-    const executeRequest = backend.waitForNextRequest(ConsoleMethods.execute);
+    const executeRequest = backend.waitForNextRequest(ConsoleMethods.submitCode);
     await monacoInput.press('Enter');
     await expect.poll(async () => (await executeRequest).params).toEqual(
         expect.objectContaining({
@@ -2025,8 +2306,12 @@ test('console recalls executed code with ArrowUp after Enter execution', async (
         }),
     );
 
-    // Wait for history entry to be added (addHistoryEntry is called in submitCodeEditorWidgetCode)
-    await page.waitForTimeout(200);
+    // The extension host is the history authority and notifies the webview only
+    // after it accepts the execution.
+    await backend.notify(ConsoleMethods.historyAdd, {
+        sessionId: 'session-1',
+        input: 'print("hello")',
+    });
 
     // ArrowUp should recall the executed code
     await monacoInput.press('ArrowUp');
@@ -2105,7 +2390,10 @@ test('console handles complete session lifecycle: create → switch → destroy 
     );
 
     const stopRequest = backend.waitForNextRequest(SessionMethods.stop);
-    await page.getByLabel('Delete Session').click();
+    await page
+        .getByRole('tab', { name: 'Primary' })
+        .getByRole('button', { name: 'Delete Session' })
+        .click();
     expect((await stopRequest).params).toEqual({ sessionId: 'session-1' });
 
     await backend.notify(SessionMethods.info, {
@@ -2329,10 +2617,10 @@ test('console safely handles switching to a restarting session and defers execut
     });
     await page.waitForTimeout(200);
 
-    const executeCountBefore = backend.requestCount(ConsoleMethods.execute);
+    const executeCountBefore = backend.requestCount(ConsoleMethods.submitCode);
     await monacoInput.press('Enter');
     await page.waitForTimeout(200);
-    expect.soft(backend.requestCount(ConsoleMethods.execute)).toBe(executeCountBefore);
+    expect.soft(backend.requestCount(ConsoleMethods.submitCode)).toBe(executeCountBefore);
 
     // Session-2 finishes restarting and becomes ready
     const session2Ready = { ...session2Restarting, state: 'ready' as const };
@@ -2343,9 +2631,9 @@ test('console safely handles switching to a restarting session and defers execut
     await page.waitForTimeout(300);
 
     // The deferred execute should now fire
-    expect.soft(backend.requestCount(ConsoleMethods.execute)).toBe(executeCountBefore + 1);
+    expect.soft(backend.requestCount(ConsoleMethods.submitCode)).toBe(executeCountBefore + 1);
     expect
-        .soft(backend.requests(ConsoleMethods.execute).at(-1)?.params)
+        .soft(backend.requests(ConsoleMethods.submitCode).at(-1)?.params)
         .toEqual(
             expect.objectContaining({
                 sessionId: 'session-2',

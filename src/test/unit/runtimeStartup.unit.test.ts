@@ -265,6 +265,25 @@ function makeNewFolderService(
 }
 
 suite('[Unit] runtime startup', () => {
+    test('does not replace the last non-zero discovery count with an empty scan', () => {
+        const discoveryCountKey = 'vscode-supervisor.lastDiscoveryRuntimeCount.v1';
+        const context = makeContext({ [discoveryCountKey]: 5 });
+        const logChannel = makeNoopLogChannel();
+        const startupService = new RuntimeStartupService(
+            context,
+            makeRuntimeManager(),
+            makeSessionManager().value,
+            makeNewFolderService(context, logChannel),
+            logChannel,
+            createMemento(),
+        );
+
+        (startupService as any)._setStartupPhase('complete');
+        assert.strictEqual(context.globalState.get(discoveryCountKey), 5);
+        assert.strictEqual(startupService.lastDiscoveryRuntimeCount, 5);
+        startupService.dispose();
+    });
+
     test('clears dismissal keys for one language or all languages', async () => {
         const context = makeContext({
             'vscode-supervisor.dismissedArchMismatch.v1.r': true,

@@ -5,11 +5,16 @@
      */
     import type { ConsoleState } from "../types/console";
     import ConsoleTab from "./ConsoleTab.svelte";
+    import { SvelteSet } from "svelte/reactivity";
+    import { localize } from "$lib/localization";
 
     interface SessionInfo {
         id: string;
         name: string;
         runtimeName: string;
+        languageId?: string;
+        sessionMode: "console" | "notebook" | "background";
+        createdTimestamp: number;
         state: ConsoleState;
         runtimePath?: string;
         runtimeVersion?: string;
@@ -25,6 +30,7 @@
         height = 400,
         resourceUsageBySession = new Map<string, any>(),
         showResourceMonitor = true,
+        fileIconThemeSettingsId = undefined,
         onSelectSession,
         onDeleteSession,
         onRenameSession,
@@ -36,6 +42,7 @@
         height: number;
         resourceUsageBySession: Map<string, any>;
         showResourceMonitor: boolean;
+        fileIconThemeSettingsId?: string;
         onSelectSession: (sessionId: string) => void;
         onDeleteSession: (sessionId: string) => void;
         onRenameSession: (sessionId: string, newName: string) => void;
@@ -44,11 +51,27 @@
 
     // Refs
     let tabListRef: HTMLDivElement;
+    const sessionsWithHiddenName = new SvelteSet<string>();
+    const hideSessionNames = $derived(sessionsWithHiddenName.size > 0);
 
-    // Sort sessions by creation order (we use id as a proxy for now)
-    // In practice, sessions should have a createdTimestamp
+    function handleSessionNameHiddenChange(
+        sessionId: string,
+        hidden: boolean,
+    ): void {
+        if (hidden) {
+            sessionsWithHiddenName.add(sessionId);
+        } else {
+            sessionsWithHiddenName.delete(sessionId);
+        }
+    }
+
     $effect(() => {
-        // Sessions are already sorted from backend
+        const currentSessionIds = new Set(sessions.map((session) => session.id));
+        for (const sessionId of sessionsWithHiddenName) {
+            if (!currentSessionIds.has(sessionId)) {
+                sessionsWithHiddenName.delete(sessionId);
+            }
+        }
     });
 
     /**
@@ -138,12 +161,15 @@
         <ConsoleTab
             {session}
             active={session.id === activeSessionId}
+            hideSessionName={hideSessionNames}
             {width}
             resourceUsageHistory={resourceUsageBySession.get(session.id) || []}
             {showResourceMonitor}
+            {fileIconThemeSettingsId}
             onSelect={() => handleSelectSession(session.id)}
             onDelete={() => handleDeleteSession(session.id)}
             onRename={(newName) => handleRenameSession(session.id, newName)}
+            onSessionNameHiddenChange={handleSessionNameHiddenChange}
             onToggleResourceMonitor={() =>
                 onToggleResourceMonitor()}
         />
@@ -151,14 +177,15 @@
 
     {#if sessions.length === 0}
         <div class="no-sessions">
-            <p>No sessions</p>
+            <p>{localize("console.noSessions", "No sessions")}</p>
         </div>
     {/if}
 </div>
 
 <style>
     .tabs-container {
-        border-top: 1px solid var(--vscode-positronActionBar-border);
+        border-top: 1px solid
+            var(--vscode-positronActionBar-border, var(--vscode-panel-border));
         background-color: var(--vscode-tab-inactiveBackground);
         flex-grow: 1;
         overflow-y: auto;

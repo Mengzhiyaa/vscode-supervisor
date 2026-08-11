@@ -32,6 +32,9 @@ export const defaultSearchOptions: SearchOptions = {
     wholeWord: false,
 };
 
+/** Maximum number of DOM ranges created for one search. */
+export const CONSOLE_SEARCH_MATCHES_LIMIT = 1000;
+
 /**
  * Builds a RegExp from the query string and search options.
  * Returns null if the query is invalid.
@@ -157,7 +160,10 @@ export function findMatchesInDOM(
     let startNodeInfoIndex = 0;
     let endNodeInfoIndex = 0;
 
-    while ((match = regex.exec(fullText)) !== null) {
+    while (
+        matches.length < CONSOLE_SEARCH_MATCHES_LIMIT &&
+        (match = regex.exec(fullText)) !== null
+    ) {
         const matchStart = match.index;
         const matchEnd = match.index + match[0].length;
 

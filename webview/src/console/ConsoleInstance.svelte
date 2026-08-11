@@ -9,6 +9,7 @@
     } from "../shared/ContextMenu.svelte";
     import ConsoleInstanceItems from "./ConsoleInstanceItems.svelte";
     import ConsoleSearchWidget from "./ConsoleSearchWidget.svelte";
+    import SubmittingOverlay from "./SubmittingOverlay.svelte";
     import type { ConsoleInstanceModel } from "./models/consoleInstance";
     import { getVsCodeState, setVsCodeState } from "../lib/rpc/client";
     import {
@@ -25,6 +26,7 @@
         copyScopedSelection,
         getScopedSelection,
     } from "./utils/selectionUtils";
+    import { localize } from "$lib/localization";
 
     /** Persisted state structure for this console */
     interface ConsolePersistedState {
@@ -37,11 +39,12 @@
         consoleInstance,
         active = false,
         width = 600,
-        height = 400,
         revealRequest = undefined,
         openSearchRequest = undefined,
+        findCommandRequest = undefined,
         languageAssetsVersion = 0,
         charWidth = 0,
+        submitting = false,
         onSelectAll,
         onFocusInput,
         onInsertText,
@@ -50,17 +53,26 @@
         onInputAnchorReady = undefined,
         onScrollLockChanged = undefined,
         onWidthInCharsChanged = undefined,
+        onCancelSubmission = undefined,
+        onFindVisibilityChanged = undefined,
     }: {
         consoleInstance: ConsoleInstanceModel;
         active: boolean;
         width: number;
-        height: number;
         revealRequest:
             | { sessionId: string; executionId: string; nonce: number }
             | undefined;
         openSearchRequest: { sessionId: string; nonce: number } | undefined;
+        findCommandRequest:
+            | {
+                  sessionId: string;
+                  command: "focus" | "next" | "previous" | "close";
+                  nonce: number;
+              }
+            | undefined;
         languageAssetsVersion?: number;
         charWidth: number;
+        submitting?: boolean;
         onSelectAll: () => void;
         onFocusInput: () => void;
         onInsertText: (text: string) => void;
@@ -78,6 +90,8 @@
             sessionId: string,
             widthInChars: number,
         ) => void;
+        onCancelSubmission?: (sessionId: string) => void;
+        onFindVisibilityChanged?: (visible: boolean) => void;
     } = $props();
 
     const session = $derived.by(() => ({
@@ -100,12 +114,18 @@
     let hasRestoredScroll = $state(false);
     let lastRevealNonce = $state<number | undefined>(undefined);
     let lastOpenSearchNonce = $state<number | undefined>(undefined);
+    let lastFindCommandNonce = $state<number | undefined>(undefined);
     let lastWidthInChars = $state<number | undefined>(undefined);
     let inputAnchorRef: HTMLDivElement;
     let widthInCharsAnimationFrame: number | undefined;
     let lastRuntimeItemsMarker = $state(0);
     let lastExecuteScrollMarker = $state(0);
     let ignoreNextScrollEvent = $state(false);
+    let lastObservedSize:
+        | { scrollHeight: number; clientHeight: number }
+        | undefined;
+    let instanceResizeObserver: ResizeObserver | undefined;
+    let showSubmittingOverlay = $state(false);
 
     // Search state
     let searchVisible = $state(false);
@@ -126,12 +146,12 @@
 
     const contextMenuEntries = $derived.by((): ContextMenuEntry[] => [
         {
-            label: "Copy",
+            label: localize("common.copy", "Copy"),
             disabled: !contextMenuCopyEnabled,
             onSelected: copySelection,
         },
         {
-            label: "Paste",
+            label: localize("common.paste", "Paste"),
             disabled: contextMenuClipboardText === "",
             onSelected: () => {
                 pasteText(contextMenuClipboardText);
@@ -139,7 +159,7 @@
         },
         { separator: true },
         {
-            label: "Select All",
+            label: localize("common.selectAll", "Select All"),
             onSelected: () => onSelectAll(),
         },
     ]);
@@ -208,12 +228,27 @@
      * Handle scroll events for scroll lock
      */
     function handleScroll(e: Event) {
+        const container = e.target as HTMLDivElement;
+        const currentSize = {
+            scrollHeight: container.scrollHeight,
+            clientHeight: container.clientHeight,
+        };
+
         if (ignoreNextScrollEvent) {
             ignoreNextScrollEvent = false;
+            lastObservedSize = currentSize;
             return;
         }
 
-        const container = e.target as HTMLDivElement;
+        const sizeChanged =
+            lastObservedSize !== undefined &&
+            (currentSize.scrollHeight !== lastObservedSize.scrollHeight ||
+                currentSize.clientHeight !== lastObservedSize.clientHeight);
+        lastObservedSize = currentSize;
+        if (sizeChanged) {
+            return;
+        }
+
         const scrollPosition = distanceFromBottom(container);
 
         // Update scroll lock state
@@ -378,6 +413,7 @@
         searchVisible = true;
         searchFocusNonce += 1;
         scheduleSearchRefresh(true, true);
+        onFindVisibilityChanged?.(true);
     }
 
     function closeSearch() {
@@ -391,6 +427,7 @@
             searchContentRefreshTimer = undefined;
         }
         clearSearchResults();
+        onFindVisibilityChanged?.(false);
     }
 
     function handleSearch(
@@ -681,11 +718,27 @@
             observeSearchContent();
             isInitialMount = false;
         });
+
+        instanceResizeObserver = new ResizeObserver(() => {
+            scheduleWidthInCharsUpdate();
+            if (!active || scrollLocked || !consoleInstanceRef) {
+                return;
+            }
+            ignoreNextScrollEvent = true;
+            consoleInstanceRef.scrollTo(
+                consoleInstanceRef.scrollLeft,
+                consoleInstanceRef.scrollHeight,
+            );
+        });
+        instanceResizeObserver.observe(consoleInstanceRef);
         scheduleWidthInCharsUpdate();
     });
 
     // Clean up search on destroy
     onDestroy(() => {
+        if (active && searchVisible) {
+            onFindVisibilityChanged?.(false);
+        }
         onInputAnchorReady?.(session.id, null);
         clearHighlights();
         if (searchInputDebounceTimer) {
@@ -695,8 +748,55 @@
             clearTimeout(searchContentRefreshTimer);
         }
         searchContentObserver?.disconnect();
+        instanceResizeObserver?.disconnect();
         if (widthInCharsAnimationFrame !== undefined) {
             cancelAnimationFrame(widthInCharsAnimationFrame);
+        }
+    });
+
+    $effect(() => {
+        if (active) {
+            onFindVisibilityChanged?.(searchVisible);
+        }
+    });
+
+    $effect(() => {
+        if (!submitting) {
+            showSubmittingOverlay = false;
+            return;
+        }
+
+        const timer = setTimeout(() => {
+            if (submitting) {
+                showSubmittingOverlay = true;
+            }
+        }, 1000);
+        return () => clearTimeout(timer);
+    });
+
+    $effect(() => {
+        if (
+            !findCommandRequest ||
+            findCommandRequest.sessionId !== session.id ||
+            findCommandRequest.nonce === lastFindCommandNonce
+        ) {
+            return;
+        }
+
+        lastFindCommandNonce = findCommandRequest.nonce;
+        switch (findCommandRequest.command) {
+            case "focus":
+                openSearch();
+                break;
+            case "next":
+                navigateNextMatch();
+                break;
+            case "previous":
+                navigatePreviousMatch();
+                break;
+            case "close":
+                closeSearch();
+                break;
         }
     });
 
@@ -754,7 +854,6 @@
 
     $effect(() => {
         void adjustedWidth;
-        void height;
         void charWidth;
         void runtimeItems.length;
         void wordWrap;
@@ -773,7 +872,7 @@
     tabindex="0"
     aria-labelledby="console-tab-{session.id}"
     data-testid="console-{session.id}"
-    style="width: {adjustedWidth}px; height: {height}px; white-space: {wordWrap
+    style="width: {adjustedWidth}px; white-space: {wordWrap
         ? 'pre-wrap'
         : 'pre'}; overflow-x: {wordWrap
         ? 'hidden'
@@ -813,6 +912,10 @@
         />
         <div class="console-input-anchor" bind:this={inputAnchorRef}></div>
     </div>
+    <SubmittingOverlay
+        visible={showSubmittingOverlay}
+        onCancel={() => onCancelSubmission?.(session.id)}
+    />
 </div>
 
 {#if showContextMenu && consoleInstanceRef}
@@ -827,6 +930,7 @@
 <style>
     .console-instance {
         top: 0;
+        bottom: 0;
         left: 0;
         cursor: default;
         position: absolute;
@@ -850,11 +954,13 @@
     }
 
     .console-instance::-webkit-scrollbar:vertical {
-        border-left: 1px solid var(--vscode-positronScrollBar-border);
+        border-left: 1px solid
+            var(--vscode-positronScrollBar-border, var(--vscode-panel-border));
     }
 
     .console-instance::-webkit-scrollbar:horizontal {
-        border-top: 1px solid var(--vscode-positronScrollBar-border);
+        border-top: 1px solid
+            var(--vscode-positronScrollBar-border, var(--vscode-panel-border));
     }
 
     .console-instance::-webkit-scrollbar-track {
@@ -874,8 +980,10 @@
     }
 
     .console-instance::-webkit-scrollbar-corner {
-        border-top: 1px solid var(--vscode-positronScrollBar-border);
-        border-left: 1px solid var(--vscode-positronScrollBar-border);
+        border-top: 1px solid
+            var(--vscode-positronScrollBar-border, var(--vscode-panel-border));
+        border-left: 1px solid
+            var(--vscode-positronScrollBar-border, var(--vscode-panel-border));
     }
 
     .console-instance.hidden {

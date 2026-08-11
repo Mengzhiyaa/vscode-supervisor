@@ -5,6 +5,7 @@
     Mirrors: positron/.../components/consoleInstanceItems.tsx
 -->
 <script lang="ts">
+    import { localize } from "$lib/localization";
     import ConsoleOutputLines from "./ConsoleOutputLines.svelte";
     import RuntimeActivity from "./RuntimeActivity.svelte";
     import RuntimeStarted from "./RuntimeStarted.svelte";
@@ -142,14 +143,16 @@
             <RuntimeStartupFailure runtimeItemStartupFailure={runtimeItem} />
         {:else}
             <!-- Handle other RuntimeItem types in future -->
-            <div class="runtime-item-unknown">Unknown runtime item type</div>
+            <div class="runtime-item-unknown">
+                {localize("console.runtimeItemUnknown", "Unknown runtime item type")}
+            </div>
         {/if}
     {/each}
 
     {#if disconnected}
         <div class="console-item-starting disconnected-banner">
             <span class="codicon codicon-loading codicon-modifier-spin"></span>
-            <span>Extensions restarting...</span>
+            <span>{localize("console.extensionsRestarting", "Extensions restarting...")}</span>
         </div>
     {/if}
 </div>
@@ -198,7 +201,10 @@
         padding: 4px;
         font-size: 10px;
         line-height: normal;
-        background: var(--vscode-positronConsole-traceBackground);
+        background: var(
+            --vscode-positronConsole-traceBackground,
+            var(--vscode-textBlockQuote-background, var(--vscode-editor-inactiveSelectionBackground))
+        );
     }
 
     .trace-timestamp {

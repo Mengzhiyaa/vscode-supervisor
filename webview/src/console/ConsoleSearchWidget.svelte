@@ -6,6 +6,8 @@
     Mirrors VS Code Terminal's search widget appearance and behavior.
 -->
 <script lang="ts">
+    import { localize } from "$lib/localization";
+
     interface Props {
         /** Whether the search widget is visible */
         visible: boolean;
@@ -50,6 +52,10 @@
     let wholeWord = $state(false);
     let inputElement = $state<HTMLInputElement | undefined>(undefined);
     let isInvalidRegex = $state(false);
+    let widgetWidth = $state(419);
+    let resizeHandle = $state<HTMLDivElement | undefined>(undefined);
+    let resizeStartX = 0;
+    let resizeStartWidth = 0;
 
     // Focus input when becoming visible
     $effect(() => {
@@ -98,9 +104,9 @@
             e.preventDefault();
             e.stopPropagation();
             if (e.shiftKey) {
-                onPreviousMatch();
-            } else {
                 onNextMatch();
+            } else {
+                onPreviousMatch();
             }
         }
     }
@@ -125,18 +131,61 @@
         useRegex = !useRegex;
     }
 
+    function beginResize(event: PointerEvent): void {
+        event.preventDefault();
+        resizeStartX = event.clientX;
+        resizeStartWidth = widgetWidth;
+        resizeHandle?.setPointerCapture(event.pointerId);
+    }
+
+    function resize(event: PointerEvent): void {
+        if (!resizeHandle?.hasPointerCapture(event.pointerId)) return;
+        widgetWidth = Math.max(
+            260,
+            Math.min(640, resizeStartWidth + resizeStartX - event.clientX),
+        );
+    }
+
+    function finishResize(event: PointerEvent): void {
+        if (resizeHandle?.hasPointerCapture(event.pointerId)) {
+            resizeHandle.releasePointerCapture(event.pointerId);
+        }
+    }
+
     // Match count display
     const matchCountText = $derived.by(() => {
         if (!query) return "";
-        if (isInvalidRegex) return "Invalid regex";
-        if (matchCount === 0) return "No results";
-        return `${currentMatchIndex + 1} of ${matchCount}`;
+        if (isInvalidRegex) return localize("console.find.invalidRegex", "Invalid regex");
+        if (matchCount === 0) return localize("console.find.noResults", "No results");
+        return matchCount === 1000
+            ? localize(
+                  "console.find.matchCountLimited",
+                  "{0} of 1000+",
+                  currentMatchIndex + 1,
+              )
+            : localize(
+                  "console.find.matchCount",
+                  "{0} of {1}",
+                  currentMatchIndex + 1,
+                  matchCount,
+              );
     });
 
 </script>
 
 {#if visible}
-    <div class="search-widget-shell">
+    <div class="search-widget-shell" style:width={`${widgetWidth}px`}>
+        <div
+            bind:this={resizeHandle}
+            class="resize-handle"
+            role="separator"
+            aria-label={localize("console.find.resize", "Resize Find")}
+            aria-orientation="vertical"
+            onpointerdown={beginResize}
+            onpointermove={resize}
+            onpointerup={finishResize}
+            onpointercancel={finishResize}
+        ></div>
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div class="search-widget" onkeydown={handleWidgetKeyDown}>
             <div class="search-row">
@@ -146,7 +195,7 @@
                         bind:value={query}
                         class="search-input"
                         type="text"
-                        placeholder="Find"
+                        placeholder={localize("console.find.placeholder", "Find")}
                         spellcheck="false"
                         autocomplete="off"
                         onkeydown={handleInputKeyDown}
@@ -157,8 +206,8 @@
                             type="button"
                             class="option-button"
                             class:active={caseSensitive}
-                            title="Match Case"
-                            aria-label="Match Case"
+                            title={localize("console.find.matchCase", "Match Case")}
+                            aria-label={localize("console.find.matchCase", "Match Case")}
                             onclick={toggleCaseSensitive}
                         >
                             <span class="codicon codicon-case-sensitive"></span>
@@ -168,8 +217,8 @@
                             type="button"
                             class="option-button"
                             class:active={wholeWord}
-                            title="Match Whole Word"
-                            aria-label="Match Whole Word"
+                            title={localize("console.find.matchWholeWord", "Match Whole Word")}
+                            aria-label={localize("console.find.matchWholeWord", "Match Whole Word")}
                             onclick={toggleWholeWord}
                         >
                             <span class="codicon codicon-whole-word"></span>
@@ -179,8 +228,8 @@
                             type="button"
                             class="option-button"
                             class:active={useRegex}
-                            title="Use Regular Expression"
-                            aria-label="Use Regular Expression"
+                            title={localize("console.find.useRegex", "Use Regular Expression")}
+                            aria-label={localize("console.find.useRegex", "Use Regular Expression")}
                             onclick={toggleRegex}
                         >
                             <span class="codicon codicon-regex"></span>
@@ -200,8 +249,8 @@
                 <button
                     type="button"
                     class="nav-button previous-button"
-                    title="Previous Match (Shift+Enter)"
-                    aria-label="Previous Match"
+                    title={localize("console.find.previousWithKey", "Previous Match (Enter)")}
+                    aria-label={localize("console.find.previous", "Previous Match")}
                     disabled={matchCount === 0}
                     onclick={onPreviousMatch}
                 >
@@ -211,8 +260,8 @@
                 <button
                     type="button"
                     class="nav-button next-button"
-                    title="Next Match (Enter)"
-                    aria-label="Next Match"
+                    title={localize("console.find.nextWithKey", "Next Match (Shift+Enter)")}
+                    aria-label={localize("console.find.next", "Next Match")}
                     disabled={matchCount === 0}
                     onclick={onNextMatch}
                 >
@@ -222,8 +271,8 @@
                 <button
                     type="button"
                     class="nav-button close-button"
-                    title="Close (Escape)"
-                    aria-label="Close"
+                    title={localize("console.find.closeWithKey", "Close (Escape)")}
+                    aria-label={localize("common.close", "Close")}
                     onclick={onClose}
                 >
                     <span class="codicon codicon-close"></span>
@@ -239,12 +288,26 @@
         top: 0;
         right: 0;
         overflow: visible;
-        width: min(419px, calc(100% - 64px));
         max-width: calc(100% - 18px);
         padding: 0 10px 10px;
         pointer-events: none;
         box-sizing: border-box;
         z-index: 1;
+    }
+
+    .resize-handle {
+        position: absolute;
+        inset: 0 auto 10px 4px;
+        width: 6px;
+        z-index: 2;
+        cursor: ew-resize;
+        pointer-events: auto;
+        touch-action: none;
+    }
+
+    .resize-handle:hover,
+    .resize-handle:focus-visible {
+        border-left: 1px solid var(--vscode-focusBorder);
     }
 
     .search-widget {

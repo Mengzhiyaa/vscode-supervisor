@@ -15,13 +15,16 @@
     import ConsoleInfoButton from "./ConsoleInfoButton.svelte";
     import ConsoleResourceMonitor from "./ConsoleResourceMonitor.svelte";
     import ContextMenu, { type ContextMenuEntry } from "../shared/ContextMenu.svelte";
+    import { localize } from "$lib/localization";
     
     interface SessionInfo {
         id: string;
         name: string;
         runtimeName: string;
         state: ConsoleState;
+        runtimeState: ConsoleState;
         runtimePath?: string;
+        runtimeDisplayPath?: string;
         runtimeVersion?: string;
         runtimeSource?: string;
     }
@@ -30,6 +33,7 @@
         readonly currentWorkingDirectory: string;
         readonly stateLabel: string;
         readonly interruptible: boolean;
+        readonly submitting?: boolean;
         readonly interrupting: boolean;
         readonly restarting: boolean;
         readonly showDeleteButton?: boolean;
@@ -53,6 +57,7 @@
         currentWorkingDirectory,
         stateLabel,
         interruptible,
+        submitting = false,
         interrupting,
         restarting,
         showDeleteButton = false,
@@ -75,19 +80,23 @@
     let actionBarElement = $state<HTMLDivElement | null>(null);
     let contextMenuPoint = $state<{ x: number; y: number } | null>(null);
     const contextMenuEntries = $derived.by((): ContextMenuEntry[] => [{
-        label: "Show Resource Monitor",
+        label: localize("console.showResourceMonitor", "Show Resource Monitor"),
         checked: showResourceMonitor,
         onSelected: () => onToggleResourceMonitor?.(),
     }]);
 
     // Localized strings (Positron pattern)
-    const positronInterruptExecution = "Interrupt Execution";
-    const positronRestartSession = "Restart Session";
-    const positronToggleWordWrap = "Toggle Word Wrap";
-    const positronClearConsole = "Clear Console";
-    const positronToggleTrace = "Toggle Trace";
-    const positronDeleteSession = "Delete Session";
-    const positronOpenInEditor = "Open in Editor";
+    const positronInterruptExecution = localize("console.interruptExecution", "Interrupt Execution");
+    const positronRestartSession = $derived(localize(
+        "console.restartLanguage",
+        "Restart {0}",
+        session?.runtimeName ?? localize("console.session", "Session"),
+    ));
+    const positronToggleWordWrap = localize("console.toggleWordWrap", "Toggle Word Wrap");
+    const positronClearConsole = localize("console.clearConsole", "Clear Console");
+    const positronToggleTrace = localize("console.toggleTrace", "Toggle Trace");
+    const positronDeleteSession = localize("console.deleteSession", "Delete Session");
+    const positronOpenInEditor = localize("console.openInEditor", "Open in Editor");
     const RESOURCE_MONITOR_MAX_WIDTH = 180;
 
     // --- Build DynamicActionBar actions ---
@@ -116,7 +125,7 @@
         }
 
         // Interrupt (conditional).
-        if (interruptible) {
+        if (interruptible || submitting) {
             actions.push({
                 fixedWidth: 24,
                 separator: false,
@@ -153,7 +162,7 @@
             component: restartSnippet,
             overflowMenuItem: {
                 label: positronRestartSession,
-                icon: "positron-restart-runtime-thin",
+                icon: "refresh",
                 disabled: !canShutdown || restarting,
                 onSelected: () => onRestart(),
             },
@@ -262,7 +271,7 @@
 
 {#snippet restartSnippet()}
     <ActionBarButton
-        icon="positron-restart-runtime-thin"
+        icon="refresh"
         ariaLabel={positronRestartSession}
         tooltip={positronRestartSession}
         disabled={!canShutdown || restarting}
@@ -324,11 +333,12 @@
     bind:this={actionBarElement}
     class="console-action-bar"
     role="toolbar"
-    aria-label="Console actions"
+    aria-label={localize("console.actions", "Console actions")}
     tabindex="-1"
     data-trace-enabled={traceEnabled}
     oncontextmenu={(event) => {
         if (!onToggleResourceMonitor) return;
+        if (!(event.target as Element).closest(".console-resource-monitor")) return;
         event.preventDefault();
         contextMenuPoint = { x: event.clientX, y: event.clientY };
     }}

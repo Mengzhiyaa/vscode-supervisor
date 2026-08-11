@@ -3,6 +3,7 @@
   1:1 Positron replication - Restart button displayed after session exit
 -->
 <script lang="ts">
+    import { localize } from "$lib/localization";
     // Props using Svelte 5 runes
     interface Props {
         languageName?: string;
@@ -22,7 +23,9 @@
         isDisabled = disabled;
     });
 
-    let restartLabel = $derived(`Restart ${languageName}`);
+    let restartLabel = $derived(
+        localize("console.restartLanguage", "Restart {0}", languageName),
+    );
 
     function handleRestart() {
         // Disable the button to prevent mashing

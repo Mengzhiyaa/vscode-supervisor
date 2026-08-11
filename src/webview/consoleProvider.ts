@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { MessageConnection } from 'vscode-jsonrpc';
-import { CoreConfigurationKeys, CoreConfigurationSections, ViewIds } from '../coreCommandIds';
+import { ContextKeys, CoreConfigurationKeys, CoreConfigurationSections, ViewIds } from '../coreCommandIds';
 import { BaseWebviewProvider } from './baseProvider';
 import * as ConsoleProtocol from '../rpc/webview/console';
 import * as LspProtocol from '../rpc/webview/lsp';
@@ -47,6 +47,7 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
     private readonly _initializedSessions = new Set<string>();
     private readonly _sessionSyncSeq = new Map<string, number>();
     private _pendingLanguageSupportAssetsRefresh = false;
+    private _pendingFindCommand: ConsoleProtocol.ConsoleFindCommandNotification.Params['command'] | undefined;
 
     // Current console width in characters (Positron pattern: track for new sessions)
     private _currentWidthInChars = 80;
@@ -54,6 +55,7 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
     private readonly _lastClearReasons = new Map<string, 'user' | 'runtime' | undefined>();
     private readonly _consoleThemeProvider = new ConsoleThemeProvider();
     private _runtimeStartupEvent: ConsoleProtocol.RuntimeStartupPhaseNotification.RuntimeStartupEvent | undefined;
+    private _latestDiscoveredRuntimePath: string | undefined;
 
     constructor(
         extensionUri: vscode.Uri,
@@ -85,7 +87,14 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
 
         if (this._runtimeStartupService) {
             this._consoleServiceDisposables.push(
-                this._runtimeStartupService.onDidChangeRuntimeStartupPhase(() => {
+                this._runtimeStartupService.onDidChangeRuntimeStartupPhase((phase) => {
+                    if (phase === 'discovering') {
+                        this._latestDiscoveredRuntimePath = undefined;
+                    }
+                    this._sendRuntimeStartupPhaseChanged();
+                }),
+                this._runtimeStartupService.onDidDiscoverRuntime(({ metadata }) => {
+                    this._latestDiscoveredRuntimePath = metadata.runtimePath?.replace(/\\/g, '/');
                     this._sendRuntimeStartupPhaseChanged();
                 }),
                 this._runtimeStartupService.onWillAutoStartRuntime((event) => {
@@ -113,6 +122,14 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
         return 'ConsoleViewProvider';
     }
 
+    protected override _onDidDisposeWebviewView(): void {
+        this._webviewReady = false;
+        this._pendingFindCommand = undefined;
+        void vscode.commands.executeCommand('setContext', ContextKeys.consoleFocused, false);
+        void vscode.commands.executeCommand('setContext', ContextKeys.consoleFindVisible, false);
+        void vscode.commands.executeCommand('setContext', ContextKeys.consoleFindInputFocused, false);
+    }
+
     async reveal(preserveFocus: boolean): Promise<void> {
         const view = this.view;
         if (view) {
@@ -121,6 +138,21 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
         }
 
         await vscode.commands.executeCommand('workbench.views.action.showView', ViewIds.console);
+    }
+
+    async runFindCommand(
+        command: ConsoleProtocol.ConsoleFindCommandNotification.Params['command'],
+    ): Promise<void> {
+        if (!this._connection || !this._webviewReady) {
+            this._pendingFindCommand = command;
+            await this.reveal(command !== 'focus');
+            return;
+        }
+
+        this._connection.sendNotification(
+            ConsoleProtocol.ConsoleFindCommandNotification.type,
+            { command },
+        );
     }
 
     /**
@@ -273,7 +305,36 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
         connection.onNotification(ConsoleProtocol.ConsoleReadyNotification.type, () => {
             this._webviewReady = true;
             this._flushPendingConsoleSync('console/ready');
+            if (this._pendingFindCommand) {
+                const command = this._pendingFindCommand;
+                this._pendingFindCommand = undefined;
+                connection.sendNotification(
+                    ConsoleProtocol.ConsoleFindCommandNotification.type,
+                    { command },
+                );
+            }
         });
+
+        connection.onNotification(
+            ConsoleProtocol.ConsoleContextKeysChangedNotification.type,
+            params => {
+                void vscode.commands.executeCommand(
+                    'setContext',
+                    ContextKeys.consoleFocused,
+                    params.consoleFocused,
+                );
+                void vscode.commands.executeCommand(
+                    'setContext',
+                    ContextKeys.consoleFindVisible,
+                    params.findVisible,
+                );
+                void vscode.commands.executeCommand(
+                    'setContext',
+                    ContextKeys.consoleFindInputFocused,
+                    params.findInputFocused,
+                );
+            },
+        );
 
         // Handle console settings request.
         connection.onRequest(ConsoleProtocol.GetConsoleSettingsRequest.type, async () => {
@@ -374,7 +435,7 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
         });
 
         // Handle isComplete request (Positron pattern: use runtime isCodeFragmentComplete)
-        connection.onRequest(ConsoleProtocol.IsCompleteRequest.type, async (params) => {
+        connection.onRequest(ConsoleProtocol.IsCompleteRequest.type, async (params, token) => {
             try {
                 this.log(`IsComplete request: ${params.code.substring(0, 30)}...`, vscode.LogLevel.Debug);
 
@@ -383,7 +444,24 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
                     throw new Error(`Console session '${params.sessionId ?? ''}' is not available`);
                 }
 
-                const status = await targetSession.isCodeFragmentComplete(params.code);
+                // A second Enter or explicit Cancel should release the webview
+                // immediately even when the runtime's is_complete reply is slow.
+                // The runtime request itself has no cancellation primitive, so
+                // race it with the JSON-RPC cancellation token and ignore its
+                // eventual result.
+                const status = await Promise.race([
+                    targetSession.isCodeFragmentComplete(params.code),
+                    new Promise<undefined>((resolve) => {
+                        if (token.isCancellationRequested) {
+                            resolve(undefined);
+                            return;
+                        }
+                        token.onCancellationRequested(() => resolve(undefined));
+                    }),
+                ]);
+                if (status === undefined) {
+                    return { status: 'unknown' as const };
+                }
                 const statusMap: Record<RuntimeCodeFragmentStatus, string> = {
                     [RuntimeCodeFragmentStatus.Complete]: 'complete',
                     [RuntimeCodeFragmentStatus.Incomplete]: 'incomplete',
@@ -398,6 +476,31 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
             }
         });
 
+        connection.onRequest(ConsoleProtocol.SubmitCodeRequest.type, async (params, token) => {
+            const instance = this._resolveConsoleInstance('submitCode', params.sessionId);
+            if (!instance) {
+                return { status: 'failed' as const };
+            }
+            const cancellation = token.onCancellationRequested(() => {
+                instance.cancelCodeSubmission();
+            });
+            try {
+                const status = await instance.submitCode(
+                    params.code,
+                    { source: 'console' },
+                    params.checkCompleteness,
+                );
+                return { status };
+            } finally {
+                cancellation.dispose();
+            }
+        });
+
+        connection.onRequest(ConsoleProtocol.CancelSubmissionRequest.type, async (params) => {
+            this._resolveConsoleInstance('cancelSubmission', params.sessionId)
+                ?.cancelCodeSubmission();
+        });
+
         // Handle interrupt request
         connection.onRequest(ConsoleProtocol.InterruptRequest.type, async (params) => {
             this.log('Interrupt request received', vscode.LogLevel.Debug);
@@ -406,6 +509,10 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
             if (instance) {
                 instance.interrupt();
             }
+        });
+
+        connection.onRequest(ConsoleProtocol.WorkspaceRequestTrustRequest.type, async () => {
+            await vscode.commands.executeCommand('workbench.trust.manage');
         });
 
         // Clipboard access from a webview is not reliable in every VS Code host
@@ -895,6 +1002,8 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
         this._connection.sendNotification(ConsoleProtocol.RuntimeStartupPhaseNotification.type, {
             phase,
             discoveredCount: this._runtimeStartupService.discoveredRuntimeCount,
+            expectedCount: this._runtimeStartupService.lastDiscoveryRuntimeCount,
+            latestRuntimePath: this._latestDiscoveredRuntimePath,
             runtimeStartupEvent: this._runtimeStartupEvent,
         });
     }
@@ -980,9 +1089,9 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
         const config = vscode.workspace.getConfiguration(CoreConfigurationSections.supervisor);
         const size = config.get<number>('console.scrollbackSize');
         if (typeof size === 'number' && Number.isFinite(size)) {
-            return Math.max(0, size);
+            return Math.max(1000, Math.min(20000, size));
         }
-        return 1000;
+        return 10000;
     }
 
     /**
@@ -990,6 +1099,7 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
      */
     private _getConsoleSettings(): ConsoleProtocol.ConsoleSettings {
         const config = vscode.workspace.getConfiguration(CoreConfigurationSections.supervisor);
+        const rootConfig = vscode.workspace.getConfiguration();
         const editorConfig = vscode.workspace.getConfiguration('editor');
 
         const appearance = resolveConsoleAppearance({
@@ -1008,7 +1118,16 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
             fontFamily: appearance.fontFamily,
             fontSize: appearance.fontSize,
             lineHeight: appearance.lineHeight,
+            fontLigatures: config.get<string>('console.fontLigatures') || editorConfig.get<string>('fontLigatures', 'off'),
+            fontVariations: config.get<string>('console.fontVariations') || editorConfig.get<string>('fontVariations', 'off'),
+            fontWeight: config.get<string>('console.fontWeight') || editorConfig.get<string>('fontWeight', 'normal'),
+            letterSpacing: config.get<number>('console.letterSpacing', editorConfig.get<number>('letterSpacing', 0)),
             showResourceMonitor: config.get<boolean>('console.showResourceMonitor', true),
+            promptWhenIncomplete: rootConfig.get<boolean>(
+                CoreConfigurationKeys.consolePromptWhenIncomplete,
+                true,
+            ),
+            sashSize: Math.max(1, Math.min(20, rootConfig.get<number>('workbench.sashSize', 4))),
         };
     }
 
@@ -1253,15 +1372,28 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
         // Forward console appearance settings changes to the webview.
         this._consoleServiceDisposables.push(
             vscode.workspace.onDidChangeConfiguration(e => {
+                if (e.affectsConfiguration('workbench.iconTheme')) {
+                    void this._sendConsoleThemeChanged();
+                }
                 if (
                     e.affectsConfiguration(CoreConfigurationKeys.consoleScrollbackSize) ||
                     e.affectsConfiguration(CoreConfigurationKeys.consoleFontSize) ||
                     e.affectsConfiguration(CoreConfigurationKeys.consoleFontFamily) ||
                     e.affectsConfiguration(CoreConfigurationKeys.consoleLineHeight) ||
+                    e.affectsConfiguration(CoreConfigurationKeys.consoleFontLigatures) ||
+                    e.affectsConfiguration(CoreConfigurationKeys.consoleFontVariations) ||
+                    e.affectsConfiguration(CoreConfigurationKeys.consoleFontWeight) ||
+                    e.affectsConfiguration(CoreConfigurationKeys.consoleLetterSpacing) ||
                     e.affectsConfiguration(CoreConfigurationKeys.consoleShowResourceMonitor) ||
+                    e.affectsConfiguration(CoreConfigurationKeys.consolePromptWhenIncomplete) ||
+                    e.affectsConfiguration('workbench.sashSize') ||
                     e.affectsConfiguration('editor.fontFamily') ||
                     e.affectsConfiguration('editor.fontSize') ||
                     e.affectsConfiguration('editor.lineHeight')
+                    || e.affectsConfiguration('editor.fontLigatures')
+                    || e.affectsConfiguration('editor.fontVariations')
+                    || e.affectsConfiguration('editor.fontWeight')
+                    || e.affectsConfiguration('editor.letterSpacing')
                 ) {
                     this._sendConsoleSettingsChanged();
                 }
@@ -1376,6 +1508,13 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
                     case 'appendRuntimeItem':
                         changes.push({
                             kind: 'appendRuntimeItem',
+                            runtimeItem: event.item,
+                        });
+                        break;
+                    case 'replaceRuntimeItem':
+                        changes.push({
+                            kind: 'replaceRuntimeItem',
+                            targetId: event.targetId,
                             runtimeItem: event.item,
                         });
                         break;

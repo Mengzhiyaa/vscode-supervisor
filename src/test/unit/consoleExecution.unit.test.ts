@@ -13,6 +13,10 @@ import {
     RuntimeCodeExecutionMode,
     RuntimeErrorBehavior,
 } from '../../services/console/interfaces/consoleService';
+import {
+    RuntimeItemActivity,
+    RuntimeItemPendingInput,
+} from '../../services/console/classes/runtimeItem';
 
 function makeNoopLogChannel(): vscode.LogOutputChannel {
     const noop = () => undefined;
@@ -213,6 +217,88 @@ suite('[Unit] console execution alignment', () => {
         await (instance as any).processPendingInput();
 
         assert.strictEqual(executeCalls[0][5], executionMetadata);
+        instance.dispose();
+    });
+
+    test('host-owned submission shows a transcript placeholder and executes exactly once', async () => {
+        const executeCalls: unknown[][] = [];
+        const instance = createConsoleInstance();
+        const runtimeSession = createRuntimeSession(executeCalls);
+        let resolveCompleteness!: (status: RuntimeCodeFragmentStatus) => void;
+        runtimeSession.isCodeFragmentComplete = () =>
+            new Promise<RuntimeCodeFragmentStatus>((resolve) => {
+                resolveCompleteness = resolve;
+            });
+        instance.attachRuntimeSession(runtimeSession, SessionAttachMode.Connected);
+
+        const submission = instance.submitCode('1 + 1', { source: 'console' });
+        const placeholder = instance.runtimeItems.find(
+            (item): item is RuntimeItemPendingInput => item instanceof RuntimeItemPendingInput,
+        );
+        assert.ok(placeholder);
+        const placeholderIndex = instance.runtimeItems.indexOf(placeholder);
+        assert.strictEqual(placeholder.submitting, true);
+        assert.strictEqual(instance.codeSubmissionInProgress, true);
+
+        resolveCompleteness(RuntimeCodeFragmentStatus.Complete);
+        assert.strictEqual(await submission, 'executed');
+        assert.strictEqual(executeCalls.length, 1);
+        assert.strictEqual(executeCalls[0][0], '1 + 1');
+        assert.strictEqual(instance.codeSubmissionInProgress, false);
+        assert.ok(!instance.runtimeItems.includes(placeholder));
+        assert.ok(instance.runtimeItems[placeholderIndex] instanceof RuntimeItemActivity);
+        instance.dispose();
+    });
+
+    test('host-owned submission leaves incomplete code unexecuted', async () => {
+        const executeCalls: unknown[][] = [];
+        const instance = createConsoleInstance();
+        const runtimeSession = createRuntimeSession(executeCalls);
+        runtimeSession.isCodeFragmentComplete = async () => RuntimeCodeFragmentStatus.Incomplete;
+        instance.attachRuntimeSession(runtimeSession, SessionAttachMode.Connected);
+
+        assert.strictEqual(
+            await instance.submitCode('function(', { source: 'console' }),
+            'incomplete',
+        );
+        assert.deepStrictEqual(executeCalls, []);
+        assert.strictEqual(instance.codeSubmissionInProgress, false);
+        instance.dispose();
+    });
+
+    test('host-owned submission cancellation wins a slow completeness race', async () => {
+        const executeCalls: unknown[][] = [];
+        const instance = createConsoleInstance();
+        const runtimeSession = createRuntimeSession(executeCalls);
+        runtimeSession.isCodeFragmentComplete = () => new Promise(() => undefined);
+        instance.attachRuntimeSession(runtimeSession, SessionAttachMode.Connected);
+
+        const submission = instance.submitCode('slow()', { source: 'console' });
+        instance.cancelCodeSubmission();
+        assert.strictEqual(await submission, 'cancelled');
+        assert.deepStrictEqual(executeCalls, []);
+        assert.strictEqual(instance.codeSubmissionInProgress, false);
+        assert.ok(!instance.runtimeItems.some(
+            item => item instanceof RuntimeItemPendingInput && item.submitting,
+        ));
+        instance.dispose();
+    });
+
+    test('host-owned submission reports completeness failures and restores idle state', async () => {
+        const executeCalls: unknown[][] = [];
+        const instance = createConsoleInstance();
+        const runtimeSession = createRuntimeSession(executeCalls);
+        runtimeSession.isCodeFragmentComplete = async () => {
+            throw new Error('completeness unavailable');
+        };
+        instance.attachRuntimeSession(runtimeSession, SessionAttachMode.Connected);
+
+        assert.strictEqual(
+            await instance.submitCode('1 + 1', { source: 'console' }),
+            'failed',
+        );
+        assert.deepStrictEqual(executeCalls, []);
+        assert.strictEqual(instance.codeSubmissionInProgress, false);
         instance.dispose();
     });
 });

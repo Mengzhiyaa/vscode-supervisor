@@ -26,8 +26,12 @@ export function createSession(overrides: Partial<SessionInfo> = {}): SessionInfo
         name: overrides.name ?? 'Primary',
         runtimeName: overrides.runtimeName ?? 'R',
         languageId: overrides.languageId ?? 'r',
+        sessionMode: overrides.sessionMode ?? 'console',
+        createdTimestamp: overrides.createdTimestamp ?? Date.now(),
         state: overrides.state ?? 'ready',
+        runtimeState: overrides.runtimeState ?? overrides.state ?? 'ready',
         runtimePath: overrides.runtimePath,
+        runtimeDisplayPath: overrides.runtimeDisplayPath,
         runtimeVersion: overrides.runtimeVersion,
         runtimeSource: overrides.runtimeSource,
         base64EncodedIconSvg: overrides.base64EncodedIconSvg,
@@ -169,7 +173,13 @@ export function registerConsoleDefaults(
         fontFamily: 'var(--vscode-editor-font-family)',
         fontSize: 13,
         lineHeight: 1.4,
+        fontLigatures: "off",
+        fontVariations: "off",
+        fontWeight: "normal",
+        letterSpacing: 0,
         showResourceMonitor: true,
+        promptWhenIncomplete: true,
+        sashSize: 4,
         ...options.settings,
     }));
     backend.onRequest(SessionMethods.switch, async (request) => {
@@ -189,6 +199,9 @@ export function registerConsoleDefaults(
     }));
     backend.onRequest(SessionMethods.showOutputChannel, () => undefined);
     backend.onRequest(ConsoleMethods.isComplete, () => ({ status: 'complete' }));
+    backend.onRequest(ConsoleMethods.submitCode, () => ({ status: 'executed' }));
+    backend.onRequest(ConsoleMethods.cancelSubmission, () => undefined);
+    backend.onRequest(ConsoleMethods.requestWorkspaceTrust, () => undefined);
     backend.onRequest(ConsoleMethods.replyPrompt, () => undefined);
     backend.onRequest(ConsoleMethods.execute, (request) => ({
         executionId: (request.params as { executionId?: string }).executionId ?? 'exec-1',

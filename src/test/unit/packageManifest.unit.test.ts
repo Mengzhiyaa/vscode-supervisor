@@ -33,6 +33,12 @@ interface PackageJsonShape {
             };
         }>;
         commands?: Array<{ command?: string }>;
+        keybindings?: Array<{
+            command?: string;
+            key?: string;
+            mac?: string;
+            when?: string;
+        }>;
         notebookRenderer?: Array<{
             id?: string;
             entrypoint?: string;
@@ -154,6 +160,33 @@ suite('[Unit] Supervisor package manifest', () => {
         assert.ok(fs.existsSync(path.join(path.resolve(__dirname, '../../..'), 'scripts/run-vscode-tests.mjs')));
         assert.ok(fs.existsSync(path.join(path.resolve(__dirname, '../../..'), '.github/workflows/ci.yml')));
         assert.ok(fs.existsSync(path.join(path.resolve(__dirname, '../../..'), '.github/workflows/release.yml')));
+    });
+
+    test('contributes rebindable Console find commands and default keys', () => {
+        const packageJson = readPackageJson();
+        const commands = new Set(
+            (packageJson.contributes?.commands ?? []).map(entry => entry.command),
+        );
+        for (const command of [
+            'supervisor.console.find',
+            'supervisor.console.findNext',
+            'supervisor.console.findPrevious',
+            'supervisor.console.findClose',
+        ]) {
+            assert.ok(commands.has(command), `Expected ${command} command contribution`);
+        }
+
+        const keybindings = packageJson.contributes?.keybindings ?? [];
+        assert.ok(keybindings.some(binding =>
+            binding.command === 'supervisor.console.findNext' &&
+            binding.key === 'f3' &&
+            binding.mac === 'cmd+g'
+        ));
+        assert.ok(keybindings.some(binding =>
+            binding.command === 'supervisor.console.findPrevious' &&
+            binding.key === 'shift+f3' &&
+            binding.mac === 'cmd+shift+g'
+        ));
     });
 
     test('contributes the P0 plots contract and opt-in runtime diagnostics view', () => {

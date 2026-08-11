@@ -314,8 +314,8 @@
         -webkit-appearance: none;
         background: transparent;
         grid-template-columns: [title] 1fr [chevron] 22px [end];
-        color: var(--vscode-positronDropDownListBox-foreground);
-        border: 1px solid var(--vscode-positronDropDownListBox-border) !important;
+        color: var(--vscode-positronDropDownListBox-foreground, var(--vscode-dropdown-foreground));
+        border: 1px solid var(--vscode-positronDropDownListBox-border, var(--vscode-dropdown-border)) !important;
     }
 
     .drop-down-list-box:focus {
@@ -340,7 +340,7 @@
         white-space: nowrap;
         text-overflow: ellipsis;
         grid-column: title / chevron;
-        color: var(--vscode-positronContextMenu-foreground);
+        color: var(--vscode-positronContextMenu-foreground, var(--vscode-menu-foreground));
     }
 
     .drop-down-list-box .chevron {
@@ -358,13 +358,13 @@
         margin: 4px;
         display: flex;
         flex-direction: column;
-        background: var(--vscode-positronDropDownListBox-background);
+        background: var(--vscode-positronDropDownListBox-background, var(--vscode-dropdown-background));
     }
 
     .drop-down-list-box-items .separator {
         height: 1px;
         margin: 4px 10px;
-        background: var(--vscode-positronDropDownListBox-separatorBackground);
+        background: var(--vscode-positronDropDownListBox-separatorBackground, var(--vscode-menu-separatorBackground));
     }
 
     .drop-down-list-box-items .item {
@@ -382,15 +382,15 @@
         appearance: none;
         -webkit-appearance: none;
         background: transparent;
-        color: var(--vscode-positronDropDownListBox-foreground);
+        color: var(--vscode-positronDropDownListBox-foreground, var(--vscode-dropdown-foreground));
         grid-template-columns: [title] 1fr [icon] min-content [end];
     }
 
     .drop-down-list-box-items .item:hover:not(.disabled),
     .drop-down-list-box-items .item.highlighted:not(.disabled) {
         border-radius: 4px;
-        color: var(--vscode-positronDropDownListBox-hoverForeground);
-        background: var(--vscode-positronDropDownListBox-hoverBackground);
+        color: var(--vscode-positronDropDownListBox-hoverForeground, var(--vscode-list-hoverForeground));
+        background: var(--vscode-positronDropDownListBox-hoverBackground, var(--vscode-list-hoverBackground));
     }
 
     .drop-down-list-box-items .item:focus {
@@ -403,7 +403,7 @@
     }
 
     .drop-down-list-box-items .item:not(.disabled):focus-visible {
-        background: var(--vscode-positronDropDownListBox-hoverBackground);
+        background: var(--vscode-positronDropDownListBox-hoverBackground, var(--vscode-list-hoverBackground));
     }
 
     .drop-down-list-box-items .item .dropdown-entry {

@@ -24,9 +24,9 @@ export class SessionSnapshotBuilder {
     ) { }
 
     buildBaseSessions(): SessionProtocol.SessionInfo[] {
-        return (this._sessionManager?.sessions ?? []).map(session =>
-            this._buildBaseSessionInfo(session)
-        );
+        return (this._sessionManager?.sessions ?? [])
+            .map(session => this._buildBaseSessionInfo(session))
+            .sort(compareSessionCreationTime);
     }
 
     buildSessionsWithConsoleOverlay(): SessionProtocol.SessionInfo[] {
@@ -54,7 +54,7 @@ export class SessionSnapshotBuilder {
             overlaidSessions.push(this._buildConsoleOnlySessionInfo(instance));
         }
 
-        return overlaidSessions;
+        return overlaidSessions.sort(compareSessionCreationTime);
     }
 
     resolveForegroundConsoleSessionId(
@@ -99,7 +99,10 @@ export class SessionSnapshotBuilder {
                 session.sessionMetadata.sessionName ||
                 session.runtimeMetadata.runtimeName,
             runtimeName: session.runtimeMetadata.runtimeName,
+            sessionMode: session.sessionMetadata.sessionMode,
+            createdTimestamp: session.sessionMetadata.createdTimestamp,
             state: mapRuntimeStateToSessionState(session.state),
+            runtimeState: mapRuntimeStateToSessionState(session.state),
             runtimePath: session.runtimeMetadata.runtimePath,
             runtimeVersion: session.runtimeMetadata.languageVersion,
             runtimeSource: session.runtimeMetadata.runtimeSource,
@@ -108,6 +111,9 @@ export class SessionSnapshotBuilder {
             runtimeAttached: false,
             ...(session.runtimeMetadata.languageId
                 ? { languageId: session.runtimeMetadata.languageId }
+                : {}),
+            ...(session.runtimeMetadata.runtimeDisplayPath
+                ? { runtimeDisplayPath: session.runtimeMetadata.runtimeDisplayPath }
                 : {}),
         };
     }
@@ -120,6 +126,7 @@ export class SessionSnapshotBuilder {
         return {
             ...session,
             state: mapConsoleStateToSessionState(instance.state),
+            runtimeState: session.runtimeState,
             runtimePath: instance.runtimeMetadata.runtimePath || session.runtimePath,
             runtimeVersion: instance.runtimeMetadata.languageVersion || session.runtimeVersion,
             runtimeSource: instance.runtimeMetadata.runtimeSource || session.runtimeSource,
@@ -127,6 +134,12 @@ export class SessionSnapshotBuilder {
             promptActive: instance.promptActive,
             runtimeAttached: instance.runtimeAttached,
             ...(languageId ? { languageId } : {}),
+            ...(instance.runtimeMetadata.runtimeDisplayPath || session.runtimeDisplayPath
+                ? {
+                    runtimeDisplayPath:
+                        instance.runtimeMetadata.runtimeDisplayPath || session.runtimeDisplayPath,
+                }
+                : {}),
         };
     }
 
@@ -141,7 +154,10 @@ export class SessionSnapshotBuilder {
                 instance.sessionName ||
                 instance.runtimeMetadata.runtimeName,
             runtimeName: instance.runtimeMetadata.runtimeName,
+            sessionMode: instance.sessionMetadata.sessionMode,
+            createdTimestamp: instance.sessionMetadata.createdTimestamp,
             state: mapConsoleStateToSessionState(instance.state),
+            runtimeState: mapConsoleStateToSessionState(instance.state),
             runtimePath: instance.runtimeMetadata.runtimePath,
             runtimeVersion: instance.runtimeMetadata.languageVersion,
             runtimeSource: instance.runtimeMetadata.runtimeSource,
@@ -149,8 +165,18 @@ export class SessionSnapshotBuilder {
             promptActive: instance.promptActive,
             runtimeAttached: instance.runtimeAttached,
             ...(languageId ? { languageId } : {}),
+            ...(instance.runtimeMetadata.runtimeDisplayPath
+                ? { runtimeDisplayPath: instance.runtimeMetadata.runtimeDisplayPath }
+                : {}),
         };
     }
+}
+
+function compareSessionCreationTime(
+    left: SessionProtocol.SessionInfo,
+    right: SessionProtocol.SessionInfo,
+): number {
+    return left.createdTimestamp - right.createdTimestamp || left.id.localeCompare(right.id);
 }
 
 export function isForegroundConsoleSessionCandidate(session: SessionProtocol.SessionInfo): boolean {

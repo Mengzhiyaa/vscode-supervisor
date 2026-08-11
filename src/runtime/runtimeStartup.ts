@@ -30,6 +30,7 @@ const PERSISTENT_WORKSPACE_SESSIONS = 'vscode-supervisor.workspaceSessionList.v1
 export const EPHEMERAL_WORKSPACE_SESSIONS =
     'vscode-supervisor.workspaceSessionList.ephemeral.v1';
 const DISMISSED_ARCHITECTURE_MISMATCH_KEY_PREFIX = 'vscode-supervisor.dismissedArchMismatch.v1';
+const LAST_DISCOVERY_RUNTIME_COUNT = 'vscode-supervisor.lastDiscoveryRuntimeCount.v1';
 
 interface IAffiliatedRuntimeMetadata {
     metadata: LanguageRuntimeMetadata;
@@ -72,6 +73,9 @@ export class RuntimeStartupService implements vscode.Disposable {
 
     private readonly _onDidChangeRuntimeStartupPhase = new vscode.EventEmitter<RuntimeStartupPhase>();
     readonly onDidChangeRuntimeStartupPhase = this._onDidChangeRuntimeStartupPhase.event;
+    get onDidDiscoverRuntime() {
+        return this._runtimeManager.onDidDiscoverRuntime;
+    }
 
     private readonly _onWillAutoStartRuntime = new vscode.EventEmitter<IRuntimeAutoStartEvent>();
     readonly onWillAutoStartRuntime = this._onWillAutoStartRuntime.event;
@@ -172,6 +176,10 @@ export class RuntimeStartupService implements vscode.Disposable {
 
     get discoveredRuntimeCount(): number {
         return this._runtimeManager.getInstallations().length;
+    }
+
+    get lastDiscoveryRuntimeCount(): number {
+        return this._context.globalState.get<number>(LAST_DISCOVERY_RUNTIME_COUNT, 0);
     }
 
     async startup(): Promise<void> {
@@ -533,6 +541,13 @@ export class RuntimeStartupService implements vscode.Disposable {
         }
 
         this._startupPhase = phase;
+        if (phase === RuntimeStartupPhase.Complete && this.discoveredRuntimeCount > 0 &&
+            this.discoveredRuntimeCount !== this.lastDiscoveryRuntimeCount) {
+            void this._context.globalState.update(
+                LAST_DISCOVERY_RUNTIME_COUNT,
+                this.discoveredRuntimeCount,
+            );
+        }
         this._onDidChangeRuntimeStartupPhase.fire(phase);
         this._outputChannel.debug(`[RuntimeStartup] Phase changed to '${phase}'`);
     }

@@ -3,6 +3,7 @@
     Based on Positron's ResourceUsageGraph.tsx
 -->
 <script lang="ts">
+    import { localize } from "$lib/localization";
     /**
      * Fixed spacing between data points in pixels.
      */
@@ -88,7 +89,7 @@
     {height}
     viewBox="0 0 {width} {height}"
 >
-    <title>CPU usage</title>
+    <title>{localize("console.resource.cpuUsage", "CPU usage")}</title>
     {#if fillPath}
         <path class="resource-usage-fill" d={fillPath} />
     {/if}

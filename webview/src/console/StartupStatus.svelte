@@ -5,38 +5,63 @@
 <script lang="ts">
     import RuntimeStartupProgress from "./RuntimeStartupProgress.svelte";
     import type { RuntimeStartupPhase } from "../types/console";
+    import { localize } from "$lib/localization";
 
     interface Props {
         startupPhase?: RuntimeStartupPhase;
         discoveredCount?: number;
+        expectedCount?: number;
+        latestRuntimePath?: string;
         runtimeStartupEvent?: {
             runtimeName: string;
             languageName: string;
             base64EncodedIconSvg?: string;
             newSession: boolean;
         };
+        onTrustWorkspace?: () => void;
     }
 
     let {
         startupPhase = "initializing",
         discoveredCount = 0,
+        expectedCount = 0,
+        latestRuntimePath,
         runtimeStartupEvent,
+        onTrustWorkspace,
     }: Props = $props();
 
     const messages = {
-        initializing: "Starting up",
-        awaitingTrust: "Consoles cannot start until the workspace is trusted",
-        newFolderTasks: "Setting up workspace",
-        reconnecting: "Reconnecting",
-        starting: "Starting",
-        discovering: "Discovering interpreters",
+        initializing: localize("console.initializing", "Waiting for extensions"),
+        awaitingTrust: localize(
+            "console.awaitingTrust",
+            "Cannot start consoles in Restricted Mode.",
+        ),
+        trustFolder: localize("console.trustFolder", "Trust this folder"),
+        newFolderTasks: localize("console.newFolderTasks", "Setting up workspace"),
+        reconnecting: localize("console.reconnecting", "Reconnecting"),
+        starting: localize("console.starting", "Starting"),
+        discovering: localize("console.discovering", "Discovering interpreters"),
     };
+
+    const progressPercent = $derived(
+        expectedCount > 0
+            ? Math.min(100, (discoveredCount / expectedCount) * 100)
+            : undefined,
+    );
 </script>
 
 <div class="startup-status">
-    <div class="progress">
-        <div class="progress-bar"></div>
-    </div>
+    {#if startupPhase !== "awaitingTrust"}
+        <div class="progress" data-testid="startup-progress-bar">
+            <div
+                class:infinite={progressPercent === undefined}
+                class="progress-bar"
+                style:width={progressPercent === undefined
+                    ? undefined
+                    : `${progressPercent}%`}
+            ></div>
+        </div>
+    {/if}
 
     {#if runtimeStartupEvent}
         <RuntimeStartupProgress {runtimeStartupEvent} />
@@ -51,7 +76,13 @@
     {/if}
 
     {#if startupPhase === "awaitingTrust"}
-        <div class="awaiting">{messages.awaitingTrust}...</div>
+        <div class="awaiting">
+            {messages.awaitingTrust}
+            <button type="button" class="trust-link" onclick={onTrustWorkspace}>
+                {messages.trustFolder}
+            </button>
+            {localize("console.enableConsoles", "to enable consoles.")}
+        </div>
     {/if}
 
     {#if startupPhase === "newFolderTasks"}
@@ -65,10 +96,13 @@
     {#if startupPhase === "discovering" && !runtimeStartupEvent}
         <div class="discovery">
             {messages.discovering}
-            {#if discoveredCount > 0}
-                <span> ({discoveredCount})</span>
-            {/if}...
+            ...
         </div>
+        {#if latestRuntimePath}
+            <div class="discovery-path" title={latestRuntimePath}>
+                {latestRuntimePath}
+            </div>
+        {/if}
     {/if}
 </div>
 
@@ -100,9 +134,14 @@
     .progress-bar {
         position: absolute;
         inset: 0 auto 0 0;
-        width: 35%;
+        width: 0;
         height: 100%;
         background: var(--vscode-progressBar-background);
+        transition: width 120ms linear;
+    }
+
+    .progress-bar.infinite {
+        width: 35%;
         animation: loading 1.2s linear infinite;
     }
 
@@ -122,5 +161,29 @@
     .starting,
     .discovery {
         text-align: center;
+    }
+
+    .trust-link {
+        margin: 0 4px;
+        padding: 0;
+        border: 0;
+        color: var(--vscode-textLink-foreground);
+        background: transparent;
+        cursor: pointer;
+        font: inherit;
+    }
+
+    .trust-link:hover {
+        color: var(--vscode-textLink-activeForeground);
+        text-decoration: underline;
+    }
+
+    .discovery-path {
+        max-width: min(560px, calc(100% - 32px));
+        margin-top: 4px;
+        overflow: hidden;
+        color: var(--vscode-descriptionForeground);
+        text-overflow: ellipsis;
+        white-space: nowrap;
     }
 </style>

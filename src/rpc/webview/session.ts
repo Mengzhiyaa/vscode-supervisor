@@ -9,8 +9,12 @@ export interface SessionInfo {
     name: string;
     runtimeName: string;
     languageId?: string;
+    sessionMode: 'console' | 'notebook' | 'background';
+    createdTimestamp: number;
     state: 'uninitialized' | 'starting' | 'ready' | 'busy' | 'offline' | 'interrupting' | 'restarting' | 'exiting' | 'exited' | 'disconnected';
+    runtimeState: 'uninitialized' | 'starting' | 'ready' | 'busy' | 'offline' | 'interrupting' | 'restarting' | 'exiting' | 'exited' | 'disconnected';
     runtimePath?: string;
+    runtimeDisplayPath?: string;
     runtimeVersion?: string;
     runtimeSource?: string;
     base64EncodedIconSvg?: string;

@@ -120,8 +120,12 @@
         align-items: center;
         font-size: 12px;
         box-sizing: border-box;
-        background: var(--vscode-positronActionBar-textInputBackground);
-        border: 1px solid var(--vscode-positronActionBar-textInputBorder);
+        background: var(
+            --vscode-positronActionBar-textInputBackground,
+            var(--vscode-input-background)
+        );
+        border: 1px solid
+            var(--vscode-positronActionBar-textInputBorder, var(--vscode-input-border));
     }
 
     .action-bar-filter-input.action-bar-filter-input-md {
@@ -144,12 +148,18 @@
 
     .text-input::placeholder {
         opacity: 0.5;
-        color: var(--vscode-positronActionBar-foreground);
+        color: var(--vscode-positronActionBar-foreground, var(--vscode-foreground));
     }
 
     .text-input::selection {
-        color: var(--vscode-positronActionBar-textInputSelectionForeground);
-        background: var(--vscode-positronActionBar-textInputSelectionBackground);
+        color: var(
+            --vscode-positronActionBar-textInputSelectionForeground,
+            var(--vscode-editor-selectionForeground, inherit)
+        );
+        background: var(
+            --vscode-positronActionBar-textInputSelectionBackground,
+            var(--vscode-editor-selectionBackground)
+        );
     }
 
     .clear-button {

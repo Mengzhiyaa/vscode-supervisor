@@ -361,7 +361,8 @@ export class RuntimeItemPendingInput extends RuntimeItemStandard {
         public readonly attribution: RuntimeItemPendingInputAttribution,
         public readonly executionId: string | undefined,
         public readonly code: string,
-        public readonly mode: 'interactive' | 'non-interactive' | 'silent' | 'transient' = 'interactive'
+        public readonly mode: 'interactive' | 'non-interactive' | 'silent' | 'transient' = 'interactive',
+        public readonly submitting: boolean = false,
     ) {
         super(id, when, code);
     }

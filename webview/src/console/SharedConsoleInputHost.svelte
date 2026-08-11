@@ -30,7 +30,11 @@
         onInterrupt: (sessionId: string) => void;
         onActivate: (sessionId: string) => void;
         onSelectAll: () => void;
-        onCodeExecuted: () => void;
+        onCodeExecuted: (sessionId: string) => void;
+        onSubmittingChanged?: (
+            sessionId: string,
+            submitting: boolean,
+        ) => void;
         onOpenSearch?: (sessionId: string) => void;
         onOpenInEditor?: (sessionId: string, code: string) => void;
         onClearConsole?: (sessionId: string) => void;
@@ -57,6 +61,7 @@
         onActivate,
         onSelectAll,
         onCodeExecuted,
+        onSubmittingChanged,
         onOpenSearch,
         onOpenInEditor,
         onClearConsole,
@@ -76,7 +81,11 @@
         onInterrupt: (sessionId: string) => void;
         onActivate: (sessionId: string) => void;
         onSelectAll: () => void;
-        onCodeExecuted: () => void;
+        onCodeExecuted: (sessionId: string) => void;
+        onSubmittingChanged?: (
+            sessionId: string,
+            submitting: boolean,
+        ) => void;
         onOpenSearch?: (sessionId: string) => void;
         onOpenInEditor?: (sessionId: string, code: string) => void;
         onClearConsole?: (sessionId: string) => void;
@@ -116,6 +125,7 @@
             onActivate,
             onSelectAll,
             onCodeExecuted,
+            onSubmittingChanged,
             onOpenSearch,
             onOpenInEditor,
             onClearConsole,

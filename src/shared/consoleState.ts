@@ -88,6 +88,7 @@ export interface SerializedRuntimePendingInput {
     when: number;
     inputPrompt?: string;
     code?: string;
+    submitting?: boolean;
     // Legacy restore-state key used by older snapshots.
     prompt?: string;
 }

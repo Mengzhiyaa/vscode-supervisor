@@ -74,7 +74,23 @@ export class WebviewManager implements vscode.Disposable {
                         retainContextWhenHidden: true
                     }
                 }
-            )
+            ),
+            vscode.commands.registerCommand(
+                CoreCommandIds.consoleFind,
+                () => this._consoleProvider?.runFindCommand('focus'),
+            ),
+            vscode.commands.registerCommand(
+                CoreCommandIds.consoleFindNext,
+                () => this._consoleProvider?.runFindCommand('next'),
+            ),
+            vscode.commands.registerCommand(
+                CoreCommandIds.consoleFindPrevious,
+                () => this._consoleProvider?.runFindCommand('previous'),
+            ),
+            vscode.commands.registerCommand(
+                CoreCommandIds.consoleFindClose,
+                () => this._consoleProvider?.runFindCommand('close'),
+            ),
         );
 
         // Variables Sidebar Provider

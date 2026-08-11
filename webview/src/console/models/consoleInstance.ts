@@ -12,8 +12,12 @@ export interface ConsoleSessionInfo {
     name: string;
     runtimeName: string;
     languageId?: string;
+    sessionMode: "console" | "notebook" | "background";
+    createdTimestamp: number;
     state: ConsoleState;
+    runtimeState: ConsoleState;
     runtimePath?: string;
+    runtimeDisplayPath?: string;
     runtimeVersion?: string;
     runtimeSource?: string;
     base64EncodedIconSvg?: string;
@@ -26,6 +30,8 @@ export interface ConsoleInstanceModel {
     sessionName: string;
     runtimeName: string;
     languageId: string;
+    sessionMode: "console" | "notebook" | "background";
+    createdTimestamp: number;
     state: ConsoleState;
     runtimePath?: string;
     runtimeVersion?: string;
@@ -105,6 +111,8 @@ export function createConsoleInstanceModel(
         sessionName: session.name || session.runtimeName,
         runtimeName: session.runtimeName,
         languageId: session.languageId ?? "plaintext",
+        sessionMode: session.sessionMode,
+        createdTimestamp: session.createdTimestamp,
         state: session.state,
         runtimePath: session.runtimePath,
         runtimeVersion: session.runtimeVersion,

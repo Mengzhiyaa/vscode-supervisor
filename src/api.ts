@@ -151,6 +151,8 @@ export interface LanguageRuntimeMetadata {
     runtimeId: string;
     runtimeName: string;
     runtimePath: string;
+    /** Human-friendly runtime path, for example one using `~` shorthand. */
+    runtimeDisplayPath?: string;
     runtimeVersion: string;
     runtimeShortName: string;
     runtimeSource: string;

@@ -97,6 +97,11 @@
         {
           "name": "rules",
           "type": "ConsoleThemeRule[]"
+        },
+        {
+          "name": "fileIconThemeSettingsId",
+          "optional": true,
+          "type": "string"
         }
       ]
     },
@@ -120,9 +125,21 @@
           "name": "lineHeight",
           "type": "number"
         },
+        { "name": "fontLigatures", "type": "string" },
+        { "name": "fontVariations", "type": "string" },
+        { "name": "fontWeight", "type": "string" },
+        { "name": "letterSpacing", "type": "number" },
         {
           "name": "showResourceMonitor",
           "type": "boolean"
+        },
+        {
+          "name": "promptWhenIncomplete",
+          "type": "boolean"
+        },
+        {
+          "name": "sashSize",
+          "type": "number"
         }
       ]
     },
@@ -152,7 +169,12 @@
       "fields": [
         {
           "name": "kind",
-          "type": "'appendRuntimeItem' | 'appendActivityItem' | 'replaceActivityOutput' | 'clearActivityOutput' | 'updateActivityInputState'"
+          "type": "'appendRuntimeItem' | 'replaceRuntimeItem' | 'appendActivityItem' | 'replaceActivityOutput' | 'clearActivityOutput' | 'updateActivityInputState'"
+        },
+        {
+          "name": "targetId",
+          "optional": true,
+          "type": "string"
         },
         {
           "name": "parentId",
@@ -302,6 +324,47 @@
               "type": "'complete' | 'incomplete' | 'invalid' | 'unknown'"
             }
           ]
+        }
+      ]
+    },
+    {
+      "kind": "request",
+      "name": "SubmitCodeRequest",
+      "method": "console/submitCode",
+      "paramsType": "Params",
+      "resultType": "Result",
+      "errorType": "void",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            { "name": "code", "type": "string" },
+            { "name": "sessionId", "type": "string" },
+            { "name": "checkCompleteness", "type": "boolean" }
+          ]
+        },
+        {
+          "kind": "interface",
+          "name": "Result",
+          "fields": [
+            { "name": "status", "type": "'executed' | 'incomplete' | 'cancelled' | 'failed'" }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "request",
+      "name": "CancelSubmissionRequest",
+      "method": "console/cancelSubmission",
+      "paramsType": "Params",
+      "resultType": "void",
+      "errorType": "void",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [{ "name": "sessionId", "type": "string" }]
         }
       ]
     },
@@ -488,6 +551,15 @@
     },
     {
       "kind": "request",
+      "name": "WorkspaceRequestTrustRequest",
+      "method": "console/requestWorkspaceTrust",
+      "paramsType": "void",
+      "resultType": "void",
+      "errorType": "void",
+      "declarations": []
+    },
+    {
+      "kind": "request",
       "name": "SetConsoleShowResourceMonitorRequest",
       "method": "console/setShowResourceMonitor",
       "paramsType": "Params",
@@ -525,6 +597,50 @@
             {
               "name": "reason",
               "type": "string"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "ConsoleFindCommandNotification",
+      "method": "console/findCommand",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "command",
+              "type": "'focus' | 'next' | 'previous' | 'close'"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "ConsoleContextKeysChangedNotification",
+      "method": "console/contextKeysChanged",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "consoleFocused",
+              "type": "boolean"
+            },
+            {
+              "name": "findVisible",
+              "type": "boolean"
+            },
+            {
+              "name": "findInputFocused",
+              "type": "boolean"
             }
           ]
         }
@@ -908,6 +1024,16 @@
               "name": "discoveredCount",
               "optional": true,
               "type": "number"
+            },
+            {
+              "name": "expectedCount",
+              "optional": true,
+              "type": "number"
+            },
+            {
+              "name": "latestRuntimePath",
+              "optional": true,
+              "type": "string"
             },
             {
               "name": "runtimeStartupEvent",

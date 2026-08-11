@@ -21,6 +21,10 @@ export const CoreCommandIds = {
     consoleNavigateInputHistoryUp: 'supervisor.console.navigateInputHistoryUp',
     consoleNavigateInputHistoryDown: 'supervisor.console.navigateInputHistoryDown',
     consoleNavigateInputHistoryUpPrefixMatch: 'supervisor.console.navigateInputHistoryUpPrefixMatch',
+    consoleFind: 'supervisor.console.find',
+    consoleFindNext: 'supervisor.console.findNext',
+    consoleFindPrevious: 'supervisor.console.findPrevious',
+    consoleFindClose: 'supervisor.console.findClose',
     dataExplorerCopy: 'supervisor.dataExplorer.copy',
     dataExplorerCopyTableData: 'supervisor.dataExplorer.copyTableData',
     dataExplorerCollapseSummary: 'supervisor.dataExplorer.collapseSummary',
@@ -111,6 +115,9 @@ export const WorkbenchViewContainerCommands = {
 
 export const ContextKeys = {
     consoleSessionsExist: 'supervisor.consoleSessionsExist',
+    consoleFocused: 'supervisor.consoleFocused',
+    consoleFindVisible: 'supervisor.consoleFindVisible',
+    consoleFindInputFocused: 'supervisor.consoleFindInputFocused',
     shouldTabComplete: 'supervisor.shouldTabComplete',
     isDevelopment: 'supervisor.isDevelopment',
     dataExplorerEditorActive: 'supervisor.dataExplorerEditorActive',
@@ -139,7 +146,12 @@ export const CoreConfigurationKeys = {
     consoleFontSize: 'supervisor.console.fontSize',
     consoleFontFamily: 'supervisor.console.fontFamily',
     consoleLineHeight: 'supervisor.console.lineHeight',
+    consoleFontLigatures: 'supervisor.console.fontLigatures',
+    consoleFontVariations: 'supervisor.console.fontVariations',
+    consoleFontWeight: 'supervisor.console.fontWeight',
+    consoleLetterSpacing: 'supervisor.console.letterSpacing',
     consoleScrollbackSize: 'supervisor.console.scrollbackSize',
     consoleShowResourceMonitor: 'supervisor.console.showResourceMonitor',
+    consolePromptWhenIncomplete: 'supervisor.console.promptWhenIncomplete',
     consoleEnableTrace: 'supervisor.console.enableTrace',
 } as const;

@@ -20,7 +20,13 @@ export interface ConsoleSettings {
     fontFamily: string;
     fontSize: number;
     lineHeight: number;
+    fontLigatures: string;
+    fontVariations: string;
+    fontWeight: string;
+    letterSpacing: number;
     showResourceMonitor: boolean;
+    promptWhenIncomplete: boolean;
+    sashSize: number;
 }
 
 export enum RuntimeCodeExecutionMode {

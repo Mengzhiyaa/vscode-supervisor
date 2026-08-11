@@ -3,6 +3,8 @@ export interface SessionInfo {
     name: string;
     runtimeName: string;
     languageId?: string;
+    sessionMode: 'console' | 'notebook' | 'background';
+    createdTimestamp: number;
     state:
         | 'uninitialized'
         | 'starting'
@@ -14,7 +16,19 @@ export interface SessionInfo {
         | 'exiting'
         | 'exited'
         | 'disconnected';
+    runtimeState:
+        | 'uninitialized'
+        | 'starting'
+        | 'ready'
+        | 'busy'
+        | 'offline'
+        | 'interrupting'
+        | 'restarting'
+        | 'exiting'
+        | 'exited'
+        | 'disconnected';
     runtimePath?: string;
+    runtimeDisplayPath?: string;
     runtimeVersion?: string;
     runtimeSource?: string;
     base64EncodedIconSvg?: string;
@@ -27,7 +41,13 @@ export interface ConsoleSettings {
     fontFamily: string;
     fontSize: number;
     lineHeight: number;
+    fontLigatures: string;
+    fontVariations: string;
+    fontWeight: string;
+    letterSpacing: number;
     showResourceMonitor: boolean;
+    promptWhenIncomplete: boolean;
+    sashSize: number;
 }
 
 export interface VariablesInstanceInfo {
@@ -159,6 +179,8 @@ export const SessionMethods = {
 
 export const ConsoleMethods = {
     isComplete: 'console/isComplete',
+    submitCode: 'console/submitCode',
+    cancelSubmission: 'console/cancelSubmission',
     execute: 'console/execute',
     interrupt: 'console/interrupt',
     writeClipboardText: 'console/writeClipboardText',
@@ -169,6 +191,8 @@ export const ConsoleMethods = {
     getSettings: 'console/getSettings',
     setShowResourceMonitor: 'console/setShowResourceMonitor',
     requestFullState: 'console/requestFullState',
+    findCommand: 'console/findCommand',
+    contextKeysChanged: 'console/contextKeysChanged',
     revealExecution: 'console/revealExecution',
     clear: 'console/clear',
     restoreState: 'console/restoreState',
@@ -189,6 +213,7 @@ export const ConsoleMethods = {
     themeChanged: 'console/themeChanged',
     languageSupportAssetsChanged: 'console/languageSupportAssetsChanged',
     runtimeStartupPhase: 'console/runtimeStartupPhase',
+    requestWorkspaceTrust: 'console/requestWorkspaceTrust',
     setWidthInChars: 'console/setWidthInChars',
     openExternal: 'console/openExternal',
     ready: 'console/ready',

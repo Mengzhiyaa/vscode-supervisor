@@ -12,6 +12,7 @@ function createSession(sessionId: string, state: RuntimeState, name: string) {
             sessionId,
             sessionName: `${name}-metadata`,
             sessionMode: 'console',
+            createdTimestamp: Number(sessionId.match(/\d+$/u)?.[0] ?? 0),
         },
         runtimeMetadata: {
             runtimeName: 'R',
@@ -36,6 +37,7 @@ function createConsoleInstance(
             sessionId,
             sessionName: options?.sessionName ?? `console-${sessionId}`,
             sessionMode: 'console',
+            createdTimestamp: Number(sessionId.match(/\d+$/u)?.[0] ?? 0),
         },
         promptActive: options?.promptActive ?? false,
         runtimeAttached: options?.runtimeAttached ?? false,
@@ -57,7 +59,7 @@ suite('[Unit] session snapshot builder', () => {
 
         const builder = new SessionSnapshotBuilder(
             {
-                sessions: [restarting, idle],
+                sessions: [idle, restarting],
                 getSession: (sessionId: string) => {
                     if (sessionId === 'session-2') {
                         return restarting;
@@ -124,7 +126,10 @@ suite('[Unit] session snapshot builder', () => {
             id: 'session-1',
             name: 'renamed-session',
             runtimeName: 'R',
+            sessionMode: 'console',
+            createdTimestamp: 1,
             state: 'ready',
+            runtimeState: 'starting',
             runtimePath: '/console/session-1',
             runtimeVersion: '4.4.1',
             runtimeSource: 'configured',
@@ -174,7 +179,10 @@ suite('[Unit] session snapshot builder', () => {
                 id: 'session-failed',
                 name: 'failed',
                 runtimeName: 'R',
+                sessionMode: 'console' as const,
+                createdTimestamp: 1,
                 state: 'exited' as const,
+                runtimeState: 'exited' as const,
                 promptActive: false,
                 runtimeAttached: false,
             },
@@ -182,7 +190,10 @@ suite('[Unit] session snapshot builder', () => {
                 id: 'session-detached',
                 name: 'detached',
                 runtimeName: 'R',
+                sessionMode: 'console' as const,
+                createdTimestamp: 2,
                 state: 'ready' as const,
+                runtimeState: 'ready' as const,
                 promptActive: false,
                 runtimeAttached: false,
             },
@@ -190,7 +201,10 @@ suite('[Unit] session snapshot builder', () => {
                 id: 'session-healthy',
                 name: 'healthy',
                 runtimeName: 'R',
+                sessionMode: 'console' as const,
+                createdTimestamp: 3,
                 state: 'ready' as const,
+                runtimeState: 'ready' as const,
                 promptActive: false,
                 runtimeAttached: true,
             },

@@ -1,23 +1,26 @@
 <script lang="ts">
+    import { localize } from "$lib/localization";
     interface EmptyConsoleProps {
         readonly onStartSession?: () => void;
     }
 
     let { onStartSession = () => {} }: EmptyConsoleProps = $props();
 
-    const noSessionRunning = "There is no session running.";
-    const useWord = "Use";
-    const startSession = "Start Session";
-    const toStartOne = "to start one.";
+    const emptyPrefix = localize(
+        "console.emptyPrefix",
+        "There is no session running. Use",
+    );
+    const startSession = localize("console.startSession", "Start Session");
+    const emptySuffix = localize("console.emptySuffix", "to start one.");
 </script>
 
 <div class="empty-console" role="status">
     <div class="title">
-        <span>{noSessionRunning} {useWord} </span>
+        <span>{emptyPrefix} </span>
         <button class="link" type="button" onclick={onStartSession}>
             {startSession}
         </button>
-        <span> {toStartOne}</span>
+        <span> {emptySuffix}</span>
     </div>
 </div>
 

@@ -57,6 +57,7 @@
         type ILanguageRuntimeMessageOutputData,
     } from "./classes";
     import type { ConsoleThemeData } from "$lib/monaco/languageSupport";
+    import { localize } from "$lib/localization";
 
     // Per-session data storage
     interface SessionData {
@@ -77,11 +78,13 @@
     interface RuntimeChange {
         kind:
             | "appendRuntimeItem"
+            | "replaceRuntimeItem"
             | "appendActivityItem"
             | "replaceActivityOutput"
             | "clearActivityOutput"
             | "updateActivityInputState";
         parentId?: string;
+        targetId?: string;
         outputId?: string;
         state?: ActivityItemInputState;
         runtimeItem?: SerializedRuntimeItem;
@@ -105,12 +108,10 @@
     }
 
     // Constants (matching Positron)
-    const ACTION_BAR_HEIGHT = 28;
-    const MINIMUM_CONSOLE_TAB_LIST_WIDTH = 64;
-    const MAXIMUM_CONSOLE_TAB_LIST_WIDTH = 200; // Cap at 200px
+    const MINIMUM_CONSOLE_TAB_LIST_WIDTH = 60;
     const MINIMUM_CONSOLE_PANE_WIDTH = 120;
     const MAX_RESOURCE_USAGE_HISTORY = 600;
-    const DEFAULT_SCROLLBACK_SIZE = 1000;
+    const DEFAULT_SCROLLBACK_SIZE = 10000;
     const DEFAULT_CONSOLE_FONT_SIZE = 14;
     const DEFAULT_CONSOLE_LINE_HEIGHT = 1.4;
     const DEFAULT_CONSOLE_FONT_FAMILY = "var(--vscode-editor-font-family)";
@@ -130,6 +131,7 @@
     const inputAnchorBySession = new SvelteMap<string, HTMLDivElement>();
     let inputAnchorVersion = $state(0);
     const scrollLockedBySession = new SvelteMap<string, boolean>();
+    const submittingBySession = new SvelteMap<string, boolean>();
     let sessionSwitchNonce = 0;
     let revealRequest = $state<
         { sessionId: string; executionId: string; nonce: number } | undefined
@@ -169,13 +171,21 @@
         fontFamily: DEFAULT_CONSOLE_FONT_FAMILY,
         fontSize: DEFAULT_CONSOLE_FONT_SIZE,
         lineHeight: DEFAULT_CONSOLE_LINE_HEIGHT,
+        fontLigatures: "off",
+        fontVariations: "off",
+        fontWeight: "normal",
+        letterSpacing: 0,
         showResourceMonitor: true,
+        promptWhenIncomplete: true,
+        sashSize: 4,
     });
     let consoleThemeData = $state<ConsoleThemeData | undefined>(undefined);
     // When true (default), permanently delete data beyond scrollback limit to free memory
     let clearScrollbackData = $state(true);
     let runtimeStartupPhase = $state<RuntimeStartupPhase>("initializing");
     let discoveredRuntimeCount = $state(0);
+    let expectedRuntimeCount = $state(0);
+    let latestRuntimePath = $state<string | undefined>(undefined);
     let runtimeStartupEvent = $state<RuntimeStartupEvent | undefined>(
         undefined,
     );
@@ -183,6 +193,15 @@
         { sessionId: string; nonce: number } | undefined
     >(undefined);
     let openSearchCounter = 0;
+    let findCommandRequest = $state<
+        {
+            sessionId: string;
+            command: "focus" | "next" | "previous" | "close";
+            nonce: number;
+        } | undefined
+    >(undefined);
+    let findCommandCounter = 0;
+    let findVisible = false;
 
     // Refs
     let mainContainer: HTMLDivElement;
@@ -339,6 +358,11 @@
                 scrollLockedBySession.delete(sessionId);
             }
         }
+        for (const sessionId of [...submittingBySession.keys()]) {
+            if (!remainingSessionIds.has(sessionId)) {
+                submittingBySession.delete(sessionId);
+            }
+        }
         if (
             pendingForegroundSessionId &&
             !remainingSessionIds.has(pendingForegroundSessionId)
@@ -369,6 +393,33 @@
                     error,
                 );
             });
+    }
+
+    function sendConsoleContextKeys(): void {
+        const activeElement = document.activeElement;
+        const consoleFocused = Boolean(
+            mainContainer &&
+                activeElement instanceof Node &&
+                mainContainer.contains(activeElement),
+        );
+        const findInputFocused =
+            activeElement instanceof HTMLElement &&
+            activeElement.classList.contains("search-input");
+
+        connection?.sendNotification("console/contextKeysChanged", {
+            consoleFocused,
+            findVisible,
+            findInputFocused,
+        });
+    }
+
+    function handleConsoleFocusChanged(): void {
+        requestAnimationFrame(sendConsoleContextKeys);
+    }
+
+    function handleFindVisibilityChanged(visible: boolean): void {
+        findVisible = visible;
+        sendConsoleContextKeys();
     }
 
     function mergeIncomingSession(
@@ -486,15 +537,15 @@
 
         switch (session.state) {
             case "starting":
-                return "Starting";
+                return localize("console.state.starting", "Starting");
             case "restarting":
-                return "Restarting";
+                return localize("console.state.restarting", "Restarting");
             case "interrupting":
-                return "Interrupting";
+                return localize("console.state.interrupting", "Interrupting");
             case "exiting":
-                return "Shutting down";
+                return localize("console.state.exiting", "Shutting Down");
             case "offline":
-                return "Reconnecting";
+                return localize("console.reconnecting", "Reconnecting");
             default:
                 return "";
         }
@@ -572,7 +623,7 @@
         if (typeof value !== "number" || !Number.isFinite(value)) {
             return DEFAULT_SCROLLBACK_SIZE;
         }
-        return Math.max(0, Math.trunc(value));
+        return Math.max(1000, Math.min(20000, Math.trunc(value)));
     }
 
     function applyScrollbackSize(value?: number): void {
@@ -593,7 +644,7 @@
         if (typeof value !== "number" || !Number.isFinite(value)) {
             return DEFAULT_CONSOLE_FONT_SIZE;
         }
-        return Math.min(32, Math.max(8, value));
+        return Math.min(100, Math.max(6, value));
     }
 
     function normalizeConsoleLineHeight(value?: number): number {
@@ -618,8 +669,22 @@
         const normalizedLineHeight = normalizeConsoleLineHeight(
             nextSettings?.lineHeight ?? consoleSettings.lineHeight,
         );
+        const fontLigatures = nextSettings?.fontLigatures ?? consoleSettings.fontLigatures;
+        const fontVariations = nextSettings?.fontVariations ?? consoleSettings.fontVariations;
+        const fontWeight = nextSettings?.fontWeight ?? consoleSettings.fontWeight;
+        const letterSpacing = Math.max(
+            -5,
+            Math.min(20, nextSettings?.letterSpacing ?? consoleSettings.letterSpacing),
+        );
         const showResourceMonitor =
             nextSettings?.showResourceMonitor ?? consoleSettings.showResourceMonitor;
+        const promptWhenIncomplete =
+            nextSettings?.promptWhenIncomplete ??
+            consoleSettings.promptWhenIncomplete;
+        const sashSize = Math.max(
+            1,
+            Math.min(20, nextSettings?.sashSize ?? consoleSettings.sashSize),
+        );
 
         applyScrollbackSize(normalizedScrollbackSize);
 
@@ -628,7 +693,13 @@
             consoleSettings.fontFamily === normalizedFontFamily &&
             consoleSettings.fontSize === normalizedFontSize &&
             consoleSettings.lineHeight === normalizedLineHeight &&
-            consoleSettings.showResourceMonitor === showResourceMonitor
+            consoleSettings.fontLigatures === fontLigatures &&
+            consoleSettings.fontVariations === fontVariations &&
+            consoleSettings.fontWeight === fontWeight &&
+            consoleSettings.letterSpacing === letterSpacing &&
+            consoleSettings.showResourceMonitor === showResourceMonitor &&
+            consoleSettings.promptWhenIncomplete === promptWhenIncomplete &&
+            consoleSettings.sashSize === sashSize
         ) {
             return;
         }
@@ -638,7 +709,13 @@
             fontFamily: normalizedFontFamily,
             fontSize: normalizedFontSize,
             lineHeight: normalizedLineHeight,
+            fontLigatures,
+            fontVariations,
+            fontWeight,
+            letterSpacing,
             showResourceMonitor,
+            promptWhenIncomplete,
+            sashSize,
         };
     }
 
@@ -1066,14 +1143,22 @@
                 return {
                     runtimeItem: new RuntimeItemStarted(
                         item.id,
-                        `${item.sessionName} started.`,
+                        localize(
+                            "console.sessionStarted",
+                            "{0} started.",
+                            item.sessionName,
+                        ),
                     ),
                 };
             case "restarted":
                 return {
                     runtimeItem: new RuntimeItemStarted(
                         item.id,
-                        `${item.sessionName} restarted.`,
+                        localize(
+                            "console.sessionRestarted",
+                            "{0} restarted.",
+                            item.sessionName,
+                        ),
                     ),
                 };
             case "startup":
@@ -1085,7 +1170,10 @@
                     runtimeItem: new RuntimeItemStartupFailure(
                         item.id,
                         (item.message as string | undefined) ??
-                            "Runtime failed to start.",
+                            localize(
+                                "console.runtimeFailedToStart",
+                                "Runtime failed to start.",
+                            ),
                         (item.details as string | undefined) ?? "",
                     ),
                 };
@@ -1119,6 +1207,7 @@
                         item.id,
                         item.inputPrompt ?? item.prompt ?? ">",
                         item.code ?? "",
+                        item.submitting === true,
                     ),
                 };
             case "trace":
@@ -1175,6 +1264,39 @@
             );
         }
         data.runtimeItems.push(deserialized.runtimeItem);
+        if (sync) {
+            syncSessionRuntimeItems(sessionId);
+        }
+        return true;
+    }
+
+    function replaceRuntimeItem(
+        sessionId: string,
+        targetId: string,
+        item: SerializedRuntimeItem,
+        sync: boolean = true,
+    ): boolean {
+        ensureSessionData(sessionId);
+        const data = getSessionData(sessionId);
+        const targetIndex = data.runtimeItems.findIndex(
+            (runtimeItem) => runtimeItem.id === targetId,
+        );
+        const deserialized = deserializeRuntimeItem(item, sessionId);
+        if (targetIndex < 0 || !deserialized) {
+            return false;
+        }
+
+        const previousItem = data.runtimeItems[targetIndex];
+        if (previousItem instanceof RuntimeItemActivity) {
+            data.runtimeItemActivities.delete(previousItem.id);
+        }
+        data.runtimeItems.splice(targetIndex, 1, deserialized.runtimeItem);
+        if (deserialized.activity) {
+            data.runtimeItemActivities.set(
+                deserialized.runtimeItem.id,
+                deserialized.activity,
+            );
+        }
         if (sync) {
             syncSessionRuntimeItems(sessionId);
         }
@@ -1336,6 +1458,15 @@
                     changed =
                         appendRuntimeItem(
                             sessionId,
+                            change.runtimeItem as SerializedRuntimeItem,
+                            false,
+                        ) || changed;
+                    break;
+                case "replaceRuntimeItem":
+                    changed =
+                        replaceRuntimeItem(
+                            sessionId,
+                            change.targetId as string,
                             change.runtimeItem as SerializedRuntimeItem,
                             false,
                         ) || changed;
@@ -1695,17 +1826,38 @@
             (params: {
                 phase: RuntimeStartupPhase;
                 discoveredCount?: number;
+                expectedCount?: number;
+                latestRuntimePath?: string;
                 runtimeStartupEvent?: RuntimeStartupEvent;
             }) => {
                 runtimeStartupPhase = params.phase;
                 discoveredRuntimeCount = params.discoveredCount ?? 0;
+                expectedRuntimeCount = params.expectedCount ?? 0;
+                latestRuntimePath = params.latestRuntimePath;
                 runtimeStartupEvent = params.runtimeStartupEvent;
+            },
+        );
+
+        connection.onNotification(
+            "console/findCommand",
+            (params: {
+                command: "focus" | "next" | "previous" | "close";
+            }) => {
+                if (!activeConsoleSessionId) {
+                    return;
+                }
+                findCommandRequest = {
+                    sessionId: activeConsoleSessionId,
+                    command: params.command,
+                    nonce: ++findCommandCounter,
+                };
             },
         );
 
         // Load initial settings before sessions so Monaco starts with the
         // effective console font instead of a transient fallback.
         connection.sendNotification("console/ready");
+        sendConsoleContextKeys();
         void (async () => {
             await loadConsoleSettings();
             await loadSessions();
@@ -1731,11 +1883,8 @@
             return;
         }
 
-        // Use 1/5 of width, but cap at MAXIMUM_CONSOLE_TAB_LIST_WIDTH (200px)
-        const maxTabWidth = Math.min(
-            Math.trunc(newWidth / 5),
-            MAXIMUM_CONSOLE_TAB_LIST_WIDTH,
-        );
+        // Positron allows the session list to use up to one fifth of the view.
+        const maxTabWidth = Math.trunc(newWidth / 5);
 
         // Only show tab list when there are multiple sessions
         const shouldShowTabList =
@@ -1780,7 +1929,10 @@
      */
     function handleBeginResize() {
         return {
-            minimumWidth: MINIMUM_CONSOLE_PANE_WIDTH,
+            minimumWidth: Math.max(
+                MINIMUM_CONSOLE_PANE_WIDTH,
+                containerWidth - Math.trunc(containerWidth / 5),
+            ),
             maximumWidth: containerWidth - MINIMUM_CONSOLE_TAB_LIST_WIDTH,
             startingWidth: consolePaneWidth,
         };
@@ -1860,9 +2012,13 @@
     }
 
     async function handleInterrupt(sessionId?: string) {
-        if (!connection) return;
         const targetSessionId = sessionId || activeConsoleSessionId;
         if (!targetSessionId) return;
+        if (submittingBySession.get(targetSessionId)) {
+            emitInputCommand(targetSessionId, { kind: "cancelSubmission" });
+            return;
+        }
+        if (!connection) return;
         try {
             await connection.sendRequest("console/interrupt", {
                 sessionId: targetSessionId,
@@ -1870,6 +2026,25 @@
         } catch (e) {
             console.error("Interrupt failed:", e);
         }
+    }
+
+    function handleSubmittingChanged(
+        sessionId: string,
+        submitting: boolean,
+    ): void {
+        if (submitting) {
+            submittingBySession.set(sessionId, true);
+        } else {
+            submittingBySession.delete(sessionId);
+        }
+    }
+
+    function cancelSubmission(sessionId: string): void {
+        void connection?.sendRequest("console/cancelSubmission", { sessionId });
+        emitInputCommand(sessionId, {
+            kind: "cancelSubmission",
+            skipHostRequest: true,
+        });
     }
 
     async function handleOpenInEditor(sessionId: string, code?: string) {
@@ -2010,7 +2185,6 @@
     }
 
     // Derived state
-    const adjustedHeight = $derived(containerHeight - ACTION_BAR_HEIGHT);
     const activeSession = $derived(getActiveConsoleSession());
     const consoleInstances = $derived.by((): ConsoleInstanceModel[] =>
         sessions.map((session) => {
@@ -2056,16 +2230,27 @@
 <div
     class="console-core"
     bind:this={mainContainer}
+    onfocusin={handleConsoleFocusChanged}
+    onfocusout={handleConsoleFocusChanged}
     style:--console-content-font-family={consoleSettings.fontFamily}
     style:--console-content-font-size="{consoleSettings.fontSize}px"
     style:--console-line-height={String(consoleSettings.lineHeight)}
+    style:--console-font-ligatures={consoleSettings.fontLigatures}
+    style:--console-font-variations={consoleSettings.fontVariations}
+    style:--console-font-weight={consoleSettings.fontWeight}
+    style:--console-letter-spacing={`${consoleSettings.letterSpacing}px`}
 >
     {#if sessions.length === 0}
         {#if runtimeStartupPhase !== "complete"}
             <StartupStatus
                 startupPhase={runtimeStartupPhase}
                 discoveredCount={discoveredRuntimeCount}
+                expectedCount={expectedRuntimeCount}
+                {latestRuntimePath}
                 {runtimeStartupEvent}
+                onTrustWorkspace={() => {
+                    void connection?.sendRequest("console/requestWorkspaceTrust");
+                }}
             />
         {:else}
             <EmptyConsole onStartSession={handleStartSession} />
@@ -2074,18 +2259,21 @@
         <!-- Left: Console pane -->
         <div
             class="console-pane"
-            style="width: {visibleConsolePaneWidth}px; height: {containerHeight}px;"
+            style="width: {visibleConsolePaneWidth}px;"
         >
             <ActionBar
                 {currentWorkingDirectory}
                 stateLabel={stateLabelForSession(activeSession)}
                 interruptible={activeSession?.state === "busy"}
+                submitting={activeConsoleSessionId
+                    ? (submittingBySession.get(activeConsoleSessionId) ?? false)
+                    : false}
                 interrupting={activeSession?.state === "interrupting"}
                 restarting={
                     activeSession?.state === "starting" ||
                     activeSession?.state === "restarting"
                 }
-                showDeleteButton={Boolean(activeSession)}
+                showDeleteButton={Boolean(activeSession) && !showSessionTabs}
                 canShutdown={canShutdownSession(activeSession)}
                 canStart={canStartSession(activeSession)}
                 traceEnabled={activeConsoleInstance?.trace ?? false}
@@ -2139,18 +2327,20 @@
             {#if visibleConsolePaneWidth > 0}
                 <div
                     class="console-instances-container"
-                    style="height: {adjustedHeight}px;"
                 >
                     {#each consoleInstances as consoleInstance (consoleInstance.sessionId)}
                         <ConsoleInstance
                             {consoleInstance}
                             active={consoleInstance.sessionId === activeConsoleSessionId}
                             width={visibleConsolePaneWidth}
-                            height={adjustedHeight}
+                            submitting={submittingBySession.get(
+                                consoleInstance.sessionId,
+                            ) ?? false}
                             {languageAssetsVersion}
                             {charWidth}
                             {revealRequest}
                             {openSearchRequest}
+                            {findCommandRequest}
                             onSelectAll={() =>
                                 selectAllRuntimeItems(consoleInstance.sessionId)}
                             onFocusInput={() =>
@@ -2163,6 +2353,8 @@
                             onInputAnchorReady={handleInputAnchorReady}
                             onScrollLockChanged={handleScrollLockChanged}
                             onWidthInCharsChanged={handleWidthInCharsChanged}
+                            onCancelSubmission={cancelSubmission}
+                            onFindVisibilityChanged={handleFindVisibilityChanged}
                         />
                     {/each}
 
@@ -2179,11 +2371,10 @@
                         onActivate={handleSetForegroundSession}
                         onSelectAll={() =>
                             selectAllRuntimeItems(activeConsoleSessionId)}
-                        onCodeExecuted={() => {
-                            if (activeConsoleSessionId) {
-                                signalCodeExecuted(activeConsoleSessionId);
-                            }
+                        onCodeExecuted={(sessionId) => {
+                            signalCodeExecuted(sessionId);
                         }}
+                        onSubmittingChanged={handleSubmittingChanged}
                         onOpenSearch={requestOpenSearch}
                         onOpenInEditor={handleOpenInEditor}
                         onClearConsole={handleClearConsole}
@@ -2199,6 +2390,7 @@
         <!-- Splitter -->
         {#if showSessionTabs && consoleTabListWidth > 0}
             <VerticalSplitter
+                sashSize={consoleSettings.sashSize}
                 onBeginResize={handleBeginResize}
                 onResize={handleResize}
             />
@@ -2213,6 +2405,7 @@
                 height={containerHeight}
                 {resourceUsageBySession}
                 showResourceMonitor={consoleSettings.showResourceMonitor}
+                fileIconThemeSettingsId={consoleThemeData?.fileIconThemeSettingsId}
                 onSelectSession={handleSetForegroundSession}
                 onDeleteSession={handleDeleteSession}
                 onRenameSession={handleRenameSession}
@@ -2235,17 +2428,25 @@
         width: 100%;
         height: 100%;
         overflow: hidden;
+        min-height: 0;
+        font-feature-settings: var(--console-font-ligatures);
+        font-variation-settings: var(--console-font-variations);
+        font-weight: var(--console-font-weight);
+        letter-spacing: var(--console-letter-spacing);
     }
 
     .console-pane {
         display: flex;
         flex-direction: column;
+        height: 100%;
         min-width: 0;
+        min-height: 0;
         overflow: hidden;
     }
 
     .console-instances-container {
         flex: 1;
+        min-height: 0;
         position: relative;
         overflow: hidden;
     }

@@ -354,7 +354,14 @@ export class ConsoleThemeProvider {
             : getEmbeddedDefaultTokenColors(theme.kind);
 
         const rules = flattenTokenColors(effectiveTokenColors);
-        return { base, rules };
+        const fileIconThemeSettingsId = vscode.workspace
+            .getConfiguration('workbench')
+            .get<string>('iconTheme');
+        return {
+            base,
+            rules,
+            ...(fileIconThemeSettingsId ? { fileIconThemeSettingsId } : {}),
+        };
     }
 
     private _resolveActiveThemeSource(theme: vscode.ColorTheme): ThemeSource | undefined {

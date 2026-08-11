@@ -5,6 +5,7 @@
     Mirrors: positron/.../components/runtimeActivity.tsx
 -->
 <script lang="ts">
+    import { localize } from "$lib/localization";
     import ActivityInput from "./ActivityInput.svelte";
     import ActivityOutputStream from "./ActivityOutputStream.svelte";
     import ActivityErrorStream from "./ActivityErrorStream.svelte";
@@ -82,7 +83,9 @@
             <ActivityPrompt activityItemPrompt={activityItem} />
         {:else}
             <!-- Unknown activity item type -->
-            <div class="activity-item-unknown">Unknown activity item</div>
+            <div class="activity-item-unknown">
+                {localize("console.activityItemUnknown", "Unknown activity item")}
+            </div>
         {/if}
     {/each}
 </div>

@@ -28,8 +28,8 @@ export interface ResolvedConsoleAppearance {
 
 const DEFAULT_CONSOLE_FONT_SIZE = 14;
 const DEFAULT_CONSOLE_LINE_HEIGHT = 1.4;
-const MIN_CONSOLE_FONT_SIZE = 8;
-const MAX_CONSOLE_FONT_SIZE = 32;
+const MIN_CONSOLE_FONT_SIZE = 6;
+const MAX_CONSOLE_FONT_SIZE = 100;
 const MIN_CONSOLE_LINE_HEIGHT = 1;
 const MAX_CONSOLE_LINE_HEIGHT = 3;
 
@@ -118,13 +118,12 @@ export function resolveConsoleAppearance(
         MAX_CONSOLE_FONT_SIZE,
     );
 
-    const lineHeight = hasExplicitConfigValue(options.configuredLineHeightInspection)
-        ? clampFiniteNumber(
-            options.configuredLineHeight,
-            DEFAULT_CONSOLE_LINE_HEIGHT,
-            MIN_CONSOLE_LINE_HEIGHT,
-            MAX_CONSOLE_LINE_HEIGHT,
-        )
+    const configuredLineHeight = options.configuredLineHeight ?? 0;
+    const lineHeight = hasExplicitConfigValue(options.configuredLineHeightInspection) &&
+        configuredLineHeight > 0
+        ? configuredLineHeight < 8
+            ? clampFiniteNumber(configuredLineHeight, DEFAULT_CONSOLE_LINE_HEIGHT, MIN_CONSOLE_LINE_HEIGHT, MAX_CONSOLE_LINE_HEIGHT)
+            : clampFiniteNumber(configuredLineHeight / fontSize, DEFAULT_CONSOLE_LINE_HEIGHT, MIN_CONSOLE_LINE_HEIGHT, MAX_CONSOLE_LINE_HEIGHT)
         : deriveEditorLineHeightRatio(options.editorLineHeight, fontSize);
 
     return {

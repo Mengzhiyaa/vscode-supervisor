@@ -11,6 +11,7 @@ export type ConsoleInputCommand =
     | { kind: "historyDown" }
     | { kind: "historyClear" }
     | { kind: "openInEditor" }
+    | { kind: "cancelSubmission"; skipHostRequest?: boolean }
     | { kind: "setPendingCode"; code?: string }
     | { kind: "historyAdd"; input: string; when?: number }
     | { kind: "historySet"; entries: { input: string; when?: number }[] };

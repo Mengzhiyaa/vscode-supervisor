@@ -30,6 +30,7 @@ export interface ConsoleThemeRule {
 export interface ConsoleThemeData {
     base: 'vs' | 'vs-dark' | 'hc-black' | 'hc-light';
     rules: ConsoleThemeRule[];
+    fileIconThemeSettingsId?: string;
 }
 
 export interface ConsoleSettings {
@@ -37,7 +38,13 @@ export interface ConsoleSettings {
     fontFamily: string;
     fontSize: number;
     lineHeight: number;
+    fontLigatures: string;
+    fontVariations: string;
+    fontWeight: string;
+    letterSpacing: number;
     showResourceMonitor: boolean;
+    promptWhenIncomplete: boolean;
+    sashSize: number;
 }
 
 export interface SerializedRuntimeItemPayload {
@@ -49,7 +56,8 @@ export interface SerializedActivityItemPayload {
 }
 
 export interface ConsoleRuntimeChange {
-    kind: 'appendRuntimeItem' | 'appendActivityItem' | 'replaceActivityOutput' | 'clearActivityOutput' | 'updateActivityInputState';
+    kind: 'appendRuntimeItem' | 'replaceRuntimeItem' | 'appendActivityItem' | 'replaceActivityOutput' | 'clearActivityOutput' | 'updateActivityInputState';
+    targetId?: string;
     parentId?: string;
     outputId?: string;
     state?: 'provisional' | 'executing' | 'completed' | 'cancelled';
@@ -101,6 +109,30 @@ export namespace IsCompleteRequest {
     }
 
     export const type = new RequestType<Params, Result, void>('console/isComplete');
+}
+
+export namespace SubmitCodeRequest {
+
+    export interface Params {
+        code: string;
+        sessionId: string;
+        checkCompleteness: boolean;
+    }
+
+    export interface Result {
+        status: 'executed' | 'incomplete' | 'cancelled' | 'failed';
+    }
+
+    export const type = new RequestType<Params, Result, void>('console/submitCode');
+}
+
+export namespace CancelSubmissionRequest {
+
+    export interface Params {
+        sessionId: string;
+    }
+
+    export const type = new RequestType<Params, void, void>('console/cancelSubmission');
 }
 
 export namespace InterruptRequest {
@@ -182,6 +214,11 @@ export namespace GetConsoleSettingsRequest {
     export const type = new RequestType0<ConsoleSettings, void>('console/getSettings');
 }
 
+export namespace WorkspaceRequestTrustRequest {
+
+    export const type = new RequestType0<void, void>('console/requestWorkspaceTrust');
+}
+
 export namespace SetConsoleShowResourceMonitorRequest {
 
     export interface Params {
@@ -199,6 +236,26 @@ export namespace ConsoleRequestFullStateRequest {
     }
 
     export const type = new RequestType<Params, void, void>('console/requestFullState');
+}
+
+export namespace ConsoleFindCommandNotification {
+
+    export interface Params {
+        command: 'focus' | 'next' | 'previous' | 'close';
+    }
+
+    export const type = new NotificationType<Params>('console/findCommand');
+}
+
+export namespace ConsoleContextKeysChangedNotification {
+
+    export interface Params {
+        consoleFocused: boolean;
+        findVisible: boolean;
+        findInputFocused: boolean;
+    }
+
+    export const type = new NotificationType<Params>('console/contextKeysChanged');
 }
 
 export namespace ClearOutputNotification {
@@ -366,6 +423,8 @@ export namespace RuntimeStartupPhaseNotification {
     export interface Params {
         phase: 'initializing' | 'awaitingTrust' | 'reconnecting' | 'newFolderTasks' | 'starting' | 'discovering' | 'complete';
         discoveredCount?: number;
+        expectedCount?: number;
+        latestRuntimePath?: string;
         runtimeStartupEvent?: RuntimeStartupEvent;
     }
 

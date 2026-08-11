@@ -7,6 +7,7 @@
 <script lang="ts">
     import type { HistoryMatch } from "./history";
     import HistoryCompletionItem from "./HistoryCompletionItem.svelte";
+    import { localize } from "$lib/localization";
 
     interface Props {
         /** The list of history items to display */
@@ -52,7 +53,10 @@
         }
     }
 
-    const noMatchMessage = "No matching history items";
+    const noMatchMessage = localize(
+        "console.history.noMatches",
+        "No matching history items",
+    );
 </script>
 
 <svelte:window onclick={handleWindowClick} />
@@ -63,7 +67,7 @@
     style:bottom="{bottomPx}px"
     style:left="{leftPx}px"
     role="listbox"
-    aria-label="History browser"
+    aria-label={localize("console.history.browser", "History browser")}
 >
     {#if items.length === 0}
         <div class="no-results">{noMatchMessage}</div>

@@ -119,6 +119,7 @@ export interface SerializedConsoleActivityItemPayload {
 export type ConsoleRuntimeItemsChangeEvent =
     | { kind: 'restore' }
     | { kind: 'appendRuntimeItem'; item: SerializedConsoleRuntimeItemPayload }
+    | { kind: 'replaceRuntimeItem'; targetId: string; item: SerializedConsoleRuntimeItemPayload }
     | { kind: 'appendActivityItem'; parentId: string; item: SerializedConsoleActivityItemPayload }
     | { kind: 'replaceActivityOutput'; parentId: string; outputId: string; item: SerializedConsoleActivityItemPayload }
     | { kind: 'clearActivityOutput'; parentId: string }
@@ -133,6 +134,8 @@ export interface DidNavigateInputHistoryEventArgs {
     /** Whether to use prefix matching */
     usePrefixMatch: boolean;
 }
+
+export type ConsoleSubmissionResult = 'executed' | 'incomplete' | 'cancelled' | 'failed';
 
 /**
  * IPositronConsoleService interface (1:1 Positron).
@@ -267,6 +270,13 @@ export interface IPositronConsoleInstance extends vscode.Disposable {
         executionId?: string,
         executionMetadata?: Record<string, unknown>,
     ): void;
+    readonly codeSubmissionInProgress: boolean;
+    submitCode(
+        code: string,
+        attribution: IConsoleCodeAttribution,
+        checkCompleteness?: boolean,
+    ): Promise<ConsoleSubmissionResult>;
+    cancelCodeSubmission(): void;
     replyToPrompt(value: string): void;
     attachRuntimeSession(session: RuntimeSession | undefined, mode: SessionAttachMode): void;
     showRestoreFailure(error: Error): void;

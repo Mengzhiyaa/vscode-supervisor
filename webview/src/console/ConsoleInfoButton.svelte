@@ -8,7 +8,9 @@
     import ActionBarButton from "../shared/ActionBarButton.svelte";
     import ModalPopup from "../shared/ModalPopup.svelte";
     import { getRpcConnection } from "../lib/rpc/client";
+    import { localize } from "../lib/localization";
     import type { ConsoleState } from "../types/console";
+    import { getRuntimeDisplayPath } from "./utils/runtimeDisplayPath";
 
     type SessionOutputChannel = "console" | "kernel" | "lsp";
 
@@ -17,8 +19,9 @@
         name: string;
         runtimeName: string;
         state: ConsoleState;
+        runtimeState: ConsoleState;
         runtimePath?: string;
-        runtimeVersion?: string;
+        runtimeDisplayPath?: string;
         runtimeSource?: string;
     }
 
@@ -32,7 +35,10 @@
     let anchorElement = $state<HTMLDivElement | null>(null);
     let outputChannels = $state<SessionOutputChannel[]>([]);
     const sessionLabel = $derived(
-        session?.name || session?.runtimeVersion || session?.runtimeName || "",
+        session?.name || session?.runtimeName || "",
+    );
+    const displayPath = $derived(
+        getRuntimeDisplayPath(session?.runtimePath, session?.runtimeDisplayPath),
     );
     const outputChannelOrder: SessionOutputChannel[] = [
         "kernel",
@@ -68,39 +74,44 @@
     function getStateLabel(state: ConsoleState): string {
         switch (state) {
             case "uninitialized":
-                return "Uninitialized";
+                return localize("console.state.uninitialized", "Uninitialized");
             case "ready":
-                return "Ready";
+                return localize("console.state.ready", "Ready");
             case "busy":
-                return "Busy";
+                return localize("console.state.busy", "Busy");
             case "interrupting":
-                return "Interrupting";
+                return localize("console.state.interrupting", "Interrupting");
             case "starting":
-                return "Starting";
+                return localize("console.state.starting", "Starting");
             case "restarting":
-                return "Restarting";
+                return localize("console.state.restarting", "Restarting");
             case "exiting":
-                return "Shutting Down";
+                return localize("console.state.exiting", "Shutting Down");
             case "exited":
-                return "Exited";
+                return localize("console.state.exited", "Exited");
             case "offline":
-                return "Offline";
+                return localize("console.state.offline", "Offline");
             case "disconnected":
-                return "Disconnected";
+                return localize("console.state.disconnected", "Disconnected");
             default:
                 return state;
         }
     }
 
     function getOutputChannelLabel(channel: SessionOutputChannel): string {
-        switch (channel) {
-            case "kernel":
-                return "Show Kernel Output Channel";
-            case "console":
-                return "Show Supervisor Output Channel";
-            case "lsp":
-                return "Show LSP Output Channel";
-        }
+        const channelName = localize(
+            `console.info.channel.${channel}`,
+            channel === "kernel"
+                ? "Kernel"
+                : channel === "console"
+                  ? "Supervisor"
+                  : "LSP",
+        );
+        return localize(
+            "console.info.showOutputChannel",
+            "Show {0} Output Channel",
+            channelName,
+        );
     }
 
     async function loadOutputChannels() {
@@ -150,8 +161,8 @@
 <div class="console-info-button-container" bind:this={anchorElement}>
     <ActionBarButton
         icon="info"
-        ariaLabel="Console Information"
-        tooltip="Console Information"
+        ariaLabel={localize("console.info.title", "Console Information")}
+        tooltip={localize("console.info.title", "Console Information")}
         disabled={!session}
         onclick={handleClick}
     />
@@ -173,30 +184,38 @@
 
                         <div class="top-separator">
                             <p class="line session-id" data-testid="session-id">
-                                Session ID: {session.id}
+                                {localize(
+                                    "console.info.sessionId",
+                                    "Session ID: {0}",
+                                    session.id,
+                                )}
                             </p>
                             <p class="line" data-testid="session-state">
-                                State: {getStateLabel(session.state)}
+                                {localize(
+                                    "console.info.state",
+                                    "State: {0}",
+                                    getStateLabel(session.runtimeState),
+                                )}
                             </p>
                         </div>
 
                         <div class="top-separator">
-                            <p class="line" data-testid="runtime-name">
-                                Runtime: {session.runtimeName}
-                            </p>
-                            {#if session.runtimeVersion}
-                                <p class="line" data-testid="runtime-version">
-                                    Version: {session.runtimeVersion}
-                                </p>
-                            {/if}
-                            {#if session.runtimePath}
-                                <p class="line path" data-testid="runtime-path">
-                                    Path: {session.runtimePath}
+                            {#if displayPath}
+                                <p class="line path" data-testid="session-path">
+                                    {localize(
+                                        "console.info.runtimePath",
+                                        "Path: {0}",
+                                        displayPath,
+                                    )}
                                 </p>
                             {/if}
                             {#if session.runtimeSource}
-                                <p class="line" data-testid="runtime-source">
-                                    Source: {session.runtimeSource}
+                                <p class="line" data-testid="session-source">
+                                    {localize(
+                                        "console.info.runtimeSource",
+                                        "Source: {0}",
+                                        session.runtimeSource,
+                                    )}
                                 </p>
                             {/if}
                         </div>

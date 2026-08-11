@@ -265,6 +265,29 @@
         "category": "Ark Console"
       },
       {
+        "command": "supervisor.console.find",
+        "title": "Console: Find",
+        "category": "Ark Console"
+      },
+      {
+        "command": "supervisor.console.findNext",
+        "title": "Console: Find Next",
+        "category": "Ark Console",
+        "enablement": "supervisor.consoleFindVisible"
+      },
+      {
+        "command": "supervisor.console.findPrevious",
+        "title": "Console: Find Previous",
+        "category": "Ark Console",
+        "enablement": "supervisor.consoleFindVisible"
+      },
+      {
+        "command": "supervisor.console.findClose",
+        "title": "Console: Close Find",
+        "category": "Ark Console",
+        "enablement": "supervisor.consoleFindVisible"
+      },
+      {
         "command": "supervisor.dataExplorer.copy",
         "title": "Copy",
         "category": "Ark Data Explorer",
@@ -446,6 +469,29 @@
         "command": "supervisor.console.clearConsole",
         "key": "ctrl+l",
         "when": "view == supervisor.console"
+      },
+      {
+        "command": "supervisor.console.find",
+        "key": "ctrl+f",
+        "mac": "cmd+f",
+        "when": "view == supervisor.console"
+      },
+      {
+        "command": "supervisor.console.findNext",
+        "key": "f3",
+        "mac": "cmd+g",
+        "when": "supervisor.consoleFindVisible"
+      },
+      {
+        "command": "supervisor.console.findPrevious",
+        "key": "shift+f3",
+        "mac": "cmd+shift+g",
+        "when": "supervisor.consoleFindVisible"
+      },
+      {
+        "command": "supervisor.console.findClose",
+        "key": "escape",
+        "when": "supervisor.consoleFindVisible && !supervisor.consoleFindInputFocused"
       },
       {
         "command": "supervisor.viewer.find",
@@ -1049,8 +1095,8 @@
         "supervisor.console.fontSize": {
           "type": "number",
           "default": 14,
-          "minimum": 8,
-          "maximum": 32,
+          "minimum": 6,
+          "maximum": 100,
           "description": "Font size for the console output (in pixels). If not explicitly set in user/workspace settings, the console follows the editor font size."
         },
         "supervisor.console.fontFamily": {
@@ -1060,22 +1106,49 @@
         },
         "supervisor.console.lineHeight": {
           "type": "number",
-          "default": 1.4,
-          "minimum": 1,
-          "maximum": 3,
-          "description": "Line height multiplier for console output. If not explicitly set in user/workspace settings, the console uses the editor line height when configured, otherwise falls back to 1.4."
+          "default": 0,
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Console line height. Use 0 to inherit, a value below 8 as a multiplier, or a value of 8 or more as pixels."
         },
         "supervisor.console.scrollbackSize": {
           "type": "number",
-          "default": 1000,
-          "minimum": 100,
-          "maximum": 10000,
+          "default": 10000,
+          "minimum": 1000,
+          "maximum": 20000,
           "description": "Maximum number of lines to keep in scrollback buffer."
+        },
+        "supervisor.console.fontLigatures": {
+          "type": "string",
+          "default": "",
+          "description": "CSS font-feature-settings for the Console. Leave empty to inherit the editor setting."
+        },
+        "supervisor.console.fontVariations": {
+          "type": "string",
+          "default": "",
+          "description": "CSS font-variation-settings for the Console. Leave empty to inherit the editor setting."
+        },
+        "supervisor.console.fontWeight": {
+          "type": "string",
+          "default": "",
+          "description": "Font weight for Console input and output. Leave empty to inherit the editor setting."
+        },
+        "supervisor.console.letterSpacing": {
+          "type": "number",
+          "default": 0,
+          "minimum": -5,
+          "maximum": 20,
+          "description": "Additional letter spacing for Console input and output in pixels."
         },
         "supervisor.console.showResourceMonitor": {
           "type": "boolean",
           "default": true,
           "description": "Show CPU and memory usage in session tabs."
+        },
+        "supervisor.console.promptWhenIncomplete": {
+          "type": "boolean",
+          "default": true,
+          "description": "Check whether Console input is complete before submitting it for execution."
         },
         "supervisor.console.showNotebookConsoles": {
           "type": "boolean",

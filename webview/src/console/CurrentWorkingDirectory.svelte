@@ -9,6 +9,7 @@
     import ContextMenu, {
         type ContextMenuEntry,
     } from "../shared/ContextMenu.svelte";
+    import { localize } from "$lib/localization";
 
     interface CurrentWorkingDirectoryProps {
         readonly directoryLabel: string;
@@ -17,10 +18,11 @@
     let { directoryLabel }: CurrentWorkingDirectoryProps = $props();
 
     // Localized strings
-    const positronCurrentWorkingDirectory = "Current Working Directory";
-    const positronCopy = "Copy";
-    const positronDoubleClickToCopyPath = "Double-click to copy path";
-    const positronPathCopied = "Path copied";
+    const positronCurrentWorkingDirectory = localize("console.cwd.label", "Current Working Directory");
+    const positronCopy = localize("common.copy", "Copy");
+    const positronDoubleClickToCopyPath = localize("console.cwd.doubleClickCopy", "Double-click to copy path");
+    const positronPathCopied = localize("console.cwd.copied", "Path copied");
+    const displayDirectoryLabel = $derived(directoryLabel.replace(/\\/g, "/"));
 
     let copied = $state(false);
     let copyResetTimer: ReturnType<typeof setTimeout> | undefined;
@@ -31,7 +33,7 @@
 
     const tooltip = $derived(
         directoryLabel
-            ? `${directoryLabel}\n${
+            ? `${displayDirectoryLabel}\n${
                   copied ? positronPathCopied : positronDoubleClickToCopyPath
               }`
             : "",
@@ -129,7 +131,7 @@
     onkeydown={handleKeyDown}
 >
     <span class="codicon codicon-folder" role="presentation"></span>
-    <span class="label">{directoryLabel}</span>
+    <span class="label">{displayDirectoryLabel}</span>
 </div>
 
 {#if showContextMenu && containerEl}
@@ -156,6 +158,8 @@
             var(--vscode-foreground)
         );
         cursor: default;
+        width: 100%;
+        min-width: 0;
     }
 
     .current-working-directory-label:focus {
@@ -175,6 +179,7 @@
     }
 
     .label {
+        min-width: 0;
         overflow: hidden;
         padding-left: 5px;
         text-overflow: ellipsis;

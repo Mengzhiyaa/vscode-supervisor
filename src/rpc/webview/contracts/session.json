@@ -24,11 +24,28 @@
           "type": "string"
         },
         {
+          "name": "sessionMode",
+          "type": "'console' | 'notebook' | 'background'"
+        },
+        {
+          "name": "createdTimestamp",
+          "type": "number"
+        },
+        {
           "name": "state",
           "type": "'uninitialized' | 'starting' | 'ready' | 'busy' | 'offline' | 'interrupting' | 'restarting' | 'exiting' | 'exited' | 'disconnected'"
         },
         {
+          "name": "runtimeState",
+          "type": "'uninitialized' | 'starting' | 'ready' | 'busy' | 'offline' | 'interrupting' | 'restarting' | 'exiting' | 'exited' | 'disconnected'"
+        },
+        {
           "name": "runtimePath",
+          "optional": true,
+          "type": "string"
+        },
+        {
+          "name": "runtimeDisplayPath",
           "optional": true,
           "type": "string"
         },

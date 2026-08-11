@@ -13,7 +13,10 @@
 -->
 <script lang="ts">
     import { onMount, onDestroy, tick } from "svelte";
-    import type { MessageConnection } from "vscode-jsonrpc/browser";
+    import {
+        CancellationTokenSource,
+        type MessageConnection,
+    } from "vscode-jsonrpc/browser";
     import { monaco, ensureMonacoRuntime } from "$lib/monaco/setup";
     import {
         ensureLanguageTextMateTokenizerReady,
@@ -67,7 +70,11 @@
         readonly onInterrupt: (sessionId: string) => void;
         readonly onActivate: (sessionId: string) => void;
         readonly onSelectAll: () => void;
-        readonly onCodeExecuted: () => void;
+        readonly onCodeExecuted: (sessionId: string) => void;
+        readonly onSubmittingChanged?: (
+            sessionId: string,
+            submitting: boolean,
+        ) => void;
         readonly onOpenSearch?: (sessionId: string) => void;
         readonly onOpenInEditor?: (sessionId: string, code: string) => void;
         readonly onClearConsole?: (sessionId: string) => void;
@@ -101,6 +108,7 @@
         onActivate,
         onSelectAll,
         onCodeExecuted,
+        onSubmittingChanged,
         onOpenSearch,
         onOpenInEditor,
         onClearConsole,
@@ -161,8 +169,15 @@
     // svelte-ignore state_referenced_locally
     const stateRef = { current: consoleState };
 
-    // Ref to prevent concurrent execute attempts from key-repeat or rapid Enter presses.
-    const executeAttemptInProgressRef = { current: false };
+    // Submission state. Only one completeness check runs at a time. A second
+    // Enter cancels the old check and replays the combined submitted code and
+    // type-ahead once cancellation settles.
+    const submissionInFlightRef = { current: false };
+    const submissionSessionIdRef = { current: undefined as string | undefined };
+    const resubmitQueuedRef = { current: false };
+    const submissionCancellationSourceRef = {
+        current: undefined as CancellationTokenSource | undefined,
+    };
 
     // Tracks a queued Enter press that should execute once this session is ready again.
     const deferredExecuteSessionIdRef = { current: undefined as string | undefined };
@@ -360,6 +375,10 @@
             fontFamily: settings.fontFamily,
             fontSize: settings.fontSize,
             lineHeight: getConsoleLineHeightPx(settings),
+            fontLigatures: settings.fontLigatures,
+            fontVariations: settings.fontVariations,
+            fontWeight: settings.fontWeight,
+            letterSpacing: settings.letterSpacing,
         });
 
         const layoutWidth =
@@ -852,6 +871,9 @@
                     codeEditorWidget?.getValue() ?? "",
                 );
                 break;
+            case "cancelSubmission":
+                cancelCodeSubmission();
+                break;
             case "setPendingCode":
                 if (codeEditorWidget) {
                     codeEditorWidget.setValue(command.code || "");
@@ -979,153 +1001,268 @@
         );
     }
 
-    async function submitCodeEditorWidgetCode(code: string): Promise<boolean> {
-        const trimmedCode = code.trim();
-        if (!trimmedCode) {
-            return false;
+    function restoreSubmittedCodeWithTypeAhead(
+        model: monaco.editor.ITextModel,
+        code: string,
+    ): void {
+        const typeAhead = model.getValue();
+        model.setValue(typeAhead ? `${code}\n${typeAhead}` : code);
+        if (codeEditorWidget.getModel() === model) {
+            updateCodeEditorWidgetPosition(Position.Last, Position.Last);
+            codeEditorWidget.updateOptions(createLineNumbersOptions());
+            codeEditorWidget.render(true);
         }
+    }
 
-        const submittedSessionId = currentSessionId();
-
+    async function submitCodeEditorWidgetCode(
+        submittedSessionId: string,
+        model: monaco.editor.ITextModel,
+        code: string,
+    ): Promise<boolean> {
         if (deferredExecuteSessionIdRef.current === submittedSessionId) {
             deferredExecuteSessionIdRef.current = undefined;
         }
 
-        // Clear current code fragment
-        currentCodeFragment = undefined;
-
-        // Clear the code editor widget's model
-        codeEditorWidget.setValue("");
-
-        // Immediately change the prompt to spaces to eliminate flickering (Positron pattern)
         const promptWidth = Math.max(
             inputPrompt.length,
             continuationPrompt.length,
         );
-        codeEditorWidget.updateOptions({
-            lineNumbers: (_: number) => " ".repeat(promptWidth),
-            lineNumbersMinChars: promptWidth,
-        });
+        if (codeEditorWidget.getModel() === model) {
+            codeEditorWidget.updateOptions({
+                lineNumbers: (_: number) => " ".repeat(promptWidth),
+                lineNumbersMinChars: promptWidth,
+            });
+        }
 
         try {
-            // Execute the code against the session that owned the input when
-            // Enter was pressed. Wait for the extension host to accept it so a
-            // rejected RPC cannot silently discard the user's code.
             await onExecute(submittedSessionId, code);
         } catch (error) {
-            // The editor is cleared optimistically to match Positron's prompt
-            // transition. Restore only if the user has not already begun a new
-            // draft while the request was in flight.
-            if (
-                currentSessionId() === submittedSessionId &&
-                codeEditorWidget.getValue() === ""
-            ) {
-                codeEditorWidget.setValue(code);
-                updateCodeEditorWidgetPosition(
-                    Position.Last,
-                    Position.Last,
-                );
-                codeEditorWidget.updateOptions(createLineNumbersOptions());
-            }
-            codeEditorWidget.render(true);
+            restoreSubmittedCodeWithTypeAhead(model, code);
             console.error("Execute error:", error);
-
-            // The Enter event has been handled by restoring the original code;
-            // callers must not append a newline on top of it.
             return true;
         }
 
-        // Only successful submissions enter history.
-        addHistoryEntry(code);
-
-        // Render the code editor widget
-        codeEditorWidget.render(true);
-
-        // Call the code executed callback
-        onCodeExecuted();
-
+        if (codeEditorWidget.getModel() === model) {
+            codeEditorWidget.render(true);
+        }
+        onCodeExecuted(submittedSessionId);
         return true;
     }
 
     /**
-     * Executes the code editor widget's code, if possible (Positron pattern).
-     * Handles all four status types: Complete, Incomplete, Invalid, Unknown.
+     * Submit the current editor contents while preserving type-ahead. A second
+     * Enter cancels the current completeness check, merges the first submission
+     * above the new draft, and rechecks that combined input in order.
      */
     async function executeCodeEditorWidgetCodeIfPossible(): Promise<boolean> {
-        if (executeAttemptInProgressRef.current) {
+        const requestedSessionId = currentSessionId();
+        if (submissionInFlightRef.current) {
+            if (submissionSessionIdRef.current === requestedSessionId) {
+                resubmitQueuedRef.current = true;
+            } else {
+                deferredExecuteSessionIdRef.current = requestedSessionId;
+                resubmitQueuedRef.current = false;
+            }
+            submissionCancellationSourceRef.current?.cancel();
+            if (connection && submissionSessionIdRef.current) {
+                void connection.sendRequest("console/cancelSubmission", {
+                    sessionId: submissionSessionIdRef.current,
+                });
+            }
             return true;
         }
 
-        const code = codeEditorWidget.getValue();
-
-        if (!code.trim() || stateRef.current !== "ready") {
+        if (
+            !codeEditorWidget.getValue().trim() ||
+            stateRef.current !== "ready"
+        ) {
             return false;
         }
 
-        executeAttemptInProgressRef.current = true;
+        const submissionModel = codeEditorWidget.getModel();
+        if (!submissionModel) {
+            return false;
+        }
+
+        submissionInFlightRef.current = true;
+        submissionSessionIdRef.current = requestedSessionId;
+        onSubmittingChanged?.(requestedSessionId, true);
 
         try {
-            // Check if code is complete (Positron pattern: use runtime isCodeFragmentComplete)
-            if (connection) {
-                try {
-                    const result = (await connection.sendRequest(
-                        "console/isComplete",
-                        {
-                            code,
-                            sessionId: currentSessionId(),
-                        },
-                    )) as { status: string };
-
-                    // Handle status according to Positron pattern
-                    switch (result.status) {
-                        case "complete":
-                            // Code is complete, proceed to execute
-                            break;
-
-                        case "incomplete":
-                            // Code is incomplete, don't execute - let user add more lines
-                            return false;
-
-                        case "invalid":
-                            // Code has syntax errors, log warning but execute anyway
-                            // (so user can see the error from the interpreter)
-                            console.warn(
-                                `Executing invalid code fragment: '${code}'`,
-                            );
-                            break;
-
-                        case "unknown":
-                            // Could not determine completeness, log warning but execute anyway
-                            console.warn(
-                                `Could not determine whether code fragment: '${code}' is complete.`,
-                            );
-                            break;
-
-                        default:
-                            // Unknown status, treat as complete
-                            console.warn(
-                                `Unknown isComplete status: ${result.status}`,
-                            );
-                            break;
-                    }
-                } catch (e) {
-                    // Handle errors - show notification to user (Positron pattern)
-                    if (e instanceof Error) {
-                        console.error(
-                            `Cannot execute code: ${e.name} (${e.message})`,
-                        );
-                    } else {
-                        console.error(
-                            `Cannot execute code: ${JSON.stringify(e)}`,
-                        );
-                    }
-                    return false;
+            for (;;) {
+                const submittedSessionId = requestedSessionId;
+                const submittedCode = submissionModel.getValue();
+                if (!submittedCode.trim()) {
+                    return true;
                 }
-            }
 
-            return await submitCodeEditorWidgetCode(code);
+                currentCodeFragment = undefined;
+                submissionModel.setValue("");
+                resubmitQueuedRef.current = false;
+
+                let status = "executed";
+                let cancelled = false;
+
+                if (connection) {
+                    const cancellationSource = new CancellationTokenSource();
+                    submissionCancellationSourceRef.current = cancellationSource;
+                    try {
+                        const result = (await connection.sendRequest(
+                            "console/submitCode",
+                            {
+                                code: submittedCode,
+                                sessionId: submittedSessionId,
+                                checkCompleteness:
+                                    consoleSettings.promptWhenIncomplete,
+                            },
+                            cancellationSource.token,
+                        )) as { status: string };
+                        if (cancellationSource.token.isCancellationRequested) {
+                            cancelled = true;
+                        } else {
+                            status = result.status;
+                        }
+                    } catch (error) {
+                        if (cancellationSource.token.isCancellationRequested) {
+                            cancelled = true;
+                        } else {
+                            console.error("Cannot execute code:", error);
+                            restoreSubmittedCodeWithTypeAhead(
+                                submissionModel,
+                                submittedCode,
+                            );
+                            return true;
+                        }
+                    } finally {
+                        if (
+                            submissionCancellationSourceRef.current ===
+                            cancellationSource
+                        ) {
+                            submissionCancellationSourceRef.current = undefined;
+                        }
+                        cancellationSource.dispose();
+                    }
+                } else {
+                    await submitCodeEditorWidgetCode(
+                        submittedSessionId,
+                        submissionModel,
+                        submittedCode,
+                    );
+                    if (
+                        resubmitQueuedRef.current &&
+                        submissionModel.getValue().trim()
+                    ) {
+                        continue;
+                    }
+                    return true;
+                }
+
+                if (cancelled) {
+                    restoreSubmittedCodeWithTypeAhead(
+                        submissionModel,
+                        submittedCode,
+                    );
+                    if (
+                        resubmitQueuedRef.current &&
+                        submissionModel.getValue().trim()
+                    ) {
+                        continue;
+                    }
+                    return true;
+                }
+
+                switch (status) {
+                    case "executed":
+                        if (codeEditorWidget.getModel() === submissionModel) {
+                            codeEditorWidget.render(true);
+                        }
+                        onCodeExecuted(submittedSessionId);
+                        break;
+                    case "incomplete":
+                        restoreSubmittedCodeWithTypeAhead(
+                            submissionModel,
+                            submittedCode,
+                        );
+                        if (
+                            resubmitQueuedRef.current &&
+                            submissionModel.getValue().trim()
+                        ) {
+                            continue;
+                        }
+                        return false;
+                    case "cancelled":
+                        restoreSubmittedCodeWithTypeAhead(
+                            submissionModel,
+                            submittedCode,
+                        );
+                        if (
+                            resubmitQueuedRef.current &&
+                            submissionModel.getValue().trim()
+                        ) {
+                            continue;
+                        }
+                        return true;
+                    case "failed":
+                        restoreSubmittedCodeWithTypeAhead(
+                            submissionModel,
+                            submittedCode,
+                        );
+                        return true;
+                    default:
+                        console.warn(`Unknown submit status: ${status}`);
+                        restoreSubmittedCodeWithTypeAhead(
+                            submissionModel,
+                            submittedCode,
+                        );
+                        return true;
+                }
+                if (
+                    resubmitQueuedRef.current &&
+                    submissionModel.getValue().trim()
+                ) {
+                    continue;
+                }
+                return true;
+            }
         } finally {
-            executeAttemptInProgressRef.current = false;
+            submissionCancellationSourceRef.current?.dispose();
+            submissionCancellationSourceRef.current = undefined;
+            submissionInFlightRef.current = false;
+            resubmitQueuedRef.current = false;
+            submissionSessionIdRef.current = undefined;
+            onSubmittingChanged?.(requestedSessionId, false);
+            void maybeExecuteDeferredCode();
+        }
+    }
+
+    function cancelCodeSubmission(
+        sessionIdToCancel?: string,
+        skipHostRequest: boolean = false,
+    ): void {
+        if (
+            sessionIdToCancel &&
+            submissionSessionIdRef.current !== sessionIdToCancel
+        ) {
+            return;
+        }
+        resubmitQueuedRef.current = false;
+        submissionCancellationSourceRef.current?.cancel();
+        const submittingSessionId = submissionSessionIdRef.current;
+        if (connection && submittingSessionId && !skipHostRequest) {
+            void connection.sendRequest("console/cancelSubmission", {
+                sessionId: submittingSessionId,
+            });
+        }
+    }
+
+    function interruptOrCancelSubmission(): void {
+        if (
+            submissionInFlightRef.current &&
+            submissionSessionIdRef.current === currentSessionId()
+        ) {
+            cancelCodeSubmission(currentSessionId());
+        } else {
+            onInterrupt(currentSessionId());
         }
     }
 
@@ -1404,6 +1541,11 @@
 
     onDestroy(() => {
         destroyed = true;
+        const submittingSessionId = submissionSessionIdRef.current;
+        cancelCodeSubmission();
+        if (submissionInFlightRef.current && submittingSessionId) {
+            onSubmittingChanged?.(submittingSessionId, false);
+        }
         activationEpoch += 1;
         activationState = "idle";
         activatingSessionId = undefined;
@@ -1435,6 +1577,14 @@
         const activeCommittedSessionId = committedSessionId;
         const isActivationPending = activationState === "switching";
         handledCommandNonces.add(inputCommand.nonce);
+
+        if (inputCommand.command.kind === "cancelSubmission") {
+            cancelCodeSubmission(
+                targetSessionId,
+                inputCommand.command.skipHostRequest ?? false,
+            );
+            return;
+        }
 
         if (!codeEditorWidget) {
             enqueuePendingCommand(targetSessionId, inputCommand.command);
@@ -1608,7 +1758,7 @@
         if (key === "c" && isMacintosh && isInterruptChord) {
             event.preventDefault();
             event.stopPropagation();
-            onInterrupt(currentSessionId());
+            interruptOrCancelSubmission();
             return;
         }
 
@@ -1663,7 +1813,7 @@
         if (isInterruptChord) {
             event.preventDefault();
             event.stopPropagation();
-            onInterrupt(currentSessionId());
+            interruptOrCancelSubmission();
         }
     }
 
@@ -1961,10 +2111,13 @@
                         e.preventDefault();
                         e.stopPropagation();
                         disengageHistoryBrowser();
-                    } else if (stateRef.current === "busy") {
+                    } else if (
+                        stateRef.current === "busy" ||
+                        submissionInFlightRef.current
+                    ) {
                         e.preventDefault();
                         e.stopPropagation();
-                        onInterrupt(currentSessionId());
+                        interruptOrCancelSubmission();
                     }
                     return;
                 }

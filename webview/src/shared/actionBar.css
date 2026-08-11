@@ -206,8 +206,8 @@ body.vscode-high-contrast-light .action-bar-button:hover:not(:disabled),
 
 .action-bar-menu-button.border {
     height: 22px;
-    background-color: var(--vscode-positronActionBar-background);
-    border: 1px solid var(--vscode-positronActionBar-selectBorder);
+    background-color: var(--vscode-positronActionBar-background, var(--vscode-editor-background));
+    border: 1px solid var(--vscode-positronActionBar-selectBorder, var(--vscode-dropdown-border));
 }
 
 .action-bar-menu-button .action-bar-menu-icon,
@@ -216,7 +216,7 @@ body.vscode-high-contrast-light .action-bar-button:hover:not(:disabled),
     align-items: center;
     justify-content: center;
     display: flex !important;
-    height: var(--vscode-positronActionBar-iconSize);
+    height: var(--vscode-positronActionBar-iconSize, 16px);
 }
 
 .action-bar-menu-button .menu-label,
@@ -257,7 +257,7 @@ body.vscode-high-contrast-light .action-bar-button:hover:not(:disabled),
     justify-content: center;
     display: flex !important;
     font-size: 18px !important;
-    height: var(--vscode-positronActionBar-iconSize);
+    height: var(--vscode-positronActionBar-iconSize, 16px);
 }
 
 .action-bar-menu-button .action-bar-menu-icon::before,

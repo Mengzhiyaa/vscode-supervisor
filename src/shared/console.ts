@@ -30,6 +30,7 @@ export interface ConsoleThemeRule {
 export interface ConsoleThemeData {
     base: 'vs' | 'vs-dark' | 'hc-black' | 'hc-light';
     rules: ConsoleThemeRule[];
+    fileIconThemeSettingsId?: string;
 }
 
 export function deserializePromptState(

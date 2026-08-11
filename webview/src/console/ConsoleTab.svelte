@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { onDestroy, tick } from "svelte";
     /**
      * ConsoleTab.svelte - Individual session tab component
      * Based on Positron's ConsoleTab in consoleTabList.tsx
@@ -11,6 +12,7 @@
     import RuntimeIcon from "./RuntimeIcon.svelte";
     import ResourceUsageGraph from "./ResourceUsageGraph.svelte";
     import ResourceUsageStats from "./ResourceUsageStats.svelte";
+    import { localize } from "$lib/localization";
 
     interface ResourceUsage {
         cpu_percent: number;
@@ -21,6 +23,9 @@
         id: string;
         name: string;
         runtimeName: string;
+        languageId?: string;
+        sessionMode: "console" | "notebook" | "background";
+        createdTimestamp: number;
         state: ConsoleState;
         runtimePath?: string;
         runtimeVersion?: string;
@@ -32,22 +37,31 @@
     let {
         session,
         active = false,
+        hideSessionName = false,
         width = 200,
         resourceUsageHistory = [],
         showResourceMonitor = true,
+        fileIconThemeSettingsId = undefined,
         onSelect,
         onDelete,
         onRename,
+        onSessionNameHiddenChange = () => {},
         onToggleResourceMonitor = () => {},
     }: {
         session: SessionInfo;
         active: boolean;
+        hideSessionName?: boolean;
         width: number;
         resourceUsageHistory?: ResourceUsage[];
         showResourceMonitor?: boolean;
+        fileIconThemeSettingsId?: string;
         onSelect: () => void;
         onDelete: () => void;
         onRename: (newName: string) => void;
+        onSessionNameHiddenChange?: (
+            sessionId: string,
+            hidden: boolean,
+        ) => void;
         onToggleResourceMonitor?: () => void;
     } = $props();
 
@@ -65,6 +79,8 @@
     let inputRef: HTMLInputElement;
     // svelte-ignore non_reactive_update
     let tabRef: HTMLDivElement;
+    let sessionNameRef = $state<HTMLParagraphElement>();
+    let fittedSessionName = $state("");
 
     // Context menu state
     let showContextMenu = $state(false);
@@ -74,6 +90,8 @@
     // Minimum width for showing delete button
     const MINIMUM_ACTION_TAB_WIDTH = 110;
     const RESOURCE_GRAPH_HEIGHT = 24;
+    const deleteSessionLabel = localize("console.deleteSession", "Delete Session");
+    const renameLabel = localize("console.rename", "Rename...");
 
     // Computed values for resource usage
     let graphWidth = $derived(Math.max(0, width - 20));
@@ -94,16 +112,19 @@
             session.runtimeName ||
             "Session",
     );
-    const showResourceMonitorLabel = $derived("Show Resource Monitor");
+    const sessionNameIsCutShort = $derived(
+        hideSessionName || fittedSessionName !== primarySessionName,
+    );
+    const showResourceMonitorLabel = $derived(localize("console.showResourceMonitor", "Show Resource Monitor"));
     const contextMenuEntries = $derived.by(
         (): ContextMenuEntry[] => [
             {
-                label: "Rename...",
+                label: renameLabel,
                 icon: "edit",
                 onSelected: () => startRename(),
             },
             {
-                label: "Delete",
+                label: deleteSessionLabel,
                 icon: "trash",
                 disabled: deleteDisabled,
                 onSelected: () => {
@@ -117,6 +138,70 @@
             },
         ],
     );
+
+    function fitSessionName(
+        name: string,
+        availableWidth: number,
+        measure: (text: string) => number,
+    ): string {
+        if (measure(name) <= availableWidth) {
+            return name;
+        }
+
+        const separator = /[\s\p{P}\p{S}]/u;
+        let length = name.length - 1;
+        while (length >= 1) {
+            let end = length;
+            while (end > 0 && separator.test(name.charAt(end - 1))) {
+                end -= 1;
+            }
+            if (end < 1) {
+                break;
+            }
+            const candidate = `${name.slice(0, end)}…`;
+            if (measure(candidate) <= availableWidth) {
+                return candidate;
+            }
+            length = end - 1;
+        }
+        return "";
+    }
+
+    $effect(() => {
+        void width;
+        void primarySessionName;
+        void isRenaming;
+        void tick().then(() => {
+            if (!sessionNameRef) {
+                return;
+            }
+            const measureElement = document.createElement("span");
+            measureElement.style.position = "absolute";
+            measureElement.style.visibility = "hidden";
+            measureElement.style.whiteSpace = "pre";
+            sessionNameRef.appendChild(measureElement);
+            try {
+                const availableWidth =
+                    sessionNameRef.getBoundingClientRect().width;
+                fittedSessionName = fitSessionName(
+                    primarySessionName,
+                    availableWidth,
+                    (text) => {
+                        measureElement.textContent = text;
+                        return measureElement.getBoundingClientRect().width;
+                    },
+                );
+                onSessionNameHiddenChange(
+                    session.id,
+                    fittedSessionName.length === 0,
+                );
+            } finally {
+                measureElement.remove();
+            }
+        });
+    });
+
+    onDestroy(() => onSessionNameHiddenChange(session.id, false));
 
     /**
      * Handle tab click
@@ -352,6 +437,9 @@
     aria-selected={active}
     aria-controls="console-panel-{session.id}"
     aria-label={session.name}
+    title={sessionNameIsCutShort && !isRenaming
+        ? primarySessionName
+        : undefined}
     data-testid="console-tab-{session.id}"
     onclick={handleClick}
     onmousedown={handleMouseDown}
@@ -363,8 +451,10 @@
 
         <!-- Runtime icon using RuntimeIcon component -->
         <RuntimeIcon
-            sessionMode="console"
+            sessionMode={session.sessionMode}
+            languageId={session.languageId}
             base64EncodedIconSvg={session.base64EncodedIconSvg}
+            {fileIconThemeSettingsId}
         />
 
         {#if isRenaming}
@@ -380,14 +470,15 @@
             />
         {:else}
             <!-- Positron style: Tab title is session label (rename target) -->
-            <p class="session-name">
-                {primarySessionName}
+            <p class="session-name" bind:this={sessionNameRef}>
+                {hideSessionName ? "" : fittedSessionName}
             </p>
 
             {#if width > MINIMUM_ACTION_TAB_WIDTH}
                 <button
                     class="delete-button"
-                    title="Delete Session"
+                    title={deleteSessionLabel}
+                    aria-label={deleteSessionLabel}
                     data-testid="trash-session"
                     disabled={deleteDisabled}
                     onclick={handleDeleteClick}
@@ -448,9 +539,9 @@
         background-color: var(--vscode-list-hoverBackground);
     }
 
-    .tab-button:focus,
-    .tab-button:focus-visible {
-        outline: none;
+    .tab-button:not(.tab-button--active):hover {
+        outline: 1px dashed var(--vscode-contrastActiveBorder, transparent);
+        outline-offset: -1px;
     }
 
     .tab-button:focus-within:not(.tab-button--active) {
@@ -460,6 +551,8 @@
     .tab-button--active {
         background-color: var(--vscode-list-inactiveSelectionBackground);
         border-left: 1px solid var(--vscode-panelTitle-activeBorder);
+        outline: 1px solid var(--vscode-contrastActiveBorder, transparent);
+        outline-offset: -1px;
     }
 
     .tab-button--active:hover,
@@ -472,6 +565,7 @@
         align-items: center;
         height: 22px;
         width: 100%;
+        position: relative;
     }
 
     .session-name {
@@ -481,16 +575,18 @@
         overflow: hidden;
         min-width: 0;
         text-overflow: ellipsis;
+        font-variant-numeric: tabular-nums;
     }
 
     .session-name-input {
         background-color: var(--vscode-input-background);
         border: 1px solid var(--vscode-input-border);
         color: var(--vscode-input-foreground);
-        flex: 1;
-        min-width: 0;
+        position: absolute;
+        inset: 0 0 0 auto;
+        width: calc(100% - 40px);
+        min-width: 40px;
         box-sizing: border-box;
-        width: 100%;
         height: 22px;
         margin: 0;
         padding: 0 4px;

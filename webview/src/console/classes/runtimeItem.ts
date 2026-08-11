@@ -188,7 +188,8 @@ export class RuntimeItemPendingInput extends RuntimeItemStandard {
     constructor(
         id: string,
         public readonly inputPrompt: string,
-        public readonly code: string
+        public readonly code: string,
+        public readonly submitting: boolean = false,
     ) {
         super(id, code);
     }

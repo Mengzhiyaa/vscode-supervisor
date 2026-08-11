@@ -3,13 +3,18 @@
     Based on Positron's ResourceUsageStats.tsx
 -->
 <script lang="ts">
+    import { localize } from "$lib/localization";
     // Props
     let {
         cpuPercent = 0,
         memoryBytes = 0,
+        showCpu = true,
+        showMemory = true,
     }: {
         cpuPercent: number;
         memoryBytes: number;
+        showCpu?: boolean;
+        showMemory?: boolean;
     } = $props();
 
     /**
@@ -43,14 +48,21 @@
 </script>
 
 <dl class="resource-usage-stats" aria-live="polite" aria-atomic="true">
-    <div class="resource-usage-cpu">
-        <dt class="resource-usage-label">CPU</dt>
+    {#if showCpu}<div class="resource-usage-cpu">
+        <dt class="resource-usage-label">{localize("console.resource.cpu", "CPU")}</dt>
         <dd class="resource-usage-value">{cpuPercent.toFixed(0)}%</dd>
-    </div>
-    <div class="resource-usage-memory">
-        <dt class="resource-usage-label">MEM</dt>
+    </div>{/if}
+    {#if showMemory}<div
+        class="resource-usage-memory"
+        title={localize(
+            "console.resource.memoryTooltip",
+            "Memory {0}",
+            formatBytes(memoryBytes),
+        )}
+    >
+        <dt class="resource-usage-label">{localize("console.resource.memoryShort", "MEM")}</dt>
         <dd class="resource-usage-value">{formatBytes(memoryBytes)}</dd>
-    </div>
+    </div>{/if}
 </dl>
 
 <style>
