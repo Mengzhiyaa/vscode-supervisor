@@ -288,6 +288,35 @@
         "enablement": "supervisor.consoleFindVisible"
       },
       {
+        "command": "supervisor.variables.focus",
+        "title": "Variables: Focus",
+        "category": "Ark Variables"
+      },
+      {
+        "command": "supervisor.variables.expand",
+        "title": "Variables: Expand Selected",
+        "category": "Ark Variables",
+        "enablement": "supervisor.variablesHasSelection"
+      },
+      {
+        "command": "supervisor.variables.collapse",
+        "title": "Variables: Collapse Selected",
+        "category": "Ark Variables",
+        "enablement": "supervisor.variablesHasSelection"
+      },
+      {
+        "command": "supervisor.variables.copyAsText",
+        "title": "Variables: Copy as Text",
+        "category": "Ark Variables",
+        "enablement": "supervisor.variablesHasSelection"
+      },
+      {
+        "command": "supervisor.variables.copyAsHtml",
+        "title": "Variables: Copy as HTML",
+        "category": "Ark Variables",
+        "enablement": "supervisor.variablesHasSelection"
+      },
+      {
         "command": "supervisor.dataExplorer.copy",
         "title": "Copy",
         "category": "Ark Data Explorer",
@@ -492,6 +521,33 @@
         "command": "supervisor.console.findClose",
         "key": "escape",
         "when": "supervisor.consoleFindVisible && !supervisor.consoleFindInputFocused"
+      },
+      {
+        "command": "supervisor.variables.focus",
+        "key": "ctrl+k ctrl+v",
+        "mac": "cmd+k cmd+v"
+      },
+      {
+        "command": "supervisor.variables.expand",
+        "key": "right",
+        "when": "supervisor.variablesFocused && supervisor.variablesHasSelection"
+      },
+      {
+        "command": "supervisor.variables.collapse",
+        "key": "left",
+        "when": "supervisor.variablesFocused && supervisor.variablesHasSelection"
+      },
+      {
+        "command": "supervisor.variables.copyAsText",
+        "key": "ctrl+c",
+        "mac": "cmd+c",
+        "when": "supervisor.variablesFocused && supervisor.variablesHasSelection"
+      },
+      {
+        "command": "supervisor.variables.copyAsHtml",
+        "key": "ctrl+shift+c",
+        "mac": "cmd+shift+c",
+        "when": "supervisor.variablesFocused && supervisor.variablesHasSelection"
       },
       {
         "command": "supervisor.viewer.find",

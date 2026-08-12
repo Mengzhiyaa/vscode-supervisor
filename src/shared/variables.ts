@@ -39,6 +39,8 @@ export interface IVariableItem {
     hasViewer?: boolean;
     isExpanded?: boolean;
     isRecent?: boolean;
+    /** Runtime update timestamp used for stable recent sorting. */
+    updatedTime?: number;
 }
 
 export interface IVariableOverflow {

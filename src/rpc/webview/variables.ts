@@ -68,6 +68,16 @@ export namespace VariablesReadyNotification {
     export const type = new NotificationType<void>('variables/ready');
 }
 
+export namespace VariablesContextKeysChangedNotification {
+
+    export interface Params {
+        variablesFocused: boolean;
+        hasSelection: boolean;
+    }
+
+    export const type = new NotificationType<Params>('variables/contextKeysChanged');
+}
+
 export interface MemorySessionUsage {
     sessionId: string;
     sessionName: string;
@@ -119,6 +129,11 @@ export namespace MemoryUsageUpdatedNotification {
     }
 
     export const type = new NotificationType<Params>('variables/memoryUsageUpdated');
+}
+
+export namespace OpenMemorySettingsRequest {
+
+    export const type = new RequestType0<void, void>('variables/openMemorySettings');
 }
 
 export namespace MemoryUsageEnabledChangedNotification {
@@ -182,6 +197,7 @@ export interface VariableEntry {
     hasChildren?: boolean;
     hasViewer?: boolean;
     isRecent?: boolean;
+    updatedTime?: number;
     overflowValues?: number;
 }
 

@@ -56,7 +56,7 @@ export interface VariablesTreeGroup extends Omit<SharedVariableGroup, 'type'> {
  */
 export interface VariablesTreeItem extends Omit<
     SharedVariableItem,
-    'type' | 'size' | 'kind' | 'hasViewer' | 'isExpanded' | 'isRecent'
+    'type' | 'size' | 'kind' | 'hasViewer' | 'isExpanded' | 'isRecent' | 'updatedTime'
 > {
     size: number;
     kind: string;
@@ -64,6 +64,7 @@ export interface VariablesTreeItem extends Omit<
     isExpanded: boolean;
     childItems?: VariablesTreeItem[];
     isRecent: boolean;
+    updatedTime: number;
 }
 
 /**

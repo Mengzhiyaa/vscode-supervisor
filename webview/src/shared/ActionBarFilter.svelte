@@ -110,11 +110,14 @@
     .action-bar-filter-container {
         display: flex;
         align-items: center;
+        min-width: 0;
+        box-sizing: border-box;
     }
 
     .action-bar-filter-input {
         width: 100%;
         display: flex;
+        min-width: 0;
         border-radius: 4px;
         margin-right: 2px;
         align-items: center;
@@ -138,6 +141,7 @@
 
     .text-input {
         width: 100%;
+        min-width: 0;
         padding: 4px 8px;
         border-radius: 4px;
         border: none !important;

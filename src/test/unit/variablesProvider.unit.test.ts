@@ -42,8 +42,8 @@ function makeMemoryUsageServiceStub() {
 class FakeConnection {
     readonly requests = new Map<string, (params: any) => Promise<any> | any>();
 
-    onRequest(type: { method: string }, handler: (params: any) => Promise<any> | any): vscode.Disposable {
-        this.requests.set(type.method, handler);
+    onRequest(type: { method: string } | string, handler: (params: any) => Promise<any> | any): vscode.Disposable {
+        this.requests.set(typeof type === 'string' ? type : type.method, handler);
         return { dispose: () => undefined };
     }
 
@@ -149,5 +149,47 @@ suite('[Unit] variables provider active-session sync', () => {
         assert.deepStrictEqual(calls, [
             'variables:detached-session',
         ]);
+    });
+
+    test('focuses an existing data explorer for the same variable path', async () => {
+        let focused = 0;
+        let opened = 0;
+        const provider = new VariablesViewProvider(
+            vscode.Uri.file('/tmp'),
+            makeNoopLogChannel(),
+            undefined,
+            {
+                positronVariablesInstances: [],
+                activePositronVariablesInstance: undefined,
+                onDidStartPositronVariablesInstance: createEventStub(),
+                onDidStopPositronVariablesInstance: createEventStub(),
+                onDidChangeActivePositronVariablesInstance: createEventStub(),
+                getVariablesInstance: () => ({
+                    view: async () => {
+                        opened += 1;
+                        return 'new-viewer';
+                    },
+                }),
+            } as any,
+            makeMemoryUsageServiceStub(),
+            () => [],
+            {
+                getInstanceForVariablePath: () => ({
+                    identifier: 'existing-viewer',
+                    requestFocus: () => { focused += 1; },
+                }),
+            } as any,
+        );
+        const connection = new FakeConnection();
+        (provider as any)._registerRpcHandlers(connection as any);
+
+        const result = await connection.requests.get('variables/view')?.({
+            sessionId: 'session-1',
+            path: ['iris'],
+        });
+
+        assert.strictEqual(result, 'existing-viewer');
+        assert.strictEqual(focused, 1);
+        assert.strictEqual(opened, 0);
     });
 });

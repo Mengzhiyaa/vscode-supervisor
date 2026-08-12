@@ -189,6 +189,42 @@ suite('[Unit] Supervisor package manifest', () => {
         ));
     });
 
+    test('contributes rebindable Variables focus and list commands', () => {
+        const packageJson = readPackageJson();
+        const commands = new Set(
+            (packageJson.contributes?.commands ?? []).map(entry => entry.command),
+        );
+        for (const command of [
+            'supervisor.variables.focus',
+            'supervisor.variables.expand',
+            'supervisor.variables.collapse',
+            'supervisor.variables.copyAsText',
+            'supervisor.variables.copyAsHtml',
+        ]) {
+            assert.ok(commands.has(command), `Expected ${command} command contribution`);
+        }
+
+        const keybindings = packageJson.contributes?.keybindings ?? [];
+        assert.ok(keybindings.some(binding =>
+            binding.command === 'supervisor.variables.focus' &&
+            binding.key === 'ctrl+k ctrl+v' &&
+            binding.mac === 'cmd+k cmd+v'
+        ));
+        for (const [command, key, mac] of [
+            ['supervisor.variables.expand', 'right', undefined],
+            ['supervisor.variables.collapse', 'left', undefined],
+            ['supervisor.variables.copyAsText', 'ctrl+c', 'cmd+c'],
+            ['supervisor.variables.copyAsHtml', 'ctrl+shift+c', 'cmd+shift+c'],
+        ]) {
+            assert.ok(keybindings.some(binding =>
+                binding.command === command &&
+                binding.key === key &&
+                binding.mac === mac &&
+                binding.when === 'supervisor.variablesFocused && supervisor.variablesHasSelection'
+            ));
+        }
+    });
+
     test('contributes the P0 plots contract and opt-in runtime diagnostics view', () => {
         const packageJson = readPackageJson();
         const properties = packageJson.contributes?.configuration?.properties ?? {};

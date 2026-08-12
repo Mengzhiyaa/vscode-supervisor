@@ -442,6 +442,7 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
             () => this._getLanguageWebviewLocalResourceRoots(),
             (webview) => this._getLanguageMonacoSupportModuleUris(webview),
             (webview) => this._getLanguageTextMateGrammarDefinitions(webview),
+            this._positronDataExplorerService,
         );
         this._disposables.push(this._webviewManager);
         this._disposables.push(this._languageAssetCatalog.onDidChangeSnapshot(() => {

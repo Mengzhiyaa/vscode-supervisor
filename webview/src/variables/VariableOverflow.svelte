@@ -3,29 +3,43 @@
   1:1 Positron replication - Shows "... more values" for truncated lists
 -->
 <script lang="ts">
-    // Props using Svelte 5 runes
+    import { localize } from "$lib/localization";
+    import VerticalSplitter from "./VerticalSplitter.svelte";
+
     interface Props {
+        entryId: string;
         overflowValues: number;
         indentLevel?: number;
         nameColumnWidth?: number;
         detailsColumnWidth?: number;
         selected?: boolean;
         focused?: boolean;
+        disabled?: boolean;
         style?: string;
         onselect?: () => void;
         ondeselect?: () => void;
+        onBeginResizeNameColumn: () => {
+            minimumWidth: number;
+            maximumWidth: number;
+            startingWidth: number;
+        };
+        onResizeNameColumn: (newNameColumnWidth: number) => void;
     }
 
     let {
+        entryId,
         overflowValues,
         indentLevel = 0,
         nameColumnWidth = 150,
         detailsColumnWidth = 200,
         selected = false,
         focused = false,
+        disabled = false,
         style = "",
         onselect,
         ondeselect,
+        onBeginResizeNameColumn,
+        onResizeNameColumn,
     }: Props = $props();
 
     // Detect platform for modifier key
@@ -33,12 +47,19 @@
         typeof navigator !== "undefined" &&
         navigator.platform.toLowerCase().includes("mac");
 
-    let valueText = $derived(`${overflowValues.toLocaleString()} more values`);
+    let valueText = $derived(
+        localize(
+            "variables.moreValues",
+            "{0} more values",
+            overflowValues.toLocaleString(),
+        ),
+    );
     let indentMargin = $derived(indentLevel * 20);
 
     function handleMouseDown(event: MouseEvent) {
         event.preventDefault();
         event.stopPropagation();
+        if (disabled) return;
 
         switch (event.button) {
             case 0: // Main button
@@ -56,13 +77,16 @@
 </script>
 
 <div
+    id={`variable-entry-${entryId}`}
     class="variable-overflow"
     class:selected
     class:focused
+    class:disabled
     {style}
     role="treeitem"
     tabindex="-1"
     aria-selected={selected}
+    aria-disabled={disabled}
     onmousedown={handleMouseDown}
 >
     <div
@@ -73,10 +97,14 @@
             class="name-column-indenter"
             style="margin-left: {indentMargin}px;"
         >
-            <div class="name-value">[...]</div>
+            <div class="gutter"></div>
+            <div class="name-value">…</div>
         </div>
     </div>
-    <div class="splitter"></div>
+    <VerticalSplitter
+        onBeginResize={onBeginResizeNameColumn}
+        onResize={onResizeNameColumn}
+    />
     <div
         class="details-column"
         style="width: {detailsColumnWidth -
@@ -90,58 +118,73 @@
     .variable-overflow {
         display: flex;
         align-items: center;
-        height: 22px;
+        box-sizing: border-box;
+        min-height: 26px;
+        height: 26px;
         cursor: pointer;
         user-select: none;
+        border-top: 0.5px solid
+            var(--vscode-positronVariables-border, var(--vscode-tree-tableColumnsBorder));
+        border-bottom: 0.5px solid
+            var(--vscode-positronVariables-border, var(--vscode-tree-tableColumnsBorder));
     }
 
     .variable-overflow:hover {
-        background-color: var(--vscode-list-hoverBackground);
+        background-color: var(
+            --vscode-positronVariables-rowHoverBackground,
+            var(--vscode-list-hoverBackground)
+        );
     }
 
     .variable-overflow.selected {
+        background-color: var(--vscode-list-inactiveSelectionBackground);
+        color: var(--vscode-list-inactiveSelectionForeground);
+    }
+
+    .variable-overflow.focused.selected {
         background-color: var(--vscode-list-activeSelectionBackground);
         color: var(--vscode-list-activeSelectionForeground);
     }
 
-    .variable-overflow.focused {
-        outline: 1px solid var(--vscode-focusBorder);
-        outline-offset: -1px;
+    .variable-overflow.disabled {
+        cursor: default;
+        opacity: 0.5;
     }
 
     .name-column {
         display: flex;
         align-items: center;
-        padding: 0 4px;
+        overflow: hidden;
     }
 
     .name-column-indenter {
         display: flex;
         align-items: center;
+        min-width: 0;
+    }
+
+    .gutter {
+        width: 26px;
+        min-width: 26px;
     }
 
     .name-value {
-        font-size: 12px;
         color: var(--vscode-descriptionForeground);
-        font-style: italic;
-    }
-
-    .splitter {
-        width: 1px;
-        height: 100%;
-        background-color: var(--vscode-panel-border);
-        cursor: col-resize;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
     }
 
     .details-column {
         display: flex;
         align-items: center;
-        padding: 0 4px;
+        min-width: 0;
     }
 
     .value {
-        font-size: 12px;
         color: var(--vscode-descriptionForeground);
-        font-style: italic;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
     }
 </style>

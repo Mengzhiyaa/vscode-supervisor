@@ -20,6 +20,7 @@
         VariablesGrouping,
         VariablesSorting,
     } from "../types/variables";
+    import { localize } from "$lib/localization";
 
     // Props using Svelte 5 runes
     interface Props {
@@ -30,6 +31,7 @@
         instances?: VariablesInstance[];
         activeInstanceId?: string;
         hasActiveInstance?: boolean;
+        activeInstanceDisabled?: boolean;
         memoryUsageEnabled?: boolean;
         memoryUsageSnapshot?: MemoryUsageSnapshot;
         onrefresh?: () => void;
@@ -39,6 +41,7 @@
         onsortingChange?: (sorting: VariablesSorting) => void;
         onhighlightRecentChange?: (value: boolean) => void;
         onselectInstance?: (id: string) => void;
+        onconfigureMemory?: () => void;
     }
 
     let {
@@ -49,6 +52,7 @@
         instances = [],
         activeInstanceId,
         hasActiveInstance = true,
+        activeInstanceDisabled = false,
         memoryUsageEnabled = true,
         memoryUsageSnapshot,
         onrefresh,
@@ -58,11 +62,12 @@
         onsortingChange,
         onhighlightRecentChange,
         onselectInstance,
+        onconfigureMemory,
     }: Props = $props();
 
     // Localized strings (matching Positron)
-    const refreshObjectsLabel = "Refresh objects";
-    const deleteAllObjectsLabel = "Delete all objects";
+    const refreshObjectsLabel = localize("variables.refreshObjects", "Refresh Objects");
+    const deleteAllObjectsLabel = localize("variables.deleteAllObjects", "Delete All Objects");
 
     function handleFilterTextChanged(value: string) {
         onfilterChange?.(value);
@@ -73,6 +78,7 @@
     }
 
     function handleDeleteAll() {
+        if (activeInstanceDisabled) return;
         ondeleteAll?.();
     }
 
@@ -107,7 +113,7 @@
             component: refreshSnippet,
             overflowMenuItem: {
                 label: refreshObjectsLabel,
-                icon: "positron-refresh",
+                icon: "refresh",
                 onSelected: handleRefresh,
             },
         },
@@ -117,7 +123,8 @@
             component: deleteAllSnippet,
             overflowMenuItem: {
                 label: deleteAllObjectsLabel,
-                icon: "clear-all",
+                icon: "trash",
+                disabled: activeInstanceDisabled,
                 onSelected: handleDeleteAll,
             },
         },
@@ -144,12 +151,13 @@
     <MemoryUsageMeter
         enabled={memoryUsageEnabled}
         snapshot={memoryUsageSnapshot}
+        onconfigure={onconfigureMemory}
     />
 {/snippet}
 
 {#snippet refreshSnippet()}
     <ActionBarButton
-        icon="positron-refresh"
+        icon="refresh"
         ariaLabel={refreshObjectsLabel}
         tooltip={refreshObjectsLabel}
         onclick={handleRefresh}
@@ -158,9 +166,10 @@
 
 {#snippet deleteAllSnippet()}
     <ActionBarButton
-        icon="clear-all"
+        icon="trash"
         ariaLabel={deleteAllObjectsLabel}
         tooltip={deleteAllObjectsLabel}
+        disabled={activeInstanceDisabled}
         onclick={handleDeleteAll}
     />
 {/snippet}
@@ -191,8 +200,9 @@
             </div>
             <div class="action-bar-region right">
                 <ActionBarFilter
-                    width={150}
+                    width="100%"
                     initialFilterText={filterText}
+                    placeholder={localize("variables.filter", "Filter")}
                     onFilterTextChanged={handleFilterTextChanged}
                 />
             </div>
@@ -212,5 +222,16 @@
         justify-content: space-between;
         height: var(--vscode-positronActionBar-height, 28px);
         gap: 4px;
+    }
+
+    .secondary .action-bar-region.left {
+        flex: 0 1 auto;
+        max-width: 50%;
+        overflow: hidden;
+    }
+
+    .secondary .action-bar-region.right {
+        flex: 1 1 0;
+        margin-left: 0;
     }
 </style>

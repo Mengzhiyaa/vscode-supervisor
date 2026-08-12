@@ -50,9 +50,33 @@
     });
 
     function handleKeyDown(e: KeyboardEvent) {
-        if (e.key === "Escape") {
-            e.preventDefault();
-            onClose();
+        const buttons = menuRef
+            ? Array.from(menuRef.querySelectorAll<HTMLButtonElement>(".menu-item:not(:disabled)"))
+            : [];
+        const currentIndex = document.activeElement instanceof HTMLButtonElement
+            ? buttons.indexOf(document.activeElement)
+            : -1;
+        switch (e.key) {
+            case "Escape":
+                e.preventDefault();
+                onClose();
+                break;
+            case "ArrowDown":
+                e.preventDefault();
+                buttons[(currentIndex + 1 + buttons.length) % buttons.length]?.focus();
+                break;
+            case "ArrowUp":
+                e.preventDefault();
+                buttons[(currentIndex - 1 + buttons.length) % buttons.length]?.focus();
+                break;
+            case "Home":
+                e.preventDefault();
+                buttons[0]?.focus();
+                break;
+            case "End":
+                e.preventDefault();
+                buttons.at(-1)?.focus();
+                break;
         }
     }
 
@@ -69,8 +93,9 @@
     }
 
     onMount(() => {
-        // Focus the menu for keyboard events
-        menuRef?.focus();
+        requestAnimationFrame(() => {
+            menuRef?.querySelector<HTMLButtonElement>(".menu-item:not(:disabled)")?.focus();
+        });
     });
 </script>
 
@@ -80,7 +105,7 @@
 <div
     class="context-menu-overlay"
     role="menu"
-    tabindex="0"
+    tabindex="-1"
     onkeydown={handleKeyDown}
 >
     <div

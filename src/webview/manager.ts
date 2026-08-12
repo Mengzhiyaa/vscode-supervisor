@@ -16,6 +16,7 @@ import { PositronPlotsService } from '../runtime/positronPlotsService';
 import { PositronPreviewService } from '../services/preview';
 import { PositronHelpService } from '../services/help';
 import { RuntimeStartupService } from '../runtime/runtimeStartup';
+import type { PositronDataExplorerService } from '../services/dataExplorer';
 
 /**
  * Manages all webview providers for the extension.
@@ -47,6 +48,7 @@ export class WebviewManager implements vscode.Disposable {
         private readonly _getLanguageTextMateGrammarDefinitions: (
             webview: vscode.Webview,
         ) => Readonly<Record<string, { scopeName: string; grammarUrl: string }>>,
+        private readonly _dataExplorerService?: PositronDataExplorerService,
     ) { }
 
     /**
@@ -101,6 +103,7 @@ export class WebviewManager implements vscode.Disposable {
             this._variablesService,
             this._memoryUsageService,
             this._getAdditionalLocalResourceRoots,
+            this._dataExplorerService,
         );
         this._disposables.push(
             vscode.window.registerWebviewViewProvider(
@@ -111,7 +114,27 @@ export class WebviewManager implements vscode.Disposable {
                         retainContextWhenHidden: true
                     }
                 }
-            )
+            ),
+            vscode.commands.registerCommand(
+                CoreCommandIds.variablesFocus,
+                () => vscode.commands.executeCommand(`${ViewIds.variables}.focus`),
+            ),
+            vscode.commands.registerCommand(
+                CoreCommandIds.variablesExpand,
+                () => this._variablesProvider?.runListCommand('expand'),
+            ),
+            vscode.commands.registerCommand(
+                CoreCommandIds.variablesCollapse,
+                () => this._variablesProvider?.runListCommand('collapse'),
+            ),
+            vscode.commands.registerCommand(
+                CoreCommandIds.variablesCopyAsText,
+                () => this._variablesProvider?.runListCommand('copyAsText'),
+            ),
+            vscode.commands.registerCommand(
+                CoreCommandIds.variablesCopyAsHtml,
+                () => this._variablesProvider?.runListCommand('copyAsHtml'),
+            ),
         );
 
         // Plots Sidebar Provider

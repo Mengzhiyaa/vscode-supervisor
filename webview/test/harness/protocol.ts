@@ -75,6 +75,7 @@ export interface VariableEntry {
     hasChildren?: boolean;
     hasViewer?: boolean;
     isRecent?: boolean;
+    updatedTime?: number;
     overflowValues?: number;
 }
 
@@ -239,6 +240,10 @@ export const VariablesMethods = {
     formatForClipboard: 'variables/formatForClipboard',
     clear: 'variables/clear',
     view: 'variables/view',
+    getMemoryUsage: 'variables/getMemoryUsage',
+    memoryUsageUpdated: 'variables/memoryUsageUpdated',
+    memoryUsageEnabledChanged: 'variables/memoryUsageEnabledChanged',
+    openMemorySettings: 'variables/openMemorySettings',
 } as const;
 
 export const PlotsMethods = {

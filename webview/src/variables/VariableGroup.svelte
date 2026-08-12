@@ -10,6 +10,7 @@
         expanded?: boolean;
         selected?: boolean;
         focused?: boolean;
+        disabled?: boolean;
         style?: string;
         onselect?: () => void;
         ondeselect?: () => void;
@@ -23,6 +24,7 @@
         expanded = true,
         selected = false,
         focused = false,
+        disabled = false,
         style = "",
         onselect,
         ondeselect,
@@ -38,6 +40,7 @@
     function handleMouseDown(event: MouseEvent) {
         event.preventDefault();
         event.stopPropagation();
+        if (disabled) return;
 
         switch (event.button) {
             case 0: // Main button
@@ -60,25 +63,30 @@
     function handleChevronMouseDown(event: MouseEvent) {
         event.preventDefault();
         event.stopPropagation();
+        if (disabled) return;
     }
 
     function handleChevronMouseUp(event: MouseEvent) {
         event.preventDefault();
         event.stopPropagation();
+        if (disabled) return;
         ontoggleExpand?.();
     }
 </script>
 
 <div
+    id={`variable-entry-${groupId}`}
     class="variable-group"
     class:selected
     class:focused
+    class:disabled
     {style}
     data-group-id={groupId}
     role="treeitem"
     tabindex="-1"
     aria-expanded={expanded}
     aria-selected={selected}
+    aria-disabled={disabled}
     onmousedown={handleMouseDown}
 >
     <div
@@ -118,6 +126,13 @@
             var(--vscode-positronVariables-border, var(--vscode-panel-border));
         user-select: none;
         -webkit-user-select: none;
+        min-height: 26px;
+        height: 26px;
+    }
+
+    .variable-group.disabled {
+        cursor: default;
+        opacity: 0.5;
     }
 
     .variable-group:hover {

@@ -250,6 +250,8 @@ export function registerVariablesDefaults(
     backend.onRequest(VariablesMethods.formatForClipboard, () => 'clipboard');
     backend.onRequest(VariablesMethods.clear, () => undefined);
     backend.onRequest(VariablesMethods.view, () => undefined);
+    backend.onRequest(VariablesMethods.getMemoryUsage, () => ({ enabled: false }));
+    backend.onRequest(VariablesMethods.openMemorySettings, () => undefined);
 }
 
 export function registerPlotsDefaults(

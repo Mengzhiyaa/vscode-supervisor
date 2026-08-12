@@ -201,9 +201,9 @@ export class PositronVariablesService implements IPositronVariablesService {
 
             // Update active if needed
             if (this._activeVariablesInstance === instance) {
-                const remaining = this.positronVariablesInstances;
-                const nextActive = remaining.length > 0
-                    ? remaining[0] as PositronVariablesInstance
+                const foregroundSessionId = this._sessionManager.activeSessionId;
+                const nextActive = foregroundSessionId
+                    ? this._variablesInstancesBySessionId.get(foregroundSessionId)
                     : undefined;
                 this._setActivePositronVariablesInstance(nextActive);
             }
@@ -220,6 +220,9 @@ export class PositronVariablesService implements IPositronVariablesService {
     }
 
     private _setActivePositronVariablesInstance(instance: PositronVariablesInstance | undefined): void {
+        if (this._activeVariablesInstance === instance) {
+            return;
+        }
         this._activeVariablesInstance = instance;
         if (instance) {
             void instance.requestRefresh().catch(error => {

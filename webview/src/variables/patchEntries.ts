@@ -116,7 +116,8 @@ function itemsEqual(a: IVariableItem, b: IVariableItem): boolean {
         a.hasViewer === b.hasViewer &&
         a.isExpanded === b.isExpanded &&
         a.indentLevel === b.indentLevel &&
-        a.isRecent === b.isRecent
+        a.isRecent === b.isRecent &&
+        a.updatedTime === b.updatedTime
     );
 }
 

@@ -5,15 +5,15 @@
 /* CSS Variables for Positron-specific variables */
 :root {
     /* Positron Variables specific colors */
-    --vscode-positronVariables-foreground: var(--vscode-foreground);
-    --vscode-positronVariables-background: var(--vscode-sideBar-background);
-    --vscode-positronVariables-border: var(--vscode-panel-border, rgba(128, 128, 128, 0.35));
+    --vscode-positronVariables-foreground: var(--vscode-editor-foreground, var(--vscode-foreground));
+    --vscode-positronVariables-background: var(--vscode-panel-background, var(--vscode-editor-background));
+    --vscode-positronVariables-border: var(--vscode-tree-tableColumnsBorder, var(--vscode-panel-border, rgba(128, 128, 128, 0.35)));
     --vscode-positronVariables-rowHoverBackground: var(--vscode-list-hoverBackground);
     --vscode-positronVariables-activeSelectionBackground: var(--vscode-list-activeSelectionBackground);
     --vscode-positronVariables-activeSelectionForeground: var(--vscode-list-activeSelectionForeground);
     --vscode-positronVariables-inactiveSelectionBackground: var(--vscode-list-inactiveSelectionBackground);
     --vscode-positronVariables-inactiveSelectionForeground: var(--vscode-list-inactiveSelectionForeground);
-    --vscode-positronVariables-headerBackground: var(--vscode-sideBarSectionHeader-background);
+    --vscode-positronVariables-headerBackground: var(--vscode-editorGroupHeader-tabsBackground, var(--vscode-editor-background));
 
     /* Action bar height - matching Positron */
     --vscode-positronActionBar-height: 28px;

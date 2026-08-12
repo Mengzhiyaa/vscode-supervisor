@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { localize } from "$lib/localization";
     import VerticalSplitter from "./VerticalSplitter.svelte";
 
     interface Props {
@@ -17,6 +18,7 @@
         focused?: boolean;
         recent?: boolean;
         viewerLoading?: boolean;
+        disabled?: boolean;
         rightText?: string;
         onselect?: (id: string) => void;
         ondeselect?: () => void;
@@ -47,6 +49,7 @@
         focused = false,
         recent = false,
         viewerLoading = false,
+        disabled = false,
         rightText = "",
         onselect,
         ondeselect,
@@ -66,6 +69,15 @@
     function handleMouseDown(event: MouseEvent) {
         event.preventDefault();
         event.stopPropagation();
+        if (disabled) {
+            if (
+                event.button === 2 ||
+                (event.button === 0 && isMac && event.ctrlKey)
+            ) {
+                oncontextMenu?.(id, event.clientX, event.clientY);
+            }
+            return;
+        }
 
         switch (event.button) {
             case 0:
@@ -89,7 +101,7 @@
         event.preventDefault();
         event.stopPropagation();
 
-        if (hasViewer) {
+        if (!disabled && hasViewer) {
             onview?.(id);
         }
     }
@@ -98,22 +110,25 @@
         event.preventDefault();
         event.stopPropagation();
 
-        if (hasChildren) {
+        if (!disabled && hasChildren) {
             ontoggleExpand?.(id);
         }
     }
 </script>
 
 <div
+    id={`variable-entry-${id}`}
     class="variable-item"
     class:selected
     class:focused
     class:recent
-    role="button"
-    tabindex="0"
+    class:disabled
+    role="treeitem"
+    tabindex="-1"
+    aria-selected={selected}
+    aria-disabled={disabled}
     onmousedown={handleMouseDown}
     ondblclick={handleDoubleClick}
-    onkeydown={(e) => e.key === "Enter" && onselect?.(id)}
 >
     <div
         class="name-column"
@@ -124,7 +139,7 @@
                 <button
                     class="expand-collapse-area"
                     onclick={handleToggle}
-                    disabled={!hasChildren}
+                    disabled={disabled || !hasChildren}
                 >
                     {#if hasChildren}
                         <span
@@ -157,13 +172,19 @@
                     class:enabled={!viewerLoading}
                     class:disabled={viewerLoading}
                     title={viewerLoading
-                        ? "Loading..."
+                        ? localize("variables.loading", "Loading...")
                         : kind === "table"
-                          ? "View Data Table"
+                          ? localize(
+                                "variables.viewDataTable",
+                                "View Data Table",
+                            )
                           : kind === "connection"
-                            ? "View Connection"
-                            : "View"}
-                    disabled={viewerLoading}
+                            ? localize(
+                                  "variables.viewConnection",
+                                  "View Connection",
+                              )
+                            : localize("variables.view", "View")}
+                    disabled={disabled || viewerLoading}
                     onclick={(event) => {
                         event.preventDefault();
                         event.stopPropagation();
@@ -199,6 +220,7 @@
         border-bottom: 0.5px solid
             var(--vscode-positronVariables-border, var(--vscode-panel-border));
         min-height: 26px;
+        height: 26px;
     }
 
     .variable-item:hover {
@@ -206,6 +228,15 @@
             --vscode-positronVariables-rowHoverBackground,
             var(--vscode-list-hoverBackground)
         );
+    }
+
+    .variable-item.disabled {
+        cursor: default;
+        opacity: 0.5;
+    }
+
+    .variable-item.disabled:hover {
+        background: transparent;
     }
 
     .variable-item.selected {

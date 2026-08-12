@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { onMount } from "svelte";
     /**
      * ConfirmDialog.svelte
      * Confirmation dialog component for destructive actions like "Delete All Variables".
@@ -23,15 +24,31 @@
         onCancel,
     }: Props = $props();
 
+    let overlay = $state<HTMLDivElement | null>(null);
+    let cancelButton = $state<HTMLButtonElement | null>(null);
+
     function handleKeyDown(e: KeyboardEvent) {
         if (e.key === "Escape") {
             e.preventDefault();
             onCancel();
-        } else if (e.key === "Enter") {
+        } else if (e.key === "Tab" && overlay) {
             e.preventDefault();
-            onConfirm();
+            const buttons = Array.from(overlay.querySelectorAll<HTMLButtonElement>("button"));
+            const currentIndex = buttons.indexOf(document.activeElement as HTMLButtonElement);
+            const nextIndex = e.shiftKey
+                ? (currentIndex - 1 + buttons.length) % buttons.length
+                : (currentIndex + 1) % buttons.length;
+            buttons[nextIndex]?.focus();
         }
     }
+
+    onMount(() => {
+        const previousFocus = document.activeElement instanceof HTMLElement
+            ? document.activeElement
+            : null;
+        cancelButton?.focus();
+        return () => queueMicrotask(() => previousFocus?.focus());
+    });
 
     function handleBackdropClick(e: MouseEvent) {
         if (e.target === e.currentTarget) {
@@ -42,6 +59,7 @@
 
 <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 <div
+    bind:this={overlay}
     class="dialog-overlay"
     role="dialog"
     aria-modal="true"
@@ -58,7 +76,7 @@
             <p>{message}</p>
         </div>
         <div class="dialog-footer">
-            <button class="dialog-button secondary" onclick={onCancel}>
+            <button bind:this={cancelButton} class="dialog-button secondary" onclick={onCancel}>
                 {cancelLabel}
             </button>
             <button class="dialog-button danger" onclick={onConfirm}>

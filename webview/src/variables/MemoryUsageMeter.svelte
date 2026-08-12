@@ -5,6 +5,7 @@
         MemoryUsageSnapshot,
     } from "../types/memory";
     import { localize } from "$lib/localization";
+    import { getMemoryMeterLayout } from "./memoryUsageLayout";
 
     interface Segment {
         id: string;
@@ -22,18 +23,23 @@
     interface Props {
         enabled?: boolean;
         snapshot?: MemoryUsageSnapshot;
+        onconfigure?: () => void;
     }
 
-    let { enabled = true, snapshot }: Props = $props();
+    let { enabled = true, snapshot, onconfigure }: Props = $props();
 
     let expanded = $state(false);
     let anchorEl = $state<HTMLButtonElement | null>(null);
     let dropdownEl = $state<HTMLDivElement | null>(null);
     let dropdownStyle = $state("");
     let highlightedSegmentId = $state<string | null>(null);
+    let meterWidth = $state(0);
 
     const loading = $derived(enabled && !snapshot);
     const lowMemory = $derived(snapshot?.lowMemory);
+    const meterLayout = $derived(
+        getMemoryMeterLayout(meterWidth, !!lowMemory),
+    );
     const supervisorBytes = $derived(
         snapshot
             ? snapshot.kernelTotalBytes +
@@ -138,7 +144,7 @@
                       : []),
                   {
                       id: "overhead:extension-host",
-                      name: "Extension Host",
+                      name: localize('memory.extensionHost', 'Extension Host'),
                       bytes: snapshot.extensionHostOverheadBytes,
                       className: "overhead",
                   },
@@ -211,7 +217,7 @@
     }
 
     function rowWidth(bytes: number): number {
-        return Math.max(2, (bytes / maxRowBytes) * 100);
+        return Math.max(2, (bytes / maxRowBytes) * 85);
     }
 
     function pctLabel(bytes: number): string {
@@ -223,16 +229,41 @@
         return pct > 0 && pct < 1 ? "<1%" : `${Math.round(pct)}%`;
     }
 
+    function isSupervisorSegment(id: string): boolean {
+        return id.startsWith("session:") || id.startsWith("overhead:");
+    }
+
+    function isSegmentHighlighted(id: string): boolean {
+        return highlightedSegmentId === id ||
+            (highlightedSegmentId === "summary:supervisor" && isSupervisorSegment(id));
+    }
+
+    function isSegmentDimmed(id: string): boolean {
+        if (!highlightedSegmentId) return false;
+        if (highlightedSegmentId === "summary:supervisor") {
+            return !isSupervisorSegment(id);
+        }
+        return highlightedSegmentId !== id;
+    }
+
     function lowMemoryLabel(): string {
         if (!lowMemory) {
             return "";
         }
 
         if (lowMemory.unit === "percent") {
-            return `Less than ${lowMemory.threshold}% memory remaining`;
+            return localize(
+                "memory.lessThanPercentRemaining",
+                "Less than {0}% memory remaining",
+                lowMemory.threshold,
+            );
         }
 
-        return `Less than ${lowMemory.threshold} MB memory remaining`;
+        return localize(
+            "memory.lessThanMegabytesRemaining",
+            "Less than {0} MB memory remaining",
+            lowMemory.threshold,
+        );
     }
 
     function updateDropdownPosition() {
@@ -262,6 +293,7 @@
     function closeDropdown() {
         expanded = false;
         highlightedSegmentId = null;
+        queueMicrotask(() => anchorEl?.focus());
     }
 
     function handleDocumentMouseDown(event: MouseEvent) {
@@ -303,7 +335,10 @@
             return;
         }
 
-        void tick().then(updateDropdownPosition);
+        void tick().then(() => {
+            updateDropdownPosition();
+            dropdownEl?.focus();
+        });
     });
 
 </script>
@@ -319,7 +354,12 @@
         class:compact
         class:low-memory={!!lowMemory}
         class="memory-bar"
-        aria-hidden="true"
+        role={compact ? "meter" : undefined}
+        aria-label={compact ? localize('memory.memoryUsage', 'Memory usage') : undefined}
+        aria-valuemin={compact ? 0 : undefined}
+        aria-valuemax={compact ? 100 : undefined}
+        aria-valuenow={compact && snapshot ? usedPercent : undefined}
+        aria-hidden={compact ? undefined : "true"}
     >
         {#if snapshot}
             {#each segments as segment (segment.id)}
@@ -328,9 +368,8 @@
                     <!-- svelte-ignore a11y_no_static_element_interactions -->
                     <div
                         class={`memory-segment ${segment.className}`}
-                        class:highlighted={highlightedSegmentId === segment.id}
-                        class:dimmed={!!highlightedSegmentId &&
-                            highlightedSegmentId !== segment.id}
+                        class:highlighted={isSegmentHighlighted(segment.id)}
+                        class:dimmed={isSegmentDimmed(segment.id)}
                         style:flex-basis={`${width}%`}
                         onmouseenter={() => (highlightedSegmentId = segment.id)}
                         onmouseleave={() => (highlightedSegmentId = null)}
@@ -366,6 +405,7 @@
 {#if enabled}
     <button
         bind:this={anchorEl}
+        bind:clientWidth={meterWidth}
         class="memory-usage-meter"
         class:low-memory={!!lowMemory}
         title={tooltip}
@@ -376,19 +416,25 @@
         onclick={() => (expanded = !expanded)}
         onkeydown={handleKeyDown}
     >
-        {#if lowMemory}
+        {#if lowMemory && (meterLayout === "barAndLabel" || meterLayout === "labelAndWarning")}
             <span
                 class="memory-warning codicon codicon-warning"
                 title={lowMemoryLabel()}
                 aria-hidden="true"
             ></span>
         {/if}
-        {@render memoryBar(true)}
-        <span class="memory-label">{loading ? "Mem" : formatBytes(supervisorBytes)}</span>
-        <span
-            class="memory-arrow codicon codicon-positron-drop-down-arrow"
-            aria-hidden="true"
-        ></span>
+        {#if meterLayout === "barAndLabel"}
+            {@render memoryBar(true)}
+        {/if}
+        {#if meterLayout !== "hidden"}
+            <span class="memory-label">{loading
+                    ? localize("memory.mem", "Mem")
+                    : formatBytes(supervisorBytes)}</span>
+            <span
+                class="memory-arrow codicon codicon-positron-drop-down-arrow"
+                aria-hidden="true"
+            ></span>
+        {/if}
     </button>
 
     {#if expanded}
@@ -398,7 +444,9 @@
             class:low-memory={!!lowMemory}
             style={dropdownStyle}
             role="dialog"
+            tabindex="-1"
             aria-label={localize('memory.memoryUsage', 'Memory usage')}
+            onkeydown={handleKeyDown}
         >
             {#if loading || !snapshot}
                 <div class="memory-loading">{localize('memory.computing', 'Computing memory usage...')}</div>
@@ -413,6 +461,14 @@
                         <div class="low-memory-message">
                             <span class="codicon codicon-warning" aria-hidden="true"></span>
                             <span>{lowMemoryLabel()}</span>
+                            <button
+                                type="button"
+                                class="configure-memory"
+                                onclick={() => {
+                                    closeDropdown();
+                                    onconfigure?.();
+                                }}
+                            >{localize('memory.configure', 'Configure')}</button>
                         </div>
                     {/if}
                 </div>
@@ -619,6 +675,15 @@
         color: var(--vscode-editorWarning-foreground, var(--vscode-notificationsWarningIcon-foreground));
     }
 
+    .configure-memory {
+        border: 0;
+        padding: 0;
+        color: var(--vscode-textLink-foreground);
+        background: transparent;
+        cursor: pointer;
+        text-decoration: underline;
+    }
+
     .memory-breakdown {
         padding: 10px 12px 12px;
     }
@@ -709,19 +774,4 @@
         user-select: none;
     }
 
-    @container (max-width: 95px) {
-        .memory-bar.compact {
-            display: none;
-        }
-    }
-
-    @container (max-width: 54px) {
-        .memory-warning {
-            display: none;
-        }
-
-        .memory-label {
-            min-width: 28px;
-        }
-    }
 </style>

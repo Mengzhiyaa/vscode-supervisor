@@ -48,6 +48,7 @@ class VariableItem implements VariablesTreeItem {
     isExpanded: boolean;
     childItems?: VariableItem[];
     isRecent: boolean;
+    updatedTime: number;
     totalChildren: number;
     overflowEntry?: VariableOverflow;
 
@@ -64,6 +65,7 @@ class VariableItem implements VariablesTreeItem {
         this.hasViewer = variable.has_viewer;
         this.isExpanded = false;
         this.isRecent = isRecent;
+        this.updatedTime = Number.isFinite(variable.updated_time) ? variable.updated_time : 0;
         this.totalChildren = variable.length;
     }
 
@@ -677,17 +679,13 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
         const sorted = [...items];
         switch (this._sorting) {
             case PositronVariablesSorting.Name:
-                sorted.sort((a, b) => a.displayName.localeCompare(b.displayName));
+                sorted.sort(compareVariableItemsByName);
                 break;
             case PositronVariablesSorting.Size:
-                sorted.sort((a, b) => b.size - a.size);
+                sorted.sort(compareVariableItemsBySize);
                 break;
             case PositronVariablesSorting.Recent:
-                sorted.sort((a, b) => {
-                    if (a.isRecent && !b.isRecent) {return -1;}
-                    if (!a.isRecent && b.isRecent) {return 1;}
-                    return a.displayName.localeCompare(b.displayName);
-                });
+                sorted.sort(compareVariableItemsByRecent);
                 break;
         }
         return sorted;
@@ -824,4 +822,34 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
         this._onDidChangeEntriesEmitter.fire(flattened);
     }
     //#endregion
+}
+
+type SortableVariableItem = Pick<VariableItem, 'displayName' | 'size' | 'updatedTime'>;
+
+export function compareVariableItemsByName(
+    a: SortableVariableItem,
+    b: SortableVariableItem,
+): number {
+    const nameResult = a.displayName.localeCompare(b.displayName, undefined, { numeric: true });
+    return nameResult !== 0 ? nameResult : a.size - b.size;
+}
+
+export function compareVariableItemsBySize(
+    a: SortableVariableItem,
+    b: SortableVariableItem,
+): number {
+    const sizeResult = b.size - a.size;
+    return sizeResult !== 0
+        ? sizeResult
+        : a.displayName.localeCompare(b.displayName, undefined, { numeric: true });
+}
+
+export function compareVariableItemsByRecent(
+    a: SortableVariableItem,
+    b: SortableVariableItem,
+): number {
+    const recentResult = b.updatedTime - a.updatedTime;
+    return recentResult !== 0
+        ? recentResult
+        : a.displayName.localeCompare(b.displayName, undefined, { numeric: true });
 }

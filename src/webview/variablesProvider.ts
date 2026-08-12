@@ -1,11 +1,13 @@
 import * as vscode from 'vscode';
 import { MessageConnection } from 'vscode-jsonrpc';
 import { BaseWebviewProvider } from './baseProvider';
+import { ContextKeys } from '../coreCommandIds';
 import * as VariablesProtocol from '../rpc/webview/variables';
 import * as SessionProtocol from '../rpc/webview/session';
 import { RuntimeSession } from '../runtime/session';
 import { RuntimeSessionService } from '../runtime/runtimeSession';
 import { MemoryUsageService } from '../services/memory';
+import type { PositronDataExplorerService } from '../services/dataExplorer';
 import {
     PositronVariablesService,
     IPositronVariablesInstance,
@@ -53,6 +55,7 @@ export class VariablesViewProvider extends BaseWebviewProvider {
         private readonly _variablesService: PositronVariablesService,
         private readonly _memoryUsageService: MemoryUsageService,
         getAdditionalLocalResourceRoots: () => readonly vscode.Uri[] = () => [],
+        private readonly _dataExplorerService?: PositronDataExplorerService,
     ) {
         super(extensionUri, outputChannel, getAdditionalLocalResourceRoots);
         this._sessionSnapshotBuilder = new SessionSnapshotBuilder(this._sessionManager);
@@ -81,6 +84,15 @@ export class VariablesViewProvider extends BaseWebviewProvider {
         return 'VariablesViewProvider';
     }
 
+    protected override _onDidDisposeWebviewView(): void {
+        void vscode.commands.executeCommand('setContext', ContextKeys.variablesFocused, false);
+        void vscode.commands.executeCommand('setContext', ContextKeys.variablesHasSelection, false);
+    }
+
+    runListCommand(command: 'expand' | 'collapse' | 'copyAsText' | 'copyAsHtml'): void {
+        this._connection?.sendNotification('variables/listCommand', { command });
+    }
+
     override resolveWebviewView(
         webviewView: vscode.WebviewView,
         context: vscode.WebviewViewResolveContext,
@@ -88,14 +100,14 @@ export class VariablesViewProvider extends BaseWebviewProvider {
     ): void | Thenable<void> {
         super.resolveWebviewView(webviewView, context, token);
 
-        this._variablesService.setViewVisible(true);
+        queueMicrotask(() => this._variablesService.setViewVisible(webviewView.visible));
 
         webviewView.onDidChangeVisibility(() => {
-            this._variablesService.setViewVisible(webviewView.visible);
+            queueMicrotask(() => this._variablesService.setViewVisible(webviewView.visible));
         });
 
         webviewView.onDidDispose(() => {
-            this._variablesService.setViewVisible(false);
+            queueMicrotask(() => this._variablesService.setViewVisible(false));
         });
     }
 
@@ -217,6 +229,22 @@ export class VariablesViewProvider extends BaseWebviewProvider {
             this._flushPendingVariablesSync();
         });
 
+        connection.onNotification(
+            VariablesProtocol.VariablesContextKeysChangedNotification.type,
+            params => {
+                void vscode.commands.executeCommand(
+                    'setContext',
+                    ContextKeys.variablesFocused,
+                    params.variablesFocused,
+                );
+                void vscode.commands.executeCommand(
+                    'setContext',
+                    ContextKeys.variablesHasSelection,
+                    params.hasSelection,
+                );
+            },
+        );
+
         connection.onRequest('session/list', async () => {
             this.log('Session list request', vscode.LogLevel.Debug);
             return this._buildSessionInfoSnapshot();
@@ -227,6 +255,13 @@ export class VariablesViewProvider extends BaseWebviewProvider {
                 enabled: this._memoryUsageService.enabled,
                 snapshot: this._memoryUsageService.currentSnapshot,
             };
+        });
+
+        connection.onRequest(VariablesProtocol.OpenMemorySettingsRequest.type, async () => {
+            await vscode.commands.executeCommand(
+                'workbench.action.openSettings',
+                '@ext:mengzhiya.vscode-supervisor memoryUsage.lowMemory',
+            );
         });
 
         connection.onRequest(VariablesProtocol.ListVariablesRequest.type, async (params) => {
@@ -430,6 +465,9 @@ export class VariablesViewProvider extends BaseWebviewProvider {
                 return await instance.clipboardFormat(targetPath, params.format);
             } catch (e) {
                 this.log(`Failed to format variable for clipboard: ${e}`, vscode.LogLevel.Warning);
+                void vscode.window.showErrorMessage(
+                    vscode.l10n.t('Unable to copy the variable: {0}', String(e)),
+                );
                 return '';
             }
         });
@@ -450,9 +488,20 @@ export class VariablesViewProvider extends BaseWebviewProvider {
             }
 
             try {
+                const existing = this._dataExplorerService?.getInstanceForVariablePath(
+                    sessionId,
+                    targetPath,
+                );
+                if (existing) {
+                    existing.requestFocus();
+                    return existing.identifier;
+                }
                 return await instance.view(targetPath);
             } catch (e) {
                 this.log(`Failed to open variable viewer: ${e}`, vscode.LogLevel.Warning);
+                void vscode.window.showErrorMessage(
+                    vscode.l10n.t('Unable to open the variable viewer: {0}', String(e)),
+                );
                 return undefined;
             }
         });
@@ -704,7 +753,8 @@ export class VariablesViewProvider extends BaseWebviewProvider {
                     kind: entry.kind,
                     hasChildren: entry.hasChildren,
                     hasViewer: entry.hasViewer,
-                    isRecent: entry.isRecent
+                    isRecent: entry.isRecent,
+                    updatedTime: entry.updatedTime
                 });
                 continue;
             }

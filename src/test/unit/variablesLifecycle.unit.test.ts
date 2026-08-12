@@ -5,7 +5,12 @@ import {
     PositronVariablesSorting,
     RuntimeClientState,
 } from '../../services/variables/interfaces/variablesService';
-import { PositronVariablesInstance } from '../../services/variables/variablesInstance';
+import {
+    compareVariableItemsByName,
+    compareVariableItemsByRecent,
+    compareVariableItemsBySize,
+    PositronVariablesInstance,
+} from '../../services/variables/variablesInstance';
 import { PositronVariablesService } from '../../services/variables/variablesService';
 
 function eventStub<T>(): vscode.Event<T> {
@@ -34,6 +39,27 @@ function logStub(): vscode.LogOutputChannel {
 }
 
 suite('[Unit] variables lifecycle', () => {
+    test('uses stable Positron name, size, and recent sort semantics', () => {
+        const items = [
+            { displayName: 'x10', size: 5, updatedTime: 100 },
+            { displayName: 'x2', size: 10, updatedTime: 200 },
+            { displayName: 'x2', size: 1, updatedTime: 100 },
+        ];
+
+        assert.deepStrictEqual(
+            [...items].sort(compareVariableItemsByName).map(item => `${item.displayName}:${item.size}`),
+            ['x2:1', 'x2:10', 'x10:5'],
+        );
+        assert.deepStrictEqual(
+            [...items].sort(compareVariableItemsBySize).map(item => `${item.displayName}:${item.size}`),
+            ['x2:10', 'x10:5', 'x2:1'],
+        );
+        assert.deepStrictEqual(
+            [...items].sort(compareVariableItemsByRecent).map(item => `${item.updatedTime}:${item.displayName}`),
+            ['200:x2', '100:x2', '100:x10'],
+        );
+    });
+
     test('uses Positron decimal size-group boundaries and ordering', () => {
         const instance = Object.create(
             PositronVariablesInstance.prototype,

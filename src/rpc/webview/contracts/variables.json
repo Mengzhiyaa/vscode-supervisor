@@ -168,6 +168,28 @@
       "paramsType": "void"
     },
     {
+      "kind": "notification",
+      "name": "VariablesContextKeysChangedNotification",
+      "method": "variables/contextKeysChanged",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "variablesFocused",
+              "type": "boolean"
+            },
+            {
+              "name": "hasSelection",
+              "type": "boolean"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "kind": "interface",
       "name": "MemorySessionUsage",
       "fields": [
@@ -325,6 +347,14 @@
           ]
         }
       ]
+    },
+    {
+      "kind": "request",
+      "name": "OpenMemorySettingsRequest",
+      "method": "variables/openMemorySettings",
+      "paramsType": "void",
+      "resultType": "void",
+      "errorType": "void"
     },
     {
       "kind": "notification",
@@ -505,6 +535,11 @@
           "name": "isRecent",
           "optional": true,
           "type": "boolean"
+        },
+        {
+          "name": "updatedTime",
+          "optional": true,
+          "type": "number"
         },
         {
           "name": "overflowValues",
