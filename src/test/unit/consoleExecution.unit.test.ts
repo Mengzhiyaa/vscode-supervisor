@@ -3,10 +3,13 @@ import * as vscode from 'vscode';
 import { LanguageRuntimeSessionMode } from '../../api';
 import {
     RuntimeCodeFragmentStatus,
+    LanguageRuntimeMessageType,
+    RuntimeOnlineState,
     RuntimeState,
 } from '../../internal/runtimeTypes';
 import {
     PositronConsoleInstance,
+    PositronConsoleState,
     SessionAttachMode,
 } from '../../services/console';
 import {
@@ -299,6 +302,101 @@ suite('[Unit] console execution alignment', () => {
         );
         assert.deepStrictEqual(executeCalls, []);
         assert.strictEqual(instance.codeSubmissionInProgress, false);
+        instance.dispose();
+    });
+
+    test('host-owned submission executes when completeness check times out', async () => {
+        const executeCalls: unknown[][] = [];
+        const instance = createConsoleInstance();
+        const runtimeSession = createRuntimeSession(executeCalls);
+        runtimeSession.isCodeFragmentComplete = () => new Promise(() => undefined);
+        instance.attachRuntimeSession(runtimeSession, SessionAttachMode.Connected);
+        (instance as any)._codeCompletenessTimeoutMs = 10;
+
+        assert.strictEqual(
+            await instance.submitCode('1 + 1', { source: 'console' }),
+            'executed',
+        );
+        assert.strictEqual(executeCalls.length, 1);
+        assert.strictEqual(executeCalls[0][0], '1 + 1');
+        assert.strictEqual(instance.codeSubmissionInProgress, false);
+        instance.dispose();
+    });
+
+    test('background runtime busy state does not disable console input', () => {
+        const executeCalls: unknown[][] = [];
+        const instance = createConsoleInstance();
+        const runtimeSession = createRuntimeSession(executeCalls);
+        instance.attachRuntimeSession(runtimeSession, SessionAttachMode.Connected);
+
+        assert.strictEqual(instance.state, PositronConsoleState.Ready);
+
+        // Kernel-wide Busy can be caused by Variables, Plots, LSP, or another
+        // comm client and carries no parent ID that ties it to Console input.
+        (instance as any).handleRuntimeStateChange(RuntimeState.Busy);
+
+        assert.strictEqual(instance.state, PositronConsoleState.Ready);
+        instance.dispose();
+    });
+
+    test('correlated console execution still drives busy and ready state', () => {
+        const executeCalls: unknown[][] = [];
+        const instance = createConsoleInstance();
+        const runtimeSession = createRuntimeSession(executeCalls);
+        instance.attachRuntimeSession(runtimeSession, SessionAttachMode.Connected);
+
+        instance.handleState({
+            id: 'state-busy',
+            event_clock: 1,
+            parent_id: 'fragment-console-1',
+            when: new Date().toISOString(),
+            type: LanguageRuntimeMessageType.State,
+            state: RuntimeOnlineState.Busy,
+        });
+        assert.strictEqual(instance.state, PositronConsoleState.Busy);
+
+        instance.handleState({
+            id: 'state-idle',
+            event_clock: 2,
+            parent_id: 'fragment-console-1',
+            when: new Date().toISOString(),
+            type: LanguageRuntimeMessageType.State,
+            state: RuntimeOnlineState.Idle,
+        });
+        assert.strictEqual(instance.state, PositronConsoleState.Ready);
+        instance.dispose();
+    });
+
+    test('reconnecting busy runtime returns console input to ready on idle', () => {
+        const executeCalls: unknown[][] = [];
+        const instance = createConsoleInstance();
+        const runtimeSession = createRuntimeSession(executeCalls, RuntimeState.Busy);
+        instance.attachRuntimeSession(runtimeSession, SessionAttachMode.Reconnecting);
+
+        assert.strictEqual(instance.state, PositronConsoleState.Busy);
+
+        (instance as any).handleRuntimeStateChange(RuntimeState.Idle);
+        assert.strictEqual(instance.state, PositronConsoleState.Ready);
+        instance.dispose();
+    });
+
+    test('unrelated global idle does not complete a correlated console execution', () => {
+        const executeCalls: unknown[][] = [];
+        const instance = createConsoleInstance();
+        const runtimeSession = createRuntimeSession(executeCalls);
+        instance.attachRuntimeSession(runtimeSession, SessionAttachMode.Connected);
+
+        instance.handleState({
+            id: 'state-busy',
+            event_clock: 1,
+            parent_id: 'fragment-console-1',
+            when: new Date().toISOString(),
+            type: LanguageRuntimeMessageType.State,
+            state: RuntimeOnlineState.Busy,
+        });
+        (instance as any).handleRuntimeStateChange(RuntimeState.Idle);
+
+        assert.strictEqual(instance.state, PositronConsoleState.Busy);
         instance.dispose();
     });
 });

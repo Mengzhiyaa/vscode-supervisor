@@ -109,6 +109,7 @@
 
     // Constants (matching Positron)
     const MINIMUM_CONSOLE_TAB_LIST_WIDTH = 60;
+    const DEFAULT_CONSOLE_TAB_LIST_WIDTH = 180;
     const MINIMUM_CONSOLE_PANE_WIDTH = 120;
     const MAX_RESOURCE_USAGE_HISTORY = 600;
     const DEFAULT_SCROLLBACK_SIZE = 10000;
@@ -1897,8 +1898,11 @@
         } else if (consolePaneWidth === 0 || consoleTabListWidth === 0) {
             // Initial layout OR transition from single to multi-session
             // Need to allocate space for the tab list
-            consoleTabListWidth = maxTabWidth;
-            consolePaneWidth = newWidth - maxTabWidth;
+            consoleTabListWidth = Math.min(
+                DEFAULT_CONSOLE_TAB_LIST_WIDTH,
+                maxTabWidth,
+            );
+            consolePaneWidth = newWidth - consoleTabListWidth;
         } else {
             // Resize handling (maintaining existing proportions)
             const delta = newWidth - containerWidth;

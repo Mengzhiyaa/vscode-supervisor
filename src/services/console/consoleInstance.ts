@@ -97,6 +97,7 @@ const ON_DID_CHANGE_RUNTIME_ITEMS_THROTTLE_THRESHOLD = 20;
 const ON_DID_CHANGE_RUNTIME_ITEMS_THROTTLE_INTERVAL = 50;
 const DEFAULT_INPUT_PROMPT = '>';
 const DEFAULT_CONTINUATION_PROMPT = '+';
+const DEFAULT_CODE_COMPLETENESS_TIMEOUT_MS = 5000;
 
 function normalizePromptValue(prompt: string | undefined): string | undefined {
     if (typeof prompt !== 'string') {
@@ -152,6 +153,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
     private _nextId = 0;
     private _startupFailureHandled = false;
     private _startupFailureFallbackHandle: ReturnType<typeof setTimeout> | undefined;
+    private _runtimeLifecycleBusy = false;
     private readonly _disposables: vscode.Disposable[] = [];
     private readonly _errorFollowupTokenSources = new Set<vscode.CancellationTokenSource>();
     private readonly _runningErrorSuggestions = new Set<string>();
@@ -167,6 +169,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
     private _runtimeItemSubmittingInput: RuntimeItemPendingInput | undefined;
     private _submissionGeneration = 0;
     private _cancelActiveSubmission: (() => void) | undefined;
+    private readonly _codeCompletenessTimeoutMs = DEFAULT_CODE_COMPLETENESS_TIMEOUT_MS;
     private _lastPastedText = '';
 
     // Input history (1:1 Positron)
@@ -813,10 +816,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
 
         try {
             const status = checkCompleteness
-                ? await Promise.race([
-                    this._session.isCodeFragmentComplete(code),
-                    cancelled,
-                ])
+                ? await this._checkCodeFragmentCompleteness(code, cancelled)
                 : RuntimeCodeFragmentStatus.Complete;
 
             if (generation !== this._submissionGeneration || status === undefined) {
@@ -847,6 +847,35 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
         } finally {
             if (generation === this._submissionGeneration) {
                 this._cancelActiveSubmission = undefined;
+            }
+        }
+    }
+
+    private async _checkCodeFragmentCompleteness(
+        code: string,
+        cancelled: Promise<undefined>,
+    ): Promise<RuntimeCodeFragmentStatus | undefined> {
+        let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+        const timedOut = new Promise<RuntimeCodeFragmentStatus>((resolve) => {
+            timeoutHandle = setTimeout(() => {
+                timeoutHandle = undefined;
+                this._outputChannel.warn(
+                    `[ConsoleInstance] Code completeness check timed out after ` +
+                    `${this._codeCompletenessTimeoutMs}ms; submitting code for runtime validation`,
+                );
+                resolve(RuntimeCodeFragmentStatus.Unknown);
+            }, this._codeCompletenessTimeoutMs);
+        });
+
+        try {
+            return await Promise.race([
+                this._session!.isCodeFragmentComplete(code),
+                cancelled,
+                timedOut,
+            ]);
+        } finally {
+            if (timeoutHandle !== undefined) {
+                clearTimeout(timeoutHandle);
             }
         }
     }
@@ -1422,6 +1451,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
 
         this._session = session;
         this._runtimeAttached = true;
+        this._runtimeLifecycleBusy = false;
         this._startupFailureHandled = false;
         this._clearStartupFailureFallback();
 
@@ -2454,6 +2484,35 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
             void this.processPendingInput();
             this.completeStartup();
         }
+
+        // Busy/Idle are kernel-wide states and are also emitted for background
+        // requests from Variables, Plots, LSP, and other comm clients. They must
+        // not drive an already-running Console directly: a missing idle event for
+        // one of those unrelated requests would otherwise leave input permanently
+        // disabled. Console execution Busy/Idle is handled by handleState(), which
+        // can correlate the event through its parent execution ID. The startup
+        // exception preserves the state of a reconnect to an already-busy kernel.
+        if (state === RuntimeState.Busy) {
+            if (
+                this._state === PositronConsoleState.Starting ||
+                this._state === PositronConsoleState.Uninitialized
+            ) {
+                this._runtimeLifecycleBusy = true;
+                this.setState(PositronConsoleState.Busy);
+            }
+            return;
+        }
+        if (state === RuntimeState.Idle) {
+            if (this._runtimeLifecycleBusy) {
+                this._runtimeLifecycleBusy = false;
+                if (this._state !== PositronConsoleState.Ready) {
+                    this.setState(PositronConsoleState.Ready);
+                }
+            }
+            return;
+        }
+
+        this._runtimeLifecycleBusy = false;
 
         const mappedState = runtimeStateToPositronConsoleState(state);
         if (mappedState === PositronConsoleState.Disconnected) {

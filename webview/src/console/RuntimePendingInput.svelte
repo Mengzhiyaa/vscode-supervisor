@@ -25,6 +25,9 @@
         ? localize("console.submittingCode", "Submitting code")
         : undefined}
 >
+    {#if runtimeItemPendingInput.submitting}
+        <div class="pending-input-submitting-bar"></div>
+    {/if}
     {#each runtimeItemPendingInput.outputLines as outputLine (outputLine.id)}
         <div class="pending-line">
             <span class="prompt" style:width={promptWidthPx}
@@ -47,25 +50,33 @@
 
     .pending-input.submitting {
         opacity: 1;
-        overflow: hidden;
     }
 
-    .pending-input.submitting::after {
+    .pending-input-submitting-bar {
         position: absolute;
-        inset: 0;
-        content: "";
+        top: 0;
+        left: -10px;
+        bottom: 0;
+        width: 4px;
         pointer-events: none;
-        background: repeating-linear-gradient(
-            -45deg,
-            transparent 0 6px,
-            color-mix(in srgb, var(--vscode-testing-iconPassed, #2eb77c) 28%, transparent) 6px 12px
+        background-image: repeating-linear-gradient(
+            45deg,
+            var(--vscode-positronConsole-ansiBrightGreen),
+            var(--vscode-positronConsole-ansiBrightGreen) 3px,
+            transparent 3px,
+            transparent 6px
         );
-        animation: submitting-barber-pole 500ms linear infinite;
+        background-size: 8.49px 8.49px;
+        animation: pending-input-submitting-move-stripes 1s linear infinite;
     }
 
-    @keyframes submitting-barber-pole {
+    @keyframes pending-input-submitting-move-stripes {
+        from {
+            background-position: 0 0;
+        }
+
         to {
-            transform: translateX(17px);
+            background-position: 8.49px 0;
         }
     }
 

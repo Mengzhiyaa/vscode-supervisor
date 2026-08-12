@@ -1752,6 +1752,13 @@ test('console preserves type-ahead and shows delayed submission feedback with a 
     });
 
     await expect(page.getByLabel('Submitting code')).toBeVisible();
+    const submittingIndicator = page.locator('.pending-input-submitting-bar');
+    await expect(submittingIndicator).toBeVisible();
+    await expect(submittingIndicator).toHaveCSS('width', '4px');
+    await expect(page.locator('.pending-input.submitting')).toHaveCSS(
+        'background-image',
+        'none',
+    );
     await expect(page.getByTestId('console-submitting-overlay')).toHaveCount(0);
     await backend.notify(ConsoleMethods.setPendingCode, {
         sessionId: 'session-1',
