@@ -224,6 +224,11 @@ export class PositronDataExplorerEditorProvider implements vscode.Disposable {
             })
         );
         this._disposables.push(
+            vscode.commands.registerCommand(PositronDataExplorerCommandId.SelectWorksheet, async () => {
+                await this._selectWorksheetForActive();
+            })
+        );
+        this._disposables.push(
             vscode.commands.registerCommand(PositronDataExplorerCommandId.MoveToNewWindow, async () => {
                 await this._sendToActiveWebview(DataExplorerMoveToNewWindowNotification.type.method);
             })
@@ -358,6 +363,53 @@ export class PositronDataExplorerEditorProvider implements vscode.Disposable {
             availableSheets: [...active.instance.fileAvailableSheets],
             selectedSheet: active.instance.fileSelectedSheet,
         });
+    }
+
+    private async _selectWorksheetForActive(): Promise<void> {
+        const active = this._getActiveExplorerContext();
+        if (!active) {
+            vscode.window.showWarningMessage(vscode.l10n.t('No active Data Explorer editor.'));
+            return;
+        }
+
+        const worksheets = active.instance.fileAvailableSheets;
+        if (!isSpreadsheetDataExplorerIdentifier(active.identifier) || worksheets.length === 0) {
+            vscode.window.showWarningMessage(
+                vscode.l10n.t('This dataset does not provide selectable worksheets.'),
+            );
+            return;
+        }
+
+        const selected = await vscode.window.showQuickPick(
+            worksheets.map(label => ({
+                label,
+                picked: label === active.instance.fileSelectedSheet,
+            })),
+            {
+                placeHolder: vscode.l10n.t('Select a worksheet'),
+                title: vscode.l10n.t('Data Explorer Worksheet'),
+            },
+        );
+        if (!selected || selected.label === active.instance.fileSelectedSheet) {
+            return;
+        }
+
+        try {
+            await active.instance.runWithForegroundLoading(async () => {
+                const result = await active.instance.setDatasetImportOptions({
+                    has_header_row: active.instance.fileHasHeaderRow,
+                    sheet_name: selected.label,
+                });
+                if (result.error_message) {
+                    throw new Error(result.error_message);
+                }
+                await active.instance.clientInstance.updateBackendState();
+            });
+        } catch (error) {
+            vscode.window.showErrorMessage(
+                vscode.l10n.t('Failed to select worksheet: {0}', String(error)),
+            );
+        }
     }
 
     private async _openAsPlaintext(instance: IPositronDataExplorerInstance): Promise<void> {

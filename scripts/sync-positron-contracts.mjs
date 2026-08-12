@@ -42,15 +42,37 @@ const upstreamClassifierPath = path.join(
     'positron',
     'mainThreadLanguageRuntime.ts',
 );
+const upstreamDataExplorerBackendPath = path.join(
+    positronRoot,
+    'positron',
+    'comms',
+    'data_explorer-backend-openrpc.json',
+);
+const upstreamDataExplorerFrontendPath = path.join(
+    positronRoot,
+    'positron',
+    'comms',
+    'data_explorer-frontend-openrpc.json',
+);
 const localRuntimePath = path.join(repositoryRoot, 'src', 'internal', 'runtimeTypes.ts');
 const localCompatibilityPath = path.join(repositoryRoot, 'src', 'supervisor', 'positron.ts');
+const localDataExplorerCommPath = path.join(
+    repositoryRoot,
+    'src',
+    'runtime',
+    'comms',
+    'positronDataExplorerComm.ts',
+);
 
 for (const requiredPath of [
     upstreamApiPath,
     upstreamRuntimePath,
     upstreamClassifierPath,
+    upstreamDataExplorerBackendPath,
+    upstreamDataExplorerFrontendPath,
     localRuntimePath,
     localCompatibilityPath,
+    localDataExplorerCommPath,
 ]) {
     if (!fs.existsSync(requiredPath)) {
         throw new Error(
@@ -66,6 +88,9 @@ const upstreamRuntime = parseSource(upstreamRuntimePath);
 const upstreamClassifier = parseSource(upstreamClassifierPath);
 const localRuntime = parseSource(localRuntimePath);
 const localCompatibility = parseSource(localCompatibilityPath);
+const localDataExplorerComm = parseSource(localDataExplorerCommPath);
+const upstreamDataExplorerBackend = readJson(upstreamDataExplorerBackendPath);
+const upstreamDataExplorerFrontend = readJson(upstreamDataExplorerFrontendPath);
 
 const watchedTopLevel = [
     'LanguageRuntimeMessageType',
@@ -95,6 +120,8 @@ const snapshot = {
         'src/positron-dts/positron.d.ts',
         'src/vs/workbench/services/languageRuntime/common/languageRuntimeService.ts',
         'src/vs/workbench/api/browser/positron/mainThreadLanguageRuntime.ts',
+        'positron/comms/data_explorer-backend-openrpc.json',
+        'positron/comms/data_explorer-frontend-openrpc.json',
     ],
     publicApi: {
         declarations: Object.fromEntries(watchedTopLevel.map(name => [
@@ -120,6 +147,10 @@ const snapshot = {
             requireMethod(upstreamClassifier, 'inferPositronOutputKind'),
         ),
     },
+    dataExplorerOpenRpc: {
+        backend: canonicalOpenRpc(upstreamDataExplorerBackend),
+        frontend: canonicalOpenRpc(upstreamDataExplorerFrontend),
+    },
 };
 
 verifyLocalEnums(upstreamModule, upstreamRuntime, localRuntime);
@@ -130,6 +161,11 @@ verifyLocalPublicInterfaceFields(upstreamModule, upstreamApi, localRuntime, [
     'LanguageRuntimeUpdateOutput',
 ]);
 verifyLocalCompatibilitySurface(localCompatibility, watchedNamespaces);
+verifyDataExplorerMethodEnums(
+    upstreamDataExplorerBackend,
+    upstreamDataExplorerFrontend,
+    localDataExplorerComm,
+);
 
 const generated = `${JSON.stringify(snapshot, null, 2)}\n`;
 const current = fs.existsSync(snapshotPath)
@@ -145,7 +181,9 @@ if (checkOnly) {
             'Review the upstream change, update compatibility/output routing, then run `npm run sync:positron-contracts`.',
         ].join('\n'));
     }
-    console.log('Verified watched Positron API, runtime enums, and rich-output classifier.');
+    console.log(
+        'Verified watched Positron API, runtime enums, rich-output classifier, and Data Explorer OpenRPC.',
+    );
 } else {
     fs.mkdirSync(path.dirname(snapshotPath), { recursive: true });
     fs.writeFileSync(snapshotPath, generated);
@@ -160,6 +198,19 @@ function parseSource(file) {
         true,
         file.endsWith('.d.ts') ? ts.ScriptKind.TS : ts.ScriptKind.TS,
     );
+}
+
+function readJson(file) {
+    return JSON.parse(fs.readFileSync(file, 'utf8'));
+}
+
+function canonicalOpenRpc(document) {
+    return {
+        openrpc: document.openrpc,
+        info: document.info,
+        methods: document.methods,
+        components: document.components,
+    };
 }
 
 function findModuleBlock(sourceFile, moduleName) {
@@ -274,6 +325,26 @@ function verifyLocalEnums(publicModule, upstreamRuntimeSource, localRuntimeSourc
             throw new Error(
                 `Local enum '${name}' differs from Positron. ` +
                 `upstream=${JSON.stringify(upstream)}, local=${JSON.stringify(local)}`,
+            );
+        }
+    }
+}
+
+function verifyDataExplorerMethodEnums(backend, frontend, localSource) {
+    const comparisons = [
+        ['DataExplorerBackendRequest', backend.methods],
+        ['DataExplorerFrontendEvent', frontend.methods],
+    ];
+
+    for (const [enumName, methods] of comparisons) {
+        const localValues = Object.values(enumMembers(localSource, enumName))
+            .map(value => value.replace(/^['"]|['"]$/g, ''))
+            .sort();
+        const upstreamValues = methods.map(method => method.name).sort();
+        if (JSON.stringify(localValues) !== JSON.stringify(upstreamValues)) {
+            throw new Error(
+                `Local enum '${enumName}' differs from Positron OpenRPC methods: ` +
+                `upstream=${JSON.stringify(upstreamValues)}, local=${JSON.stringify(localValues)}`,
             );
         }
     }

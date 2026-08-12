@@ -950,6 +950,23 @@
             {
               "name": "message",
               "type": "string"
+            },
+            {
+              "name": "operation",
+              "type": "string"
+            },
+            {
+              "name": "severity",
+              "type": "'error' | 'warning'"
+            },
+            {
+              "name": "recoverable",
+              "type": "boolean"
+            },
+            {
+              "name": "requestId",
+              "optional": true,
+              "type": "number"
             }
           ]
         }

@@ -449,6 +449,10 @@ export namespace DataExplorerErrorNotification {
 
     export interface Params {
         message: string;
+        operation: string;
+        severity: 'error' | 'warning';
+        recoverable: boolean;
+        requestId?: number;
     }
 
     export const type = new NotificationType<Params>('dataExplorer/error');

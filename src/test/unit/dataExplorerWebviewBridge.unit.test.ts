@@ -477,6 +477,36 @@ suite('[Unit] Data Explorer webview bridge P0 protocol', () => {
         fixture.bridge.dispose();
     });
 
+    test('publishes structured recoverable errors for background data requests', async () => {
+        const fixture = createBridge({
+            rows: 1,
+            columns: 1,
+            getDataValues: async () => {
+                throw new Error('request failed');
+            },
+        });
+
+        await fixture.bridge.sendData({
+            startRow: 0,
+            endRow: 1,
+            columns: [0],
+            requestId: 41,
+            generation: 0,
+        });
+
+        const error = fixture.notifications.find(
+            ({ method }) => method === 'dataExplorer/error',
+        );
+        assert.deepStrictEqual(error?.params, {
+            message: 'Error: request failed',
+            operation: 'requestData',
+            severity: 'error',
+            recoverable: true,
+            requestId: 41,
+        });
+        fixture.bridge.dispose();
+    });
+
     test('derives rapid row-filter mutations from the latest serialized Ark state', async () => {
         const appliedFilters: TestRowFilter[][] = [];
         const fixture = createBridge({

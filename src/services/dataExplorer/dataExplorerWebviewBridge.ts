@@ -395,7 +395,9 @@ export class DataExplorerWebviewBridge {
                     columns: [],
                     requestId: params.requestId,
                 });
-                this._sendError(String(error));
+                this._sendError(String(error), 'requestSchema', {
+                    requestId: params.requestId,
+                });
             }
         });
 
@@ -469,7 +471,9 @@ export class DataExplorerWebviewBridge {
                         requestId: params.requestId,
                     },
                 );
-                this._sendError(String(error));
+                this._sendError(String(error), 'searchSchema', {
+                    requestId: params.requestId,
+                });
             }
         });
 
@@ -768,7 +772,7 @@ export class DataExplorerWebviewBridge {
                     );
                 });
             } catch (error) {
-                this._sendError(String(error));
+                this._sendError(String(error), 'sort');
             }
         });
 
@@ -779,7 +783,7 @@ export class DataExplorerWebviewBridge {
                     await instance.setSortColumns([]);
                 });
             } catch (error) {
-                this._sendError(String(error));
+                this._sendError(String(error), 'clearSort');
             }
         });
 
@@ -792,7 +796,7 @@ export class DataExplorerWebviewBridge {
                 try {
                     await this._mutateRowFilters(() => []);
                 } catch (error) {
-                    this._sendError(String(error));
+                    this._sendError(String(error), 'clearFilters');
                 }
             },
         );
@@ -805,7 +809,7 @@ export class DataExplorerWebviewBridge {
                     params.filter as RowFilter,
                 ]);
             } catch (error) {
-                this._sendError(String(error));
+                this._sendError(String(error), 'addFilter');
             }
         });
 
@@ -821,7 +825,7 @@ export class DataExplorerWebviewBridge {
                     ),
                 );
             } catch (error) {
-                this._sendError(String(error));
+                this._sendError(String(error), 'updateFilter');
             }
         });
 
@@ -834,7 +838,7 @@ export class DataExplorerWebviewBridge {
                     ),
                 );
             } catch (error) {
-                this._sendError(String(error));
+                this._sendError(String(error), 'removeFilter');
             }
         });
 
@@ -936,7 +940,9 @@ export class DataExplorerWebviewBridge {
                     }
                 } catch (error) {
                     logChannel.error(`[DataExplorerEditor] Copy failed: ${error}`);
-                    this._sendError(`Copy failed: ${String(error)}`);
+                    this._sendError(`Copy failed: ${String(error)}`, 'copy', {
+                        presentation: 'notification',
+                    });
                 }
             },
         );
@@ -1093,6 +1099,8 @@ export class DataExplorerWebviewBridge {
                 } catch (error) {
                     this._sendError(
                         `Failed to move editor to new window: ${String(error)}`,
+                        'moveToNewWindow',
+                        { presentation: 'notification' },
                     );
                 }
             },
@@ -1172,7 +1180,9 @@ export class DataExplorerWebviewBridge {
                     `Converted to ${params.desiredSyntax} code and copied to clipboard.`,
                 );
             } catch (error) {
-                this._sendError(`Convert to code failed: ${String(error)}`);
+                this._sendError(`Convert to code failed: ${String(error)}`, 'convertToCode', {
+                    presentation: 'notification',
+                });
             }
         });
 
@@ -1183,7 +1193,9 @@ export class DataExplorerWebviewBridge {
             try {
                 await this._options.openAsPlaintext();
             } catch (error) {
-                this._sendError(`Open as plain text failed: ${String(error)}`);
+                this._sendError(`Open as plain text failed: ${String(error)}`, 'openAsPlaintext', {
+                    presentation: 'notification',
+                });
             }
         });
 
@@ -1192,7 +1204,9 @@ export class DataExplorerWebviewBridge {
             try {
                 await this._options.openAsSpreadsheet();
             } catch (error) {
-                this._sendError(`Open as spreadsheet failed: ${String(error)}`);
+                this._sendError(`Open as spreadsheet failed: ${String(error)}`, 'openAsSpreadsheet', {
+                    presentation: 'notification',
+                });
             }
         });
 
@@ -1223,6 +1237,8 @@ export class DataExplorerWebviewBridge {
                 } catch (error) {
                     this._sendError(
                         `File options update failed: ${String(error)}`,
+                        'applyFileOptions',
+                        { presentation: 'notification' },
                     );
                 }
             },
@@ -1443,7 +1459,9 @@ export class DataExplorerWebviewBridge {
             });
         } catch (error) {
             logChannel.error(`[DataExplorerEditor] Error fetching data: ${error}`);
-            this._sendError(String(error));
+            this._sendError(String(error), 'requestData', {
+                requestId: request.requestId,
+            });
         }
     }
 
@@ -1599,10 +1617,30 @@ export class DataExplorerWebviewBridge {
         });
     }
 
-    private _sendError(message: string): void {
-        void vscode.window.showErrorMessage(message);
+    private _sendError(
+        message: string,
+        operation: string,
+        options: {
+            presentation?: 'banner' | 'notification';
+            severity?: 'error' | 'warning';
+            recoverable?: boolean;
+            requestId?: number;
+        } = {},
+    ): void {
+        if (options.presentation === 'notification') {
+            const showMessage = options.severity === 'warning'
+                ? vscode.window.showWarningMessage
+                : vscode.window.showErrorMessage;
+            void showMessage(message);
+            return;
+        }
+
         this._options.connection.sendNotification(DataExplorerErrorNotification.type, {
             message,
+            operation,
+            severity: options.severity ?? 'error',
+            recoverable: options.recoverable ?? true,
+            requestId: options.requestId,
         });
     }
 

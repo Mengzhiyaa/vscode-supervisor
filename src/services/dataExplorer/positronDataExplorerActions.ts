@@ -14,6 +14,7 @@ export enum PositronDataExplorerCommandId {
     OpenAsPlaintext = 'supervisor.dataExplorer._openAsPlaintextInternal',
     OpenAsSpreadsheet = 'supervisor.dataExplorer._openAsSpreadsheetInternal',
     ToggleFileOptions = 'supervisor.dataExplorer._toggleFileOptionsInternal',
+    SelectWorksheet = 'supervisor.dataExplorer._selectWorksheetInternal',
     MoveToNewWindow = 'supervisor.dataExplorer._moveToNewWindowInternal',
     ShowColumnContextMenu = 'supervisor.dataExplorer._showColumnContextMenuInternal',
     ShowRowContextMenu = 'supervisor.dataExplorer._showRowContextMenuInternal',

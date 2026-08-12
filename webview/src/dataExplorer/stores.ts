@@ -41,12 +41,12 @@ export function createDataExplorerStores() {
     const rowFilters = derived(state, $state => $state.backendState?.row_filters ?? []);
     const columns = derived(state, $state => $state.schema);
     const status = derived(state, $state => {
-        if ($state.error) return 'error';
+        if ($state.error?.severity === 'error') return 'error';
         if ($state.backendState?.connected === false) return 'disconnected';
         return $state.isLoading ? 'computing' : 'idle';
     });
     const isLoading = derived(state, $state => $state.isLoading);
-    const errorMessage = derived(state, $state => $state.error);
+    const errorMessage = derived(state, $state => $state.error?.message ?? null);
 
     return {
         state,

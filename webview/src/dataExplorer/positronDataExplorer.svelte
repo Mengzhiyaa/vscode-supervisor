@@ -39,7 +39,7 @@
     const instance = new PositronDataExplorerInstance(postMessage);
     const stores = instance.stores;
     const { state: explorerState } = stores;
-    const { isLoading, errorMessage } = stores;
+    const { isLoading } = stores;
     const tableDataDataGridInstance = instance.tableDataDataGridInstance;
     const tableSchemaDataGridInstance = instance.tableSchemaDataGridInstance;
     const dataExplorerAriaLabel = localize(
@@ -49,6 +49,10 @@
     const loadingDataExplorerLabel = localize(
         "dataExplorer.loading",
         "Loading Data Explorer",
+    );
+    const dismissErrorLabel = localize(
+        "dataExplorer.dismissError",
+        "Dismiss error",
     );
 
     function postMessage(message: WebviewMessage) {
@@ -227,7 +231,12 @@
         if (availableSyntaxes.length === 0) {
             stores.state.update((state) => ({
                 ...state,
-                error: "No code syntax is available for this backend.",
+                error: {
+                    message: "No code syntax is available for this backend.",
+                    operation: "convertToCode",
+                    severity: "warning",
+                    recoverable: true,
+                },
             }));
             return;
         }
@@ -274,7 +283,12 @@
         if (!supportsFileOptions) {
             stores.state.update((state) => ({
                 ...state,
-                error: "File options are not supported by this dataset.",
+                error: {
+                    message: "File options are not supported by this dataset.",
+                    operation: "fileOptions",
+                    severity: "warning",
+                    recoverable: true,
+                },
             }));
             return;
         }
@@ -507,7 +521,13 @@
         );
         connection.onNotification(
             "dataExplorer/error",
-            (params: { message: string }) => {
+            (params: {
+                message: string;
+                operation: string;
+                severity: "error" | "warning";
+                recoverable: boolean;
+                requestId?: number;
+            }) => {
                 instance.handleError(params);
             },
         );
@@ -541,9 +561,25 @@
             {loadingDataExplorerLabel}
         </div>
     {/if}
-    {#if $errorMessage && !closedReason}
-        <div class="screen-reader-status" role="alert" aria-live="assertive">
-            {$errorMessage}
+    {#if $explorerState.error && !closedReason}
+        <div
+            class="data-explorer-error-banner"
+            class:warning={$explorerState.error.severity === "warning"}
+            role="alert"
+            aria-live="assertive"
+            data-operation={$explorerState.error.operation}
+        >
+            <span>{$explorerState.error.message}</span>
+            {#if $explorerState.error.recoverable}
+                <button
+                    type="button"
+                    aria-label={dismissErrorLabel}
+                    title={dismissErrorLabel}
+                    onclick={() => instance.dismissError()}
+                >
+                    <span class="codicon codicon-close" aria-hidden="true"></span>
+                </button>
+            {/if}
         </div>
     {/if}
     <DataExplorerPanel />
@@ -607,6 +643,59 @@
         clip: rect(0, 0, 0, 0);
         white-space: nowrap;
         border: 0;
+    }
+
+    .data-explorer-error-banner {
+        position: absolute;
+        z-index: 20;
+        top: 8px;
+        left: 50%;
+        display: flex;
+        max-width: min(680px, calc(100% - 32px));
+        align-items: center;
+        gap: 12px;
+        padding: 7px 8px 7px 12px;
+        border: 1px solid var(--vscode-inputValidation-errorBorder, var(--vscode-errorForeground));
+        border-radius: 4px;
+        background: var(--vscode-inputValidation-errorBackground, var(--vscode-editorWidget-background));
+        color: var(--vscode-inputValidation-errorForeground, var(--vscode-foreground));
+        box-shadow: 0 2px 8px var(--vscode-widget-shadow, rgba(0, 0, 0, 0.3));
+        transform: translateX(-50%);
+    }
+
+    .data-explorer-error-banner.warning {
+        border-color: var(--vscode-inputValidation-warningBorder, var(--vscode-editorWarning-foreground));
+        background: var(--vscode-inputValidation-warningBackground, var(--vscode-editorWidget-background));
+        color: var(--vscode-inputValidation-warningForeground, var(--vscode-foreground));
+    }
+
+    .data-explorer-error-banner span:first-child {
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .data-explorer-error-banner button {
+        display: inline-flex;
+        flex: none;
+        align-items: center;
+        justify-content: center;
+        width: 22px;
+        height: 22px;
+        padding: 0;
+        border: 0;
+        border-radius: 3px;
+        background: transparent;
+        color: inherit;
+        cursor: pointer;
+    }
+
+    .data-explorer-error-banner button:hover {
+        background: var(--vscode-toolbar-hoverBackground);
+    }
+
+    .data-explorer-error-banner button:focus-visible {
+        outline: 1px solid var(--vscode-focusBorder);
+        outline-offset: 1px;
     }
 
 </style>

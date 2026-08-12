@@ -1109,8 +1109,17 @@ test('data explorer syncs model-owned panel state, metadata, status indicators, 
 
     await backend.notify(DataExplorerMethods.error, {
         message: 'Broken backend',
+        operation: 'requestData',
+        severity: 'error',
+        recoverable: true,
+        requestId: 9,
     });
     await expect(page.locator('.status-bar-indicator .icon')).toHaveAttribute('aria-label', 'Error');
+    const errorBanner = page.locator('.data-explorer-error-banner');
+    await expect(errorBanner).toContainText('Broken backend');
+    await expect(errorBanner).toHaveAttribute('data-operation', 'requestData');
+    await page.getByLabel('Dismiss error').click();
+    await expect(errorBanner).toBeHidden();
 
     await backend.notify(DataExplorerMethods.backendState, {
         state: createDataExplorerBackendState({
@@ -1387,6 +1396,9 @@ test('data explorer chunks visible profile requests into Positron-sized batches'
     });
     await expect.poll(() => summaryGrid.evaluate((element) => element.clientHeight))
         .toBe(500);
+    await expect
+        .poll(() => summaryGrid.locator('.data-grid-row').count())
+        .toBeGreaterThanOrEqual(columns.length);
     const profileCountBeforeInvalidation = backend.notificationCount(
         DataExplorerMethods.requestColumnProfiles,
     );

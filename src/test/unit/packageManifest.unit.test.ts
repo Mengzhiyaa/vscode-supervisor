@@ -10,6 +10,7 @@ interface PackageJsonShape {
     bugs?: { url?: string };
     repository?: { type?: string; url?: string };
     main?: string;
+    l10n?: string;
     activationEvents?: string[];
     extensionDependencies?: string[];
     scripts?: Record<string, string | undefined>;
@@ -87,6 +88,7 @@ suite('[Unit] Supervisor package manifest', () => {
         assert.strictEqual(packageJson.publisher, 'mengzhiya');
         assert.strictEqual(packageJson.icon, 'images/logo.png');
         assert.strictEqual(packageJson.main, './dist/extension.js');
+        assert.strictEqual(packageJson.l10n, './l10n');
         assert.strictEqual(packageJson.repository?.type, 'git');
         assert.strictEqual(packageJson.repository?.url, 'https://github.com/Mengzhiyaa/vscode-supervisor');
         assert.strictEqual(packageJson.homepage, 'https://github.com/Mengzhiyaa/vscode-supervisor#readme');
@@ -110,7 +112,10 @@ suite('[Unit] Supervisor package manifest', () => {
         assert.strictEqual(packageJson.scripts?.['verify:webview-rpc-contracts'], 'node scripts/sync-webview-rpc-contracts.mjs --check');
         assert.strictEqual(packageJson.scripts?.['sync:positron-contracts'], 'node scripts/sync-positron-contracts.mjs');
         assert.strictEqual(packageJson.scripts?.['verify:positron-contracts'], 'node scripts/sync-positron-contracts.mjs --check');
-        assert.strictEqual(packageJson.scripts?.['verify:contracts'], 'npm run verify:api-dts && npm run verify:webview-rpc-contracts');
+        assert.strictEqual(
+            packageJson.scripts?.['verify:contracts'],
+            'npm run verify:api-dts && npm run verify:webview-rpc-contracts && npm run verify:positron-contracts && npm run verify:data-explorer-localization',
+        );
         assert.strictEqual(packageJson.scripts?.['build:webview'], 'npm --prefix webview run build');
         assert.strictEqual(packageJson.scripts?.['build'], 'npm run check:webview && npm run build:webview && npm run copy:duckdb && npm run compile');
         assert.strictEqual(
@@ -130,6 +135,7 @@ suite('[Unit] Supervisor package manifest', () => {
         assert.ok(!commands.has('supervisor.insertPipeOperator'));
         assert.ok(!commands.has('supervisor.help.showHelpAtCursor'));
         assert.ok(commands.has('supervisor.dataExplorer.openAsSpreadsheet'));
+        assert.ok(commands.has('supervisor.dataExplorer.selectWorksheet'));
     });
 
     test('keeps release files and packaging rules', () => {
@@ -148,6 +154,8 @@ suite('[Unit] Supervisor package manifest', () => {
         assert.match(vscodeIgnore, /!ThirdPartyNotices\.txt/);
         assert.match(vscodeIgnore, /!README\.md/);
         assert.match(vscodeIgnore, /!CHANGELOG\.md/);
+        assert.ok(fs.existsSync(path.join(path.resolve(__dirname, '../../..'), 'package.nls.json')));
+        assert.ok(fs.existsSync(path.join(path.resolve(__dirname, '../../..'), 'package.nls.zh-cn.json')));
         assert.match(vscodeIgnore, /webview\/package\.json/);
         assert.match(vscodeIgnore, /webview\/src\/\*\*/);
         assert.match(vscodeIgnore, /src\/\*\*/);

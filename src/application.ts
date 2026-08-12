@@ -1538,6 +1538,11 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
             )
         );
         this._disposables.push(
+            vscode.commands.registerCommand(CoreCommandIds.dataExplorerSelectWorksheet, () =>
+                vscode.commands.executeCommand(PositronDataExplorerCommandId.SelectWorksheet)
+            )
+        );
+        this._disposables.push(
             vscode.commands.registerCommand(CoreCommandIds.dataExplorerMoveToNewWindow, () =>
                 vscode.commands.executeCommand(PositronDataExplorerCommandId.MoveToNewWindow)
             )

@@ -1,0 +1,22 @@
+{
+  "supervisor.inlineDataExplorer.displayName": "Supervisor Inline Data Explorer",
+  "supervisor.dataExplorer.category": "Ark Data Explorer",
+  "supervisor.dataExplorer.copy.title": "Copy",
+  "supervisor.dataExplorer.copyTableData.title": "Copy Table Data",
+  "supervisor.dataExplorer.collapseSummary.title": "Collapse Summary",
+  "supervisor.dataExplorer.expandSummary.title": "Expand Summary",
+  "supervisor.dataExplorer.summaryOnLeft.title": "Summary on Left",
+  "supervisor.dataExplorer.summaryOnRight.title": "Summary on Right",
+  "supervisor.dataExplorer.clearColumnSorting.title": "Clear Column Sorting",
+  "supervisor.dataExplorer.convertToCode.title": "Convert to Code",
+  "supervisor.dataExplorer.openAsPlaintext.title": "Open as Plain Text File",
+  "supervisor.dataExplorer.openAsSpreadsheet.title": "Open as Spreadsheet",
+  "supervisor.dataExplorer.toggleFileOptions.title": "File Options",
+  "supervisor.dataExplorer.selectWorksheet.title": "Select Worksheet",
+  "supervisor.dataExplorer.moveToNewWindow.title": "Move into New Window",
+  "supervisor.dataExplorer.showColumnContextMenu.title": "Show Column Context Menu",
+  "supervisor.dataExplorer.showRowContextMenu.title": "Show Row Context Menu",
+  "supervisor.dataExplorer.showCellContextMenu.title": "Show Cell Context Menu",
+  "supervisor.dataExplorer.openFile.title": "Open in Data Explorer",
+  "supervisor.dataExplorer.editor.displayName": "Data Explorer"
+}

@@ -43,6 +43,7 @@ export const CoreCommandIds = {
     dataExplorerOpenAsPlaintext: 'supervisor.dataExplorer.openAsPlaintext',
     dataExplorerOpenAsSpreadsheet: 'supervisor.dataExplorer.openAsSpreadsheet',
     dataExplorerToggleFileOptions: 'supervisor.dataExplorer.toggleFileOptions',
+    dataExplorerSelectWorksheet: 'supervisor.dataExplorer.selectWorksheet',
     dataExplorerMoveToNewWindow: 'supervisor.dataExplorer.moveToNewWindow',
     dataExplorerShowColumnContextMenu: 'supervisor.dataExplorer.showColumnContextMenu',
     dataExplorerShowRowContextMenu: 'supervisor.dataExplorer.showRowContextMenu',

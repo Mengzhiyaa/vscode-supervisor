@@ -10,6 +10,14 @@ export type { SearchSchemaSortOrder };
 /** A formatted backend value or a numeric special-value sentinel. */
 export type ColumnValue = number | string;
 
+export interface DataExplorerErrorState {
+    message: string;
+    operation: string;
+    severity: 'error' | 'warning';
+    recoverable: boolean;
+    requestId?: number;
+}
+
 /**
  * Data Explorer instance state
  */
@@ -17,7 +25,7 @@ export interface DataExplorerState {
     backendState: BackendState | null;
     schema: SchemaColumn[];
     isLoading: boolean;
-    error: string | null;
+    error: DataExplorerErrorState | null;
     supportsFileOptions?: boolean;
     supportsOpenAsSpreadsheet?: boolean;
     fileHasHeaderRow?: boolean;

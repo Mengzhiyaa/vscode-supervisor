@@ -1,0 +1,22 @@
+{
+  "supervisor.inlineDataExplorer.displayName": "Supervisor 内联数据浏览器",
+  "supervisor.dataExplorer.category": "Ark 数据浏览器",
+  "supervisor.dataExplorer.copy.title": "复制",
+  "supervisor.dataExplorer.copyTableData.title": "复制表格数据",
+  "supervisor.dataExplorer.collapseSummary.title": "折叠摘要",
+  "supervisor.dataExplorer.expandSummary.title": "展开摘要",
+  "supervisor.dataExplorer.summaryOnLeft.title": "摘要置于左侧",
+  "supervisor.dataExplorer.summaryOnRight.title": "摘要置于右侧",
+  "supervisor.dataExplorer.clearColumnSorting.title": "清除列排序",
+  "supervisor.dataExplorer.convertToCode.title": "转换为代码",
+  "supervisor.dataExplorer.openAsPlaintext.title": "作为纯文本文件打开",
+  "supervisor.dataExplorer.openAsSpreadsheet.title": "作为电子表格打开",
+  "supervisor.dataExplorer.toggleFileOptions.title": "文件选项",
+  "supervisor.dataExplorer.selectWorksheet.title": "选择工作表",
+  "supervisor.dataExplorer.moveToNewWindow.title": "移至新窗口",
+  "supervisor.dataExplorer.showColumnContextMenu.title": "显示列上下文菜单",
+  "supervisor.dataExplorer.showRowContextMenu.title": "显示行上下文菜单",
+  "supervisor.dataExplorer.showCellContextMenu.title": "显示单元格上下文菜单",
+  "supervisor.dataExplorer.openFile.title": "在数据浏览器中打开",
+  "supervisor.dataExplorer.editor.displayName": "数据浏览器"
+}

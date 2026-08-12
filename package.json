@@ -28,6 +28,7 @@
     "onStartupFinished"
   ],
   "main": "./dist/extension.js",
+  "l10n": "./l10n",
   "scripts": {
     "vscode:prepublish": "npm run build",
     "compile": "node esbuild.mjs --production",
@@ -43,7 +44,8 @@
     "verify:webview-rpc-contracts": "node scripts/sync-webview-rpc-contracts.mjs --check",
     "sync:positron-contracts": "node scripts/sync-positron-contracts.mjs",
     "verify:positron-contracts": "node scripts/sync-positron-contracts.mjs --check",
-    "verify:contracts": "npm run verify:api-dts && npm run verify:webview-rpc-contracts",
+    "verify:data-explorer-localization": "node scripts/verify-data-explorer-localization.mjs",
+    "verify:contracts": "npm run verify:api-dts && npm run verify:webview-rpc-contracts && npm run verify:positron-contracts && npm run verify:data-explorer-localization",
     "build:webview": "npm --prefix webview run build",
     "watch:webview": "npm --prefix webview run dev",
     "check:webview": "npm --prefix webview run check",
@@ -119,7 +121,7 @@
     "notebookRenderer": [
       {
         "id": "supervisor.inlineDataExplorerRenderer",
-        "displayName": "Supervisor Inline Data Explorer",
+        "displayName": "%supervisor.inlineDataExplorer.displayName%",
         "entrypoint": "./notebook/inlineDataExplorerRenderer.js",
         "requiresMessaging": "always",
         "mimeTypes": [
@@ -318,120 +320,127 @@
       },
       {
         "command": "supervisor.dataExplorer.copy",
-        "title": "Copy",
-        "category": "Ark Data Explorer",
+        "title": "%supervisor.dataExplorer.copy.title%",
+        "category": "%supervisor.dataExplorer.category%",
         "enablement": "supervisor.dataExplorerEditorActive && supervisor.dataExplorerFocused"
       },
       {
         "command": "supervisor.dataExplorer.copyTableData",
-        "title": "Copy Table Data",
-        "category": "Ark Data Explorer",
+        "title": "%supervisor.dataExplorer.copyTableData.title%",
+        "category": "%supervisor.dataExplorer.category%",
         "enablement": "supervisor.dataExplorerEditorActive && supervisor.dataExplorerFocused && supervisor.isDevelopment"
       },
       {
         "command": "supervisor.dataExplorer.collapseSummary",
-        "title": "Collapse Summary",
-        "category": "Ark Data Explorer",
+        "title": "%supervisor.dataExplorer.collapseSummary.title%",
+        "category": "%supervisor.dataExplorer.category%",
         "enablement": "supervisor.dataExplorerEditorActive && !supervisor.dataExplorerSummaryCollapsed"
       },
       {
         "command": "supervisor.dataExplorer.expandSummary",
-        "title": "Expand Summary",
-        "category": "Ark Data Explorer",
+        "title": "%supervisor.dataExplorer.expandSummary.title%",
+        "category": "%supervisor.dataExplorer.category%",
         "enablement": "supervisor.dataExplorerEditorActive && supervisor.dataExplorerSummaryCollapsed"
       },
       {
         "command": "supervisor.dataExplorer.summaryOnLeft",
-        "title": "Summary on Left",
-        "category": "Ark Data Explorer",
+        "title": "%supervisor.dataExplorer.summaryOnLeft.title%",
+        "category": "%supervisor.dataExplorer.category%",
         "icon": "$(layout-sidebar-left-off)",
         "enablement": "supervisor.dataExplorerEditorActive"
       },
       {
         "command": "supervisor.dataExplorer.summaryOnRight",
-        "title": "Summary on Right",
-        "category": "Ark Data Explorer",
+        "title": "%supervisor.dataExplorer.summaryOnRight.title%",
+        "category": "%supervisor.dataExplorer.category%",
         "icon": "$(layout-sidebar-right-off)",
         "enablement": "supervisor.dataExplorerEditorActive"
       },
       {
         "command": "supervisor.dataExplorer.summaryOnLeftActive",
-        "title": "Summary on Left",
-        "category": "Ark Data Explorer",
+        "title": "%supervisor.dataExplorer.summaryOnLeft.title%",
+        "category": "%supervisor.dataExplorer.category%",
         "icon": "$(layout-sidebar-left)",
         "enablement": "supervisor.dataExplorerEditorActive"
       },
       {
         "command": "supervisor.dataExplorer.summaryOnRightActive",
-        "title": "Summary on Right",
-        "category": "Ark Data Explorer",
+        "title": "%supervisor.dataExplorer.summaryOnRight.title%",
+        "category": "%supervisor.dataExplorer.category%",
         "icon": "$(layout-sidebar-right)",
         "enablement": "supervisor.dataExplorerEditorActive"
       },
       {
         "command": "supervisor.dataExplorer.clearColumnSorting",
-        "title": "Clear Column Sorting",
-        "category": "Ark Data Explorer",
+        "title": "%supervisor.dataExplorer.clearColumnSorting.title%",
+        "category": "%supervisor.dataExplorer.category%",
         "icon": "$(clear-all)",
         "enablement": "supervisor.dataExplorerEditorActive && supervisor.dataExplorerIsColumnSorting"
       },
       {
         "command": "supervisor.dataExplorer.convertToCode",
-        "title": "Convert to Code",
-        "category": "Ark Data Explorer",
+        "title": "%supervisor.dataExplorer.convertToCode.title%",
+        "category": "%supervisor.dataExplorer.category%",
         "icon": "$(code)",
         "enablement": "supervisor.dataExplorerEditorActive && supervisor.dataExplorerIsConvertToCodeEnabled && supervisor.dataExplorerCodeSyntaxesAvailable && (supervisor.dataExplorerIsColumnSorting || supervisor.dataExplorerIsRowFiltering)"
       },
       {
         "command": "supervisor.dataExplorer.openAsPlaintext",
-        "title": "Open as Plain Text File",
-        "category": "Ark Data Explorer",
+        "title": "%supervisor.dataExplorer.openAsPlaintext.title%",
+        "category": "%supervisor.dataExplorer.category%",
         "icon": "$(file-text)",
         "enablement": "supervisor.dataExplorerEditorActive && supervisor.dataExplorerIsPlaintext"
       },
       {
         "command": "supervisor.dataExplorer.openAsSpreadsheet",
-        "title": "Open as Spreadsheet",
-        "category": "Ark Data Explorer",
+        "title": "%supervisor.dataExplorer.openAsSpreadsheet.title%",
+        "category": "%supervisor.dataExplorer.category%",
         "icon": "$(github-project)",
         "enablement": "supervisor.dataExplorerEditorActive && supervisor.dataExplorerIsXlsx && !isWeb && remoteName == ''"
       },
       {
         "command": "supervisor.dataExplorer.toggleFileOptions",
-        "title": "File Options",
-        "category": "Ark Data Explorer",
+        "title": "%supervisor.dataExplorer.toggleFileOptions.title%",
+        "category": "%supervisor.dataExplorer.category%",
         "icon": "$(settings-gear)",
         "enablement": "supervisor.dataExplorerEditorActive && supervisor.dataExplorerIsPlaintext"
       },
       {
+        "command": "supervisor.dataExplorer.selectWorksheet",
+        "title": "%supervisor.dataExplorer.selectWorksheet.title%",
+        "category": "%supervisor.dataExplorer.category%",
+        "icon": "$(list-selection)",
+        "enablement": "supervisor.dataExplorerEditorActive && supervisor.dataExplorerIsXlsx"
+      },
+      {
         "command": "supervisor.dataExplorer.moveToNewWindow",
-        "title": "Move into New Window",
-        "category": "Ark Data Explorer",
+        "title": "%supervisor.dataExplorer.moveToNewWindow.title%",
+        "category": "%supervisor.dataExplorer.category%",
         "icon": "$(link-external)",
         "enablement": "supervisor.dataExplorerEditorActive && !supervisor.dataExplorerInNewWindow"
       },
       {
         "command": "supervisor.dataExplorer.showColumnContextMenu",
-        "title": "Show Column Context Menu",
-        "category": "Ark Data Explorer",
+        "title": "%supervisor.dataExplorer.showColumnContextMenu.title%",
+        "category": "%supervisor.dataExplorer.category%",
         "enablement": "supervisor.dataExplorerEditorActive"
       },
       {
         "command": "supervisor.dataExplorer.showRowContextMenu",
-        "title": "Show Row Context Menu",
-        "category": "Ark Data Explorer",
+        "title": "%supervisor.dataExplorer.showRowContextMenu.title%",
+        "category": "%supervisor.dataExplorer.category%",
         "enablement": "supervisor.dataExplorerEditorActive"
       },
       {
         "command": "supervisor.dataExplorer.showCellContextMenu",
-        "title": "Show Cell Context Menu",
-        "category": "Ark Data Explorer",
+        "title": "%supervisor.dataExplorer.showCellContextMenu.title%",
+        "category": "%supervisor.dataExplorer.category%",
         "enablement": "supervisor.dataExplorerEditorActive"
       },
       {
         "command": "supervisor.dataExplorer.openFile",
-        "title": "Open in Data Explorer",
-        "category": "Ark Data Explorer",
+        "title": "%supervisor.dataExplorer.openFile.title%",
+        "category": "%supervisor.dataExplorer.category%",
         "icon": "$(table)"
       },
       {
@@ -717,6 +726,11 @@
           "command": "supervisor.dataExplorer.toggleFileOptions",
           "when": "supervisor.dataExplorerEditorActive && supervisor.dataExplorerIsPlaintext",
           "group": "navigation@8"
+        },
+        {
+          "command": "supervisor.dataExplorer.selectWorksheet",
+          "when": "supervisor.dataExplorerEditorActive && supervisor.dataExplorerIsXlsx",
+          "group": "navigation@8"
         }
       ],
       "commandPalette": [
@@ -759,6 +773,10 @@
         {
           "command": "supervisor.dataExplorer.convertToCode",
           "when": "supervisor.dataExplorerEditorActive && supervisor.dataExplorerIsConvertToCodeEnabled && supervisor.dataExplorerCodeSyntaxesAvailable && (supervisor.dataExplorerIsColumnSorting || supervisor.dataExplorerIsRowFiltering)"
+        },
+        {
+          "command": "supervisor.dataExplorer.selectWorksheet",
+          "when": "supervisor.dataExplorerEditorActive && supervisor.dataExplorerIsXlsx"
         },
         {
           "command": "supervisor.dataExplorer.openAsPlaintext",
@@ -1229,7 +1247,7 @@
     "customEditors": [
       {
         "viewType": "positron.dataExplorerEditor",
-        "displayName": "Data Explorer",
+        "displayName": "%supervisor.dataExplorer.editor.displayName%",
         "priority": "option",
         "selector": [
           {

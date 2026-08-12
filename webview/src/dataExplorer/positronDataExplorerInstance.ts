@@ -226,7 +226,13 @@ export class PositronDataExplorerInstance {
         if (params.error) {
             this.stores.state.update((state) => ({
                 ...state,
-                error: params.error ?? state.error,
+                error: {
+                    message: params.error ?? '',
+                    operation: 'requestColumnProfiles',
+                    severity: 'error',
+                    recoverable: true,
+                    requestId: params.requestId,
+                },
             }));
         }
     }
@@ -281,11 +287,24 @@ export class PositronDataExplorerInstance {
         }));
     }
 
-    handleError(params: { message: string }): void {
+    handleError(params: {
+        message: string;
+        operation: string;
+        severity: 'error' | 'warning';
+        recoverable: boolean;
+        requestId?: number;
+    }): void {
         this.stores.state.update((state) => ({
             ...state,
-            error: params.message,
+            error: params,
             isLoading: false,
+        }));
+    }
+
+    dismissError(): void {
+        this.stores.state.update((state) => ({
+            ...state,
+            error: null,
         }));
     }
 
@@ -308,7 +327,14 @@ export class PositronDataExplorerInstance {
             ...state,
             backendState,
             schema: schemaInvalidated ? [] : state.schema,
-            error: backendState?.error_message ?? null,
+            error: backendState?.error_message
+                ? {
+                      message: backendState.error_message,
+                      operation: 'backend',
+                      severity: 'error',
+                      recoverable: false,
+                  }
+                : null,
             supportsFileOptions:
                 fileOptions?.supportsFileOptions ?? state.supportsFileOptions,
             fileHasHeaderRow:
