@@ -12,6 +12,7 @@ import { ActiveSession, DefaultApi, ServerConfiguration, ServerStatus, SessionLi
 import { summarizeAxiosError } from './util';
 import { KALLICHORE_STATE_KEY } from './KallichoreAdapterApi';
 import { extensionHostEphemeralState } from '../runtime/ephemeralState';
+import { formatRawSupervisorLine } from '../logging/logSinks';
 
 /**
  * Snapshot of a running Kallichore supervisor persisted in global storage.
@@ -126,7 +127,10 @@ export class KallichoreInstances {
 				if (!this.isProcessAlive(record.state.server_pid)) {
 					// Mark work complete for the progress UI even though we prune this entry.
 					progress.report({ increment, message: record.workspaceName ?? vscode.l10n.t("Empty Workspace") });
-					this.log?.appendLine(`${this.timestamp()} [Positron] Pruned exited supervisor PID ${record.state.server_pid}`);
+					this.log?.appendLine(formatRawSupervisorLine(
+						`Pruned exited supervisor PID ${record.state.server_pid}`,
+						vscode.LogLevel.Debug,
+					));
 					continue;
 				}
 
@@ -877,12 +881,4 @@ export class KallichoreInstances {
 			: vscode.l10n.t("The session is not connected to any client.");
 	}
 
-	/**
-	 * Formats a timestamp suitable for prefixing log messages.
-	 *
-	 * @returns A HH:MM:SS UTC timestamp string.
-	 */
-	private static timestamp(): string {
-		return new Date().toISOString().substring(11, 19);
-	}
 }

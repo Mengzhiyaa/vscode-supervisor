@@ -19,6 +19,7 @@ import { PlotSizingPolicyCustom } from './sizingPolicyCustom';
 import { PlotsConfiguration } from './plotsConfiguration';
 import { PositronPlotCommProxy } from './comms/positronPlotCommProxy';
 import { PlotClientState, ZoomLevel } from '../shared/plots';
+import { logFrameworkDiagnostic } from '../logging/frameworkLogger';
 export { PlotClientState, ZoomLevel } from '../shared/plots';
 
 /**
@@ -283,7 +284,7 @@ export class PlotClientInstance extends RuntimeClientInstance {
                 }
             } catch (err) {
                 // Log error but don't crash - plot may not have been rendered yet
-                console.warn('Failed to queue plot update request:', err);
+                logFrameworkDiagnostic('PlotClientInstance', `Failed to queue plot update request: ${err}`);
                 this._onDidUpdatePlot.fire();
             }
         });

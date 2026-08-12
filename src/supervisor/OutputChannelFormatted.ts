@@ -14,6 +14,9 @@ export type MessageFormatter = (message: string) => string;
  * OutputChannel with formatting applied to `appendLine()`.
  */
 export class OutputChannelFormatted implements vscode.OutputChannel {
+	private atLineStart = true;
+	private pendingCarriageReturn = false;
+
 	constructor(
 		private readonly channel: vscode.OutputChannel,
 		private readonly formatter: MessageFormatter
@@ -24,18 +27,22 @@ export class OutputChannelFormatted implements vscode.OutputChannel {
 	}
 
 	append(value: string): void {
-		this.channel.append(value);
+		this.write(value, false);
 	}
 
 	appendLine(value: string): void {
-		this.channel.appendLine(this.formatter(value));
+		this.write(value, true);
 	}
 
 	replace(value: string): void {
-		this.channel.replace(value);
+		this.atLineStart = true;
+		this.pendingCarriageReturn = false;
+		this.channel.replace(this.format(value, false));
 	}
 
 	clear(): void {
+		this.atLineStart = true;
+		this.pendingCarriageReturn = false;
 		this.channel.clear();
 	}
 
@@ -54,7 +61,42 @@ export class OutputChannelFormatted implements vscode.OutputChannel {
 	}
 
 	dispose(): void {
+		if (this.pendingCarriageReturn) {
+			this.pendingCarriageReturn = false;
+			this.write('\n', false);
+		}
 		this.channel.dispose();
+	}
+
+	private write(value: string, appendNewline: boolean): void {
+		this.channel.append(this.format(value, appendNewline));
+	}
+
+	private format(value: string, appendNewline: boolean): string {
+		let input = this.pendingCarriageReturn ? `\r${value}` : value;
+		this.pendingCarriageReturn = false;
+
+		if (!appendNewline && input.endsWith('\r')) {
+			input = input.substring(0, input.length - 1);
+			this.pendingCarriageReturn = true;
+		}
+		input = input.replace(/\r\n?/g, '\n');
+		if (appendNewline) {
+			input += '\n';
+		}
+
+		let output = '';
+		for (const character of input) {
+			if (this.atLineStart) {
+				output += this.formatter('');
+				this.atLineStart = false;
+			}
+			output += character;
+			if (character === '\n') {
+				this.atLineStart = true;
+			}
+		}
+		return output;
 	}
 }
 

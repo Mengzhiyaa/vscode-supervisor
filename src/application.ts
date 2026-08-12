@@ -1,4 +1,6 @@
 import * as vscode from 'vscode';
+import { registerFrameworkLogChannel } from './logging/frameworkLogger';
+import { RedactingLogOutputChannel } from './logging/logSinks';
 import {
     type ILanguageContributionServices,
     type ILanguageCapabilityRegistry,
@@ -206,8 +208,11 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
         initializePositronCompatibility(_context);
 
         // Create log output channel for logging with level support
-        this._outputChannel = vscode.window.createOutputChannel('Ark', { log: true });
+        this._outputChannel = new RedactingLogOutputChannel(
+            vscode.window.createOutputChannel('Supervisor', { log: true }),
+        );
         this._disposables.push(this._outputChannel);
+        this._disposables.push(registerFrameworkLogChannel(this._outputChannel));
         this._languageAssetCatalog = new PassiveLanguageAssetCatalog(
             () => vscode.extensions.all,
             vscode.extensions.onDidChange,
@@ -598,6 +603,8 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
     private _getLanguageContributionServices(): ILanguageContributionServices {
         return {
             logChannel: this._outputChannel,
+            frameworkLogChannel: this._outputChannel,
+            languageLogChannel: this._outputChannel,
             runtimeSessionService: this._sessionManager,
             runtimeStartupService: this._runtimeStartupService,
             positronNewFolderService: this._positronNewFolderService,
@@ -624,8 +631,12 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
                     this._runtimeManager.registerRuntimeProvider(
                         snapshot.runtimeProvider,
                         snapshot.identity,
+                        snapshot.logChannel,
                     ),
-                    this._sessionManager.registerRuntimeProvider(snapshot.runtimeProvider),
+                    this._sessionManager.registerRuntimeProvider(
+                        snapshot.runtimeProvider,
+                        snapshot.logChannel,
+                    ),
                 );
             }
             if (snapshot.sessionManager) {

@@ -8,10 +8,7 @@ import * as SessionProtocol from '../rpc/webview/session';
 import { RuntimeSession } from '../runtime/session';
 import { RuntimeSessionService } from '../runtime/runtimeSession';
 import { RuntimeStartupService } from '../runtime/runtimeStartup';
-import {
-    LanguageRuntimeSessionChannel,
-    RuntimeCodeFragmentStatus,
-} from '../internal/runtimeTypes';
+import { RuntimeCodeFragmentStatus } from '../internal/runtimeTypes';
 import {
     UiFrontendEvent,
 } from '../runtime/comms/positronUiComm';
@@ -714,17 +711,7 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
                 return;
             }
 
-            switch (params.channel) {
-                case 'console':
-                    session.showOutput(LanguageRuntimeSessionChannel.Console);
-                    return;
-                case 'kernel':
-                    session.showOutput(LanguageRuntimeSessionChannel.Kernel);
-                    return;
-                case 'lsp':
-                    session.showLspOutput();
-                    return;
-            }
+            session.showOutput(params.channel);
         });
 
         // Handle console width change notification.

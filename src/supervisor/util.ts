@@ -6,6 +6,7 @@
 import { AxiosError, isAxiosError } from './httpClient';
 import { Buffer } from 'buffer';
 import * as vscode from 'vscode';
+import { logFrameworkDiagnostic } from '../logging/frameworkLogger';
 
 /**
  * Creates a short, unique ID. Use to help create unique identifiers for
@@ -284,13 +285,13 @@ function validateAndGetBufferInstance(item: unknown, maxSize: number): Buffer | 
 
 	if (isVSBufferLike(item)) {
 		if (item.buffer.length > maxSize) {
-			console.warn(`Buffer exceeds size limit (${item.buffer.length} > ${maxSize} bytes)`);
+			logFrameworkDiagnostic('SupervisorUtil', `Buffer exceeds size limit (${item.buffer.length} > ${maxSize} bytes)`);
 			return undefined;
 		}
 		bufferInstance = item.buffer;
 	} else if (item instanceof Buffer) {
 		if (item.length > maxSize) {
-			console.warn(`Buffer exceeds size limit (${item.length} > ${maxSize} bytes)`);
+			logFrameworkDiagnostic('SupervisorUtil', `Buffer exceeds size limit (${item.length} > ${maxSize} bytes)`);
 			return undefined;
 		}
 		bufferInstance = item;
@@ -337,7 +338,7 @@ export function unpackSerializedObjectWithBuffers(payload: unknown): {
 						buffers.push(bufferInstance.toString('base64'));
 					}
 				} catch (e) {
-					console.error('Error processing buffer:', e);
+					logFrameworkDiagnostic('SupervisorUtil', `Error processing buffer: ${e}`, vscode.LogLevel.Error);
 					// Continue processing other buffers
 				}
 			}

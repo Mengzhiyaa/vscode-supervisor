@@ -38,6 +38,7 @@ export interface LanguageCapabilityRegistryOptions {
 
 interface RegistrationDraft {
     readonly identity: ILanguageRegistrationIdentity;
+    logChannel?: vscode.LogOutputChannel;
     runtimeProvider?: ILanguageRuntimeProvider<unknown>;
     lspFactory?: ILanguageLspFactory;
     binaryProvider?: IBinaryProvider;
@@ -107,6 +108,7 @@ function sameSnapshotObjects(
     draft: RegistrationDraft,
 ): boolean {
     return snapshot.runtimeProvider === draft.runtimeProvider &&
+        snapshot.logChannel === draft.logChannel &&
         snapshot.lspFactory === draft.lspFactory &&
         snapshot.binaryProvider === draft.binaryProvider &&
         snapshot.sessionManager === draft.sessionManager &&
@@ -347,6 +349,7 @@ export class LanguageCapabilityRegistry implements ILanguageCapabilityRegistry, 
         return Object.freeze({
             identity: Object.freeze({ ...draft.identity }),
             generation,
+            logChannel: draft.logChannel,
             runtimeProvider: draft.runtimeProvider,
             lspFactory: draft.lspFactory,
             binaryProvider: draft.binaryProvider,
@@ -436,7 +439,7 @@ export class LanguageCapabilityRegistry implements ILanguageCapabilityRegistry, 
         const context: ILanguageCapabilityActivationContext = {
             identity: active.snapshot.identity,
             generation: active.snapshot.generation,
-            services: this._options.services,
+            services: this._servicesForSnapshot(active.snapshot),
         };
         try {
             const result = await descriptor.activate(context, active.abortController.signal);
@@ -497,6 +500,17 @@ export class LanguageCapabilityRegistry implements ILanguageCapabilityRegistry, 
             this._disposeAll(disposables);
         }
         this._disposeAll(active.installationDisposables);
+    }
+
+    private _servicesForSnapshot(snapshot: ILanguageCapabilitySnapshot): ILanguageContributionServices {
+        const languageLogChannel = snapshot.logChannel ??
+            this._options.services.languageLogChannel ??
+            this._options.services.logChannel;
+        return Object.freeze({
+            ...this._options.services,
+            logChannel: languageLogChannel,
+            languageLogChannel,
+        });
     }
 
     private _isCurrent(active: ActiveRegistration): boolean {
@@ -649,6 +663,12 @@ class LanguageRegistrationBuilder implements ILanguageRegistrationBuilder {
     setRuntimeProvider<TInstallation>(provider: ILanguageRuntimeProvider<TInstallation>): this {
         this._assertOpen();
         this._draft.runtimeProvider = provider as ILanguageRuntimeProvider<unknown>;
+        return this;
+    }
+
+    setLogChannel(logChannel: vscode.LogOutputChannel): this {
+        this._assertOpen();
+        this._draft.logChannel = logChannel;
         return this;
     }
 

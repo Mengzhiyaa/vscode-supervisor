@@ -487,10 +487,10 @@ export const methods = {
 // ============================================================================
 
 export const window = {
-    createRawLogOutputChannel(name: string): vscode.LogOutputChannel {
-        // VS Code cannot disable log-channel prefixes, but returning a real
-        // LogOutputChannel preserves the public API shape and log methods.
-        return vscode.window.createOutputChannel(name, { log: true });
+    createRawLogOutputChannel(name: string): vscode.OutputChannel {
+        // Plain OutputChannel is the only public VS Code API that preserves
+        // producer-formatted timestamps, levels, continuations, and blank lines.
+        return vscode.window.createOutputChannel(name);
     },
 
     onDidChangeConsoleWidth: consoleWidthEmitter.event,

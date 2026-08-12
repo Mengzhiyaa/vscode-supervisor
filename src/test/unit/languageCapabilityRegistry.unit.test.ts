@@ -59,6 +59,40 @@ suite('[Unit] language capability registry', () => {
         registry.dispose();
     });
 
+    test('binds an extension-owned log channel without disposing it', async () => {
+        let disposed = false;
+        const logChannel = {
+            dispose: () => { disposed = true; },
+        } as vscode.LogOutputChannel;
+        let activationLogChannel: vscode.LogOutputChannel | undefined;
+        const registry = new LanguageCapabilityRegistry({
+            services: { logChannel: {} as vscode.LogOutputChannel } as any,
+            validateOwner: () => true,
+        });
+        const descriptor: ILanguageOptionalCapabilityDescriptor = {
+            id: 'commands.logging',
+            revision: 1,
+            kind: 'commands',
+            activate: ({ services }) => {
+                activationLogChannel = services.languageLogChannel;
+                assert.strictEqual(services.logChannel, logChannel);
+                return new vscode.Disposable(() => undefined);
+            },
+        };
+
+        const handle = coreBuilder(registry, 1)
+            .setLogChannel(logChannel)
+            .addOptionalCapability(descriptor)
+            .commit();
+        await handle.whenCapabilityReady('commands.logging');
+
+        assert.strictEqual(handle.snapshot.logChannel, logChannel);
+        assert.strictEqual(activationLogChannel, logChannel);
+        handle.dispose();
+        assert.strictEqual(disposed, false);
+        registry.dispose();
+    });
+
     test('rejects changed objects at the same revision', () => {
         const registry = createRegistry();
         const first = coreBuilder(registry, 1).commit();

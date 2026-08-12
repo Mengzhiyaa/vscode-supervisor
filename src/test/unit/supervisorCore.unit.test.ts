@@ -261,7 +261,7 @@ suite('[Unit] supervisor core backports', () => {
                             details: 'The configured R library could not be loaded.',
                         },
                         exit_code: 127,
-                        output: 'libR.so: cannot open shared object file',
+                        output: 'libR.so: cannot open shared object file; --bearer-token=secret-value',
                     },
                     headers: {},
                     status: 500,
@@ -289,6 +289,7 @@ suite('[Unit] supervisor core backports', () => {
                 hasServerCode: error.details.includes('Server error code: KERNEL_START_FAILED'),
                 hasServerDetails: error.details.includes('The configured R library could not be loaded.'),
                 hasKernelOutput: error.details.includes('libR.so: cannot open shared object file'),
+                redactsKernelOutput: !error.details.includes('secret-value'),
                 ownsStack: error.stack?.startsWith('RuntimeStartupError: Startup failed at '),
             },
             {
@@ -301,6 +302,7 @@ suite('[Unit] supervisor core backports', () => {
                 hasServerCode: true,
                 hasServerDetails: true,
                 hasKernelOutput: true,
+                redactsKernelOutput: true,
                 ownsStack: true,
             },
         );
@@ -359,6 +361,53 @@ suite('[Unit] supervisor core backports', () => {
         assert.deepStrictEqual(capturedMetadata, { source: 'unit-test' });
 
         await session.dispose();
+    });
+
+    test('runtime session delegates language lifecycle logs to the session supervisor', () => {
+        const session = new RuntimeSession(
+            'session-1',
+            makeRuntimeMetadata(),
+            makeSessionMetadata(),
+            makeNoopLogChannel(),
+            'Session 1',
+        );
+        const calls: Array<{ message: string; level?: vscode.LogLevel }> = [];
+        (session as any)._kernel = {
+            emitJupyterLog: (message: string, level?: vscode.LogLevel) => calls.push({ message, level }),
+        };
+
+        session.emitLog('Starting language services', vscode.LogLevel.Debug);
+
+        assert.deepStrictEqual(calls, [{
+            message: 'Starting language services',
+            level: vscode.LogLevel.Debug,
+        }]);
+    });
+
+    test('runtime session lists and opens console, kernel, and LSP channels', () => {
+        const session = new RuntimeSession(
+            'session-1',
+            makeRuntimeMetadata(),
+            makeSessionMetadata(),
+            makeNoopLogChannel(),
+            'Session 1',
+            { languageId: 'r', create: () => undefined } as any,
+        );
+        const nativeChannels: unknown[] = [];
+        let lspShows = 0;
+        (session as any)._kernel = {
+            listOutputChannels: () => ['console', 'kernel'],
+            showOutput: (channel: unknown) => nativeChannels.push(channel),
+        };
+        (session as any)._lsp = { showOutput: () => { lspShows += 1; } };
+
+        assert.deepStrictEqual(session.listOutputChannels(), ['console', 'kernel', 'lsp']);
+        session.showOutput('console');
+        session.showOutput('kernel');
+        session.showOutput('lsp');
+
+        assert.deepStrictEqual(nativeChannels, ['console', 'kernel']);
+        assert.strictEqual(lspShows, 1);
     });
 
     test('kernel execute requests include positron code metadata', async () => {

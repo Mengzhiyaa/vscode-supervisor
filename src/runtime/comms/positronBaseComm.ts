@@ -7,6 +7,7 @@ import * as vscode from 'vscode';
 import { RuntimeClientInstance, RuntimeClientOutput } from '../RuntimeClientInstance';
 import { RuntimeClientState } from '../../internal/runtimeTypes';
 import { createUniqueId } from '../../supervisor/util';
+import { logFrameworkDiagnostic } from '../../logging/frameworkLogger';
 
 /**
  * An enum representing the set of JSON-RPC error codes.
@@ -183,7 +184,7 @@ export class PositronBaseComm implements vscode.Disposable {
                 emitter.fire({});
             } else {
                 // If the payload is some other kind of object, log a warning
-                console.warn(
+                logFrameworkDiagnostic('PositronBaseComm',
                     `Invalid payload type ${typeof payload} ` +
                     `for event '${method}' ` +
                     `on comm ${this.clientInstance.getClientId()}: ` +
@@ -196,7 +197,7 @@ export class PositronBaseComm implements vscode.Disposable {
             // this event will get dropped. This is normal for RPC responses.
             // Only log if it's not a response pattern (no result/error)
             if (!('result' in data) && !('error' in data)) {
-                console.warn(
+                logFrameworkDiagnostic('PositronBaseComm',
                     `Dropping event '${method}' ` +
                     `on comm ${this.clientInstance.getClientId()}: ` +
                     `${JSON.stringify(data.params)} ` +

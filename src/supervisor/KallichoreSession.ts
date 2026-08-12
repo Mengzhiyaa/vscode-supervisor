@@ -26,6 +26,7 @@ import { RuntimeMessageEmitter } from './RuntimeMessageEmitter';
 import { CommMsgCommand } from './jupyter/CommMsgCommand';
 import { ShutdownRequest } from './jupyter/ShutdownRequest';
 import { LogStreamer } from './LogStreamer';
+import { dispatchStructuredLog, redactLogMessage, truncateStructuredMessage } from '../logging/logSinks';
 import { JupyterMessageHeader } from './jupyter/JupyterMessageHeader';
 import { JupyterChannel } from './jupyter/JupyterChannel';
 import { InputReplyCommand } from './jupyter/InputReplyCommand';
@@ -82,14 +83,19 @@ export interface DisconnectedEvent {
 type SessionStartupPhase = 'establish' | 'startSession' | 'websocket';
 
 class RuntimeStartupError extends Error {
+	readonly details: string;
+	readonly exitCode: number | undefined;
+
 	constructor(
 		message: string,
-		readonly details: string,
-		readonly exitCode: number | undefined,
+		details: string,
+		exitCode: number | undefined,
 		cause?: unknown,
 	) {
-		super(message);
+		super(redactLogMessage(message));
 		this.name = 'RuntimeStartupError';
+		this.details = redactLogMessage(details);
+		this.exitCode = exitCode;
 		if (cause !== undefined) {
 			(this as Error & { cause?: unknown }).cause = cause;
 		}
@@ -1326,7 +1332,9 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 			diagnosticLines.push(`Runtime path: ${this.runtimeMetadata.runtimePath}`);
 		}
 		if (this._kernelSpec?.argv.length) {
-			diagnosticLines.push(`Kernel spec command: ${this._kernelSpec.argv.join(' ')}`);
+			diagnosticLines.push(
+				`Kernel spec command: ${redactLogMessage(this._kernelSpec.argv.join(' '))}`,
+			);
 		}
 		if (this._kernelSpec?.startup_command) {
 			diagnosticLines.push(`Startup command: ${this._kernelSpec.startup_command}`);
@@ -2466,7 +2474,7 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 	 * @param logFile The path to the log file to stream
 	 */
 	private async streamLogFile(logFile: string) {
-		const logStreamer = new LogStreamer(this._kernelChannel, logFile, this.runtimeMetadata.languageName);
+		const logStreamer = new LogStreamer(this._kernelChannel, logFile);
 		this._kernelChannel.appendLine(`Streaming kernel log file: ${logFile}`);
 		this._disposables.push(logStreamer);
 		this._kernelLogFile = logFile;
@@ -2499,30 +2507,11 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 	 * @param msg The message to log
 	 */
 	public log(msg: string, logLevel?: vscode.LogLevel) {
-		// Ensure message isn't over the maximum length
-		if (msg.length > 2048) {
-			msg = msg.substring(0, 2048) + '... (truncated)';
-		}
-
-		switch (logLevel) {
-			case vscode.LogLevel.Error:
-				this._consoleChannel.error(msg);
-				break;
-			case vscode.LogLevel.Warning:
-				this._consoleChannel.warn(msg);
-				break;
-			case vscode.LogLevel.Info:
-				this._consoleChannel.info(msg);
-				break;
-			case vscode.LogLevel.Debug:
-				this._consoleChannel.debug(msg);
-				break;
-			case vscode.LogLevel.Trace:
-				this._consoleChannel.trace(msg);
-				break;
-			default:
-				this._consoleChannel.appendLine(msg);
-		}
+		dispatchStructuredLog(
+			this._consoleChannel,
+			truncateStructuredMessage(redactLogMessage(msg)),
+			logLevel,
+		);
 	}
 
 	/**

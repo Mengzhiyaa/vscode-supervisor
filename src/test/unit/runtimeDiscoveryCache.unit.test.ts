@@ -50,6 +50,40 @@ function logChannel(): vscode.LogOutputChannel {
 }
 
 suite('[Unit] Runtime discovery cache', () => {
+    test('uses the registered language channel for provider callbacks', async () => {
+        const context = { globalState: new MemoryMemento() } as unknown as vscode.ExtensionContext;
+        const frameworkLog = logChannel();
+        const languageLog = logChannel();
+        const seen: vscode.LogOutputChannel[] = [];
+        const manager = new RuntimeManager(context, {
+            registerDiscoveredRuntime: () => undefined,
+        } as any, frameworkLog);
+        const provider = {
+            languageId: 'r',
+            languageName: 'R',
+            discoverInstallations: async function* (log: vscode.LogOutputChannel) {
+                seen.push(log);
+                yield { path: '/usr/bin/R' };
+            },
+            createRuntimeMetadata: (_context: unknown, installation: unknown, log: vscode.LogOutputChannel) => {
+                seen.push(log);
+                return {
+                    runtimeId: 'r-test',
+                    runtimeName: 'R Test',
+                    runtimePath: (installation as { path: string }).path,
+                    languageId: 'r',
+                } as LanguageRuntimeMetadata;
+            },
+            getRuntimePath: (installation: { path: string }) => installation.path,
+        } as ILanguageRuntimeProvider<{ path: string }>;
+
+        manager.registerRuntimeProvider(provider, undefined, languageLog);
+        await manager.discoverLanguageRuntime('r', true);
+
+        assert.deepStrictEqual(seen, [languageLog, languageLog]);
+        manager.dispose();
+    });
+
     test('does not let an older provider lease remove its replacement', () => {
         const context = { globalState: new MemoryMemento() } as unknown as vscode.ExtensionContext;
         const manager = new RuntimeManager(context, {} as any, logChannel());

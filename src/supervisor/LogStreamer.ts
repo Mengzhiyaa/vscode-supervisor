@@ -6,24 +6,37 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import { Tail } from 'tail';
+import { type IRawLogSink, redactLogMessage } from '../logging/logSinks';
 
 // Wrapper around Tail that flushes on `dispose()`.
 // Prevents losing output on reload.
+
+/** Splits file text into logical lines without inventing a trailing blank line. */
+export function splitLogicalLines(contents: string): string[] {
+	if (contents.length === 0) {
+		return [];
+	}
+	const lines = contents.replace(/\r\n?/g, '\n').split('\n');
+	if (contents.endsWith('\n') || contents.endsWith('\r')) {
+		lines.pop();
+	}
+	return lines;
+}
 
 export class LogStreamer implements vscode.Disposable {
 	private _tail: Tail;
 	private _linesCounter: number = 0;
 
 	constructor(
-		private _output: vscode.OutputChannel,
+		private _output: IRawLogSink,
 		private _path: string,
 		private _prefix?: string,
 	) {
 		this._tail = new Tail(this._path, { fromBeginning: true, useWatchFile: true });
 
 		// Establish listeners for new lines in the log file
-		this._tail.on('line', (line) => this.appendLine(line));
-		this._tail.on('error', (error) => this.appendLine(error));
+		this._tail.on('line', (line) => this.appendLine(line, true));
+		this._tail.on('error', (error) => this.appendLine(String(error), false));
 	}
 
 	/**
@@ -45,26 +58,18 @@ export class LogStreamer implements vscode.Disposable {
 			return;
 		}
 
-		// Initialise number of lines seen, which might not be zero as the
-		// kernel might have already started outputting lines, or we might be
-		// refreshing with an existing log file. This is used for flushing
-		// the tail of the log on disposal. There is a race condition here so
-		// this might be slightly off, causing duplicate lines in the tail of
-		// the log.
-		try {
-			const lines = fs.readFileSync(this._path, 'utf8').split('\n');
-			this._linesCounter = lines.length;
-		} catch (err) {
-			this.appendLine(`Error reading initial contents of log file '${this._path}': ${err.message || JSON.stringify(err)}`);
-		}
-
 		// Start watching the log file. This streams output until the streamer is
-		// disposed.
+		// disposed. fromBeginning means _linesCounter tracks every file line that
+		// was actually delivered, including content written before watch().
 		this._tail.watch();
 	}
 
-	private appendLine(line: string) {
-		this._linesCounter += 1;
+	private appendLine(line: string, countFileLine = false) {
+		if (countFileLine) {
+			this._linesCounter += 1;
+		}
+		line = line.replace(/\r$/, '');
+		line = redactLogMessage(line);
 
 		if (this._prefix) {
 			this._output.appendLine(`[${this._prefix}] ${line}`);
@@ -80,13 +85,13 @@ export class LogStreamer implements vscode.Disposable {
 			return;
 		}
 
-		const lines = fs.readFileSync(this._path, 'utf8').split('\n');
+		const lines = splitLogicalLines(fs.readFileSync(this._path, 'utf8'));
 
 		// Push remaining lines in case new line events haven't had time to
 		// fire up before unwatching. We skip lines that we've already seen and
 		// flush the rest.
-		for (let i = this._linesCounter + 1; i < lines.length; ++i) {
-			this.appendLine(lines[i]);
+		for (let i = this._linesCounter; i < lines.length; ++i) {
+			this.appendLine(lines[i], true);
 		}
 	}
 }

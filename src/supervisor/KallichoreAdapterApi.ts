@@ -20,6 +20,7 @@ import { KallichoreApiInstance, KallichoreTransport } from './KallichoreApiInsta
 import { KallichoreInstances } from './KallichoreInstances';
 import { DapComm } from './DapComm';
 import { HandshakeSocket } from './HandshakeSocket';
+import { formatRawSupervisorLine } from '../logging/logSinks';
 import {
 	extensionHostEphemeralState,
 	type EphemeralMemento,
@@ -190,7 +191,7 @@ export class KCApi implements PositronSupervisorApi {
 	 */
 	constructor(
 		private readonly _context: vscode.ExtensionContext,
-		private readonly _log: vscode.LogOutputChannel,
+		private readonly _log: vscode.OutputChannel,
 		private readonly _transport: KallichoreTransport,
 		private readonly _reconnect: boolean,
 		private readonly _ephemeralState: EphemeralMemento =
@@ -1661,25 +1662,7 @@ export class KCApi implements PositronSupervisorApi {
 	 * @param message
 	 */
 	private log(message: string, level: vscode.LogLevel = vscode.LogLevel.Info) {
-		const formattedMsg = `[Positron] ${message}`;
-		switch (level) {
-			case vscode.LogLevel.Error:
-				this._log.error(formattedMsg);
-				break;
-			case vscode.LogLevel.Warning:
-				this._log.warn(formattedMsg);
-				break;
-			case vscode.LogLevel.Debug:
-				this._log.debug(formattedMsg);
-				break;
-			case vscode.LogLevel.Trace:
-				this._log.trace(formattedMsg);
-				break;
-			case vscode.LogLevel.Info:
-			default:
-				this._log.info(formattedMsg);
-				break;
-		}
+		this._log.appendLine(formatRawSupervisorLine(message, level));
 	}
 
 	private getWorkspaceName(): string | undefined {

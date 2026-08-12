@@ -22,6 +22,7 @@ export class RuntimeManager implements vscode.Disposable, IRuntimeManager {
 
     private readonly _disposables: vscode.Disposable[] = [];
     private readonly _runtimeProviders = new Map<string, ILanguageRuntimeProvider<any>>();
+    private readonly _runtimeProviderLogChannels = new Map<string, vscode.LogOutputChannel>();
     private readonly _runtimeProviderRegistrationTokens = new Map<string, object>();
     private readonly _runtimeProviderCacheIds = new Map<string, string>();
     private readonly _runtimes = new Map<string, LanguageRuntimeMetadata>();
@@ -57,9 +58,11 @@ export class RuntimeManager implements vscode.Disposable, IRuntimeManager {
     registerRuntimeProvider<TInstallation>(
         provider: ILanguageRuntimeProvider<TInstallation>,
         identity?: { readonly ownerExtensionId: string; readonly revision: number },
+        logChannel: vscode.LogOutputChannel = this._outputChannel,
     ): vscode.Disposable {
         const registrationToken = {};
         this._runtimeProviders.set(provider.languageId, provider as ILanguageRuntimeProvider<any>);
+        this._runtimeProviderLogChannels.set(provider.languageId, logChannel);
         this._runtimeProviderRegistrationTokens.set(provider.languageId, registrationToken);
         this._runtimeProviderCacheIds.set(
             provider.languageId,
@@ -77,7 +80,7 @@ export class RuntimeManager implements vscode.Disposable, IRuntimeManager {
                     const metadata = provider.createRuntimeMetadata(
                         this._context,
                         installation,
-                        this._outputChannel,
+                        logChannel,
                     );
                     this.registerDiscoveredRuntime(provider.languageId, installation, metadata);
                 } catch (error) {
@@ -104,6 +107,7 @@ export class RuntimeManager implements vscode.Disposable, IRuntimeManager {
             dynamicEventDisposables.forEach(disposable => disposable.dispose());
             if (this._runtimeProviderRegistrationTokens.get(provider.languageId) === registrationToken) {
                 this._runtimeProviders.delete(provider.languageId);
+                this._runtimeProviderLogChannels.delete(provider.languageId);
                 this._runtimeProviderRegistrationTokens.delete(provider.languageId);
                 this._runtimeProviderCacheIds.delete(provider.languageId);
             }
@@ -112,6 +116,10 @@ export class RuntimeManager implements vscode.Disposable, IRuntimeManager {
 
     getRuntimeProvider<TInstallation = unknown>(languageId: string): ILanguageRuntimeProvider<TInstallation> | undefined {
         return this._runtimeProviders.get(languageId) as ILanguageRuntimeProvider<TInstallation> | undefined;
+    }
+
+    private _getProviderLogChannel(languageId: string): vscode.LogOutputChannel {
+        return this._runtimeProviderLogChannels.get(languageId) ?? this._outputChannel;
     }
 
     getSupportedLanguageIds(): string[] {
@@ -269,13 +277,14 @@ export class RuntimeManager implements vscode.Disposable, IRuntimeManager {
                 continue;
             }
 
-            const installation = await provider.resolveInitialInstallation(this._outputChannel) ??
+            const logChannel = this._getProviderLogChannel(provider.languageId);
+            const installation = await provider.resolveInitialInstallation(logChannel) ??
                 this.getBestInstallation(provider.languageId);
             if (!installation) {
                 continue;
             }
 
-            const metadata = provider.createRuntimeMetadata(this._context, installation, this._outputChannel);
+            const metadata = provider.createRuntimeMetadata(this._context, installation, logChannel);
             this._runtimes.set(metadata.runtimeId, metadata);
             this._sessionManager.registerDiscoveredRuntime(
                 provider.languageId,
@@ -415,7 +424,8 @@ export class RuntimeManager implements vscode.Disposable, IRuntimeManager {
         }> = [];
         const paths = new Set<string>();
 
-        for await (const installation of provider.discoverInstallations(this._outputChannel)) {
+        const logChannel = this._getProviderLogChannel(provider.languageId);
+        for await (const installation of provider.discoverInstallations(logChannel)) {
             const runtimePath = provider.getRuntimePath(installation);
             if (paths.has(runtimePath)) {
                 continue;
@@ -425,7 +435,7 @@ export class RuntimeManager implements vscode.Disposable, IRuntimeManager {
             const metadata = provider.createRuntimeMetadata(
                 this._context,
                 installation,
-                this._outputChannel
+                logChannel
             );
             discovered.push({ installation, metadata, runtimePath });
         }

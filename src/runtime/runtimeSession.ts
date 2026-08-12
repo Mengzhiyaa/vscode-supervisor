@@ -81,6 +81,7 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
     private readonly _activeSessionsBySessionId = new Map<string, ActiveRuntimeSession>();
     private readonly _sessionLifecycleDisposables = new Map<string, vscode.Disposable[]>();
     private readonly _runtimeProviders = new Map<string, ILanguageRuntimeProvider<any>>();
+    private readonly _runtimeProviderLogChannels = new Map<string, vscode.LogOutputChannel>();
     private readonly _runtimeProviderRegistrationTokens = new Map<string, object>();
     private readonly _lspFactoriesByLanguageId = new Map<string, {
         readonly factory: ILanguageLspFactory;
@@ -198,9 +199,13 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
         this.updateActiveLanguages();
     }
 
-    registerRuntimeProvider<TInstallation>(provider: ILanguageRuntimeProvider<TInstallation>): vscode.Disposable {
+    registerRuntimeProvider<TInstallation>(
+        provider: ILanguageRuntimeProvider<TInstallation>,
+        logChannel: vscode.LogOutputChannel = this._outputChannel,
+    ): vscode.Disposable {
         const registrationToken = {};
         this._runtimeProviders.set(provider.languageId, provider as ILanguageRuntimeProvider<any>);
+        this._runtimeProviderLogChannels.set(provider.languageId, logChannel);
         this._runtimeProviderRegistrationTokens.set(provider.languageId, registrationToken);
         if (provider.lspFactory) {
             this.registerLspFactory(provider.lspFactory);
@@ -213,6 +218,7 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
             disposed = true;
             if (this._runtimeProviderRegistrationTokens.get(provider.languageId) === registrationToken) {
                 this._runtimeProviders.delete(provider.languageId);
+                this._runtimeProviderLogChannels.delete(provider.languageId);
                 this._runtimeProviderRegistrationTokens.delete(provider.languageId);
                 this._defaultInstallationsByLanguageId.delete(provider.languageId);
             }
@@ -339,6 +345,10 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
         return this._runtimeProviders.get(languageId) as ILanguageRuntimeProvider<TInstallation> | undefined;
     }
 
+    private _getProviderLogChannel(languageId: string): vscode.LogOutputChannel {
+        return this._runtimeProviderLogChannels.get(languageId) ?? this._outputChannel;
+    }
+
     getDefaultInstallation<TInstallation = unknown>(languageId: string): TInstallation | undefined {
         return this._defaultInstallationsByLanguageId.get(languageId) as TInstallation | undefined;
     }
@@ -390,7 +400,9 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
         try {
             for (const provider of this._runtimeProviders.values()) {
                 this._outputChannel.debug(`[RuntimeSession] Discovering initial ${provider.languageName} installations...`);
-                const installation = await provider.resolveInitialInstallation(this._outputChannel);
+                const installation = await provider.resolveInitialInstallation(
+                    this._getProviderLogChannel(provider.languageId),
+                );
                 if (installation) {
                     this.setDefaultInstallation(provider.languageId, installation);
                     this._outputChannel.info(
@@ -593,7 +605,11 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
             return undefined;
         }
 
-        const runtimeMetadata = provider.createRuntimeMetadata(this._context, installation, this._outputChannel);
+        const runtimeMetadata = provider.createRuntimeMetadata(
+            this._context,
+            installation,
+            this._getProviderLogChannel(provider.languageId),
+        );
         this.registerDiscoveredRuntime(provider.languageId, installation, runtimeMetadata);
         const sessionId = await this.startNewRuntimeSession(
             runtimeMetadata.runtimeId,
@@ -629,7 +645,11 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
         source: string,
     ): Promise<RuntimeSession> {
         const installation = await this._resolveInstallationForNewSession(provider);
-        const runtimeMetadata = provider.createRuntimeMetadata(this._context, installation, this._outputChannel);
+        const runtimeMetadata = provider.createRuntimeMetadata(
+            this._context,
+            installation,
+            this._getProviderLogChannel(provider.languageId),
+        );
         this.registerDiscoveredRuntime(provider.languageId, installation, runtimeMetadata);
         const sessionId = await this.startNewRuntimeSession(
             runtimeMetadata.runtimeId,
@@ -950,7 +970,10 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
         options?: ILanguageInstallationPickerOptions,
     ): Promise<TInstallation | undefined> {
         const provider = this._requireRuntimeProvider<TInstallation>(languageId);
-        const installation = await provider.promptForInstallation(this._outputChannel, options);
+        const installation = await provider.promptForInstallation(
+            this._getProviderLogChannel(languageId),
+            options,
+        );
         if (installation) {
             this.setDefaultInstallation(languageId, installation);
         }
@@ -1856,9 +1879,12 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
             return cachedInstallation;
         }
 
-        const installation = await provider.promptForInstallation(this._outputChannel, {
+        const installation = await provider.promptForInstallation(
+            this._getProviderLogChannel(provider.languageId),
+            {
             persistSelection: true,
-        });
+            },
+        );
         if (!installation) {
             throw new Error(
                 `No ${provider.languageName} installation configured. Please configure a ${provider.languageName} runtime.`,
@@ -1906,7 +1932,11 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
             return metadata;
         }
 
-        const defaults = provider.createRuntimeMetadata(this._context, installation, this._outputChannel);
+        const defaults = provider.createRuntimeMetadata(
+            this._context,
+            installation,
+            this._getProviderLogChannel(provider.languageId),
+        );
         return {
             ...metadata,
             base64EncodedIconSvg: defaults.base64EncodedIconSvg ?? metadata.base64EncodedIconSvg,
@@ -1941,12 +1971,13 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
             this._context,
             installation,
             sessionMode,
-            this._outputChannel,
+            this._getProviderLogChannel(provider.languageId),
         );
 
         this._outputChannel.info(`[RuntimeSession] Creating session ${normalizedSessionMetadata.sessionId}...`);
-        this._outputChannel.debug(`[RuntimeSession] Kernel argv: ${kernelSpec.argv.join(' ')}`);
-        this._outputChannel.trace(`[RuntimeSession] Kernel spec: ${JSON.stringify(kernelSpec, null, 2)}`);
+        this._outputChannel.debug(
+            `[RuntimeSession] Prepared kernel spec with ${kernelSpec.argv.length} argument(s)`,
+        );
 
         this.registerDiscoveredRuntime(provider.languageId, installation, normalizedRuntimeMetadata);
 
@@ -2023,7 +2054,7 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
             sessionMetadata.sessionId,
             runtimeMetadata,
             sessionMetadata,
-            this._outputChannel,
+            this._getProviderLogChannel(runtimeMetadata.languageId),
             sessionMetadata.sessionName,
             lspFactory,
             provisioning,

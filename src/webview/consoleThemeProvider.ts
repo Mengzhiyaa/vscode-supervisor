@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import type { ConsoleThemeData, ConsoleThemeRule } from '../shared/console';
+import { logFrameworkDiagnostic } from '../logging/frameworkLogger';
 
 export type RawTokenColor = {
     scope?: string | string[];
@@ -488,7 +489,11 @@ export class ConsoleThemeProvider {
             this._cache.set(key, parsed);
             return parsed;
         } catch (error) {
-            console.warn(`[ConsoleThemeProvider] Cannot read theme: ${themeUri.toString()}`, error);
+            logFrameworkDiagnostic(
+                'ConsoleThemeProvider',
+                `Cannot read theme ${themeUri.toString()}: ${error}`,
+                vscode.LogLevel.Debug,
+            );
             return undefined;
         }
     }

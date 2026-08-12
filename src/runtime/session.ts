@@ -1,5 +1,6 @@
 import * as crypto from 'crypto';
 import * as vscode from 'vscode';
+import { dispatchStructuredLog, formatLogContext, truncateStructuredMessage } from '../logging/logSinks';
 import {
     type LanguageRuntimeDynState,
     type ICodeExecutionAttribution,
@@ -10,6 +11,7 @@ import {
     type ILanguageLsp,
     type ILanguageLspFactory,
     type ILanguageRuntimeClientInstance,
+    type RuntimeSessionOutputChannel,
     type Utf8Location,
     LanguageRuntimeClientType,
     LanguageLspState,
@@ -148,8 +150,6 @@ class NullLanguageLsp implements ILanguageLsp {
         return;
     }
 }
-
-type RuntimeSessionOutputChannel = LanguageRuntimeSessionChannel | 'lsp';
 
 export interface RuntimeSessionProvisioningOptions {
     localSupervisor?: LocalSupervisorApi;
@@ -313,22 +313,6 @@ export class RuntimeSession implements vscode.Disposable {
     }
 
     /**
-     * Gets a short session ID prefix for logging.
-     * If the session ID is already language-scoped (for example `r-fed6ae6d`),
-     * reuse it directly to avoid duplicating the language prefix in logs.
-     */
-    private get _shortSessionId(): string {
-        const prefix = this.runtimeMetadata.languageId.substring(0, 1);
-        const scopedPrefix = `${prefix}-`;
-        if (this.sessionId.startsWith(scopedPrefix)) {
-            return this.sessionId;
-        }
-
-        const shortId = this.sessionId.substring(0, 8);
-        return `${scopedPrefix}${shortId}`;
-    }
-
-    /**
      * Logs a message to the output channel.
      * Follows Positron's KallichoreSession.log() pattern:
      * - Prefixes with short session ID (e.g., "r-5c0060c7")
@@ -339,33 +323,25 @@ export class RuntimeSession implements vscode.Disposable {
      * @param logLevel The log level (default: Debug)
      */
     public log(msg: string, logLevel?: vscode.LogLevel): void {
-        // Ensure message isn't over the maximum length
-        if (msg.length > 2048) {
-            msg = msg.substring(0, 2048) + '... (truncated)';
+        if (this._kernel?.emitJupyterLog) {
+            this._kernel.emitJupyterLog(msg, logLevel);
+            return;
         }
 
-        // Add short session ID prefix like Positron
-        const formattedMsg = `${this._shortSessionId} ${msg}`;
+        dispatchStructuredLog(
+            this._logChannel,
+            formatLogContext(
+                'RuntimeSession',
+                truncateStructuredMessage(msg),
+                { session: this.sessionId },
+            ),
+            logLevel,
+        );
+    }
 
-        switch (logLevel) {
-            case vscode.LogLevel.Error:
-                this._logChannel.error(formattedMsg);
-                break;
-            case vscode.LogLevel.Warning:
-                this._logChannel.warn(formattedMsg);
-                break;
-            case vscode.LogLevel.Info:
-                this._logChannel.info(formattedMsg);
-                break;
-            case vscode.LogLevel.Debug:
-                this._logChannel.debug(formattedMsg);
-                break;
-            case vscode.LogLevel.Trace:
-                this._logChannel.trace(formattedMsg);
-                break;
-            default:
-                this._logChannel.appendLine(formattedMsg);
-        }
+    /** Routes language-owned session lifecycle events to the session Supervisor channel. */
+    emitLog(message: string, level: vscode.LogLevel = vscode.LogLevel.Info): void {
+        this.log(message, level);
     }
 
     /**
@@ -1615,15 +1591,12 @@ export class RuntimeSession implements vscode.Disposable {
     /**
      * Shows one of the runtime's native output channels.
      */
-    showOutput(channel: LanguageRuntimeSessionChannel): void {
-        this._kernel?.showOutput(channel);
-    }
-
-    /**
-     * Shows the LSP output channel
-     */
-    showLspOutput(): void {
-        this._lsp.showOutput();
+    showOutput(channel: RuntimeSessionOutputChannel = 'kernel'): void {
+        if (channel === 'lsp') {
+            this._lsp.showOutput();
+            return;
+        }
+        this._kernel?.showOutput(channel as LanguageRuntimeSessionChannel);
     }
 
     /**
