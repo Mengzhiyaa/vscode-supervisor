@@ -837,6 +837,13 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
                 undefined,
                 submittingItem,
             );
+            // The webview clears its editor before sending submitCode so type-ahead
+            // can land in a fresh model while completeness is checked. Once the
+            // execution is accepted, reconcile the host-side pending-code mirror
+            // without notifying the webview: emitting an empty setPendingCode here
+            // would erase that type-ahead, while retaining the mirror would prepend
+            // the submitted fragment to every later editor execution.
+            this.clearPendingCodeState();
             return 'executed';
         } catch (error) {
             this._outputChannel.error(
@@ -985,15 +992,21 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
     }
 
     private setPendingCode(pendingCode?: string, executionId?: string): void {
-        this._pendingCode = pendingCode;
-
         if (pendingCode && executionId) {
+            this._pendingCode = pendingCode;
             this._pendingExecutionIds.set(pendingCode, executionId);
-        } else if (!pendingCode) {
-            this._pendingExecutionIds.clear();
+        } else if (pendingCode) {
+            this._pendingCode = pendingCode;
+        } else {
+            this.clearPendingCodeState();
         }
 
         this._onDidSetPendingCodeEmitter.fire(pendingCode);
+    }
+
+    private clearPendingCodeState(): void {
+        this._pendingCode = undefined;
+        this._pendingExecutionIds.clear();
     }
 
     private _getInteractivePendingCode(): string | undefined {

@@ -253,6 +253,70 @@ suite('[Unit] console execution alignment', () => {
         instance.dispose();
     });
 
+    test('console submission clears stale invalid pending code before later editor executions', async () => {
+        const executeCalls: unknown[][] = [];
+        const pendingCodeChanges: Array<string | undefined> = [];
+        const instance = createConsoleInstance();
+        const runtimeSession = createRuntimeSession(executeCalls);
+        runtimeSession.isCodeFragmentComplete = async (code: string) =>
+            code.includes('tmp.obs.prediction.score.18')
+                ? RuntimeCodeFragmentStatus.Invalid
+                : RuntimeCodeFragmentStatus.Complete;
+        instance.onDidSetPendingCode(code => pendingCodeChanges.push(code));
+        instance.attachRuntimeSession(runtimeSession, SessionAttachMode.Connected);
+
+        const fragments = [
+            'tmp.obs.prediction.score.18',
+            "sc.pl.umap(tmp, color='prediction.score.18', )",
+            "sc.pl.umap(tmp, color='prediction.score.18', )",
+            "new = pd.DataFrame({'A': [1, 2, 3], 'B': [4, 5, 6]})",
+        ];
+
+        // Editor-driven executions are merged into the invalid pending fragment
+        // until the user submits the accumulated console contents.
+        for (const fragment of fragments) {
+            await instance.enqueueCode(
+                fragment,
+                { source: 'editor' },
+                false,
+                RuntimeCodeExecutionMode.Interactive,
+                RuntimeErrorBehavior.Continue,
+            );
+        }
+        const accumulatedCode = fragments.join('\n');
+        assert.deepStrictEqual(pendingCodeChanges, [
+            fragments[0],
+            fragments.slice(0, 2).join('\n'),
+            fragments.slice(0, 3).join('\n'),
+            accumulatedCode,
+        ]);
+        assert.deepStrictEqual(executeCalls, []);
+
+        assert.strictEqual(
+            await instance.submitCode(accumulatedCode, { source: 'console' }),
+            'executed',
+        );
+        assert.strictEqual(executeCalls.length, 1);
+        assert.strictEqual(executeCalls[0][0], accumulatedCode);
+
+        // Clearing the host mirror must be silent: the webview already cleared
+        // its model, and a notification here could erase type-ahead. The next
+        // editor execution must run alone instead of inheriting accumulatedCode.
+        assert.strictEqual(pendingCodeChanges.at(-1), accumulatedCode);
+        await instance.enqueueCode(
+            'a = [1, 2, 3]',
+            { source: 'editor' },
+            false,
+            RuntimeCodeExecutionMode.Interactive,
+            RuntimeErrorBehavior.Continue,
+        );
+        assert.strictEqual(executeCalls.length, 2);
+        assert.strictEqual(executeCalls[1][0], 'a = [1, 2, 3]');
+        assert.ok(!String(executeCalls[1][0]).includes(accumulatedCode));
+        assert.strictEqual(pendingCodeChanges.length, fragments.length);
+        instance.dispose();
+    });
+
     test('host-owned submission leaves incomplete code unexecuted', async () => {
         const executeCalls: unknown[][] = [];
         const instance = createConsoleInstance();
