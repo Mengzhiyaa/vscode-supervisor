@@ -92,7 +92,6 @@ class DeferredPromise<T> {
     private _resolve!: (value: T) => void;
     private _reject!: (reason?: any) => void;
     private _isSettled = false;
-    private _isCanceled = false;
 
     constructor() {
         this.p = new Promise<T>((resolve, reject) => {
@@ -122,7 +121,6 @@ class DeferredPromise<T> {
     cancel(): void {
         if (!this._isSettled) {
             this._isSettled = true;
-            this._isCanceled = true;
             this._reject(new Error('Canceled'));
         }
     }

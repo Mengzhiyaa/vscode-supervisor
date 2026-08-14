@@ -211,6 +211,8 @@ export const ConsoleMethods = {
     historyAdd: 'console/historyAdd',
     settingsChanged: 'console/settingsChanged',
     resourceUsage: 'console/resourceUsage',
+    resourceUsageSnapshot: 'console/resourceUsageSnapshot',
+    resourceUsageSnapshotAck: 'console/resourceUsageSnapshotAck',
     themeChanged: 'console/themeChanged',
     languageSupportAssetsChanged: 'console/languageSupportAssetsChanged',
     runtimeStartupPhase: 'console/runtimeStartupPhase',

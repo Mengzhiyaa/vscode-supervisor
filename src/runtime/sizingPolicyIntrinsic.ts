@@ -5,7 +5,6 @@
 
 import type { IPlotSize, IPositronPlotSizingPolicy } from './sizingPolicy';
 import type { PlotClientInstance } from './PlotClientInstance';
-import type { IntrinsicSize } from './comms/positronPlotComm';
 import { PlotUnit } from './comms/positronPlotComm';
 
 /**

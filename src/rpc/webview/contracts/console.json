@@ -63,6 +63,15 @@
     },
     {
       "kind": "interface",
+      "name": "ResourceUsageSessionSnapshot",
+      "fields": [
+        { "name": "sessionId", "type": "string" },
+        { "name": "replace", "type": "boolean" },
+        { "name": "samples", "type": "RuntimeResourceUsage[]" }
+      ]
+    },
+    {
+      "kind": "interface",
       "name": "ConsoleThemeRule",
       "fields": [
         {
@@ -950,6 +959,37 @@
               "name": "usage",
               "type": "RuntimeResourceUsage"
             }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "ResourceUsageSnapshotNotification",
+      "method": "console/resourceUsageSnapshot",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            { "name": "generation", "type": "number" },
+            { "name": "sessions", "type": "ResourceUsageSessionSnapshot[]" }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "ResourceUsageSnapshotAckNotification",
+      "method": "console/resourceUsageSnapshotAck",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            { "name": "generation", "type": "number" }
           ]
         }
       ]

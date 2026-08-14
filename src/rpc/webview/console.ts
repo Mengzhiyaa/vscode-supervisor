@@ -20,6 +20,12 @@ export interface RuntimeResourceUsage {
     timestamp?: number;
 }
 
+export interface ResourceUsageSessionSnapshot {
+    sessionId: string;
+    replace: boolean;
+    samples: RuntimeResourceUsage[];
+}
+
 export interface ConsoleThemeRule {
     token: string;
     foreground?: string;
@@ -398,6 +404,25 @@ export namespace ResourceUsageNotification {
     }
 
     export const type = new NotificationType<Params>('console/resourceUsage');
+}
+
+export namespace ResourceUsageSnapshotNotification {
+
+    export interface Params {
+        generation: number;
+        sessions: ResourceUsageSessionSnapshot[];
+    }
+
+    export const type = new NotificationType<Params>('console/resourceUsageSnapshot');
+}
+
+export namespace ResourceUsageSnapshotAckNotification {
+
+    export interface Params {
+        generation: number;
+    }
+
+    export const type = new NotificationType<Params>('console/resourceUsageSnapshotAck');
 }
 
 export namespace ReplyPromptRequest {

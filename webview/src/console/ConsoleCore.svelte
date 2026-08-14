@@ -160,6 +160,7 @@
     const traceBySession = new SvelteMap<string, boolean>();
     const resourceUsageBySession =
         new SvelteMap<string, ResourceUsage[]>();
+    let lastResourceUsageGeneration = 0;
     let languageAssetsVersion = $state(0);
 
     // Console width state (Positron pattern: dynamic width adjustment)
@@ -812,6 +813,33 @@
             updated.splice(0, updated.length - MAX_RESOURCE_USAGE_HISTORY);
         }
         resourceUsageBySession.set(sessionId, updated);
+    }
+
+    function applyResourceUsageSnapshot(params: {
+        generation: number;
+        sessions: Array<{
+            sessionId: string;
+            replace: boolean;
+            samples: ResourceUsage[];
+        }>;
+    }): void {
+        if (params.generation <= lastResourceUsageGeneration) {
+            return;
+        }
+        lastResourceUsageGeneration = params.generation;
+
+        for (const snapshot of params.sessions) {
+            const samples = snapshot.replace
+                ? snapshot.samples
+                : [
+                      ...(resourceUsageBySession.get(snapshot.sessionId) ?? []),
+                      ...snapshot.samples,
+                  ];
+            resourceUsageBySession.set(
+                snapshot.sessionId,
+                samples.slice(-MAX_RESOURCE_USAGE_HISTORY),
+            );
+        }
     }
 
     function emitInputCommand(
@@ -1799,6 +1827,27 @@
             "console/resourceUsage",
             (params: { sessionId: string; usage: ResourceUsage }) => {
                 pushResourceUsage(params.sessionId, params.usage);
+            },
+        );
+
+        connection.onNotification(
+            "console/resourceUsageSnapshot",
+            (params: {
+                generation: number;
+                sessions: Array<{
+                    sessionId: string;
+                    replace: boolean;
+                    samples: ResourceUsage[];
+                }>;
+            }) => {
+                try {
+                    applyResourceUsageSnapshot(params);
+                } finally {
+                    void connection?.sendNotification(
+                        "console/resourceUsageSnapshotAck",
+                        { generation: params.generation },
+                    );
+                }
             },
         );
 

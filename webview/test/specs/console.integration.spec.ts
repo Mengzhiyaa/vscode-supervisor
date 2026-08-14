@@ -1930,6 +1930,61 @@ test('console updates pending input, resource usage, and language assets from ex
         });
 });
 
+test('console applies acknowledged resource usage snapshots atomically', async ({ page }) => {
+    const session = createSession({ id: 'session-1', name: 'Primary' });
+    const backend = await openWebviewPage(page, 'console', {
+        configure: mockBackend => {
+            registerConsoleDefaults(mockBackend, {
+                sessions: [session],
+                activeSessionId: session.id,
+            });
+        },
+    });
+
+    await backend.notify(SessionMethods.info, {
+        sessions: [session],
+        activeSessionId: session.id,
+    });
+
+    const firstAck = backend.waitForNextNotification(
+        ConsoleMethods.resourceUsageSnapshotAck,
+    );
+    await backend.notify(ConsoleMethods.resourceUsageSnapshot, {
+        generation: 7,
+        sessions: [{
+            sessionId: session.id,
+            replace: true,
+            samples: [
+                { cpu_percent: 10, memory_bytes: 1_048_576 },
+                { cpu_percent: 20, memory_bytes: 2_097_152 },
+            ],
+        }],
+    });
+    expect((await firstAck).params).toEqual({ generation: 7 });
+    const monitor = page.locator('.console-resource-monitor');
+    await expect(monitor).toHaveAccessibleName(
+        'Runtime resource usage: CPU 20%, memory 2097152 bytes',
+    );
+    await expect(monitor).toContainText('2.00MB');
+
+    const secondAck = backend.waitForNextNotification(
+        ConsoleMethods.resourceUsageSnapshotAck,
+    );
+    await backend.notify(ConsoleMethods.resourceUsageSnapshot, {
+        generation: 8,
+        sessions: [{
+            sessionId: session.id,
+            replace: false,
+            samples: [{ cpu_percent: 35, memory_bytes: 3_145_728 }],
+        }],
+    });
+    expect((await secondAck).params).toEqual({ generation: 8 });
+    await expect(monitor).toHaveAccessibleName(
+        'Runtime resource usage: CPU 35%, memory 3145728 bytes',
+    );
+    await expect(monitor).toContainText('3.00MB');
+});
+
 test('console aligns single-session resource usage with the red interrupt action and persists its context toggle', async ({ page }) => {
     const session = createSession({
         id: 'session-1',

@@ -38,7 +38,6 @@ import {
  */
 export class VariablesViewProvider extends BaseWebviewProvider {
     private readonly _disposables: vscode.Disposable[] = [];
-    private _pendingSessionInfoUpdate = false;
     private _webviewReady = false;
     private _motionReduced = false;
     private readonly _sessionSnapshotBuilder: SessionSnapshotBuilder;
@@ -543,17 +542,14 @@ export class VariablesViewProvider extends BaseWebviewProvider {
 
     private _sendSessionInfoUpdate(): void {
         if (!this._connection) {
-            this._pendingSessionInfoUpdate = true;
             return;
         }
 
         if (!this._webviewReady) {
-            this._pendingSessionInfoUpdate = true;
             return;
         }
 
         this._connection.sendNotification('session/info', this._buildSessionInfoSnapshot());
-        this._pendingSessionInfoUpdate = false;
     }
 
     private _buildSessionInfoSnapshot(): SessionProtocol.SessionInfoNotification.Params {

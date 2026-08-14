@@ -8,7 +8,7 @@ import * as positron from './positron';
 
 import { KallichoreApiInstance, KallichoreTransport } from './KallichoreApiInstance';
 import { KallichoreServerState } from './ServerState';
-import { ActiveSession, DefaultApi, ServerConfiguration, ServerStatus, SessionList, SessionMode, Status } from './kcclient/api';
+import { ActiveSession, DefaultApi, ServerConfiguration, ServerStatus, SessionList, SessionMode } from './kcclient/api';
 import { summarizeAxiosError } from './util';
 import { KALLICHORE_STATE_KEY } from './KallichoreAdapterApi';
 import { extensionHostEphemeralState } from '../runtime/ephemeralState';

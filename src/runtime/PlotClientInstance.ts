@@ -5,15 +5,13 @@
 
 import * as vscode from 'vscode';
 import {
-    type LanguageRuntimeMessageCommData,
     type LanguageRuntimeMessageCommOpen,
-    RuntimeClientType,
 } from '../internal/runtimeTypes';
 import { RuntimeClientInstance, RuntimeClientMessageSender } from './RuntimeClientInstance';
 import type { IPlotSize, IPositronPlotSizingPolicy } from './sizingPolicy';
 import type { IntrinsicSize, PlotOrigin, PlotRenderSettings, PlotResult } from './comms/positronPlotComm';
-import { PlotRenderFormat, PlotUnit } from './comms/positronPlotComm';
-import { DeferredRender, IRenderedPlot, RenderRequest } from './positronPlotRenderQueue';
+import { PlotRenderFormat } from './comms/positronPlotComm';
+import { DeferredRender, IRenderedPlot } from './positronPlotRenderQueue';
 import { PlotSizingPolicyAuto } from './sizingPolicyAuto';
 import { PlotSizingPolicyCustom } from './sizingPolicyCustom';
 import { PlotsConfiguration } from './plotsConfiguration';

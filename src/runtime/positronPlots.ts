@@ -5,7 +5,7 @@
 
 import * as vscode from 'vscode';
 import type { IPlotSize, IPositronPlotSizingPolicy } from './sizingPolicy';
-import type { PlotClientInstance, PlotMetadata as PlotClientMetadata } from './PlotClientInstance';
+import type { PlotMetadata as PlotClientMetadata } from './PlotClientInstance';
 import { ZoomLevel } from './PlotClientInstance';
 import type { PlotRenderSettings } from './comms/positronPlotComm';
 import { DarkFilter, HistoryPolicy, HistoryPosition } from '../shared/plots';

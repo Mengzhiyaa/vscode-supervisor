@@ -8,7 +8,6 @@ import { deserializePromptState } from '../../shared/console';
 import type {
     SerializedActivityItem,
     SerializedConsoleState,
-    SerializedRuntimePendingInput,
     SerializedRuntimeItem,
 } from '../../shared/consoleState';
 import {

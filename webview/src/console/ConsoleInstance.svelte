@@ -136,6 +136,7 @@
     let currentMatchIndex = $state(0);
     let searchInputDebounceTimer: ReturnType<typeof setTimeout> | undefined;
     let searchContentRefreshTimer: ReturnType<typeof setTimeout> | undefined;
+    let searchNavigationRevision = 0;
     let searchContentObserver: MutationObserver | undefined;
     let showContextMenu = $state(false);
     let contextMenuX = $state(0);
@@ -445,9 +446,14 @@
         if (searchInputDebounceTimer) {
             clearTimeout(searchInputDebounceTimer);
         }
+        const navigationRevision = searchNavigationRevision;
         searchInputDebounceTimer = setTimeout(() => {
             searchInputDebounceTimer = undefined;
-            performSearch(query, options, false);
+            performSearch(
+                query,
+                options,
+                searchNavigationRevision !== navigationRevision,
+            );
         }, 150);
     }
 
@@ -491,6 +497,7 @@
 
     function navigateNextMatch() {
         if (searchMatches.length === 0) return;
+        searchNavigationRevision += 1;
         currentMatchIndex = (currentMatchIndex + 1) % searchMatches.length;
         applyHighlights(searchMatches, currentMatchIndex);
         scrollCurrentMatchIntoView(searchMatches, currentMatchIndex);
@@ -498,6 +505,7 @@
 
     function navigatePreviousMatch() {
         if (searchMatches.length === 0) return;
+        searchNavigationRevision += 1;
         currentMatchIndex =
             (currentMatchIndex - 1 + searchMatches.length) %
             searchMatches.length;

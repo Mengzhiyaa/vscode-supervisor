@@ -11,13 +11,6 @@ export type RawTokenColor = {
     };
 };
 
-const THEME_FILE_BY_KIND: Record<vscode.ColorThemeKind, string> = {
-    [vscode.ColorThemeKind.Light]: 'light_plus.json',
-    [vscode.ColorThemeKind.Dark]: 'dark_plus.json',
-    [vscode.ColorThemeKind.HighContrast]: 'hc_black.json',
-    [vscode.ColorThemeKind.HighContrastLight]: 'hc_light.json',
-};
-
 const BASE_BY_KIND: Record<vscode.ColorThemeKind, ConsoleThemeData['base']> = {
     [vscode.ColorThemeKind.Light]: 'vs',
     [vscode.ColorThemeKind.Dark]: 'vs-dark',
@@ -440,17 +433,6 @@ export class ConsoleThemeProvider {
             default:
                 return BASE_BY_KIND[fallbackKind] ?? 'vs-dark';
         }
-    }
-
-    private _resolveDefaultThemeUri(kind: vscode.ColorThemeKind): vscode.Uri {
-        const fileName = THEME_FILE_BY_KIND[kind] ?? 'dark_plus.json';
-        return vscode.Uri.joinPath(
-            vscode.Uri.file(vscode.env.appRoot),
-            'extensions',
-            'theme-defaults',
-            'themes',
-            fileName,
-        );
     }
 
     private async _collectTokenColors(themeUri: vscode.Uri, visited = new Set<string>()): Promise<RawTokenColor[]> {

@@ -14,18 +14,13 @@ import { DuckDBInstance } from './duckdbInstance';
 import { readXlsxWorksheetNames } from './xlsxWorkbook';
 import {
     escapeIdentifier,
-    escapeValue,
     buildWhereClause,
-    buildOrderByClause,
     buildCountQuery,
-    buildExportQuery,
-    formatValue,
 } from './sqlBuilder';
 import {
     ColumnSchema,
     ColumnDisplayType,
     TableSchema,
-    TableShape,
     TableData,
     TableRowLabels,
     FormatOptions,
@@ -45,8 +40,6 @@ import {
     SearchSchemaSortOrder,
     ConvertedCode,
     CodeSyntaxName,
-    ColumnProfileRequest,
-    ColumnProfileResult,
     DatasetImportOptions,
     SetDatasetImportOptionsResult,
     ArraySelection,
@@ -56,9 +49,6 @@ import {
     FilterMatchDataTypes,
     TextSearchType,
     RowFilterType,
-    ColumnFilterTypeSupportStatus,
-    RowFilterTypeSupportStatus,
-    ColumnProfileTypeSupportStatus,
     ColumnProfileType,
     TableSelectionKind,
     DataSelectionSingleCell,

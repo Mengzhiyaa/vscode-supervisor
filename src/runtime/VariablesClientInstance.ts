@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
-import { RuntimeClientInstance, RuntimeClientOutput } from './RuntimeClientInstance';
+import { RuntimeClientInstance } from './RuntimeClientInstance';
 import {
     PositronVariablesComm,
     Variable,

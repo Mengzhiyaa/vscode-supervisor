@@ -1828,29 +1828,6 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
         return { metadata, installation, provider };
     }
 
-    private _resolveRuntimeEntryFromMetadata(
-        metadata: LanguageRuntimeMetadata,
-    ): {
-        metadata: LanguageRuntimeMetadata;
-        installation: unknown;
-        provider: ILanguageRuntimeProvider<any>;
-    } | undefined {
-        const provider = this.getRuntimeProvider(metadata.languageId);
-        if (!provider) {
-            return undefined;
-        }
-
-        const installation = this._installationsByRuntimeId.get(metadata.runtimeId)
-            ?? provider.restoreInstallationFromMetadata?.(metadata);
-        if (!installation) {
-            return undefined;
-        }
-
-        const normalizedRuntimeMetadata = this._rememberRuntimeMetadata(metadata);
-        this._installationsByRuntimeId.set(normalizedRuntimeMetadata.runtimeId, installation);
-        return { metadata: normalizedRuntimeMetadata, installation, provider };
-    }
-
     private _requireRuntimeEntry(runtimeId: string): {
         metadata: LanguageRuntimeMetadata;
         installation: unknown;
@@ -2064,35 +2041,6 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
         this._sessions.set(session.sessionId, session);
         this._onDidCreateSession.fire(session);
         return session;
-    }
-
-    private async _ensureSessionReadyForInteraction(session: RuntimeSession): Promise<void> {
-        switch (session.state) {
-            case RuntimeState.Uninitialized:
-                await this._startExistingSession(session.sessionId);
-                return;
-
-            case RuntimeState.Initializing:
-            case RuntimeState.Starting:
-            case RuntimeState.Restarting:
-                await this._waitForSessionReady(session, 10000);
-                return;
-
-            case RuntimeState.Exited:
-                await this.restartSession(session.sessionId, 'ensureSessionForLanguage');
-                return;
-
-            case RuntimeState.Ready:
-            case RuntimeState.Idle:
-            case RuntimeState.Busy:
-            case RuntimeState.Interrupting:
-                return;
-
-            default:
-                throw new Error(
-                    `The ${session.runtimeMetadata.languageName} session is '${session.state}' and cannot be activated.`,
-                );
-        }
     }
 
     private _generateSessionId(languageId: string, sessionMode: LanguageSessionMode): string {

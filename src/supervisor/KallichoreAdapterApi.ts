@@ -8,7 +8,7 @@ import * as positron from './positron';
 import * as os from 'os';
 import * as path from 'path';
 import * as fs from 'fs';
-import { ClientHeartbeat, DefaultApi, ServerStatus, Status } from './kcclient/api';
+import { ClientHeartbeat, ServerStatus, Status } from './kcclient/api';
 import { PositronSupervisorApi, JupyterKernelExtra, JupyterKernelSpec, JupyterLanguageRuntimeSession } from './positron-supervisor';
 import { DisconnectedEvent, DisconnectReason, KallichoreSession } from './KallichoreSession';
 import { Barrier, PromiseHandles, withTimeout } from './async';

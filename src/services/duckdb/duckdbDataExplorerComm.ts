@@ -19,7 +19,6 @@ import {
     RowFilter,
     ColumnSortKey,
     ColumnProfileRequest,
-    ColumnProfileResult,
     FilterResult,
     ExportedData,
     ExportFormat,

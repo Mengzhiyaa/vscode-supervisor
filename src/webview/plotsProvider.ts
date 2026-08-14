@@ -92,7 +92,6 @@ export class PlotsViewProvider extends BaseWebviewProvider {
     private readonly _sessionSnapshotBuilder: SessionSnapshotBuilder;
     private _plots = new Map<string, PlotData>();
     private _plotClients = new Map<string, PlotClientInstance>();
-    private _pendingSessionInfoUpdate = false;
 
     constructor(
         extensionUri: vscode.Uri,
@@ -1089,19 +1088,15 @@ export class PlotsViewProvider extends BaseWebviewProvider {
 
     private _sendSessionInfoUpdate(): void {
         if (!this._hasAnyConnections()) {
-            this._pendingSessionInfoUpdate = true;
             return;
         }
 
-        let hasBlockedConnection = false;
         this._forEachConnectionEntry((connection) => {
             if (!this._isConnectionReady(connection)) {
-                hasBlockedConnection = true;
                 return;
             }
             this._sendSessionInfoUpdateToConnection(connection);
         });
-        this._pendingSessionInfoUpdate = hasBlockedConnection;
     }
 
     protected _registerRpcHandlers(connection: MessageConnection): void {
@@ -1783,17 +1778,6 @@ export class PlotsViewProvider extends BaseWebviewProvider {
                 return { success: false, error: String(e) };
             }
         });
-    }
-
-    private async _moveActiveEditorToNewWindow(): Promise<void> {
-        await new Promise<void>(resolve => {
-            if (typeof queueMicrotask === 'function') {
-                queueMicrotask(resolve);
-            } else {
-                setTimeout(resolve, 0);
-            }
-        });
-        await vscode.commands.executeCommand('workbench.action.moveEditorToNewWindow');
     }
 
     /** Debounce delay for viewport-triggered render settings (ms). */

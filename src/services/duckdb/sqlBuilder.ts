@@ -9,24 +9,17 @@ import {
     ColumnSortKey,
     ColumnSchema,
     ColumnSelection,
-    ColumnFilter,
-    ColumnFilterType,
     FilterComparison,
     FilterBetween,
     FilterTextSearch,
     FilterSetMembership,
-    FilterMatchDataTypes,
     TextSearchType,
     FormatOptions,
-    ArraySelection,
     DataSelectionRange,
-    DataSelectionIndices,
-    ExportFormat,
     TableSelection,
     TableSelectionKind,
     DataSelectionSingleCell,
     DataSelectionCellRange,
-    DataSelectionCellIndices,
     DataSelectionRange as DataSelectionColumnRange,
 } from '../../runtime/comms/positronDataExplorerComm';
 
@@ -127,7 +120,6 @@ function filterToSql(filter: RowFilter): string {
  */
 function textSearchToSql(col: string, params: FilterTextSearch): string {
     const term = params.term;
-    const caseFn = params.case_sensitive ? '' : 'LOWER';
     const colExpr = params.case_sensitive ? col : `LOWER(${col})`;
     const termLower = params.case_sensitive ? term : term.toLowerCase();
 
@@ -205,7 +197,6 @@ export function buildSelectQuery(
         const colName = escapeIdentifier(colSchema.column_name);
 
         // Build row range extraction
-        const sel = col.spec as DataSelectionRange;
         return colName;
     });
 

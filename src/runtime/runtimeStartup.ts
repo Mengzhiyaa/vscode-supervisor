@@ -1263,38 +1263,6 @@ export class RuntimeStartupService implements vscode.Disposable {
         await this._sessionManager.autoStartRuntime(metadata, source, activate);
     }
 
-    private async _autoStartInstallation<TInstallation>(
-        languageId: string,
-        installation: TInstallation,
-        source: string,
-        activate: boolean,
-        sessionName: string,
-    ): Promise<void> {
-        if (this._sessionManager.hasStartingOrRunningConsole(languageId)) {
-            return;
-        }
-
-        const provider = this._runtimeManager.getRuntimeProvider<TInstallation>(languageId);
-        if (!provider) {
-            return;
-        }
-
-        const metadata = provider.createRuntimeMetadata(
-            this._context,
-            installation,
-            this._outputChannel,
-        );
-
-        await this._autoStartRuntime(
-            {
-                ...metadata,
-                runtimeName: sessionName || metadata.runtimeName,
-            },
-            source,
-            activate,
-        );
-    }
-
     private _createRuntimeStartupEventFromSerializedSession(
         session: SerializedSessionMetadata,
         newSession: boolean,

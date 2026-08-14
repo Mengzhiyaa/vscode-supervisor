@@ -1,5 +1,4 @@
 import * as assert from 'assert';
-import * as path from 'path';
 import * as vscode from 'vscode';
 import {
     LanguageRuntimeSessionMode,
@@ -42,18 +41,6 @@ function createMemento(): vscode.Memento {
         },
         keys: () => Array.from(store.keys()),
     };
-}
-
-function makeContext(): vscode.ExtensionContext {
-    const extensionPath = path.resolve(__dirname, '../../..');
-    return {
-        extensionPath,
-        extensionUri: vscode.Uri.file(extensionPath),
-        subscriptions: [],
-        globalState: createMemento(),
-        workspaceState: createMemento(),
-        asAbsolutePath: (relativePath: string) => path.join(extensionPath, relativePath),
-    } as unknown as vscode.ExtensionContext;
 }
 
 function makeNoopLogChannel(): vscode.LogOutputChannel {

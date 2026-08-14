@@ -23,12 +23,6 @@ import {
     ColumnFrequencyTableParams,
     ColumnHistogramParamsMethod,
     FormatOptions,
-    SummaryStatsNumber,
-    SummaryStatsString,
-    SummaryStatsBoolean,
-    SummaryStatsDate,
-    SummaryStatsDatetime,
-    SummaryStatsOther,
 } from '../../runtime/comms/positronDataExplorerComm';
 
 function getResultRowValue(
@@ -585,7 +579,4 @@ export class ColumnProfileEvaluator {
         return t === ColumnDisplayType.Boolean;
     }
 
-    private _isDateType(t: ColumnDisplayType): boolean {
-        return t === ColumnDisplayType.Date || t === ColumnDisplayType.Datetime;
-    }
 }

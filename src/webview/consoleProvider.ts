@@ -18,6 +18,10 @@ import { IPositronConsoleInstance, RuntimeCodeExecutionMode, RuntimeErrorBehavio
 import { ConsoleThemeProvider } from './consoleThemeProvider';
 import { resolveConsoleAppearance } from './consoleSettings';
 import { SessionSnapshotBuilder } from './sessionSnapshotBuilder';
+import {
+    ConsoleResourceUsageCoordinator,
+    ConsoleResourceUsagePublication,
+} from './consoleResourceUsageCoordinator';
 
 /**
  * Webview provider for the R Console panel.
@@ -34,8 +38,6 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
     private readonly _consoleInstanceSubscriptions = new Map<string, vscode.Disposable[]>();
 
     // Flags for webview lifecycle/state synchronization.
-    // Session updates are queued until the webview explicitly signals readiness.
-    private _pendingSessionInfoUpdate = false;
     private _pendingRestoreStatesForInstances = false;
     private _webviewReady = false;
     private readonly _suppressStartupNotificationOnce = new Set<string>();
@@ -46,13 +48,17 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
     private _pendingLanguageSupportAssetsRefresh = false;
     private _pendingFindCommand: ConsoleProtocol.ConsoleFindCommandNotification.Params['command'] | undefined;
 
-    // Current console width in characters (Positron pattern: track for new sessions)
-    private _currentWidthInChars = 80;
     private readonly _missingSessionWarnings = new Set<string>();
     private readonly _lastClearReasons = new Map<string, 'user' | 'runtime' | undefined>();
     private readonly _consoleThemeProvider = new ConsoleThemeProvider();
     private _runtimeStartupEvent: ConsoleProtocol.RuntimeStartupPhaseNotification.RuntimeStartupEvent | undefined;
     private _latestDiscoveredRuntimePath: string | undefined;
+    private readonly _resourceUsageSurfaceDisposables: vscode.Disposable[] = [];
+    private readonly _resourceUsageCoordinator = new ConsoleResourceUsageCoordinator(
+        publication => this._publishResourceUsage(publication),
+    );
+    private _consoleViewVisible = false;
+    private _windowFocused = false;
 
     constructor(
         extensionUri: vscode.Uri,
@@ -119,8 +125,35 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
         return 'ConsoleViewProvider';
     }
 
+    override resolveWebviewView(
+        webviewView: vscode.WebviewView,
+        context: vscode.WebviewViewResolveContext,
+        token: vscode.CancellationToken,
+    ): void | Thenable<void> {
+        this._disposeResourceUsageSurfaceListeners();
+        this._consoleViewVisible = webviewView.visible;
+        this._windowFocused = vscode.window.state.focused;
+
+        const result = super.resolveWebviewView(webviewView, context, token);
+        this._resourceUsageSurfaceDisposables.push(
+            webviewView.onDidChangeVisibility(() => {
+                this._consoleViewVisible = webviewView.visible;
+                this._updateResourceUsagePublishingState();
+            }),
+            vscode.window.onDidChangeWindowState(state => {
+                this._windowFocused = state.focused;
+                this._updateResourceUsagePublishingState();
+            }),
+        );
+        this._updateResourceUsagePublishingState();
+        return result;
+    }
+
     protected override _onDidDisposeWebviewView(): void {
         this._webviewReady = false;
+        this._consoleViewVisible = false;
+        this._resourceUsageCoordinator.resetPublication();
+        this._disposeResourceUsageSurfaceListeners();
         this._pendingFindCommand = undefined;
         void vscode.commands.executeCommand('setContext', ContextKeys.consoleFocused, false);
         void vscode.commands.executeCommand('setContext', ContextKeys.consoleFindVisible, false);
@@ -173,6 +206,7 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
             this._suppressStartupNotificationOnce.delete(sessionId);
             this.log(`Unsubscribed from session ${sessionId}`, vscode.LogLevel.Debug);
         }
+        this._resourceUsageCoordinator.removeSession(sessionId);
     }
 
 
@@ -270,7 +304,7 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
         if (session.onDidUpdateResourceUsage) {
             disposables.push(
                 session.onDidUpdateResourceUsage(usage => {
-                    this._sendResourceUsage(sessionId, usage);
+                    this._resourceUsageCoordinator.record(sessionId, usage);
                 })
             );
         }
@@ -294,6 +328,7 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
 
     protected _registerRpcHandlers(connection: MessageConnection): void {
         this._webviewReady = false;
+        this._resourceUsageCoordinator.resetPublication();
         this._pendingRestoreStatesForInstances = true;
         // Webview was (re)created — all sessions need restore state on reconnect.
         this._initializedSessions.clear();
@@ -301,7 +336,8 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
         // Deterministic readiness signal from webview.
         connection.onNotification(ConsoleProtocol.ConsoleReadyNotification.type, () => {
             this._webviewReady = true;
-            this._flushPendingConsoleSync('console/ready');
+            this._flushPendingConsoleSync();
+            this._updateResourceUsagePublishingState();
             if (this._pendingFindCommand) {
                 const command = this._pendingFindCommand;
                 this._pendingFindCommand = undefined;
@@ -311,6 +347,13 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
                 );
             }
         });
+
+        connection.onNotification(
+            ConsoleProtocol.ResourceUsageSnapshotAckNotification.type,
+            params => {
+                this._resourceUsageCoordinator.acknowledge(params.generation);
+            },
+        );
 
         connection.onNotification(
             ConsoleProtocol.ConsoleContextKeysChangedNotification.type,
@@ -576,7 +619,7 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
             // Backward-compatible fallback: first list request implies webview is ready.
             if (!this._webviewReady) {
                 this._webviewReady = true;
-                this._flushPendingConsoleSync('session/list fallback');
+                this._flushPendingConsoleSync();
             }
 
             if (!this._sessionManager && !this._consoleService) {
@@ -718,7 +761,6 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
         // The language extension layer owns syncing width into language runtimes.
         connection.onNotification(ConsoleProtocol.SetConsoleWidthNotification.type, (params) => {
             this.log(`Console width change: ${params.widthInChars} chars`, vscode.LogLevel.Debug);
-            this._currentWidthInChars = params.widthInChars;
             this._consoleService?.setConsoleWidth(params.widthInChars);
         });
 
@@ -892,15 +934,12 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
         }
 
         if (!this._connection) {
-            // Connection not ready yet, mark as pending
-            this.log('_sendSessionInfoUpdate: Connection not ready, marking as pending', vscode.LogLevel.Debug);
-            this._pendingSessionInfoUpdate = true;
+            this.log('_sendSessionInfoUpdate: Connection not ready', vscode.LogLevel.Debug);
             return;
         }
 
         if (!this._webviewReady) {
-            this.log('_sendSessionInfoUpdate: Webview not ready, marking as pending', vscode.LogLevel.Debug);
-            this._pendingSessionInfoUpdate = true;
+            this.log('_sendSessionInfoUpdate: Webview not ready', vscode.LogLevel.Debug);
             return;
         }
 
@@ -909,11 +948,9 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
             this._buildSessionInfoSnapshot(),
         );
 
-        // Clear pending flag
-        this._pendingSessionInfoUpdate = false;
     }
 
-    private _flushPendingConsoleSync(reason: string): void {
+    private _flushPendingConsoleSync(): void {
         if (!this._connection || !this._webviewReady) {
             return;
         }
@@ -1211,11 +1248,34 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
         });
     }
 
-    private _sendResourceUsage(sessionId: string, usage: ConsoleProtocol.RuntimeResourceUsage): void {
-        this._connection?.sendNotification(ConsoleProtocol.ResourceUsageNotification.type, {
-            sessionId,
-            usage
-        });
+    private _publishResourceUsage(
+        publication: ConsoleResourceUsagePublication,
+    ): Promise<void> {
+        if (!this._connection || !this._webviewReady) {
+            return Promise.reject(new Error('Console webview is not ready'));
+        }
+        return this._connection.sendNotification(
+            ConsoleProtocol.ResourceUsageSnapshotNotification.type,
+            publication,
+        );
+    }
+
+    private _updateResourceUsagePublishingState(): void {
+        const resourceMonitorEnabled = vscode.workspace
+            .getConfiguration(CoreConfigurationSections.supervisor)
+            .get<boolean>('console.showResourceMonitor', true);
+        this._resourceUsageCoordinator.setActive(
+            this._webviewReady &&
+            this._consoleViewVisible &&
+            this._windowFocused &&
+            resourceMonitorEnabled,
+        );
+    }
+
+    private _disposeResourceUsageSurfaceListeners(): void {
+        for (const disposable of this._resourceUsageSurfaceDisposables.splice(0)) {
+            disposable.dispose();
+        }
     }
 
     private _sendSessionMetadataUpdate(
@@ -1361,6 +1421,9 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
             vscode.workspace.onDidChangeConfiguration(e => {
                 if (e.affectsConfiguration('workbench.iconTheme')) {
                     void this._sendConsoleThemeChanged();
+                }
+                if (e.affectsConfiguration(CoreConfigurationKeys.consoleShowResourceMonitor)) {
+                    this._updateResourceUsagePublishingState();
                 }
                 if (
                     e.affectsConfiguration(CoreConfigurationKeys.consoleScrollbackSize) ||

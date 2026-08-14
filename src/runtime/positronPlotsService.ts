@@ -29,7 +29,6 @@ import {
 import { RuntimeSession } from './session';
 import { RuntimeSessionService } from './runtimeSession';
 import {
-    type LanguageRuntimeInput,
     type LanguageRuntimeMessageCommOpen,
     RuntimeClientType,
 } from '../internal/runtimeTypes';

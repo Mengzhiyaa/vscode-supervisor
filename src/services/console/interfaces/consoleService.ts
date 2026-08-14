@@ -24,7 +24,6 @@ import type {
     LanguageRuntimeClearOutput,
     LanguageRuntimeError as LanguageRuntimeErrorMessage,
     LanguageRuntimeInput,
-    LanguageRuntimeMessage,
     LanguageRuntimePrompt,
     LanguageRuntimeState,
     LanguageRuntimeStream,
