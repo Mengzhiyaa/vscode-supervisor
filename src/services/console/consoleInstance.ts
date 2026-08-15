@@ -12,6 +12,7 @@ import type {
 } from '../../shared/consoleState';
 import {
     IPositronConsoleInstance,
+    isCompletenessVerified,
     PositronConsoleState,
     SessionAttachMode,
     IConsoleCodeAttribution,
@@ -708,7 +709,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
             if (!this._session) {
                 return false;
             }
-            if (allowIncomplete) {
+            if (allowIncomplete || isCompletenessVerified(attribution)) {
                 return true;
             }
 
@@ -1096,7 +1097,9 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
         }
 
         const pendingItem = this._pendingCodeQueue[0];
-        const codeFragmentStatus = await this._session.isCodeFragmentComplete(pendingItem.code);
+        const codeFragmentStatus = isCompletenessVerified(pendingItem.attribution)
+            ? RuntimeCodeFragmentStatus.Complete
+            : await this._session.isCodeFragmentComplete(pendingItem.code);
 
         if (this._pendingInputState === 'Interrupted') {
             return;

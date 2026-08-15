@@ -175,6 +175,58 @@ suite('[Unit] console execution alignment', () => {
         assert.strictEqual(executeCalls[0][0], ')\n1 + 1');
     });
 
+    test('completeness-verified editor code bypasses the runtime completeness check', async () => {
+        const executeCalls: unknown[][] = [];
+        const instance = createConsoleInstance();
+        const runtimeSession = createRuntimeSession(executeCalls);
+        let completenessChecks = 0;
+        runtimeSession.isCodeFragmentComplete = async () => {
+            completenessChecks += 1;
+            return RuntimeCodeFragmentStatus.Incomplete;
+        };
+        instance.attachRuntimeSession(runtimeSession, SessionAttachMode.Connected);
+
+        await instance.enqueueCode(
+            'for i in range(3):\n    print(i)',
+            {
+                source: 'editor',
+                metadata: { completenessVerified: true },
+            },
+        );
+
+        assert.strictEqual(completenessChecks, 0);
+        assert.strictEqual(executeCalls.length, 1);
+        assert.strictEqual(executeCalls[0][0], 'for i in range(3):\n    print(i)');
+        instance.dispose();
+    });
+
+    test('completeness-verified pending code bypasses the check when the runtime becomes ready', async () => {
+        const executeCalls: unknown[][] = [];
+        const instance = createConsoleInstance();
+        const runtimeSession = createRuntimeSession(executeCalls, RuntimeState.Busy);
+        let completenessChecks = 0;
+        runtimeSession.isCodeFragmentComplete = async () => {
+            completenessChecks += 1;
+            return RuntimeCodeFragmentStatus.Incomplete;
+        };
+        instance.attachRuntimeSession(runtimeSession, SessionAttachMode.Connected);
+
+        await instance.enqueueCode(
+            'for i in range(3):\n    print(i)',
+            {
+                source: 'editor',
+                metadata: { completenessVerified: true },
+            },
+        );
+
+        runtimeSession.state = RuntimeState.Ready;
+        await (instance as any).processPendingInput();
+
+        assert.strictEqual(completenessChecks, 0);
+        assert.strictEqual(executeCalls.length, 1);
+        instance.dispose();
+    });
+
     test('enqueue propagates completeness failures instead of creating pending code', async () => {
         const executeCalls: unknown[][] = [];
         const pendingCodeChanges: Array<string | undefined> = [];

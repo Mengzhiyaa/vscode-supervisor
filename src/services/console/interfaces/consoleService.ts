@@ -85,6 +85,16 @@ export interface IConsoleCodeAttribution {
 }
 
 /**
+ * Marks code whose completeness was already established by an editor-side
+ * statement range/input-boundary provider.
+ */
+export const COMPLETENESS_VERIFIED_METADATA_KEY = 'completenessVerified';
+
+export function isCompletenessVerified(attribution: IConsoleCodeAttribution): boolean {
+    return attribution.metadata?.[COMPLETENESS_VERIFIED_METADATA_KEY] === true;
+}
+
+/**
  * Code executed event interface (1:1 Positron).
  */
 export interface ILanguageRuntimeCodeExecutedEvent {

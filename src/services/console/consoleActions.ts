@@ -8,6 +8,7 @@ import type { Utf8Location } from '../../api';
 import { CoreCommandIds, InternalCommandIds } from '../../coreCommandIds';
 import { PositronConsoleService } from './consoleService';
 import {
+    COMPLETENESS_VERIFIED_METADATA_KEY,
     IConsoleCodeAttribution,
     RuntimeCodeExecutionMode,
     RuntimeErrorBehavior,
@@ -15,6 +16,7 @@ import {
 
 export interface ConsoleExecutionCommandOptions {
     allowIncomplete?: boolean;
+    completenessVerified?: boolean;
     languageId?: string;
     advance?: boolean;
     mode?: RuntimeCodeExecutionMode;
@@ -494,6 +496,7 @@ async function executeCodeWithAdvancement(
 
     let code: string | undefined;
     let codeRange: vscode.Range | undefined;
+    let completenessVerified = options.completenessVerified === true;
 
     // If we have a selection and it isn't empty, use its contents (Positron pattern)
     if (!selection.isEmpty) {
@@ -525,6 +528,10 @@ async function executeCodeWithAdvancement(
 
             code = statementRange.code ?? document.getText(statementRange.range);
             codeRange = statementRange.range;
+            // A successful statement-range provider has already identified one
+            // executable statement. Do not ask the runtime to re-check the raw
+            // editor slice, which may omit the REPL's terminating blank line.
+            completenessVerified = true;
 
             if (shouldAdvanceEditor) {
                 await advanceStatement(editor, statementRange, outputChannel);
@@ -581,6 +588,9 @@ async function executeCodeWithAdvancement(
             lineNumber: (codeRange?.start.line ?? position.line) + 1,
             codeLocation: codeRange
                 ? createCodeLocation(document, codeRange)
+                : undefined,
+            metadata: completenessVerified
+                ? { [COMPLETENESS_VERIFIED_METADATA_KEY]: true }
                 : undefined,
         };
 

@@ -410,6 +410,63 @@ suite('[Unit] console actions', () => {
         }
     });
 
+    test('statement range execution marks attribution completeness as verified', async () => {
+        const registeredCommands = new Map<string, RegisteredCommandHandler>();
+        const attributions: Array<Record<string, unknown> | undefined> = [];
+        let statementRangeCalls = 0;
+
+        (vscode.commands as { registerCommand: typeof vscode.commands.registerCommand }).registerCommand =
+            ((command: string, callback: RegisteredCommandHandler) => {
+                registeredCommands.set(command, callback);
+                return new vscode.Disposable(() => undefined);
+            }) as typeof vscode.commands.registerCommand;
+        (vscode.commands as { executeCommand: typeof vscode.commands.executeCommand }).executeCommand =
+            (async (command: string) => {
+                if (command === 'supervisor.lsp.getStatementRange') {
+                    statementRangeCalls += 1;
+                    // The second request is made while advancing the editor.
+                    if (statementRangeCalls === 1) {
+                        return {
+                            kind: 'success',
+                            range: {
+                                start: { line: 0, character: 0 },
+                                end: { line: 1, character: 12 },
+                            },
+                            code: 'for i in range(3):\n    print(i)',
+                        };
+                    }
+                    return undefined;
+                }
+                return undefined;
+            }) as typeof vscode.commands.executeCommand;
+
+        setActiveTextEditor(makeEditor(
+            ['for i in range(3):', '    print(i)', 'after = 1'],
+            new vscode.Selection(new vscode.Position(0, 0), new vscode.Position(0, 0)),
+        ));
+
+        const disposables = registerConsoleActions({
+            executeCode: async (...args: unknown[]) => {
+                attributions.push(args[3] as Record<string, unknown> | undefined);
+                return 'session-1';
+            },
+            activePositronConsoleInstance: undefined,
+            focusConsole: async () => undefined,
+        } as any, makeNoopLogChannel());
+
+        try {
+            const handler = registeredCommands.get(CoreCommandIds.consoleExecuteCode);
+            assert.ok(handler, 'expected execute command to be registered');
+
+            await handler?.();
+
+            assert.strictEqual(statementRangeCalls, 2);
+            assert.deepStrictEqual(attributions[0]?.metadata, { completenessVerified: true });
+        } finally {
+            disposables.forEach((disposable) => disposable.dispose());
+        }
+    });
+
     test('execution failures are shown without converting code into pending input', async () => {
         const registeredCommands = new Map<string, RegisteredCommandHandler>();
         const messages: string[] = [];
