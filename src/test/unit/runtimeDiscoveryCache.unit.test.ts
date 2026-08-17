@@ -50,6 +50,24 @@ function logChannel(): vscode.LogOutputChannel {
 }
 
 suite('[Unit] Runtime discovery cache', () => {
+    test('publishes runtime provider registration after the provider is available', () => {
+        const context = { globalState: new MemoryMemento() } as unknown as vscode.ExtensionContext;
+        const manager = new RuntimeManager(context, {} as any, logChannel());
+        const provider = { languageId: 'r' } as ILanguageRuntimeProvider<unknown>;
+        const registrations: string[] = [];
+        const listener = manager.onDidRegisterRuntimeProvider((languageId) => {
+            registrations.push(languageId);
+            assert.strictEqual(manager.getRuntimeProvider(languageId), provider);
+        });
+
+        const lease = manager.registerRuntimeProvider(provider);
+
+        assert.deepStrictEqual(registrations, ['r']);
+        lease.dispose();
+        listener.dispose();
+        manager.dispose();
+    });
+
     test('uses the registered language channel for provider callbacks', async () => {
         const context = { globalState: new MemoryMemento() } as unknown as vscode.ExtensionContext;
         const frameworkLog = logChannel();

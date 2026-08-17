@@ -11,7 +11,7 @@ import { KallichoreServerState } from './ServerState';
 import { ActiveSession, DefaultApi, ServerConfiguration, ServerStatus, SessionList, SessionMode } from './kcclient/api';
 import { summarizeAxiosError } from './util';
 import { KALLICHORE_STATE_KEY } from './KallichoreAdapterApi';
-import { extensionHostEphemeralState } from '../runtime/ephemeralState';
+import { createReloadPersistentState } from '../runtime/ephemeralState';
 import { formatRawSupervisorLine } from '../logging/logSinks';
 
 /**
@@ -672,7 +672,8 @@ export class KallichoreInstances {
 	private static getStoredSupervisorState(): KallichoreServerState | undefined {
 		const context = this.getContext();
 		const ephemeral =
-			extensionHostEphemeralState.get<KallichoreServerState>(KALLICHORE_STATE_KEY);
+			createReloadPersistentState(context.workspaceState)
+				.get<KallichoreServerState>(KALLICHORE_STATE_KEY);
 		if (ephemeral) {
 			return ephemeral;
 		}

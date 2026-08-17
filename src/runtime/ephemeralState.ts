@@ -4,51 +4,42 @@ import * as vscode from 'vscode';
  * The subset of VS Code's memento contract used by reconnect/session storage.
  *
  * VS Code extensions do not have access to Positron's application-scoped
- * EphemeralStateService. This process-global memento is the closest safe
- * equivalent available to a standalone extension: values survive extension
- * deactivate/reactivate cycles in the same extension host, but are never
- * written to disk and disappear with the extension-host process.
+ * EphemeralStateService. In Positron that service lives outside the renderer
+ * and extension host, so its values survive a window reload. A standalone
+ * extension must use workspaceState to provide the same reload boundary.
  */
 export type EphemeralMemento = Pick<vscode.Memento, 'get' | 'update' | 'keys'>;
 
-const EPHEMERAL_STATE_SYMBOL = Symbol.for(
-    'vscode-supervisor.extensionHostEphemeralState.v1',
-);
+const RELOAD_STATE_KEY_PREFIX = 'vscode-supervisor.reloadState.v1.';
 
-type GlobalWithEphemeralState = typeof globalThis & {
-    [EPHEMERAL_STATE_SYMBOL]?: Map<string, unknown>;
-};
+class ReloadPersistentMemento implements EphemeralMemento {
+    constructor(private readonly _workspaceState: vscode.Memento) {}
 
-function getProcessStore(): Map<string, unknown> {
-    const processGlobal = globalThis as GlobalWithEphemeralState;
-    if (!processGlobal[EPHEMERAL_STATE_SYMBOL]) {
-        processGlobal[EPHEMERAL_STATE_SYMBOL] = new Map<string, unknown>();
-    }
-    return processGlobal[EPHEMERAL_STATE_SYMBOL];
-}
-
-class ExtensionHostEphemeralMemento implements EphemeralMemento {
     get<T>(key: string): T | undefined;
     get<T>(key: string, defaultValue: T): T;
     get<T>(key: string, defaultValue?: T): T | undefined {
-        const store = getProcessStore();
-        return (store.has(key) ? store.get(key) : defaultValue) as T | undefined;
+        const storageKey = `${RELOAD_STATE_KEY_PREFIX}${key}`;
+        return this._workspaceState.get<T>(storageKey, defaultValue as T);
     }
 
     async update(key: string, value: unknown): Promise<void> {
-        const store = getProcessStore();
-        if (value === undefined) {
-            store.delete(key);
-        } else {
-            store.set(key, value);
-        }
+        await this._workspaceState.update(`${RELOAD_STATE_KEY_PREFIX}${key}`, value);
     }
 
     keys(): readonly string[] {
-        return Array.from(getProcessStore().keys());
+        return this._workspaceState.keys()
+            .filter((key) => key.startsWith(RELOAD_STATE_KEY_PREFIX))
+            .map((key) => key.slice(RELOAD_STATE_KEY_PREFIX.length));
     }
 }
 
-/** In-memory, extension-host-lifetime state shared by supervisor services. */
-export const extensionHostEphemeralState: EphemeralMemento =
-    new ExtensionHostEphemeralMemento();
+/**
+ * Creates workspace-scoped state that survives replacement of the extension
+ * host during a window reload. The namespace keeps reload-only state separate
+ * from genuinely machine-persistent supervisor state.
+ */
+export function createReloadPersistentState(
+    workspaceState: vscode.Memento,
+): EphemeralMemento {
+    return new ReloadPersistentMemento(workspaceState);
+}

@@ -21,7 +21,7 @@ import { RuntimeSession } from './session';
 import { type SerializedSessionMetadata } from './runtimeSessionService';
 import { RuntimeSessionService } from './runtimeSession';
 import {
-    extensionHostEphemeralState,
+    createReloadPersistentState,
     type EphemeralMemento,
 } from './ephemeralState';
 
@@ -86,6 +86,8 @@ export class RuntimeStartupService implements vscode.Disposable {
     private readonly _localWindowId = `window-${Math.random().toString(16).slice(2, 10)}`;
     private readonly _shownArchitectureMismatchWarnings = new Set<string>();
     private readonly _failedRestoredSessionIds = new Set<string>();
+    private readonly _pendingRestoredSessionIds = new Set<string>();
+    private readonly _completedRestoredSessionIds = new Set<string>();
     private readonly _crashRestartsInProgress = new Set<string>();
 
     private _startupPhase = RuntimeStartupPhase.Initializing;
@@ -95,6 +97,8 @@ export class RuntimeStartupService implements vscode.Disposable {
     private _resolveRestoredSessionsLoaded!: () => void;
     private _refreshWorkspaceRecommendationSignalsPromise: Promise<void> | undefined;
     private _workspaceRecommendationSignalsRefreshPending = false;
+    private _sessionRestoreQueue: Promise<void> = Promise.resolve();
+    private readonly _ephemeralState: EphemeralMemento;
 
     constructor(
         private readonly _context: vscode.ExtensionContext,
@@ -102,9 +106,10 @@ export class RuntimeStartupService implements vscode.Disposable {
         private readonly _sessionManager: RuntimeSessionService,
         private readonly _newFolderService: IPositronNewFolderService,
         private readonly _outputChannel: vscode.LogOutputChannel,
-        private readonly _ephemeralState: EphemeralMemento =
-            extensionHostEphemeralState,
+        ephemeralState?: EphemeralMemento,
     ) {
+        this._ephemeralState = ephemeralState ??
+            createReloadPersistentState(this._context.workspaceState);
         this._restoredSessionsLoadedPromise = new Promise<void>((resolve) => {
             this._resolveRestoredSessionsLoaded = resolve;
         });
@@ -167,6 +172,16 @@ export class RuntimeStartupService implements vscode.Disposable {
         this._sessionManager.registerPersistedSessionRestoreHandler(() => {
             return this._restorePersistedSessionsInBackground();
         });
+        const onDidRegisterRuntimeProvider = this._runtimeManager.onDidRegisterRuntimeProvider;
+        if (onDidRegisterRuntimeProvider) {
+            this._disposables.push(onDidRegisterRuntimeProvider((languageId) => {
+                void this._retryPendingRestoredSessions(languageId).catch((error) => {
+                    this._outputChannel.error(
+                        `[RuntimeStartup] Failed to retry deferred ${languageId} sessions: ${error}`,
+                    );
+                });
+            }));
+        }
         void this._loadRestoredSessions();
     }
 
@@ -399,7 +414,32 @@ export class RuntimeStartupService implements vscode.Disposable {
         }
 
         this._setStartupPhase(RuntimeStartupPhase.Reconnecting);
-        await this._restoreSessions(this._restoredSessions);
+        await this._enqueueSessionRestore(this._restoredSessions);
+    }
+
+    private _enqueueSessionRestore(sessions: SerializedSessionMetadata[]): Promise<void> {
+        const restore = this._sessionRestoreQueue.then(() => this._restoreSessions(sessions));
+        this._sessionRestoreQueue = restore.catch((error) => {
+            this._outputChannel.error(`[RuntimeStartup] Session restore queue failed: ${error}`);
+        });
+        return restore;
+    }
+
+    private async _retryPendingRestoredSessions(languageId: string): Promise<void> {
+        await this._restoredSessionsLoadedPromise;
+        const sessions = this._restoredSessions.filter((session) =>
+            session.runtimeMetadata.languageId === languageId &&
+            this._pendingRestoredSessionIds.has(session.metadata.sessionId),
+        );
+        if (sessions.length === 0) {
+            return;
+        }
+
+        this._outputChannel.debug(
+            `[RuntimeStartup] Retrying ${sessions.length} deferred ${languageId} session(s) ` +
+            'after runtime provider registration',
+        );
+        await this._enqueueSessionRestore(sessions);
     }
 
     private async _waitForNewFolderTasks(): Promise<void> {
@@ -753,14 +793,22 @@ export class RuntimeStartupService implements vscode.Disposable {
             .map(({ persisted }) => persisted);
 
         const validSessions = await Promise.all(sortedSessions.map(async (persisted) => {
+            if (this._completedRestoredSessionIds.has(persisted.metadata.sessionId)) {
+                this._pendingRestoredSessionIds.delete(persisted.metadata.sessionId);
+                return undefined;
+            }
+
             const provider = this._runtimeManager.getRuntimeProvider(persisted.runtimeMetadata.languageId);
             if (!provider) {
+                this._pendingRestoredSessionIds.add(persisted.metadata.sessionId);
                 this._outputChannel.debug(
                     `[RuntimeStartup] Deferring restore for ${persisted.metadata.sessionId}: language support for ` +
                     `${persisted.runtimeMetadata.languageId} is not registered yet`,
                 );
                 return undefined;
             }
+
+            this._pendingRestoredSessionIds.delete(persisted.metadata.sessionId);
 
             try {
                 const runtimeMetadata = provider.validateMetadata
@@ -848,6 +896,7 @@ export class RuntimeStartupService implements vscode.Disposable {
                     activate,
                     persisted.workingDirectory,
                 );
+                this._completedRestoredSessionIds.add(persisted.metadata.sessionId);
             } catch (error) {
                 await this._discardFailedRestoredSession(persisted.metadata.sessionId);
                 const normalizedError = error instanceof Error ? error : new Error(String(error));
@@ -866,6 +915,7 @@ export class RuntimeStartupService implements vscode.Disposable {
 
     private async _discardFailedRestoredSession(sessionId: string): Promise<void> {
         this._failedRestoredSessionIds.add(sessionId);
+        this._pendingRestoredSessionIds.delete(sessionId);
         this._restoredSessions = this._restoredSessions.filter(
             (session) => session.metadata.sessionId !== sessionId,
         );

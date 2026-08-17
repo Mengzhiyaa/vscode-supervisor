@@ -42,6 +42,9 @@ export class RuntimeManager implements vscode.Disposable, IRuntimeManager {
     private readonly _onDidFinishDiscovery = new vscode.EventEmitter<void>();
     readonly onDidFinishDiscovery = this._onDidFinishDiscovery.event;
 
+    private readonly _onDidRegisterRuntimeProvider = new vscode.EventEmitter<string>();
+    readonly onDidRegisterRuntimeProvider = this._onDidRegisterRuntimeProvider.event;
+
     constructor(
         private readonly _context: vscode.ExtensionContext,
         private readonly _sessionManager: RuntimeSessionService,
@@ -53,6 +56,7 @@ export class RuntimeManager implements vscode.Disposable, IRuntimeManager {
         );
         this._disposables.push(this._onDidDiscoverRuntime);
         this._disposables.push(this._onDidFinishDiscovery);
+        this._disposables.push(this._onDidRegisterRuntimeProvider);
     }
 
     registerRuntimeProvider<TInstallation>(
@@ -70,6 +74,7 @@ export class RuntimeManager implements vscode.Disposable, IRuntimeManager {
                 ? `${identity.ownerExtensionId}@revision-${identity.revision}`
                 : provider.extensionId ?? `vscode-supervisor.${provider.languageId}`,
         );
+        this._onDidRegisterRuntimeProvider.fire(provider.languageId);
         const dynamicEventDisposables: vscode.Disposable[] = [];
         if (provider.onDidDiscoverInstallation) {
             dynamicEventDisposables.push(provider.onDidDiscoverInstallation(installation => {

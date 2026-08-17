@@ -22,7 +22,7 @@ import { DapComm } from './DapComm';
 import { HandshakeSocket } from './HandshakeSocket';
 import { formatRawSupervisorLine } from '../logging/logSinks';
 import {
-	extensionHostEphemeralState,
+	createReloadPersistentState,
 	type EphemeralMemento,
 } from '../runtime/ephemeralState';
 
@@ -181,6 +181,8 @@ export class KCApi implements PositronSupervisorApi {
 	 */
 	private _showingDisconnectedWarning = false;
 
+	private readonly _ephemeralState: EphemeralMemento;
+
 	/**
 	 * Create a new Kallichore API object.
 	 *
@@ -194,10 +196,11 @@ export class KCApi implements PositronSupervisorApi {
 		private readonly _log: vscode.OutputChannel,
 		private readonly _transport: KallichoreTransport,
 		private readonly _reconnect: boolean,
-		private readonly _ephemeralState: EphemeralMemento =
-			extensionHostEphemeralState) {
+		ephemeralState?: EphemeralMemento) {
 
 		this._api = new KallichoreApiInstance(_transport);
+		this._ephemeralState = ephemeralState ??
+			createReloadPersistentState(this._context.workspaceState);
 
 		// Start Kallichore eagerly so it's warm when we start trying to create
 		// or restore sessions.

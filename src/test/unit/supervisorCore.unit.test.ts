@@ -13,6 +13,7 @@ import {
     RuntimeOutputKind,
 } from '../../internal/runtimeTypes';
 import { RuntimeSession } from '../../runtime/session';
+import { createReloadPersistentState } from '../../runtime/ephemeralState';
 import { DapComm } from '../../supervisor/DapComm';
 import {
     KALLICHORE_STATE_KEY,
@@ -141,6 +142,31 @@ suite('[Unit] supervisor core backports', () => {
         assert.strictEqual(ephemeral.get(KALLICHORE_STATE_KEY), undefined);
         assert.strictEqual(persistent.get(KALLICHORE_STATE_KEY), state);
         assert.strictEqual(selectServerState(false, undefined, state), state);
+    });
+
+    test('reload reconnect state survives a replacement extension host without colliding with persistent state', async () => {
+        const workspaceState = createMemento();
+        const firstExtensionHostState = createReloadPersistentState(workspaceState);
+        const state = {
+            base_path: 'http://127.0.0.1:9000',
+            bearer_token: 'secret',
+            server_pid: 42,
+        } as any;
+
+        await saveServerStateToTier(
+            true,
+            firstExtensionHostState,
+            workspaceState,
+            state,
+        );
+
+        const replacementExtensionHostState = createReloadPersistentState(workspaceState);
+        assert.deepStrictEqual(
+            replacementExtensionHostState.get(KALLICHORE_STATE_KEY),
+            state,
+        );
+        assert.strictEqual(workspaceState.get(KALLICHORE_STATE_KEY), undefined);
+        assert.deepStrictEqual(replacementExtensionHostState.keys(), [KALLICHORE_STATE_KEY]);
     });
     test('internal DAP sessions do not save open editors before attaching', async () => {
         const comm = {

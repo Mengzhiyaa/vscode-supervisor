@@ -37,6 +37,7 @@ function createMemento(initialEntries: Record<string, unknown> = {}): vscode.Mem
 function makeContext(
     globalStateEntries: Record<string, unknown> = {},
     workspaceStateEntries: Record<string, unknown> = {},
+    workspaceState = createMemento(workspaceStateEntries),
 ): vscode.ExtensionContext {
     const extensionPath = path.resolve(__dirname, '../../..');
     return {
@@ -44,7 +45,7 @@ function makeContext(
         extensionUri: vscode.Uri.file(extensionPath),
         subscriptions: [],
         globalState: createMemento(globalStateEntries),
-        workspaceState: createMemento(workspaceStateEntries),
+        workspaceState,
         asAbsolutePath: (relativePath: string) => path.join(extensionPath, relativePath),
     } as unknown as vscode.ExtensionContext;
 }
@@ -511,6 +512,118 @@ suite('[Unit] runtime startup', () => {
         );
 
         startupService.dispose();
+    });
+
+    test('retries a persisted session after its runtime provider registers', async () => {
+        const context = makeContext({}, {
+            [WORKSPACE_SESSION_LIST_KEY]: [makeStoredSession('session-late-provider', {
+                runtimeMetadata: makeRuntimeMetadata({
+                    sessionLocation: LanguageRuntimeSessionLocation.Machine,
+                }),
+            })],
+        });
+        const logChannel = makeNoopLogChannel();
+        const localSessionManager = makeSessionManager();
+        const onDidRegisterRuntimeProvider = new vscode.EventEmitter<string>();
+        const restored = createDeferred<void>();
+        let runtimeProvider: ReturnType<typeof makeRuntimeProvider> | undefined;
+        let restoreCalls = 0;
+
+        localSessionManager.value.restoreRuntimeSession = async () => {
+            restoreCalls += 1;
+            restored.resolve();
+        };
+        const startupService = new RuntimeStartupService(
+            context,
+            {
+                ...makeRuntimeManager(),
+                getRuntimeProvider: () => runtimeProvider,
+                onDidRegisterRuntimeProvider: onDidRegisterRuntimeProvider.event,
+            } as any,
+            localSessionManager.value,
+            makeNewFolderService(context, logChannel),
+            logChannel,
+            createMemento(),
+        );
+
+        await startupService.getRestoredSessions();
+        await localSessionManager.value.restorePersistedSessionsInBackground();
+        assert.strictEqual(restoreCalls, 0);
+        assert.deepStrictEqual(
+            context.workspaceState
+                .get<SerializedSessionMetadata[]>(WORKSPACE_SESSION_LIST_KEY, [])
+                .map((session) => session.metadata.sessionId),
+            ['session-late-provider'],
+        );
+
+        runtimeProvider = makeRuntimeProvider();
+        onDidRegisterRuntimeProvider.fire('r');
+        await restored.promise;
+        await (startupService as any)._sessionRestoreQueue;
+
+        assert.strictEqual(restoreCalls, 1);
+        onDidRegisterRuntimeProvider.fire('r');
+        await Promise.resolve();
+        await (startupService as any)._sessionRestoreQueue;
+        assert.strictEqual(restoreCalls, 1);
+
+        startupService.dispose();
+        onDidRegisterRuntimeProvider.dispose();
+    });
+
+    test('restores workspace sessions after the extension host is replaced on reload', async () => {
+        const workspaceState = createMemento();
+        const firstContext = makeContext({}, {}, workspaceState);
+        const logChannel = makeNoopLogChannel();
+        const firstSessionManager = makeSessionManager();
+        const liveSession = makeLiveSession('session-across-reload', {
+            runtimeMetadata: makeRuntimeMetadata({
+                sessionLocation: LanguageRuntimeSessionLocation.Workspace,
+            }),
+        });
+        firstSessionManager.value.sessions = [liveSession];
+        firstSessionManager.value.activeSessionId = liveSession.sessionId;
+        firstSessionManager.value.getActiveSession = () => ({ hasConsole: true });
+
+        const firstStartupService = new RuntimeStartupService(
+            firstContext,
+            makeRuntimeManager(),
+            firstSessionManager.value,
+            makeNewFolderService(firstContext, logChannel),
+            logChannel,
+        );
+        await firstStartupService.prepareForExtensionHostShutdown();
+        firstStartupService.dispose();
+
+        const replacementContext = makeContext({}, {}, workspaceState);
+        const replacementSessionManager = makeSessionManager();
+        const restoreCalls: string[] = [];
+        replacementSessionManager.value.restoreRuntimeSession = async (
+            _runtimeMetadata: unknown,
+            metadata: { sessionId: string },
+        ) => {
+            restoreCalls.push(metadata.sessionId);
+        };
+        const replacementStartupService = new RuntimeStartupService(
+            replacementContext,
+            {
+                ...makeRuntimeManager(),
+                getRuntimeProvider: () => makeRuntimeProvider(),
+            } as any,
+            replacementSessionManager.value,
+            makeNewFolderService(replacementContext, logChannel),
+            logChannel,
+        );
+
+        assert.deepStrictEqual(
+            (await replacementStartupService.getRestoredSessions())
+                .map((session) => session.metadata.sessionId),
+            ['session-across-reload'],
+        );
+        await replacementSessionManager.value.restorePersistedSessionsInBackground();
+        assert.deepStrictEqual(restoreCalls, ['session-across-reload']);
+
+        replacementStartupService.dispose();
     });
 
     test('restores newest sessions first and never activates a notebook session', async () => {
