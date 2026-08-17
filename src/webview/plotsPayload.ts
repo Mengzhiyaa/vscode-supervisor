@@ -20,6 +20,19 @@ export interface SerializedPlotRecord {
     sizingPolicyId?: string;
     customSize?: IPlotSize;
     hasIntrinsicSize?: boolean;
+    /** Stable creation timestamp used to order mixed plot kinds. */
+    created?: number;
+}
+
+export interface PlotHistoryEntry {
+    id: string;
+    created: number;
+}
+
+/** Sort mixed static, dynamic, and HTML plots by their creation metadata. */
+export function orderedPlots<T extends PlotHistoryEntry>(plots: Iterable<T>): T[] {
+    return Array.from(plots).sort((left, right) =>
+        (left.created || 0) - (right.created || 0) || left.id.localeCompare(right.id));
 }
 
 function cloneSize(size: IPlotSize | undefined): IPlotSize | undefined {
@@ -68,6 +81,7 @@ export function toPlotAddedParams(
         sizingPolicyId: plot.sizingPolicyId,
         customSize: cloneSize(plot.customSize),
         hasIntrinsicSize: plot.hasIntrinsicSize,
+        created: plot.created,
     };
 }
 

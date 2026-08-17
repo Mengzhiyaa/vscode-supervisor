@@ -393,7 +393,7 @@ export class PlotClientInstance extends RuntimeClientInstance {
         if (left.size?.height !== right.size?.height) {return false;}
         if (left.size?.width !== right.size?.width) {return false;}
         if (left.pixel_ratio !== right.pixel_ratio) {return false;}
-        return true;
+        return left.format === right.format;
     }
 
     /**

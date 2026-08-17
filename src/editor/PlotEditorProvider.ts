@@ -14,6 +14,10 @@ import * as RpcProtocol from '../rpc/webview/plotEditor';
 import { WebviewMessageReader, WebviewMessageWriter } from '../rpc/webview/transport';
 import { StaticPlotClient } from '../runtime/staticPlotClient';
 import {
+    decodeImageDataUrl,
+    extensionForMimeType,
+} from '../runtime/imageDataUrl';
+import {
     SurfaceKind,
     SurfaceLifecycleService,
     SurfaceModelKind,
@@ -34,24 +38,22 @@ export type PlotEditorContent =
 const MaxHtmlExportBytes = 50 * 1024 * 1024;
 
 export function decodeImageDataUri(data: string): { mimeType: string; bytes: Uint8Array } {
-    const match = /^data:([^;,]+)(;base64)?,([\s\S]*)$/i.exec(data);
-    if (!match || !match[1].startsWith('image/')) {
+    try {
+        const decoded = decodeImageDataUrl(data);
+        if (!decoded.mimeType.startsWith('image/')) {
+            throw new Error('Invalid image data URI');
+        }
+        return decoded;
+    } catch (error) {
+        if (error instanceof Error && error.message === 'Invalid image data URI') {
+            throw error;
+        }
         throw new Error('Invalid image data URI');
     }
-    const bytes = match[2]
-        ? Buffer.from(match[3], 'base64')
-        : Buffer.from(decodeURIComponent(match[3]), 'utf8');
-    return { mimeType: match[1].toLowerCase(), bytes };
 }
 
 export function imageExtension(mimeType: string): string {
-    switch (mimeType.toLowerCase()) {
-        case 'image/svg+xml': return 'svg';
-        case 'image/jpeg': return 'jpg';
-        case 'image/gif': return 'gif';
-        case 'image/webp': return 'webp';
-        default: return 'png';
-    }
+    return extensionForMimeType(mimeType);
 }
 
 export function addHtmlBaseUri(content: string, sourceUri: string): string {

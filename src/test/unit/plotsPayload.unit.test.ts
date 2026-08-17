@@ -1,6 +1,7 @@
 import * as assert from 'assert';
 import {
     createSelectedPlotChangedPayload,
+    orderedPlots,
     serializePlotRecord,
     toPlotAddedParams,
 } from '../../webview/plotsPayload';
@@ -69,5 +70,14 @@ suite('[Unit] plots payload helpers', () => {
 
         customSize.height = 200;
         assert.deepStrictEqual(payload.customSize, { width: 500, height: 300 });
+    });
+
+    test('orderedPlots uses creation metadata for mixed plot kinds', () => {
+        const ordered = orderedPlots([
+            { id: 'dynamic', created: 2 },
+            { id: 'html', created: 3 },
+            { id: 'static', created: 1 },
+        ]);
+        assert.deepStrictEqual(ordered.map(plot => plot.id), ['static', 'dynamic', 'html']);
     });
 });

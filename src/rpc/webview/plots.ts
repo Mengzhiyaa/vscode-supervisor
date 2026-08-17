@@ -88,6 +88,8 @@ export namespace PlotAddedNotification {
         sizingPolicyId?: string;
         customSize?: { width: number; height: number; };
         hasIntrinsicSize?: boolean;
+        created?: number;
+        revision?: number;
     }
 
     export const type = new NotificationType<Params>('plots/added');

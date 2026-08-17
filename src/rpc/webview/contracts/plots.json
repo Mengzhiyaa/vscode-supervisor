@@ -265,6 +265,16 @@
               "name": "hasIntrinsicSize",
               "optional": true,
               "type": "boolean"
+            },
+            {
+              "name": "created",
+              "optional": true,
+              "type": "number"
+            },
+            {
+              "name": "revision",
+              "optional": true,
+              "type": "number"
             }
           ]
         }

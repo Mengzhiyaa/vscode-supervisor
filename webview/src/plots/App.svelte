@@ -43,6 +43,7 @@
         sizingPolicyId?: string;
         customSize?: { width: number; height: number };
         hasIntrinsicSize?: boolean;
+        created?: number;
     }
 
     interface SizingPolicyInfo {
@@ -73,6 +74,7 @@
         totalCount?: number;
         nextCursor?: number;
         hasMore?: boolean;
+        revision?: number;
     }
 
     type PlotPatch = Partial<Omit<Plot, "id">>;
@@ -100,6 +102,8 @@
         sizingPolicyId?: string;
         customSize?: { width: number; height: number };
         hasIntrinsicSize?: boolean;
+        created?: number;
+        revision?: number;
     }
 
     interface SelectedPlotChangedParams {
@@ -144,6 +148,7 @@
     let totalPlotsCount = $state<number | undefined>(undefined);
     let hasMorePlotsHistory = $state(false);
     let loadingOlderPlots = $state(false);
+    let lastAppliedRevision = 0;
 
     // Sizing policy state (Positron integration)
     let sizingPolicies = $state<SizingPolicyInfo[]>([
@@ -335,6 +340,9 @@
     }
 
     function upsertPlotFromAdded(params: PlotAddedParams): void {
+        if (typeof params.revision === "number" && params.revision < lastAppliedRevision) {
+            return;
+        }
         const existing = allPlots.find((plot) => plot.id === params.plotId);
         const isNewPlot = !existing;
         const isStaleRender =
@@ -342,48 +350,58 @@
             existing &&
             params.renderVersion < (existing.renderVersion ?? 0);
 
-        allPlots = [
-            ...allPlots.filter((plot) => plot.id !== params.plotId),
-            normalizePlot({
-                id: params.plotId,
-                sessionId: params.sessionId,
-                thumbnail: isStaleRender
-                    ? existing.thumbnail
-                    : (params.thumbnail ?? existing?.thumbnail),
-                cachedThumbnail: isStaleRender
-                    ? existing.cachedThumbnail
-                    : (params.thumbnail ??
-                      existing?.cachedThumbnail ??
-                      existing?.thumbnail),
-                renderVersion: isStaleRender
-                    ? existing.renderVersion ?? 0
-                    : params.renderVersion ?? existing?.renderVersion,
-                initialData: params.initialData ?? existing?.initialData,
-                initialRenderSettings:
-                    params.initialRenderSettings ??
-                    existing?.initialRenderSettings,
-                kind: params.kind ?? existing?.kind,
-                htmlUri: params.htmlUri ?? existing?.htmlUri,
-                // Legacy producers did not send this field and should remain
-                // active; the P1 resource manager always sends it explicitly.
-                htmlActive: params.htmlActive ?? existing?.htmlActive ?? true,
-                originUri: params.originUri ?? existing?.originUri,
-                name: params.name ?? existing?.name,
-                code: params.code ?? existing?.code,
-                parentId: params.parentId ?? existing?.parentId,
-                languageId: params.languageId ?? existing?.languageId,
-                zoomLevel:
-                    (params.zoomLevel as ZoomLevel | undefined) ??
-                    existing?.zoomLevel,
-                sizingPolicyId:
-                    params.sizingPolicyId ?? existing?.sizingPolicyId,
-                customSize:
-                    clonePlotSize(params.customSize) ??
-                    clonePlotSize(existing?.customSize),
-                hasIntrinsicSize:
-                    params.hasIntrinsicSize ?? existing?.hasIntrinsicSize,
-            }),
-        ];
+        const nextPlot = normalizePlot({
+            id: params.plotId,
+            sessionId: params.sessionId,
+            thumbnail: isStaleRender
+                ? existing.thumbnail
+                : (params.thumbnail ?? existing?.thumbnail),
+            cachedThumbnail: isStaleRender
+                ? existing.cachedThumbnail
+                : (params.thumbnail ??
+                  existing?.cachedThumbnail ??
+                  existing?.thumbnail),
+            renderVersion: isStaleRender
+                ? existing.renderVersion ?? 0
+                : params.renderVersion ?? existing?.renderVersion,
+            initialData: params.initialData ?? existing?.initialData,
+            initialRenderSettings:
+                params.initialRenderSettings ??
+                existing?.initialRenderSettings,
+            kind: params.kind ?? existing?.kind,
+            htmlUri: params.htmlUri ?? existing?.htmlUri,
+            // Legacy producers did not send this field and should remain
+            // active; the P1 resource manager always sends it explicitly.
+            htmlActive: params.htmlActive ?? existing?.htmlActive ?? true,
+            originUri: params.originUri ?? existing?.originUri,
+            name: params.name ?? existing?.name,
+            code: params.code ?? existing?.code,
+            parentId: params.parentId ?? existing?.parentId,
+            languageId: params.languageId ?? existing?.languageId,
+            zoomLevel:
+                (params.zoomLevel as ZoomLevel | undefined) ??
+                existing?.zoomLevel,
+            sizingPolicyId:
+                params.sizingPolicyId ?? existing?.sizingPolicyId,
+            customSize:
+                clonePlotSize(params.customSize) ??
+                clonePlotSize(existing?.customSize),
+            hasIntrinsicSize:
+                params.hasIntrinsicSize ?? existing?.hasIntrinsicSize,
+            created: params.created ?? existing?.created,
+        });
+        const existingIndex = allPlots.findIndex((plot) => plot.id === params.plotId);
+        if (existingIndex >= 0) {
+            const nextPlots = [...allPlots];
+            nextPlots[existingIndex] = nextPlot;
+            allPlots = nextPlots;
+        } else {
+            allPlots = [...allPlots, nextPlot].sort((left, right) =>
+                (left.created ?? 0) - (right.created ?? 0) || left.id.localeCompare(right.id));
+        }
+        if (typeof params.revision === "number") {
+            lastAppliedRevision = Math.max(lastAppliedRevision, params.revision);
+        }
 
         if (!isNewPlot) {
             return;
@@ -471,11 +489,17 @@
     }
 
     function applyPlotsPage(result: PlotsListResult): void {
+        if (typeof result.revision === "number" && result.revision < lastAppliedRevision) {
+            return;
+        }
         const normalized = (result.plots ?? []).map((plot) =>
             normalizePlot(plot),
         );
 
         allPlots = normalized;
+        if (typeof result.revision === "number") {
+            lastAppliedRevision = result.revision;
+        }
         plotsListCursor =
             result.nextCursor !== undefined
                 ? result.nextCursor
@@ -538,6 +562,7 @@
             sizingPolicyId: plot.sizingPolicyId,
             customSize: clonePlotSize(plot.customSize),
             hasIntrinsicSize: plot.hasIntrinsicSize,
+            created: plot.created,
         };
     }
 
@@ -678,6 +703,12 @@
             if (!page) {
                 return;
             }
+            if (typeof page.revision === "number" && page.revision < lastAppliedRevision) {
+                return;
+            }
+            if (typeof page.revision === "number") {
+                lastAppliedRevision = page.revision;
+            }
 
             const normalized = (page.plots ?? []).map((plot) =>
                 normalizePlot(plot),
@@ -725,14 +756,27 @@
         );
 
         // Listen for plots cleared
-        connection.onNotification("plots/cleared", () => {
+        connection.onNotification("plots/cleared", (params?: { revision?: number }) => {
+            const revision = params?.revision;
+            if (typeof revision === "number" && revision < lastAppliedRevision) {
+                return;
+            }
+            if (typeof revision === "number") {
+                lastAppliedRevision = Math.max(lastAppliedRevision, revision);
+            }
             clearPlotsState();
         });
 
         // Listen for plots removed (session-specific cleanup)
         connection.onNotification(
             "plots/removed",
-            (params: { plotIds: string[]; sessionId: string }) => {
+            (params: { plotIds: string[]; sessionId: string; revision?: number }) => {
+                if (typeof params.revision === "number" && params.revision < lastAppliedRevision) {
+                    return;
+                }
+                if (typeof params.revision === "number") {
+                    lastAppliedRevision = Math.max(lastAppliedRevision, params.revision);
+                }
                 removePlots(params.plotIds);
             },
         );
