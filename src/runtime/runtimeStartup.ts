@@ -87,6 +87,7 @@ export class RuntimeStartupService implements vscode.Disposable {
     private readonly _shownArchitectureMismatchWarnings = new Set<string>();
     private readonly _failedRestoredSessionIds = new Set<string>();
     private readonly _pendingRestoredSessionIds = new Set<string>();
+    private readonly _restoringRestoredSessionIds = new Set<string>();
     private readonly _completedRestoredSessionIds = new Set<string>();
     private readonly _crashRestartsInProgress = new Set<string>();
 
@@ -99,6 +100,7 @@ export class RuntimeStartupService implements vscode.Disposable {
     private _workspaceRecommendationSignalsRefreshPending = false;
     private _sessionRestoreQueue: Promise<void> = Promise.resolve();
     private readonly _ephemeralState: EphemeralMemento;
+    private readonly _activateExtension: (extensionId: string, languageId: string) => Promise<void>;
 
     constructor(
         private readonly _context: vscode.ExtensionContext,
@@ -107,9 +109,20 @@ export class RuntimeStartupService implements vscode.Disposable {
         private readonly _newFolderService: IPositronNewFolderService,
         private readonly _outputChannel: vscode.LogOutputChannel,
         ephemeralState?: EphemeralMemento,
+        activateExtension?: (extensionId: string, languageId: string) => Promise<void>,
     ) {
         this._ephemeralState = ephemeralState ??
             createReloadPersistentState(this._context.workspaceState);
+        this._activateExtension = activateExtension ?? (async (extensionId, languageId) => {
+            const extension = vscode.extensions.getExtension(extensionId);
+            if (!extension) {
+                throw new Error(`Extension '${extensionId}' is not installed`);
+            }
+            this._outputChannel.debug(
+                `[RuntimeStartup] Activating extension ${extensionId} for language ${languageId}`,
+            );
+            await extension.activate();
+        });
         this._restoredSessionsLoadedPromise = new Promise<void>((resolve) => {
             this._resolveRestoredSessionsLoaded = resolve;
         });
@@ -366,11 +379,13 @@ export class RuntimeStartupService implements vscode.Disposable {
         await this._waitForNewFolderTasks();
 
         try {
-            if (!this._sessionManager.hasStartingOrRunningConsole()) {
+            if (!this._hasOutstandingSessionRestores() &&
+                !this._sessionManager.hasStartingOrRunningConsole()) {
                 await this._startAffiliatedLanguageRuntimes();
             }
 
-            if (!this._sessionManager.hasStartingOrRunningConsole()) {
+            if (!this._hasOutstandingSessionRestores() &&
+                !this._sessionManager.hasStartingOrRunningConsole()) {
                 await this._startRecommendedLanguageRuntimes();
             }
         } catch (error) {
@@ -440,6 +455,12 @@ export class RuntimeStartupService implements vscode.Disposable {
             'after runtime provider registration',
         );
         await this._enqueueSessionRestore(sessions);
+
+        if (this._startupPhase === RuntimeStartupPhase.Complete &&
+            !this._hasOutstandingSessionRestores() &&
+            !this._sessionManager.hasStartingOrRunningConsole()) {
+            await this._autoStartAfterDiscovery();
+        }
     }
 
     private async _waitForNewFolderTasks(): Promise<void> {
@@ -792,9 +813,15 @@ export class RuntimeStartupService implements vscode.Disposable {
             )
             .map(({ persisted }) => persisted);
 
+        // Positron activates every runtime-owning extension before validation.
+        // This makes provider/session-manager registration part of the restore
+        // operation instead of allowing auto-start to race a deferred restore.
+        await this._activateRestoredSessionExtensions(sortedSessions);
+
         const validSessions = await Promise.all(sortedSessions.map(async (persisted) => {
             if (this._completedRestoredSessionIds.has(persisted.metadata.sessionId)) {
                 this._pendingRestoredSessionIds.delete(persisted.metadata.sessionId);
+                this._restoringRestoredSessionIds.delete(persisted.metadata.sessionId);
                 return undefined;
             }
 
@@ -809,6 +836,7 @@ export class RuntimeStartupService implements vscode.Disposable {
             }
 
             this._pendingRestoredSessionIds.delete(persisted.metadata.sessionId);
+            this._restoringRestoredSessionIds.add(persisted.metadata.sessionId);
 
             try {
                 const runtimeMetadata = provider.validateMetadata
@@ -897,6 +925,7 @@ export class RuntimeStartupService implements vscode.Disposable {
                     persisted.workingDirectory,
                 );
                 this._completedRestoredSessionIds.add(persisted.metadata.sessionId);
+                this._restoringRestoredSessionIds.delete(persisted.metadata.sessionId);
             } catch (error) {
                 await this._discardFailedRestoredSession(persisted.metadata.sessionId);
                 const normalizedError = error instanceof Error ? error : new Error(String(error));
@@ -916,6 +945,7 @@ export class RuntimeStartupService implements vscode.Disposable {
     private async _discardFailedRestoredSession(sessionId: string): Promise<void> {
         this._failedRestoredSessionIds.add(sessionId);
         this._pendingRestoredSessionIds.delete(sessionId);
+        this._restoringRestoredSessionIds.delete(sessionId);
         this._restoredSessions = this._restoredSessions.filter(
             (session) => session.metadata.sessionId !== sessionId,
         );
@@ -944,9 +974,15 @@ export class RuntimeStartupService implements vscode.Disposable {
             })
             .map((session) => {
                 const activeSession = this._sessionManager.getActiveSession(session.sessionId);
+                const provider = this._runtimeManager.getRuntimeProvider(
+                    session.runtimeMetadata.languageId,
+                );
                 const metadata: SerializedSessionMetadata = {
                     sessionName: session.dynState.sessionName || session.sessionMetadata.sessionName,
-                    runtimeMetadata: session.runtimeMetadata,
+                    runtimeMetadata: {
+                        ...session.runtimeMetadata,
+                        extensionId: session.runtimeMetadata.extensionId ?? provider?.extensionId,
+                    },
                     metadata: {
                         ...session.sessionMetadata,
                         sessionName: session.dynState.sessionName || session.sessionMetadata.sessionName,
@@ -1217,6 +1253,13 @@ export class RuntimeStartupService implements vscode.Disposable {
     }
 
     private async _autoStartAfterDiscovery(): Promise<void> {
+        if (this._hasOutstandingSessionRestores()) {
+            this._outputChannel.debug(
+                '[RuntimeStartup] Skipping automatic startup while persisted sessions are still restoring',
+            );
+            return;
+        }
+
         if (this._runtimeManager.runtimes.length === 0) {
             void vscode.window.showWarningMessage(
                 'No interpreters found. Configure a runtime path or install a supported runtime.',
@@ -1281,6 +1324,14 @@ export class RuntimeStartupService implements vscode.Disposable {
         source: string,
         activate: boolean,
     ): Promise<void> {
+        if (this._hasOutstandingSessionRestores()) {
+            this._outputChannel.debug(
+                `[RuntimeStartup] Skipping automatic startup of ${metadata.runtimeName} while ` +
+                'persisted sessions are still restoring',
+            );
+            return;
+        }
+
         if (this._getStartupBehavior(metadata.languageId) === LanguageStartupBehavior.Disabled) {
             return;
         }
@@ -1311,6 +1362,38 @@ export class RuntimeStartupService implements vscode.Disposable {
         });
 
         await this._sessionManager.autoStartRuntime(metadata, source, activate);
+    }
+
+    private _hasOutstandingSessionRestores(): boolean {
+        return this._pendingRestoredSessionIds.size > 0 ||
+            this._restoringRestoredSessionIds.size > 0;
+    }
+
+    private async _activateRestoredSessionExtensions(
+        sessions: readonly SerializedSessionMetadata[],
+    ): Promise<void> {
+        const extensions = new Map<string, string>();
+        for (const session of sessions) {
+            if (this._runtimeManager.getRuntimeProvider(session.runtimeMetadata.languageId)) {
+                continue;
+            }
+            if (session.runtimeMetadata.extensionId) {
+                extensions.set(
+                    session.runtimeMetadata.extensionId,
+                    session.runtimeMetadata.languageId,
+                );
+            }
+        }
+
+        await Promise.all(Array.from(extensions, async ([extensionId, languageId]) => {
+            try {
+                await this._activateExtension(extensionId, languageId);
+            } catch (error) {
+                this._outputChannel.debug(
+                    `[RuntimeStartup] Error activating extension ${extensionId}: ${error}`,
+                );
+            }
+        }));
     }
 
     private _createRuntimeStartupEventFromSerializedSession(

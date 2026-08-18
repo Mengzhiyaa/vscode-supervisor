@@ -528,10 +528,14 @@ suite('[Unit] runtime startup', () => {
         const restored = createDeferred<void>();
         let runtimeProvider: ReturnType<typeof makeRuntimeProvider> | undefined;
         let restoreCalls = 0;
+        let autoStartCalls = 0;
 
         localSessionManager.value.restoreRuntimeSession = async () => {
             restoreCalls += 1;
             restored.resolve();
+        };
+        localSessionManager.value.autoStartRuntime = async () => {
+            autoStartCalls += 1;
         };
         const startupService = new RuntimeStartupService(
             context,
@@ -549,6 +553,12 @@ suite('[Unit] runtime startup', () => {
         await startupService.getRestoredSessions();
         await localSessionManager.value.restorePersistedSessionsInBackground();
         assert.strictEqual(restoreCalls, 0);
+        await (startupService as any)._autoStartRuntime(
+            makeRuntimeMetadata({ startupBehavior: LanguageRuntimeStartupBehavior.Immediate }),
+            'unit-test automatic startup',
+            true,
+        );
+        assert.strictEqual(autoStartCalls, 0);
         assert.deepStrictEqual(
             context.workspaceState
                 .get<SerializedSessionMetadata[]>(WORKSPACE_SESSION_LIST_KEY, [])
@@ -571,6 +581,55 @@ suite('[Unit] runtime startup', () => {
         onDidRegisterRuntimeProvider.dispose();
     });
 
+    test('activates the persisted runtime extension before validating and restoring', async () => {
+        const extensionId = 'publisher.runtime-r';
+        const context = makeContext({}, {
+            [WORKSPACE_SESSION_LIST_KEY]: [makeStoredSession('session-extension-activation', {
+                runtimeMetadata: makeRuntimeMetadata({
+                    extensionId,
+                    sessionLocation: LanguageRuntimeSessionLocation.Machine,
+                }),
+            })],
+        });
+        const logChannel = makeNoopLogChannel();
+        const localSessionManager = makeSessionManager();
+        const order: string[] = [];
+        let runtimeProvider: ReturnType<typeof makeRuntimeProvider> | undefined;
+        localSessionManager.value.validateRuntimeSession = async () => {
+            order.push('validate');
+            return true;
+        };
+        localSessionManager.value.restoreRuntimeSession = async () => {
+            order.push('restore');
+        };
+
+        const startupService = new RuntimeStartupService(
+            context,
+            {
+                ...makeRuntimeManager(),
+                getRuntimeProvider: () => runtimeProvider,
+            } as any,
+            localSessionManager.value,
+            makeNewFolderService(context, logChannel),
+            logChannel,
+            createMemento(),
+            async (requestedExtensionId, languageId) => {
+                order.push(`activate:${requestedExtensionId}:${languageId}`);
+                runtimeProvider = makeRuntimeProvider();
+            },
+        );
+
+        await startupService.getRestoredSessions();
+        await localSessionManager.value.restorePersistedSessionsInBackground();
+
+        assert.deepStrictEqual(order, [
+            `activate:${extensionId}:r`,
+            'validate',
+            'restore',
+        ]);
+        startupService.dispose();
+    });
+
     test('restores workspace sessions after the extension host is replaced on reload', async () => {
         const workspaceState = createMemento();
         const firstContext = makeContext({}, {}, workspaceState);
@@ -587,7 +646,10 @@ suite('[Unit] runtime startup', () => {
 
         const firstStartupService = new RuntimeStartupService(
             firstContext,
-            makeRuntimeManager(),
+            {
+                ...makeRuntimeManager(),
+                getRuntimeProvider: () => ({ extensionId: 'publisher.runtime-r' }),
+            } as any,
             firstSessionManager.value,
             makeNewFolderService(firstContext, logChannel),
             logChannel,
@@ -615,10 +677,14 @@ suite('[Unit] runtime startup', () => {
             logChannel,
         );
 
+        const restoredSessions = await replacementStartupService.getRestoredSessions();
         assert.deepStrictEqual(
-            (await replacementStartupService.getRestoredSessions())
-                .map((session) => session.metadata.sessionId),
+            restoredSessions.map((session) => session.metadata.sessionId),
             ['session-across-reload'],
+        );
+        assert.strictEqual(
+            restoredSessions[0].runtimeMetadata.extensionId,
+            'publisher.runtime-r',
         );
         await replacementSessionManager.value.restorePersistedSessionsInBackground();
         assert.deepStrictEqual(restoreCalls, ['session-across-reload']);
@@ -1005,6 +1071,7 @@ suite('[Unit] runtime startup', () => {
             )!.map((session) => session.metadata.sessionId),
             ['session-ok'],
         );
+        assert.strictEqual((startupService as any)._hasOutstandingSessionRestores(), false);
 
         startupService.dispose();
     });

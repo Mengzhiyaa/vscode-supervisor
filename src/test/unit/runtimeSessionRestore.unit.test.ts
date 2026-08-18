@@ -1,7 +1,7 @@
 import * as assert from 'assert';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { LanguageRuntimeSessionMode } from '../../api';
+import { LanguageRuntimeMetadata, LanguageRuntimeSessionMode } from '../../api';
 import { RuntimeState } from '../../internal/runtimeTypes';
 import { RuntimeSessionService } from '../../runtime/runtimeSession';
 
@@ -58,6 +58,29 @@ function makeNoopLogChannel(): vscode.LogOutputChannel {
 }
 
 suite('[Unit] runtime session persisted restore state', () => {
+    test('records the provider extension when normalizing runtime metadata', () => {
+        const service = new RuntimeSessionService(makeContext(), makeNoopLogChannel());
+        const extensionId = 'publisher.runtime-r';
+        (service as any)._runtimeProviders.set('r', { extensionId });
+
+        const metadata = {
+            runtimeId: 'runtime-1',
+            runtimeName: 'R 4.4.1',
+            runtimePath: '/usr/bin/R',
+            runtimeSource: 'system',
+            runtimeShortName: '4.4.1',
+            runtimeVersion: '4.4.1',
+            languageId: 'r',
+            languageName: 'R',
+            languageVersion: '4.4.1',
+        } satisfies LanguageRuntimeMetadata;
+
+        const normalized = (service as any)._normalizeRuntimeMetadata(metadata);
+
+        assert.strictEqual(normalized.extensionId, extensionId);
+        service.dispose();
+    });
+
     test('tracks in-progress restore and waiters', async () => {
         const service = new RuntimeSessionService(makeContext(), makeNoopLogChannel());
         let resolveRestore: (() => void) | undefined;

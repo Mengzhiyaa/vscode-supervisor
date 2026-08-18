@@ -1779,8 +1779,10 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
     }
 
     private _normalizeRuntimeMetadata(metadata: LanguageRuntimeMetadata): LanguageRuntimeMetadata {
+        const provider = this.getRuntimeProvider(metadata.languageId);
         return {
             ...metadata,
+            extensionId: metadata.extensionId ?? provider?.extensionId,
             startupBehavior: metadata.startupBehavior ?? LanguageRuntimeStartupBehavior.Immediate,
             sessionLocation: metadata.sessionLocation ?? this.getSessionLocation(),
         };
