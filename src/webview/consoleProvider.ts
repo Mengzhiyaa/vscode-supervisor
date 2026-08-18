@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { MessageConnection } from 'vscode-jsonrpc';
+import { MessageConnection } from 'vscode-jsonrpc/node';
 import { ContextKeys, CoreConfigurationKeys, CoreConfigurationSections, ViewIds } from '../coreCommandIds';
 import { BaseWebviewProvider } from './baseProvider';
 import * as ConsoleProtocol from '../rpc/webview/console';
@@ -502,13 +502,16 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
                 if (status === undefined) {
                     return { status: 'unknown' as const };
                 }
-                const statusMap: Record<RuntimeCodeFragmentStatus, string> = {
+                const statusMap = {
                     [RuntimeCodeFragmentStatus.Complete]: 'complete',
                     [RuntimeCodeFragmentStatus.Incomplete]: 'incomplete',
                     [RuntimeCodeFragmentStatus.Invalid]: 'invalid',
                     [RuntimeCodeFragmentStatus.Unknown]: 'unknown',
-                };
-                return { status: statusMap[status] || 'unknown' };
+                } satisfies Record<
+                    RuntimeCodeFragmentStatus,
+                    ConsoleProtocol.IsCompleteRequest.Result['status']
+                >;
+                return { status: statusMap[status] ?? 'unknown' };
             } catch (error) {
                 const message = error instanceof Error ? error.message : String(error);
                 void vscode.window.showErrorMessage(`Cannot execute code: ${message}`);

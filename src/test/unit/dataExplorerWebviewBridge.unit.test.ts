@@ -1,6 +1,6 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
-import type { MessageConnection } from 'vscode-jsonrpc';
+import type { MessageConnection } from 'vscode-jsonrpc/node';
 import {
     SupportStatus,
     type ColumnSelection,

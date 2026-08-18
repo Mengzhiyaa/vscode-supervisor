@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { MessageConnection } from 'vscode-jsonrpc';
+import { MessageConnection } from 'vscode-jsonrpc/node';
 import { BaseWebviewProvider } from './baseProvider';
 import {
     type LanguageRuntimePackage,

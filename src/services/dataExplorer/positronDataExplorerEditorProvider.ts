@@ -6,7 +6,7 @@
 
 import * as vscode from 'vscode';
 import { CoreCommandIds } from '../../coreCommandIds';
-import { createMessageConnection, MessageConnection } from 'vscode-jsonrpc';
+import { createMessageConnection, MessageConnection } from 'vscode-jsonrpc/node';
 import { WebviewMessageReader, WebviewMessageWriter } from '../../rpc/webview/transport';
 import {
     type IPositronDataExplorerInstance,

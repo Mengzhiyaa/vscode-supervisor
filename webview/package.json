@@ -12,19 +12,19 @@
         "test:integration": "npm run build && playwright test -c test/playwright.config.ts"
     },
     "dependencies": {
-        "@vscode/codicons": "^0.0.45",
+        "@vscode/codicons": "^0.0.46-24",
         "monaco-editor": "^0.56.0",
-        "vscode-jsonrpc": "^8.2.1",
+        "vscode-jsonrpc": "^9.0.1",
         "vscode-oniguruma": "^2.0.1",
         "vscode-textmate": "^9.3.2"
     },
     "devDependencies": {
         "@playwright/test": "^1.54.2",
-        "@sveltejs/vite-plugin-svelte": "^7.0.0",
+        "@sveltejs/vite-plugin-svelte": "^7.3.0",
         "@tsconfig/svelte": "^5.0.8",
-        "svelte": "^5.54.0",
-        "svelte-check": "^4.4.5",
+        "svelte": "^5.56.9",
+        "svelte-check": "^4.7.6",
         "typescript": "^5.9.3",
-        "vite": "^8.1.5"
+        "vite": "^8.2.1"
     }
 }

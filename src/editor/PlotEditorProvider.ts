@@ -6,7 +6,7 @@
  */
 
 import * as vscode from 'vscode';
-import { createMessageConnection, type MessageConnection } from 'vscode-jsonrpc';
+import { createMessageConnection, type MessageConnection } from 'vscode-jsonrpc/node';
 import { PlotClientInstance } from '../runtime/PlotClientInstance';
 import { PlotRenderFormat } from '../runtime/comms/positronPlotComm';
 import { PositronPlotsService } from '../runtime/positronPlotsService';

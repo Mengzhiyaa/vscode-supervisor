@@ -7,7 +7,7 @@ import {
     Message,
     MessageReader,
     MessageWriter
-} from 'vscode-jsonrpc';
+} from 'vscode-jsonrpc/node';
 
 /**
  * MessageReader implementation that reads JSON-RPC messages from a VS Code Webview.

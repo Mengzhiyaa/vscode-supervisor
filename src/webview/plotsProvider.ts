@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { createMessageConnection, MessageConnection } from 'vscode-jsonrpc';
+import { createMessageConnection, MessageConnection } from 'vscode-jsonrpc/node';
 import { BaseWebviewProvider } from './baseProvider';
 import * as PlotsProtocol from '../rpc/webview/plots';
 import * as SessionProtocol from '../rpc/webview/session';

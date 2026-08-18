@@ -3,7 +3,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
-import type { MessageConnection } from 'vscode-jsonrpc';
+import type { MessageConnection } from 'vscode-jsonrpc/node';
 import type {
     RowFilter,
     ColumnFilter,

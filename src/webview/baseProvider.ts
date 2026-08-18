@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { createMessageConnection, MessageConnection } from 'vscode-jsonrpc';
+import { createMessageConnection, MessageConnection } from 'vscode-jsonrpc/node';
 import { WebviewMessageReader, WebviewMessageWriter } from '../rpc/webview/transport';
 import { serializeWebviewLocalizationMessages } from './webviewLocalization';
 

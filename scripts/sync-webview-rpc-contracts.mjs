@@ -193,7 +193,7 @@ function renderContract(contract, sourceFile) {
         '',
     ];
     if (imports.length > 0) {
-        sections.push(`import { ${imports.join(', ')} } from 'vscode-jsonrpc';`, '');
+        sections.push(`import { ${imports.join(', ')} } from 'vscode-jsonrpc/node';`, '');
     }
     sections.push(contract.declarations.map(declaration => renderDeclaration(declaration, '')).join('\n\n'));
     return `${sections.join('\n')}\n`;
