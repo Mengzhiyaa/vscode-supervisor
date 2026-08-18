@@ -44,6 +44,7 @@
         copyScopedSelection,
         writeClipboardText,
     } from "./utils/selectionUtils";
+    import { isTabSuggestContext } from "./tabSuggest";
 
     // Position constants (Positron pattern - using const instead of enum for Svelte compatibility)
     const Position = {
@@ -1681,35 +1682,16 @@
         if (!codeEditorWidget) return false;
 
         const selection = codeEditorWidget.getSelection();
-        if (selection && !selection.isEmpty()) {
-            return false;
-        }
-
         const model = codeEditorWidget.getModel();
         const position = codeEditorWidget.getPosition();
         if (!model || !position) return false;
 
-        if (position.column <= 1) {
-            return false;
-        }
-
         const line = model.getLineContent(position.lineNumber);
-        const leftChar = line.charAt(position.column - 2);
-        if (!leftChar || /\s/.test(leftChar)) {
-            return false;
-        }
-
-        // Avoid triggering on empty/grouping parentheses.
-        if (leftChar === "(" || leftChar === ")") {
-            return false;
-        }
-
-        if (leftChar === ":") {
-            const prevChar = line.charAt(position.column - 3);
-            return prevChar === ":";
-        }
-
-        return /[A-Za-z0-9_.@$/]/.test(leftChar);
+        return isTabSuggestContext(
+            line,
+            position.column,
+            !!selection && !selection.isEmpty(),
+        );
     }
 
     function hasVisibleSuggestWidget(): boolean {
