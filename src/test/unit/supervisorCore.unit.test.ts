@@ -13,12 +13,18 @@ import {
     RuntimeOutputKind,
 } from '../../internal/runtimeTypes';
 import { RuntimeSession } from '../../runtime/session';
-import { createReloadPersistentState } from '../../runtime/ephemeralState';
+import {
+    createApplicationOwnerEpoch,
+    createReloadPersistentState,
+} from '../../runtime/ephemeralState';
 import { DapComm } from '../../supervisor/DapComm';
 import {
     KALLICHORE_STATE_KEY,
     KCApi,
+    ServerStatusPollingTimeoutError,
     isReconnectTarget,
+    pollServerStatusUntilReady,
+    quotePowerShellArgument,
     saveServerStateToTier,
     selectServerState,
     sharesApplicationLifetime,
@@ -103,6 +109,18 @@ function createDeferred<T>(): {
 }
 
 suite('[Unit] supervisor core backports', () => {
+    test('quotes space-containing PowerShell Start-Process arguments', () => {
+        assert.strictEqual(quotePowerShellArgument('--transport'), "'--transport'");
+        assert.strictEqual(
+            quotePowerShellArgument('C:\\Users\\Jane Doe\\supervisor.log'),
+            "'\"C:\\Users\\Jane Doe\\supervisor.log\"'",
+        );
+        assert.strictEqual(
+            quotePowerShellArgument("C:\\Users\\O'Brien Doe\\supervisor.log"),
+            "'\"C:\\Users\\O''Brien Doe\\supervisor.log\"'",
+        );
+    });
+
     test('uses ephemeral reconnect state only for non-reconnect-target supervisors', async () => {
         assert.strictEqual(
             sharesApplicationLifetime(vscode.UIKind.Desktop, 'immediately'),
@@ -144,9 +162,13 @@ suite('[Unit] supervisor core backports', () => {
         assert.strictEqual(selectServerState(false, undefined, state), state);
     });
 
-    test('reload reconnect state survives a replacement extension host without colliding with persistent state', async () => {
+    test('reload reconnect state survives a replacement extension host in the same application epoch', async () => {
         const workspaceState = createMemento();
-        const firstExtensionHostState = createReloadPersistentState(workspaceState);
+        const ownerEpoch = 'application-epoch-1';
+        const firstExtensionHostState = createReloadPersistentState(
+            workspaceState,
+            ownerEpoch,
+        );
         const state = {
             base_path: 'http://127.0.0.1:9000',
             bearer_token: 'secret',
@@ -160,13 +182,129 @@ suite('[Unit] supervisor core backports', () => {
             state,
         );
 
-        const replacementExtensionHostState = createReloadPersistentState(workspaceState);
+        const replacementExtensionHostState = createReloadPersistentState(
+            workspaceState,
+            ownerEpoch,
+        );
         assert.deepStrictEqual(
             replacementExtensionHostState.get(KALLICHORE_STATE_KEY),
             state,
         );
         assert.strictEqual(workspaceState.get(KALLICHORE_STATE_KEY), undefined);
         assert.deepStrictEqual(replacementExtensionHostState.keys(), [KALLICHORE_STATE_KEY]);
+    });
+
+    test('reload reconnect state expires across application epochs', async () => {
+        const workspaceState = createMemento();
+        const firstApplicationState = createReloadPersistentState(
+            workspaceState,
+            'application-epoch-1',
+        );
+        await firstApplicationState.update(KALLICHORE_STATE_KEY, { server_pid: 42 });
+
+        const nextApplicationState = createReloadPersistentState(
+            workspaceState,
+            'application-epoch-2',
+        );
+        assert.strictEqual(nextApplicationState.get(KALLICHORE_STATE_KEY), undefined);
+        assert.deepStrictEqual(nextApplicationState.keys(), []);
+
+        await new Promise<void>((resolve) => queueMicrotask(resolve));
+        assert.deepStrictEqual(workspaceState.keys(), []);
+    });
+
+    test('stale cleanup does not remove a current-epoch replacement', async () => {
+        const workspaceState = createMemento();
+        const firstApplicationState = createReloadPersistentState(
+            workspaceState,
+            'application-epoch-1',
+        );
+        await firstApplicationState.update(KALLICHORE_STATE_KEY, { server_pid: 42 });
+
+        const nextApplicationState = createReloadPersistentState(
+            workspaceState,
+            'application-epoch-2',
+        );
+        assert.strictEqual(nextApplicationState.get(KALLICHORE_STATE_KEY), undefined);
+        await nextApplicationState.update(KALLICHORE_STATE_KEY, { server_pid: 43 });
+
+        await new Promise<void>((resolve) => queueMicrotask(resolve));
+        assert.deepStrictEqual(
+            nextApplicationState.get(KALLICHORE_STATE_KEY),
+            { server_pid: 43 },
+        );
+    });
+
+    test('reload reconnect state rejects and removes the legacy unscoped format', async () => {
+        const workspaceState = createMemento();
+        const legacyStorageKey =
+            `vscode-supervisor.reloadState.v1.${KALLICHORE_STATE_KEY}`;
+        await workspaceState.update(legacyStorageKey, { server_pid: 42 });
+
+        const reloadState = createReloadPersistentState(
+            workspaceState,
+            'application-epoch-1',
+        );
+        assert.strictEqual(reloadState.get(KALLICHORE_STATE_KEY), undefined);
+        assert.strictEqual(reloadState.get('missing', 'fallback'), 'fallback');
+
+        await new Promise<void>((resolve) => queueMicrotask(resolve));
+        assert.deepStrictEqual(workspaceState.keys(), []);
+    });
+
+    test('persistent reconnect tier survives an application epoch change', async () => {
+        const workspaceState = createMemento();
+        const firstApplicationState = createReloadPersistentState(
+            workspaceState,
+            'application-epoch-1',
+        );
+        const persistentState = createMemento();
+        const state = {
+            base_path: 'http://127.0.0.1:9000',
+            bearer_token: 'secret',
+            server_pid: 42,
+        } as any;
+        await saveServerStateToTier(
+            false,
+            firstApplicationState,
+            persistentState,
+            state,
+        );
+
+        const nextApplicationState = createReloadPersistentState(
+            workspaceState,
+            'application-epoch-2',
+        );
+        assert.deepStrictEqual(
+            selectServerState(
+                false,
+                nextApplicationState.get(KALLICHORE_STATE_KEY),
+                persistentState.get(KALLICHORE_STATE_KEY),
+            ),
+            state,
+        );
+    });
+
+    test('application owner epoch is stable for one VS Code process and changes across launches', () => {
+        const first = createApplicationOwnerEpoch({
+            VSCODE_PID: '100',
+            VSCODE_IPC_HOOK: '/tmp/vscode-100.sock',
+        });
+        assert.strictEqual(
+            createApplicationOwnerEpoch({
+                VSCODE_PID: '100',
+                VSCODE_IPC_HOOK: '/tmp/vscode-100.sock',
+            }),
+            first,
+        );
+        assert.notStrictEqual(
+            createApplicationOwnerEpoch({
+                VSCODE_PID: '101',
+                VSCODE_IPC_HOOK: '/tmp/vscode-101.sock',
+            }),
+            first,
+        );
+        assert.ok(!first.includes('/tmp/vscode-100.sock'));
     });
     test('internal DAP sessions do not save open editors before attaching', async () => {
         const comm = {
@@ -212,6 +350,91 @@ suite('[Unit] supervisor core backports', () => {
             shouldIgnore.call({}, '1 hour', { code: 23 }),
             false,
         );
+    });
+
+    test('server startup polling can continue past 100 attempts within the timeout', async () => {
+        let now = 0;
+        let attempts = 0;
+        const status = await pollServerStatusUntilReady(
+            async () => {
+                attempts++;
+                if (attempts <= 120) {
+                    throw Object.assign(new Error('not ready'), { code: 'ECONNREFUSED' });
+                }
+                return { version: '0.1.67' };
+            },
+            {
+                timeoutMs: 15_000,
+                now: () => now,
+                sleep: async (milliseconds) => {
+                    now += milliseconds;
+                },
+            },
+        );
+
+        assert.strictEqual(attempts, 121);
+        assert.deepStrictEqual(status, { version: '0.1.67' });
+        assert.strictEqual(now, 12_000);
+    });
+
+    test('server startup polling stops at the configured elapsed-time deadline', async () => {
+        let now = 0;
+        let attempts = 0;
+        await assert.rejects(
+            pollServerStatusUntilReady(
+                async () => {
+                    attempts++;
+                    throw Object.assign(new Error('not ready'), { code: 'ENOENT' });
+                },
+                {
+                    timeoutMs: 250,
+                    now: () => now,
+                    sleep: async (milliseconds) => {
+                        now += milliseconds;
+                    },
+                },
+            ),
+            ServerStatusPollingTimeoutError,
+        );
+
+        assert.strictEqual(attempts, 4);
+        assert.strictEqual(now, 250);
+    });
+
+    test('quit shutdown is bounded and only runs for an online application-owned supervisor', async () => {
+        let shutdownOptions: { timeout?: number } | undefined;
+        let terminalDisposeCalls = 0;
+        const ownedSupervisor = {
+            serverSharesApplicationLifetime: () => true,
+            _started: { isOpen: () => true },
+            _api: {
+                api: {
+                    shutdownServer: async (options: { timeout?: number }) => {
+                        shutdownOptions = options;
+                    },
+                },
+            },
+            _terminal: {
+                dispose: () => {
+                    terminalDisposeCalls += 1;
+                },
+            },
+            log: () => undefined,
+        };
+
+        await KCApi.prototype.shutdownForQuit.call(ownedSupervisor as any);
+        assert.deepStrictEqual(shutdownOptions, { timeout: 2000 });
+        assert.strictEqual(terminalDisposeCalls, 1);
+        assert.strictEqual(ownedSupervisor._terminal, undefined);
+
+        let detachedShutdownCalls = 0;
+        await KCApi.prototype.shutdownForQuit.call({
+            serverSharesApplicationLifetime: () => false,
+            _started: { isOpen: () => true },
+            _api: { api: { shutdownServer: async () => { detachedShutdownCalls += 1; } } },
+            log: () => undefined,
+        } as any);
+        assert.strictEqual(detachedShutdownCalls, 0);
     });
 
     test('waiting for terminal process id times out with a clear error', async () => {

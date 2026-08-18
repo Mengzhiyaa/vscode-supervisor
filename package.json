@@ -36,6 +36,7 @@
     "compile-tests": "node -e \"require('fs').rmSync('out', { recursive: true, force: true })\" && tsc -p . --outDir out",
     "install:binaries": "node scripts/install-binaries.mjs",
     "test:binaries": "node --test scripts/install-binaries.test.mjs",
+    "test:kallichore-api-sync": "node --test scripts/sync-kallichore-api.test.mjs",
     "sync:kallichore-api": "node scripts/sync-kallichore-api.mjs",
     "verify:kallichore-api": "node scripts/sync-kallichore-api.mjs --check",
     "sync:api-dts": "node scripts/sync-api-dts.mjs",

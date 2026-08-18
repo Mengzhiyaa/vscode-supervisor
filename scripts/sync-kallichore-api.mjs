@@ -70,22 +70,46 @@ function syncFile(sourceContent, destination) {
     return true;
 }
 
-const sourceVersion = readKallichoreVersion();
-const standaloneVersion = readPinnedVersion(path.join(repoRoot, 'package.json'));
-const positronVersion = readPinnedVersion(path.join(positronSupervisorRoot, 'package.json'));
-if (new Set([sourceVersion, standaloneVersion, positronVersion]).size !== 1) {
-    throw new Error(
-        `Kallichore version mismatch: source=${sourceVersion}, ` +
-        `vscode-supervisor=${standaloneVersion}, positron-supervisor=${positronVersion}`,
-    );
+/**
+ * Validates the versions that control standalone artifacts.
+ *
+ * positronVersion is informational: Positron supplies the generated API file
+ * but can advance its own bundled server independently of this extension.
+ */
+export function assertKallichoreVersionsCanSync(versions) {
+    const { sourceVersion, standaloneVersion } = versions;
+    if (sourceVersion !== standaloneVersion) {
+        throw new Error(
+            `Kallichore version mismatch: source=${sourceVersion}, ` +
+            `vscode-supervisor=${standaloneVersion}`,
+        );
+    }
 }
 
-console.log(`Synchronizing Kallichore ${sourceVersion} API`);
-const changed = [
-    syncFile(fs.readFileSync(sourceSpec, 'utf8'), targetSpec),
-    syncFile(standaloneApi(fs.readFileSync(sourceApi, 'utf8')), targetApi),
-].some(Boolean);
+function main() {
+    const sourceVersion = readKallichoreVersion();
+    const standaloneVersion = readPinnedVersion(path.join(repoRoot, 'package.json'));
+    const positronVersion = readPinnedVersion(path.join(positronSupervisorRoot, 'package.json'));
+    assertKallichoreVersionsCanSync({
+        sourceVersion,
+        standaloneVersion,
+        positronVersion,
+    });
 
-if (checkOnly && changed) {
-    process.exitCode = 1;
+    console.log(
+        `Synchronizing Kallichore ${sourceVersion} API ` +
+        `(Positron API source is pinned to ${positronVersion})`,
+    );
+    const changed = [
+        syncFile(fs.readFileSync(sourceSpec, 'utf8'), targetSpec),
+        syncFile(standaloneApi(fs.readFileSync(sourceApi, 'utf8')), targetApi),
+    ].some(Boolean);
+
+    if (checkOnly && changed) {
+        process.exitCode = 1;
+    }
+}
+
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+    main();
 }

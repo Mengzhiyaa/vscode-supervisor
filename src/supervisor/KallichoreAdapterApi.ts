@@ -131,6 +131,70 @@ export function selectServerState(
 	return useEphemeral ? (ephemeral ?? persistent) : (persistent ?? ephemeral);
 }
 
+/**
+ * Quotes one argument for a PowerShell Start-Process -ArgumentList array.
+ * Start-Process joins array elements with spaces before invoking a batch file,
+ * so arguments containing spaces need an additional pair of double quotes.
+ */
+export function quotePowerShellArgument(argument: string): string {
+	const escapedArgument = argument.replace(/'/g, "''");
+	return argument.includes(' ') ? `'"${escapedArgument}"'` : `'${escapedArgument}'`;
+}
+
+export class ServerStatusPollingTimeoutError extends Error {
+	constructor(readonly elapsedMs: number) {
+		super(`Kallichore server did not start after ${elapsedMs}ms`);
+		this.name = 'ServerStatusPollingTimeoutError';
+	}
+}
+
+interface ServerStatusPollingOptions {
+	timeoutMs: number;
+	startedAt?: number;
+	isProcessExited?: () => boolean;
+	now?: () => number;
+	sleep?: (milliseconds: number) => Promise<void>;
+	onRetry?: (error: unknown, attempt: number, elapsedMs: number) => void;
+}
+
+/** Polls server status until it succeeds or the configured startup time expires. */
+export async function pollServerStatusUntilReady<T>(
+	request: () => Promise<T>,
+	options: ServerStatusPollingOptions,
+): Promise<T> {
+	const now = options.now ?? Date.now;
+	const sleep = options.sleep ??
+		((milliseconds: number) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds)));
+	const startedAt = options.startedAt ?? now();
+	let attempt = 0;
+
+	while (true) {
+		attempt++;
+		try {
+			return await request();
+		} catch (err) {
+			const elapsed = Math.max(0, now() - startedAt);
+			if (options.isProcessExited?.()) {
+				throw new Error('The supervisor process exited before the server was ready.');
+			}
+
+			const code = (err as { code?: unknown })?.code;
+			const retryable = code === 'ECONNREFUSED' ||
+				code === 'ENOENT' ||
+				code === 'ETIMEDOUT';
+			if (!retryable) {
+				throw err;
+			}
+			if (elapsed >= options.timeoutMs) {
+				throw new ServerStatusPollingTimeoutError(elapsed);
+			}
+
+			options.onRetry?.(err, attempt, elapsed);
+			await sleep(Math.min(100, options.timeoutMs - elapsed));
+		}
+	}
+}
+
 export class KCApi implements PositronSupervisorApi {
 	/** The DAP comm class */
 	readonly DapComm = DapComm;
@@ -530,7 +594,7 @@ export class KCApi implements PositronSupervisorApi {
 				wrapperPath = 'powershell.exe';
 				// Build the arguments for the wrapper script
 				const escapedWrapper = kernelWrapper.replace(/'/g, "''");
-				const escapedArgs = shellArgs.map(arg => `'${arg.replace(/'/g, "''")}'`).join(', ');
+				const escapedArgs = shellArgs.map(quotePowerShellArgument).join(', ');
 				shellArgs = [
 					'-WindowStyle', 'Hidden',
 					'-Command',
@@ -636,6 +700,7 @@ export class KCApi implements PositronSupervisorApi {
 
 		// Wait for the terminal to start and get the PID
 		let processId = await this._waitForTerminalProcessId(startupTimeout);
+		const supervisorStartTime = Date.now();
 
 		const readServerOutput = (): string => {
 			try {
@@ -710,93 +775,63 @@ export class KCApi implements PositronSupervisorApi {
 		// List the sessions to verify that the server is up. The process is
 		// alive for a few milliseconds (or more, on slower systems) before the
 		// HTTP server is ready, so we may need to retry a few times.
-		let serverStatus: ServerStatus | undefined;
-		for (let retry = 0; retry < 100; retry++) {
-			try {
-				const status = await this._api.api.serverStatus();
-				serverStatus = status.data;
-				this.log(`Kallichore ${status.data.version} server online with ${status.data.sessions} sessions`);
-
-				// Update the process ID; this can be different than the process
-				// ID in the hosting terminal when the supervisor is run in an
-				// shell and/or with nohup
-				if (processId !== status.data.process_id) {
-					this.log(`Running as pid ${status.data.process_id} (terminal pid ${processId})`, vscode.LogLevel.Debug);
-					processId = status.data.process_id;
-				}
-
-				// Make sure the version is the one expected in package.json.
-				const version = this._context.extension.packageJSON.positron.binaryDependencies.kallichore;
-				if (status.data.version !== version) {
-					vscode.window.showWarningMessage(vscode.l10n.t(
-						'Positron Supervisor version {0} is unsupported (expected {1}). ' +
-						'This may result in unexpected behavior or errors.',
-						status.data.version,
-						version)
-					);
-				}
-				break;
-			} catch (err) {
-				const elapsed = Date.now() - startTime;
-
-				// Has the terminal exited? if it has, there's no point in continuing to retry.
-				if (exited) {
-					throw new Error(`The supervisor process exited before the server was ready.`);
-				}
-
-				// ECONNREFUSED (for TCP) and ENOENT (for sockets) are normal
-				// conditions during startup; the server isn't ready yet. Keep
-				// trying up to the startup timeout from the time we got a
-				// process ID established.
-				if (err.code === 'ECONNREFUSED' || err.code === 'ENOENT') {
-					if (elapsed < startupTimeout) {
-						// Log every few attempts. We don't want to overwhelm
-						// the logs, and it's normal for us to encounter a few
-						// connection refusals before the server is ready.
-						if (retry > 0 && retry % 5 === 0) {
-							this.log(`Waiting for Kallichore server to start (attempt ${retry}, ${elapsed}ms)`, vscode.LogLevel.Trace);
+		let serverStatus: ServerStatus;
+		try {
+			serverStatus = await pollServerStatusUntilReady(
+				async () => (await this._api.api.serverStatus()).data,
+				{
+					timeoutMs: startupTimeout,
+					startedAt: supervisorStartTime,
+					isProcessExited: () => exited,
+					onRetry: (err, attempt, elapsed) => {
+						const code = (err as { code?: unknown })?.code;
+						if (code === 'ETIMEDOUT') {
+							this.log(
+								`Request for server status timed out; retrying (attempt ${attempt}, ${elapsed}ms)`,
+								vscode.LogLevel.Warning,
+							);
+						} else if (attempt % 5 === 0) {
+							this.log(
+								`Waiting for Kallichore server to start (attempt ${attempt}, ${elapsed}ms)`,
+								vscode.LogLevel.Trace,
+							);
 						}
-						// Wait a bit and try again
-						await new Promise((resolve) => setTimeout(resolve, 100));
-						continue;
-					} else {
-						// Give up; it shouldn't take this long to start
-						let message = `Kallichore server did not start after ${Date.now() - startTime}ms`;
-						this.log(message, vscode.LogLevel.Error);
-
-						// The error that we're about to throw will show up in
-						// the Console. If there's any content in the log
-						// files, append it to the error message so that the
-						// user can see it without clicking over to the logs.
-						if (fs.existsSync(outFile)) {
-							// Note that we don't need to append this content
-							// to the lgos since the output file is already
-							// being watched by the log streamer.
-							const contents = fs.readFileSync(outFile, 'utf8');
-							if (contents) {
-								message += `; output:\n\n${contents}`;
-							}
-						}
-						throw new Error(message);
-					}
-				}
-
-				// If the request times out, go ahead and try again as long as
-				// the startup timeout hasn't been reached. This can happen if
-				// the server is slow to start.
-				if (err.code === 'ETIMEDOUT' && elapsed < startupTimeout) {
-					this.log(`Request for server status timed out; retrying (attempt ${retry + 1}, ${elapsed}ms)`, vscode.LogLevel.Warning);
-					continue;
-				}
-
-				this.log(`Failed to get initial server status from Kallichore; ` +
-					`server may not be running or may not be ready. Check the terminal for errors. ` +
-					`Error: ${JSON.stringify(err)}`, vscode.LogLevel.Error);
+					},
+				},
+			);
+		} catch (err) {
+			if (err instanceof ServerStatusPollingTimeoutError) {
+				const message = err.message + readServerOutput();
+				this.log(message, vscode.LogLevel.Error);
+				throw new Error(message);
+			}
+			if (exited) {
 				throw err;
 			}
+			this.log(`Failed to get initial server status from Kallichore; ` +
+				`server may not be running or may not be ready. Check the terminal for errors. ` +
+				`Error: ${JSON.stringify(err)}`, vscode.LogLevel.Error);
+			throw err;
 		}
-		if (!serverStatus) {
-			throw new Error('Kallichore server did not report its status before the startup retry limit was reached');
+
+		this.log(`Kallichore ${serverStatus.version} server online with ${serverStatus.sessions} sessions`);
+
+		// Update the process ID; this can be different than the process ID in
+		// the hosting terminal when the supervisor is run in a shell or nohup.
+		if (processId !== serverStatus.process_id) {
+			this.log(`Running as pid ${serverStatus.process_id} (terminal pid ${processId})`, vscode.LogLevel.Debug);
+			processId = serverStatus.process_id;
+		}
+
+		// Make sure the version is the one expected in package.json.
+		const version = this._context.extension.packageJSON.positron.binaryDependencies.kallichore;
+		if (serverStatus.version !== version) {
+			vscode.window.showWarningMessage(vscode.l10n.t(
+				'Positron Supervisor version {0} is unsupported (expected {1}). ' +
+				'This may result in unexpected behavior or errors.',
+				serverStatus.version,
+				version)
+			);
 		}
 
 		this.log(`Kallichore server started in ${Date.now() - startTime}ms`);
@@ -875,6 +910,13 @@ export class KCApi implements PositronSupervisorApi {
 		const config = vscode.workspace.getConfiguration('kernelSupervisor');
 		const shutdownTimeout = config.get<string>('shutdownTimeout', 'immediately');
 		return !isReconnectTarget(vscode.env.uiKind, shutdownTimeout);
+	}
+
+	/** Returns whether the connected server should exit with the application. */
+	private serverSharesApplicationLifetime(): boolean {
+		const config = vscode.workspace.getConfiguration('kernelSupervisor');
+		const shutdownTimeout = config.get<string>('shutdownTimeout', 'immediately');
+		return sharesApplicationLifetime(vscode.env.uiKind, shutdownTimeout);
 	}
 
 	private async migrateServerState(): Promise<void> {
@@ -1485,6 +1527,32 @@ export class KCApi implements PositronSupervisorApi {
 	public async serverStatus(): Promise<ServerStatus> {
 		const status = await this._api.api.serverStatus();
 		return status.data;
+	}
+
+	/**
+	 * Best-effort shutdown used when the application is quitting.
+	 * Detached supervisors are intentionally left running for reconnection.
+	 */
+	async shutdownForQuit(): Promise<void> {
+		if (!this.serverSharesApplicationLifetime() || !this._started.isOpen()) {
+			return;
+		}
+
+		try {
+			await this._api.api.shutdownServer({ timeout: 2000 });
+			this.log('Requested Kallichore server shutdown on quit', vscode.LogLevel.Debug);
+		} catch (err) {
+			// Application teardown must not be blocked by a failed best-effort request.
+			this.log(
+				`Failed to shut down Kallichore server on quit: ${summarizeError(err)}`,
+				vscode.LogLevel.Warning,
+			);
+		}
+
+		if (this._terminal) {
+			this._terminal.dispose();
+			this._terminal = undefined;
+		}
 	}
 
 	/**

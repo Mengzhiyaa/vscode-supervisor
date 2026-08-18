@@ -1328,6 +1328,13 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
             }
             this._deferredAutoStartDisposablesByRuntimeId.clear();
 
+            try {
+                await this._localSupervisor?.shutdownForQuit();
+            } catch (error) {
+                this._outputChannel.warn(
+                    `[RuntimeSession] Error shutting down the local supervisor on quit: ${error}`,
+                );
+            }
             this._localSupervisor?.dispose();
             this._localSupervisor = undefined;
         })();

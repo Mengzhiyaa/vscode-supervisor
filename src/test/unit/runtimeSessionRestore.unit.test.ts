@@ -149,4 +149,22 @@ suite('[Unit] runtime session persisted restore state', () => {
 
         service.dispose();
     });
+
+    test('explicit runtime shutdown asks the local supervisor to shut down before disposal', async () => {
+        const service = new RuntimeSessionService(makeContext(), makeNoopLogChannel());
+        const calls: string[] = [];
+        (service as any)._localSupervisor = {
+            shutdownForQuit: async () => {
+                calls.push('shutdown');
+            },
+            dispose: () => {
+                calls.push('dispose');
+            },
+        };
+
+        await service.shutdown();
+
+        assert.deepStrictEqual(calls, ['shutdown', 'dispose']);
+        assert.strictEqual((service as any)._localSupervisor, undefined);
+    });
 });

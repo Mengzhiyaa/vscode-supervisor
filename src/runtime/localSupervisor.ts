@@ -191,6 +191,11 @@ export class LocalSupervisorApi implements vscode.Disposable {
         this._supervisorLog.show();
     }
 
+    /** Best-effort shutdown for supervisors that share the application's lifetime. */
+    async shutdownForQuit(): Promise<void> {
+        await this._adapterApi?.shutdownForQuit();
+    }
+
     private log(message: string, level: vscode.LogLevel = vscode.LogLevel.Info): void {
         this._supervisorLog.appendLine(formatRawSupervisorLine(message, level));
     }
