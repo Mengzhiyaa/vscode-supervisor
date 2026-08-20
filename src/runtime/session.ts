@@ -224,6 +224,13 @@ export class RuntimeSession implements vscode.Disposable {
     private _boundLspGeneration: number;
     private _dapComm?: Promise<DapComm>;
     private _lspActivationPromise?: Promise<void>;
+    /**
+     * Whether a language/session manager currently owns this session's LSP.
+     * This is deliberately independent of the global UI foreground session:
+     * Positron keeps one console LSP per language while only one session is
+     * shown in the foreground at a time.
+     */
+    private _lspRequestedActive = false;
     private _lspStartingPromise: Promise<number> = Promise.resolve(0);
     private _lspClientId?: string;
     private _lspTransportKind: 'serverComm' | undefined;
@@ -467,7 +474,7 @@ export class RuntimeSession implements vscode.Disposable {
 
                 const dapComm = this._dapComm;
                 void Promise.all([
-                    this._deactivateLsp(),
+                    this.deactivateLsp(),
                     dapComm?.then((dap) => dap.dispose()),
                 ])
                     .catch((error) => {
@@ -1109,7 +1116,7 @@ export class RuntimeSession implements vscode.Disposable {
     private async _deactivateServices(reason: string): Promise<void> {
         this.log(`Stopping runtime services (${reason})`, vscode.LogLevel.Debug);
         await Promise.all([
-            this._deactivateLsp(),
+            this.deactivateLsp(),
             this.disconnectDap(),
         ]);
     }
@@ -1362,7 +1369,7 @@ export class RuntimeSession implements vscode.Disposable {
         );
 
         if (
-            this.isForeground &&
+            this._lspRequestedActive &&
             (
                 this.state === RuntimeState.Ready ||
                 this.state === RuntimeState.Idle ||
@@ -1370,7 +1377,7 @@ export class RuntimeSession implements vscode.Disposable {
             )
         ) {
             await this.activateLsp();
-            if (this._boundLspGeneration !== generation || !this.isForeground) {
+            if (this._boundLspGeneration !== generation || !this._lspRequestedActive) {
                 await this._deactivateLsp();
             }
         }
@@ -1393,6 +1400,7 @@ export class RuntimeSession implements vscode.Disposable {
     }
 
     public activateLsp(): Promise<void> {
+        this._lspRequestedActive = true;
         if (this._lspActivationPromise) {
             return this._lspActivationPromise;
         }
@@ -1412,6 +1420,7 @@ export class RuntimeSession implements vscode.Disposable {
     }
 
     public deactivateLsp(): Promise<void> {
+        this._lspRequestedActive = false;
         return this._deactivateLsp();
     }
 
@@ -1489,7 +1498,7 @@ export class RuntimeSession implements vscode.Disposable {
 
         this._lspTransportKind = 'serverComm';
 
-        if (this._disposed || this._lsp !== lsp || !this.isForeground) {
+        if (this._disposed || this._lsp !== lsp || !this._lspRequestedActive) {
             if (this._lspClientId) {
                 this._kernel?.removeClient(this._lspClientId);
                 this._lspClientId = undefined;
@@ -1500,7 +1509,7 @@ export class RuntimeSession implements vscode.Disposable {
         this.log(`Starting Positron LSP client on port ${port}`, vscode.LogLevel.Info);
 
         await lsp.activate(port);
-        if (this._disposed || this._lsp !== lsp || !this.isForeground) {
+        if (this._disposed || this._lsp !== lsp || !this._lspRequestedActive) {
             await lsp.deactivate();
         }
     }

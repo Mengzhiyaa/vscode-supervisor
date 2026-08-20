@@ -2,6 +2,7 @@ import * as assert from 'assert';
 import * as vscode from 'vscode';
 import {
     LanguageRuntimeSessionMode,
+    LanguageLspState,
     type IRuntimeSessionMetadata,
     type LanguageRuntimeMetadata,
     type Utf8Location,
@@ -11,8 +12,10 @@ import {
     RuntimeCodeExecutionMode,
     RuntimeErrorBehavior,
     RuntimeOutputKind,
+    RuntimeState,
 } from '../../internal/runtimeTypes';
 import { RuntimeSession } from '../../runtime/session';
+import { RuntimeSessionService } from '../../runtime/runtimeSession';
 import {
     createApplicationOwnerEpoch,
     createReloadPersistentState,
@@ -802,5 +805,116 @@ suite('[Unit] supervisor core backports', () => {
         await new Promise((resolve) => setImmediate(resolve));
 
         assert.strictEqual(fakeSession._processId, 456);
+    });
+
+    test('activates an explicitly requested LSP even when its session is not globally foreground', async () => {
+        let activated = 0;
+        const lsp = {
+            state: LanguageLspState.Stopped,
+            activate: async () => { activated += 1; },
+            deactivate: async () => undefined,
+            wait: async () => true,
+            showOutput: () => undefined,
+            requestCompletion: async () => [],
+            requestHover: async () => null,
+            requestSignatureHelp: async () => null,
+            dispose: () => undefined,
+        };
+        const session = new RuntimeSession(
+            'non-foreground-lsp-session',
+            makeRuntimeMetadata(),
+            makeSessionMetadata(),
+            makeNoopLogChannel(),
+            'Session 1',
+        );
+        (session as any)._state = RuntimeState.Ready;
+        (session as any)._kernel = {
+            createPositronLspClientId: () => 'lsp-client-1',
+            startPositronLsp: async () => 1234,
+            removeClient: () => undefined,
+        };
+
+        // The language contribution may request activation before its factory
+        // is attached while restored sessions are being reconciled.
+        await session.activateLsp();
+        await session.attachLspFactory({ languageId: 'r', create: () => lsp });
+
+        assert.strictEqual(activated, 1);
+        assert.strictEqual((session as any)._lspRequestedActive, true);
+        await session.dispose();
+    });
+
+    test('cancels a slow LSP activation when the explicit request is withdrawn', async () => {
+        let resolvePort!: (port: number) => void;
+        let activated = 0;
+        let removedClients = 0;
+        const lsp = {
+            state: LanguageLspState.Stopped,
+            activate: async () => { activated += 1; },
+            deactivate: async () => undefined,
+            wait: async () => false,
+            showOutput: () => undefined,
+            requestCompletion: async () => [],
+            requestHover: async () => null,
+            requestSignatureHelp: async () => null,
+            dispose: () => undefined,
+        };
+        const session = new RuntimeSession(
+            'slow-lsp-session',
+            makeRuntimeMetadata(),
+            makeSessionMetadata(),
+            makeNoopLogChannel(),
+            'Session 1',
+            { languageId: 'r', create: () => lsp } as any,
+        );
+        (session as any)._state = RuntimeState.Ready;
+        (session as any)._kernel = {
+            createPositronLspClientId: () => 'slow-lsp-client',
+            startPositronLsp: () => new Promise<number>(resolve => { resolvePort = resolve; }),
+            removeClient: () => { removedClients += 1; },
+        };
+
+        const activation = session.activateLsp();
+        await session.deactivateLsp();
+        resolvePort(1234);
+        await activation;
+
+        assert.strictEqual(activated, 0);
+        assert.strictEqual(removedClients, 1);
+        assert.strictEqual((session as any)._lspRequestedActive, false);
+        await session.dispose();
+    });
+
+    test('does not reconcile LSPs when the global foreground changes languages', async () => {
+        const service = new RuntimeSessionService(createMemento() as any, makeNoopLogChannel()) as any;
+        let oldForeground = true;
+        let newForeground = false;
+        let oldDeactivations = 0;
+        let newActivations = 0;
+        const oldSession = {
+            sessionId: 'python-session',
+            runtimeMetadata: { languageId: 'python' },
+            sessionMetadata: { sessionMode: LanguageRuntimeSessionMode.Console },
+            setForeground: (value: boolean) => { oldForeground = value; },
+            deactivateLsp: async () => { oldDeactivations += 1; },
+        };
+        const newSession = {
+            sessionId: 'r-session',
+            runtimeMetadata: { languageId: 'r' },
+            sessionMetadata: { sessionMode: LanguageRuntimeSessionMode.Console },
+            setForeground: (value: boolean) => { newForeground = value; },
+            activateLsp: async () => { newActivations += 1; },
+        };
+        service._sessions.set(oldSession.sessionId, oldSession);
+        service._sessions.set(newSession.sessionId, newSession);
+        service._foregroundSessionId = oldSession.sessionId;
+
+        await service._setForegroundSessionInternal(newSession.sessionId);
+
+        assert.strictEqual(oldForeground, false);
+        assert.strictEqual(newForeground, true);
+        assert.strictEqual(oldDeactivations, 0);
+        assert.strictEqual(newActivations, 0);
+        service.dispose();
     });
 });

@@ -1442,6 +1442,18 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
             ) {
                 await this._setForegroundSession(session.sessionId);
             }
+
+            // `activate` is an explicit request from the caller to make this
+            // console's language services available. Keep that request
+            // independent from the global UI foreground: a language manager
+            // may subsequently enforce same-language ownership, while a
+            // different language's LSP remains active.
+            if (
+                session.sessionMetadata.sessionMode === LanguageRuntimeSessionMode.Console &&
+                activate
+            ) {
+                await session.activateLsp();
+            }
         };
 
         const failStart = () => {
@@ -2199,10 +2211,6 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
 
     private async _setForegroundSessionInternal(sessionId: string | undefined): Promise<void> {
         if (this._foregroundSessionId === sessionId) {
-            const currentSession = this.foregroundSession;
-            if (currentSession && this._isSessionUsable(currentSession)) {
-                this._scheduleSessionLspReconciliation(undefined, currentSession);
-            }
             return;
         }
 
@@ -2227,53 +2235,6 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
 
         this._onDidChangeForegroundSession.fire(newSession);
         this._onDidChangeActiveSession.fire(newSession);
-        this._scheduleSessionLspReconciliation(oldSession, newSession);
-    }
-
-    private _scheduleSessionLspReconciliation(
-        oldSession: RuntimeSession | undefined,
-        newSession: RuntimeSession | undefined,
-    ): void {
-        void this._reconcileSessionLsp(oldSession, newSession).catch(error => {
-            this._outputChannel.error(
-                `[RuntimeSession] Unexpected LSP reconciliation failure: ${error}`,
-            );
-        });
-    }
-
-    private async _reconcileSessionLsp(
-        oldSession: RuntimeSession | undefined,
-        newSession: RuntimeSession | undefined,
-    ): Promise<void> {
-        const operations: Array<{ action: string; promise: Promise<void> }> = [];
-        if (oldSession && oldSession !== newSession) {
-            operations.push({
-                action: `deactivate LSP for ${oldSession.sessionId}`,
-                promise: oldSession.deactivateLsp(),
-            });
-        }
-        if (newSession && this._isSessionUsable(newSession)) {
-            operations.push({
-                action: `activate LSP for ${newSession.sessionId}`,
-                promise: newSession.activateLsp().then(async () => {
-                    // A slow activation may finish after another console became
-                    // foreground. Converge again instead of leaving two active
-                    // language servers behind.
-                    if (!newSession.isForeground) {
-                        await newSession.deactivateLsp();
-                    }
-                }),
-            });
-        }
-
-        const results = await Promise.allSettled(operations.map(operation => operation.promise));
-        results.forEach((result, index) => {
-            if (result.status === 'rejected') {
-                this._outputChannel.error(
-                    `[RuntimeSession] Failed to ${operations[index].action}: ${result.reason}`,
-                );
-            }
-        });
     }
 
     private async _enqueueActiveSessionSwitch(task: () => Promise<void>): Promise<void> {
