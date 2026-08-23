@@ -317,6 +317,7 @@ suite('[Unit] supervisor core backports', () => {
         const session = {
             createServerComm: async () => [comm, 5678],
             emitJupyterLog: () => undefined,
+            metadata: { sessionId: 'runtime-session-1' },
         };
 
         const dapComm = await DapComm.create(
@@ -329,6 +330,14 @@ suite('[Unit] supervisor core backports', () => {
         assert.strictEqual(
             (dapComm as any).debugOptions.suppressSaveBeforeStart,
             true,
+        );
+        assert.strictEqual(
+            (dapComm as any).debugOptions.suppressDebugView,
+            undefined,
+        );
+        assert.strictEqual(
+            (dapComm as any).config.positronRuntimeSessionId,
+            'runtime-session-1',
         );
 
         dapComm.dispose();

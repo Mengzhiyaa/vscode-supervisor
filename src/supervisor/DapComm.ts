@@ -92,6 +92,9 @@ export class DapComm {
 			request: 'attach',
 			debugServer: serverPort,
 			internalConsoleOptions: 'neverOpen',
+			// Lets the Positron Console route stopped-frame input only to the
+			// debugger owned by its attached runtime session.
+			positronRuntimeSessionId: session.metadata.sessionId,
 		};
 
 		const debugOptions: vscode.DebugSessionOptions = {
@@ -100,7 +103,6 @@ export class DapComm {
 			suppressSaveBeforeStart: true,
 			suppressDebugToolbar: true,
 			suppressDebugStatusbar: true,
-			suppressDebugView: true,
 		};
 
 		return new DapComm(
