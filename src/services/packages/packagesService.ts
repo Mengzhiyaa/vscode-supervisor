@@ -55,6 +55,7 @@ export class PositronPackagesService implements IPositronPackagesService {
         this._metadataCache = new PackageMetadataCache(
             this._context.workspaceState,
             this._outputChannel,
+            this._context.storageUri,
         );
         this._itemSize = this._readStoredItemSize();
         this._disposables.push(
@@ -85,11 +86,12 @@ export class PositronPackagesService implements IPositronPackagesService {
         return this._itemSize;
     }
 
-    initialize(): void {
+    async initialize(): Promise<void> {
         if (this._initialized) {
             return;
         }
         this._initialized = true;
+        await this._metadataCache.initialize();
 
         this._disposables.push(
             this._sessionManager.onWillStartSession(event => {

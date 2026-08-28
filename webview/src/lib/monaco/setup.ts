@@ -1,6 +1,7 @@
 import * as monaco from "monaco-editor/editor";
 import "monaco-editor/features/register.all";
-import "monaco-editor/languages/definitions/register.all";
+import "monaco-editor/languages/definitions/r/register";
+import "monaco-editor/languages/definitions/python/register";
 
 import EditorWorkerUrl from "monaco-editor/editor/editor.worker?worker&url";
 

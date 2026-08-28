@@ -1,11 +1,11 @@
 import * as vscode from 'vscode';
 import type { SerializedConsoleState } from '../../shared/consoleState';
+import { ExecutionHistoryFileStore } from './executionHistoryFileStore';
 
 const SessionHistoryKeyPrefix = 'vscode-supervisor.inputHistory.session.';
 const LanguageHistoryKeyPrefix = 'vscode-supervisor.inputHistory.language.';
 const ExecutionHistoryKeyPrefix = 'vscode-supervisor.executionHistory.v1.';
 const DefaultHistorySize = 1000;
-const ExecutionPersistDebounceMs = 250;
 const MaxExecutionIndexEntries = 200;
 const MaxExecutionIndexTextChars = 64 * 1024;
 const ExecutionTruncatedMarker = '…(earlier output omitted from execution index)\n';
@@ -47,14 +47,65 @@ export class ExecutionHistoryService implements vscode.Disposable {
     private readonly _languageEntries = new Map<string, InputHistoryEntry[]>();
     private readonly _executionEntries = new Map<string, ExecutionHistoryEntry[]>();
     private readonly _knownEmptySessions = new Set<string>();
-    private readonly _executionPersistTimers = new Map<string, ReturnType<typeof setTimeout>>();
-    private _writeQueue: Promise<void> = Promise.resolve();
+    private readonly _dirtyExecutionSessions = new Set<string>();
+    private readonly _pendingWrites = new Map<
+        string,
+        InputHistoryEntry[] | ExecutionHistoryEntry[] | undefined
+    >();
+    private _writeDrainPromise: Promise<void> | undefined;
     private _disposed = false;
+    private readonly _fileStore: ExecutionHistoryFileStore;
 
     constructor(
         private readonly _storage: vscode.Memento,
         private readonly _outputChannel: vscode.LogOutputChannel,
-    ) { }
+        storageUri?: vscode.Uri,
+    ) {
+        this._fileStore = new ExecutionHistoryFileStore(storageUri, _outputChannel);
+    }
+
+    async initialize(): Promise<void> {
+        await this._fileStore.initialize();
+        if (!this._fileStore.enabled) {
+            return;
+        }
+
+        const legacyKeys = this._storage.keys().filter(key =>
+            key.startsWith(SessionHistoryKeyPrefix) ||
+            key.startsWith(LanguageHistoryKeyPrefix) ||
+            key.startsWith(ExecutionHistoryKeyPrefix),
+        );
+        for (const key of legacyKeys) {
+            const stored = this._storage.get<unknown>(key);
+            if (key.startsWith(SessionHistoryKeyPrefix)) {
+                const sessionId = key.slice(SessionHistoryKeyPrefix.length);
+                if (this._fileStore.getSessionInput(sessionId) === undefined) {
+                    await this._fileStore.writeSessionInput(
+                        sessionId,
+                        this._parseInputEntries(stored, key),
+                    );
+                }
+            } else if (key.startsWith(LanguageHistoryKeyPrefix)) {
+                const languageId = key.slice(LanguageHistoryKeyPrefix.length);
+                if (this._fileStore.getLanguageInput(languageId) === undefined) {
+                    await this._fileStore.writeLanguageInput(
+                        languageId,
+                        this._parseInputEntries(stored, key),
+                    );
+                }
+            } else {
+                const sessionId = key.slice(ExecutionHistoryKeyPrefix.length);
+                if (this._fileStore.getExecution(sessionId) === undefined) {
+                    await this._fileStore.writeExecution(
+                        sessionId,
+                        this._parseExecutionEntries(stored),
+                    );
+                }
+            }
+        }
+
+        await Promise.all(legacyKeys.map(key => this._storage.update(key, undefined)));
+    }
 
     getSessionInputEntries(sessionId: string): InputHistoryEntry[] {
         return [...this._loadSessionEntries(sessionId)];
@@ -93,7 +144,7 @@ export class ExecutionHistoryService implements vscode.Disposable {
         sessionId: string,
         state: SerializedConsoleState,
     ): ExecutionHistoryEntry[] {
-        if (this._storage.get(this._executionKey(sessionId)) !== undefined) {
+        if (this._hasStoredExecutionEntries(sessionId)) {
             return this.getExecutionEntries(sessionId);
         }
         const entries: ExecutionHistoryEntry[] = [];
@@ -156,7 +207,7 @@ export class ExecutionHistoryService implements vscode.Disposable {
         const entry = this._getOrCreateExecution(sessionId, executionId, when);
         entry.prompt = prompt;
         entry.input = input;
-        this._scheduleExecutionPersist(sessionId);
+        this._dirtyExecutionSessions.add(sessionId);
     }
 
     recordExecutionOutput(
@@ -175,7 +226,7 @@ export class ExecutionHistoryService implements vscode.Disposable {
         entry.output = combined.length > MaxExecutionIndexTextChars
             ? ExecutionTruncatedMarker + combined.slice(-MaxExecutionIndexTextChars)
             : combined;
-        this._scheduleExecutionPersist(sessionId);
+        this._dirtyExecutionSessions.add(sessionId);
     }
 
     clearExecutionOutput(sessionId: string, executionId: string): void {
@@ -185,7 +236,7 @@ export class ExecutionHistoryService implements vscode.Disposable {
             return;
         }
         entry.output = '';
-        this._scheduleExecutionPersist(sessionId);
+        this._persistExecutionEntriesNow(sessionId);
     }
 
     recordExecutionError(
@@ -225,11 +276,11 @@ export class ExecutionHistoryService implements vscode.Disposable {
                 durationMs: 0,
             });
         }
-        this._scheduleExecutionPersist(sessionId);
+        this._persistExecutionEntriesNow(sessionId);
     }
 
     clearExecutionEntries(sessionId: string): void {
-        this._cancelScheduledExecutionPersist(sessionId);
+        this._dirtyExecutionSessions.delete(sessionId);
         this._executionEntries.set(sessionId, []);
         this._persist(this._executionKey(sessionId), []);
     }
@@ -243,12 +294,10 @@ export class ExecutionHistoryService implements vscode.Disposable {
         languageId: string,
         legacyInputs: readonly string[],
     ): InputHistoryEntry[] {
-        const stored = this._storage.get<InputHistoryEntry[] | undefined>(
-            this._sessionKey(sessionId),
-        );
+        const hasStoredEntries = this._hasStoredSessionEntries(sessionId);
         const cached = this._sessionEntries.get(sessionId);
         if (
-            stored !== undefined ||
+            hasStoredEntries ||
             this._knownEmptySessions.has(sessionId) ||
             (cached !== undefined && cached.length > 0)
         ) {
@@ -286,7 +335,7 @@ export class ExecutionHistoryService implements vscode.Disposable {
     }
 
     deleteSessionHistory(sessionId: string): void {
-        this._cancelScheduledExecutionPersist(sessionId);
+        this._dirtyExecutionSessions.delete(sessionId);
         this._sessionEntries.delete(sessionId);
         this._knownEmptySessions.delete(sessionId);
         this._persist(this._sessionKey(sessionId), undefined);
@@ -295,18 +344,16 @@ export class ExecutionHistoryService implements vscode.Disposable {
     }
 
     async flush(): Promise<void> {
-        for (const sessionId of [...this._executionPersistTimers.keys()]) {
+        for (const sessionId of [...this._dirtyExecutionSessions]) {
             this._persistExecutionEntriesNow(sessionId);
         }
-        await this._writeQueue;
+        while (this._writeDrainPromise) {
+            await this._writeDrainPromise;
+        }
     }
 
     dispose(): void {
         this._disposed = true;
-        for (const timer of this._executionPersistTimers.values()) {
-            clearTimeout(timer);
-        }
-        this._executionPersistTimers.clear();
     }
 
     private _loadSessionEntries(sessionId: string): InputHistoryEntry[] {
@@ -314,9 +361,13 @@ export class ExecutionHistoryService implements vscode.Disposable {
         if (cached) {
             return cached;
         }
-        const entries = this._read(this._sessionKey(sessionId));
+        const key = this._sessionKey(sessionId);
+        const stored = this._fileStore.enabled
+            ? this._fileStore.getSessionInput(sessionId)
+            : this._storage.get<unknown>(key, []);
+        const entries = this._parseInputEntries(stored ?? [], key);
         this._sessionEntries.set(sessionId, entries);
-        if (entries.length === 0 && this._storage.get(this._sessionKey(sessionId)) !== undefined) {
+        if (entries.length === 0 && this._hasStoredSessionEntries(sessionId)) {
             this._knownEmptySessions.add(sessionId);
         }
         return entries;
@@ -327,7 +378,11 @@ export class ExecutionHistoryService implements vscode.Disposable {
         if (cached) {
             return cached;
         }
-        const entries = this._read(this._languageKey(languageId));
+        const key = this._languageKey(languageId);
+        const stored = this._fileStore.enabled
+            ? this._fileStore.getLanguageInput(languageId)
+            : this._storage.get<unknown>(key, []);
+        const entries = this._parseInputEntries(stored ?? [], key);
         this._languageEntries.set(languageId, entries);
         return entries;
     }
@@ -337,17 +392,10 @@ export class ExecutionHistoryService implements vscode.Disposable {
         if (cached) {
             return cached;
         }
-        const key = this._executionKey(sessionId);
-        const stored = this._storage.get<unknown>(key, []);
-        const entries = Array.isArray(stored)
-            ? stored.filter((entry): entry is ExecutionHistoryEntry => (
-                typeof entry === 'object' &&
-                entry !== null &&
-                typeof (entry as ExecutionHistoryEntry).id === 'string' &&
-                typeof (entry as ExecutionHistoryEntry).when === 'number' &&
-                typeof (entry as ExecutionHistoryEntry).input === 'string'
-            ))
-            : [];
+        const stored = this._fileStore.enabled
+            ? this._fileStore.getExecution(sessionId)
+            : this._storage.get<unknown>(this._executionKey(sessionId), []);
+        const entries = this._parseExecutionEntries(stored ?? []);
         this._executionEntries.set(sessionId, entries);
         return entries;
     }
@@ -374,27 +422,8 @@ export class ExecutionHistoryService implements vscode.Disposable {
         return entry;
     }
 
-    private _scheduleExecutionPersist(sessionId: string): void {
-        if (this._disposed || this._executionPersistTimers.has(sessionId)) {
-            return;
-        }
-        const timer = setTimeout(() => {
-            this._executionPersistTimers.delete(sessionId);
-            this._persistExecutionEntriesNow(sessionId);
-        }, ExecutionPersistDebounceMs);
-        this._executionPersistTimers.set(sessionId, timer);
-    }
-
-    private _cancelScheduledExecutionPersist(sessionId: string): void {
-        const timer = this._executionPersistTimers.get(sessionId);
-        if (timer) {
-            clearTimeout(timer);
-            this._executionPersistTimers.delete(sessionId);
-        }
-    }
-
     private _persistExecutionEntriesNow(sessionId: string): void {
-        this._cancelScheduledExecutionPersist(sessionId);
+        this._dirtyExecutionSessions.delete(sessionId);
         const entries = this._loadExecutionEntries(sessionId);
         if (entries.length > MaxExecutionIndexEntries) {
             entries.splice(0, entries.length - MaxExecutionIndexEntries);
@@ -421,8 +450,7 @@ export class ExecutionHistoryService implements vscode.Disposable {
         );
     }
 
-    private _read(key: string): InputHistoryEntry[] {
-        const stored = this._storage.get<unknown>(key, []);
+    private _parseInputEntries(stored: unknown, key: string): InputHistoryEntry[] {
         if (!Array.isArray(stored)) {
             this._outputChannel.warn(`[ExecutionHistoryService] Ignoring invalid history at ${key}`);
             return [];
@@ -435,6 +463,18 @@ export class ExecutionHistoryService implements vscode.Disposable {
                 typeof (entry as InputHistoryEntry).when === 'number'
             ))
             .slice(-this._maxHistorySize());
+    }
+
+    private _parseExecutionEntries(stored: unknown): ExecutionHistoryEntry[] {
+        return Array.isArray(stored)
+            ? stored.filter((entry): entry is ExecutionHistoryEntry => (
+                typeof entry === 'object' &&
+                entry !== null &&
+                typeof (entry as ExecutionHistoryEntry).id === 'string' &&
+                typeof (entry as ExecutionHistoryEntry).when === 'number' &&
+                typeof (entry as ExecutionHistoryEntry).input === 'string'
+            ))
+            : [];
     }
 
     private _append(
@@ -464,13 +504,99 @@ export class ExecutionHistoryService implements vscode.Disposable {
         key: string,
         value: InputHistoryEntry[] | ExecutionHistoryEntry[] | undefined,
     ): void {
-        this._writeQueue = this._writeQueue
-            .then(() => this._storage.update(key, value))
-            .catch(error => {
-                this._outputChannel.warn(
-                    `[ExecutionHistoryService] Failed to persist ${key}: ${error}`,
-                );
-            });
+        this._pendingWrites.set(key, value);
+        void this._drainWrites();
+    }
+
+    private _drainWrites(): Promise<void> {
+        if (this._writeDrainPromise) {
+            return this._writeDrainPromise;
+        }
+
+        const drain = this._drainPendingWrites().finally(() => {
+            if (this._writeDrainPromise === drain) {
+                this._writeDrainPromise = undefined;
+            }
+        });
+        this._writeDrainPromise = drain;
+        return drain;
+    }
+
+    private async _drainPendingWrites(): Promise<void> {
+        while (this._pendingWrites.size > 0) {
+            const writes = [...this._pendingWrites.entries()];
+            this._pendingWrites.clear();
+            for (const [key, value] of writes) {
+                try {
+                    await this._write(key, value);
+                } catch (error) {
+                    this._outputChannel.warn(
+                        `[ExecutionHistoryService] Failed to persist ${key}: ${error}`,
+                    );
+                }
+            }
+        }
+    }
+
+    private async _write(
+        key: string,
+        value: InputHistoryEntry[] | ExecutionHistoryEntry[] | undefined,
+    ): Promise<void> {
+        if (!this._fileStore.enabled) {
+            if (this._storedValueEquals(key, value)) {
+                return;
+            }
+            await this._storage.update(key, value);
+            return;
+        }
+
+        if (key.startsWith(SessionHistoryKeyPrefix)) {
+            const sessionId = key.slice(SessionHistoryKeyPrefix.length);
+            if (value === undefined) {
+                await this._fileStore.deleteSessionInput(sessionId);
+            } else {
+                await this._fileStore.writeSessionInput(sessionId, value);
+            }
+            return;
+        }
+        if (key.startsWith(LanguageHistoryKeyPrefix)) {
+            const languageId = key.slice(LanguageHistoryKeyPrefix.length);
+            if (value !== undefined) {
+                await this._fileStore.writeLanguageInput(languageId, value);
+            }
+            return;
+        }
+        if (key.startsWith(ExecutionHistoryKeyPrefix)) {
+            const sessionId = key.slice(ExecutionHistoryKeyPrefix.length);
+            if (value === undefined) {
+                await this._fileStore.deleteExecution(sessionId);
+            } else {
+                await this._fileStore.writeExecution(sessionId, value);
+            }
+        }
+    }
+
+    private _hasStoredSessionEntries(sessionId: string): boolean {
+        return this._fileStore.enabled
+            ? this._fileStore.getSessionInput(sessionId) !== undefined
+            : this._storage.get(this._sessionKey(sessionId)) !== undefined;
+    }
+
+    private _hasStoredExecutionEntries(sessionId: string): boolean {
+        return this._fileStore.enabled
+            ? this._fileStore.getExecution(sessionId) !== undefined
+            : this._storage.get(this._executionKey(sessionId)) !== undefined;
+    }
+
+    private _storedValueEquals(
+        key: string,
+        value: InputHistoryEntry[] | ExecutionHistoryEntry[] | undefined,
+    ): boolean {
+        const current = this._storage.get<unknown>(key);
+        if (current === undefined || value === undefined) {
+            return current === value;
+        }
+        return JSON.stringify(current) === JSON.stringify(value);
     }
 
     private _sessionKey(sessionId: string): string {

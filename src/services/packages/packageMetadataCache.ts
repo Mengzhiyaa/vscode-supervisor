@@ -1,3 +1,6 @@
+import { randomUUID } from 'crypto';
+import { mkdir, readFile, rename, rm, writeFile } from 'fs/promises';
+import * as path from 'path';
 import * as vscode from 'vscode';
 
 export const PACKAGE_METADATA_CACHE_ENABLED_SETTING = 'packages.metadataCache.enabled';
@@ -31,12 +34,48 @@ interface PersistedPackageMetadata {
  */
 export class PackageMetadataCache {
     private _cache: PersistedPackageMetadata;
+    private readonly _filePath: string | undefined;
+    private _fileWritePending = false;
+    private _fileWritePromise: Promise<void> | undefined;
 
     constructor(
         private readonly _storage: vscode.Memento,
         private readonly _outputChannel: vscode.LogOutputChannel,
+        storageUri?: vscode.Uri,
     ) {
-        this._cache = this._read();
+        this._cache = this._readMemento();
+        this._filePath = storageUri?.fsPath
+            ? path.join(storageUri.fsPath, 'package-metadata-cache', 'v1', 'cache.json')
+            : undefined;
+    }
+
+    async initialize(): Promise<void> {
+        if (!this._filePath) {
+            return;
+        }
+        await mkdir(path.dirname(this._filePath), { recursive: true });
+
+        let loadedFromFile = false;
+        try {
+            const parsed = this._parse(JSON.parse(await readFile(this._filePath, 'utf8')));
+            if (parsed) {
+                this._cache = parsed;
+                loadedFromFile = true;
+            }
+        } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+                this._outputChannel.warn(`[Packages] Ignoring invalid package metadata cache: ${error}`);
+            }
+        }
+
+        const hasLegacyCache = this._storage.keys().includes(PACKAGE_METADATA_CACHE_STORAGE_KEY);
+        if (!loadedFromFile && hasLegacyCache) {
+            await this._writeFile();
+            loadedFromFile = true;
+        }
+        if (hasLegacyCache && loadedFromFile) {
+            await this._storage.update(PACKAGE_METADATA_CACHE_STORAGE_KEY, undefined);
+        }
     }
 
     get(runtimeId: string): CachedPackageEnvironment | undefined {
@@ -102,16 +141,20 @@ export class PackageMetadataCache {
         return hours * MS_PER_HOUR;
     }
 
-    private _read(): PersistedPackageMetadata {
+    private _readMemento(): PersistedPackageMetadata {
         const value = this._storage.get<unknown>(PACKAGE_METADATA_CACHE_STORAGE_KEY);
+        return this._parse(value) ?? this._empty();
+    }
+
+    private _parse(value: unknown): PersistedPackageMetadata | undefined {
         if (!value || typeof value !== 'object') {
-            return this._empty();
+            return undefined;
         }
         const parsed = value as Partial<PersistedPackageMetadata>;
         if (parsed.schemaVersion !== PACKAGE_METADATA_CACHE_SCHEMA_VERSION ||
             !parsed.environments ||
             typeof parsed.environments !== 'object') {
-            return this._empty();
+            return undefined;
         }
         return {
             schemaVersion: PACKAGE_METADATA_CACHE_SCHEMA_VERSION,
@@ -120,12 +163,57 @@ export class PackageMetadataCache {
     }
 
     private _write(): void {
-        void this._storage.update(PACKAGE_METADATA_CACHE_STORAGE_KEY, this._cache).then(
-            undefined,
-            error => this._outputChannel.warn(
-                `[Packages] Failed to persist package metadata cache: ${error}`,
-            ),
-        );
+        if (!this._filePath) {
+            const current = this._storage.get<unknown>(PACKAGE_METADATA_CACHE_STORAGE_KEY);
+            if (JSON.stringify(current) === JSON.stringify(this._cache)) {
+                return;
+            }
+            void this._storage.update(PACKAGE_METADATA_CACHE_STORAGE_KEY, this._cache).then(
+                undefined,
+                error => this._outputChannel.warn(
+                    `[Packages] Failed to persist package metadata cache: ${error}`,
+                ),
+            );
+            return;
+        }
+
+        this._fileWritePending = true;
+        if (this._fileWritePromise) {
+            return;
+        }
+        const drain = this._drainFileWrites()
+            .catch(error => {
+                this._outputChannel.warn(
+                    `[Packages] Failed to persist package metadata cache: ${error}`,
+                );
+            })
+            .finally(() => {
+                if (this._fileWritePromise === drain) {
+                    this._fileWritePromise = undefined;
+                }
+                if (this._fileWritePending) {
+                    this._write();
+                }
+            });
+        this._fileWritePromise = drain;
+    }
+
+    private async _drainFileWrites(): Promise<void> {
+        while (this._fileWritePending) {
+            this._fileWritePending = false;
+            await this._writeFile();
+        }
+    }
+
+    private async _writeFile(): Promise<void> {
+        const target = this._filePath!;
+        const temporary = `${target}.${randomUUID()}.tmp`;
+        try {
+            await writeFile(temporary, JSON.stringify(this._cache), 'utf8');
+            await rename(temporary, target);
+        } finally {
+            await rm(temporary, { force: true }).catch(() => undefined);
+        }
     }
 
     private _empty(): PersistedPackageMetadata {

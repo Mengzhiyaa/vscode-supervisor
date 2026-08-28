@@ -2110,6 +2110,28 @@ test('console find caps matches, handles regex edges, navigates in Positron dire
     const findInput = page.getByPlaceholder('Find');
     await findInput.fill('needle');
     await expect(page.getByText('1 of 1000+')).toBeVisible();
+
+    // Ctrl/Cmd+V in the find box must not be redirected to the console input
+    // by ConsoleInstance's global clipboard shortcut handler.
+    const consoleValuesBeforePaste = await page.evaluate(() =>
+        ((globalThis as typeof globalThis & {
+            monaco?: { editor?: { getEditors?: () => Array<{ getValue: () => string }> } };
+        }).monaco?.editor?.getEditors?.() ?? []).map((editor) => editor.getValue()),
+    );
+    await page.evaluate(() => {
+        Object.defineProperty(navigator, 'clipboard', {
+            configurable: true,
+            value: { readText: async () => 'redirected paste' },
+        });
+    });
+    await findInput.press('Control+V');
+    await expect(findInput).toHaveValue('needle');
+    await expect.poll(() => page.evaluate(() =>
+        ((globalThis as typeof globalThis & {
+            monaco?: { editor?: { getEditors?: () => Array<{ getValue: () => string }> } };
+        }).monaco?.editor?.getEditors?.() ?? []).map((editor) => editor.getValue()),
+    )).toEqual(consoleValuesBeforePaste);
+
     await findInput.press('Shift+Enter');
     await expect(page.getByText('2 of 1000+')).toBeVisible();
     await findInput.press('Enter');

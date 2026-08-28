@@ -1,12 +1,10 @@
 import { createHash, randomUUID } from 'crypto';
-import { appendFile, mkdir, readFile, rename, rm, writeFile } from 'fs/promises';
+import { mkdir, readFile, rename, rm, writeFile } from 'fs/promises';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import type { SerializedConsoleState } from '../../shared/consoleState';
 
 const SchemaVersion = 3;
-const JournalCompactionRecordLimit = 100;
-const JournalCompactionBytesLimit = 1024 * 1024;
 
 interface RecoveryManifestSession {
     sessionId: string;
@@ -35,17 +33,10 @@ interface RecoveryJournalRecord {
     checksum: string;
 }
 
-interface RecoveryManifestTombstone {
-    generation: string;
-    revision: number;
-    deletedAt: number;
-}
-
 interface RecoveryManifest {
     schemaVersion: typeof SchemaVersion;
     activeSessionId?: string;
     sessions: Record<string, RecoveryManifestSession>;
-    tombstones: Record<string, RecoveryManifestTombstone>;
 }
 
 function isSerializedConsoleState(value: unknown): value is SerializedConsoleState {
@@ -61,9 +52,8 @@ function isSerializedConsoleState(value: unknown): value is SerializedConsoleSta
 }
 
 /**
- * File-backed v3 Console checkpoints. Files live with the Remote Extension
- * Host, so loading or retaining a large transcript does not cross the Webview
- * transport. Memento remains a small compatibility/fallback store.
+ * File-backed v3 Console recovery. Each session retains one latest checkpoint
+ * on the Extension Host; Memento is used only when file storage is unavailable.
  */
 export class ConsoleRecoveryFileStore {
     private readonly _root: string | undefined;
@@ -71,7 +61,6 @@ export class ConsoleRecoveryFileStore {
     private _manifest: RecoveryManifest = {
         schemaVersion: SchemaVersion,
         sessions: {},
-        tombstones: {},
     };
 
     constructor(
@@ -104,9 +93,6 @@ export class ConsoleRecoveryFileStore {
                     ? parsed.activeSessionId
                     : undefined,
                 sessions: parsed.sessions,
-                tombstones: parsed.tombstones && typeof parsed.tombstones === 'object'
-                    ? parsed.tombstones
-                    : {},
             };
         } catch (error) {
             if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
@@ -115,6 +101,11 @@ export class ConsoleRecoveryFileStore {
             return;
         }
 
+        const journalMigrations: Array<{
+            entry: RecoveryManifestSession;
+            state: SerializedConsoleState;
+            hash: string;
+        }> = [];
         await Promise.all(Object.values(this._manifest.sessions).map(async entry => {
             try {
                 const state = JSON.parse(await readFile(this._resolveRelativeFile(entry.file), 'utf8'));
@@ -137,12 +128,40 @@ export class ConsoleRecoveryFileStore {
                     );
                 }
                 this._states.set(entry.sessionId, recoveredState);
+                if (entry.journal?.file) {
+                    journalMigrations.push({
+                        entry,
+                        state: recoveredState,
+                        hash: createHash('sha256')
+                            .update(JSON.stringify(recoveredState), 'utf8')
+                            .digest('hex'),
+                    });
+                }
             } catch (error) {
                 this._logChannel.warn(
                     `[ConsoleRecovery] Failed to load checkpoint for ${entry.sessionId}: ${error}`,
                 );
             }
         }));
+
+        for (const migration of journalMigrations) {
+            try {
+                await this._writeCheckpoint(
+                    migration.entry.sessionId,
+                    migration.state,
+                    migration.hash,
+                    JSON.stringify(migration.state),
+                    migration.entry,
+                );
+                this._logChannel.debug(
+                    `[ConsoleRecovery] Migrated journal to latest checkpoint for ${migration.entry.sessionId}`,
+                );
+            } catch (error) {
+                this._logChannel.warn(
+                    `[ConsoleRecovery] Failed to migrate journal for ${migration.entry.sessionId}: ${error}`,
+                );
+            }
+        }
     }
 
     get(sessionId: string): SerializedConsoleState | undefined {
@@ -161,11 +180,37 @@ export class ConsoleRecoveryFileStore {
         await this._writeManifest();
     }
 
-    async write(sessionId: string, state: SerializedConsoleState): Promise<void> {
+    async write(
+        sessionId: string,
+        state: SerializedConsoleState,
+        checksum?: string,
+    ): Promise<void> {
         if (!this._root) {
             return;
         }
 
+        const serialized = JSON.stringify(state);
+        const checkpointChecksum = checksum ?? createHash('sha256')
+            .update(serialized, 'utf8')
+            .digest('hex');
+        const previous = this._manifest.sessions[sessionId];
+        await this._writeCheckpoint(
+            sessionId,
+            state,
+            checkpointChecksum,
+            serialized,
+            previous,
+        );
+    }
+
+    private async _writeCheckpoint(
+        sessionId: string,
+        state: SerializedConsoleState,
+        checksum: string,
+        serialized: string,
+        previous?: RecoveryManifestSession,
+    ): Promise<void> {
+        const root = this._root!;
         const keyHash = createHash('sha256').update(sessionId).digest('hex');
         const sessionDirectory = path.join(this._sessionsRoot(), keyHash);
         await mkdir(sessionDirectory, { recursive: true });
@@ -176,66 +221,24 @@ export class ConsoleRecoveryFileStore {
             .digest('hex')
             .slice(0, 16);
         const revision = state.revision ?? 0;
-        const tombstone = this._manifest.tombstones[sessionId];
-        if (tombstone && tombstone.generation === generation && revision <= tombstone.revision) {
-            // A stale writer from before delete/clear must not resurrect the
-            // deleted generation. A new generation is allowed to recreate the
-            // session and clears the tombstone below.
-            return;
-        }
-        const previous = this._manifest.sessions[sessionId];
-        const serialized = JSON.stringify(state);
-
-        // The first snapshot (or a generation change) is a checkpoint. Later
-        // revisions append to a journal and are compacted periodically.
-        const canJournal = previous &&
-            previous.generation === generation &&
-            revision > (previous.revision ?? previous.checkpointRevision ?? 0);
-        if (canJournal) {
-            const journal = await this._appendJournal(
-                sessionId,
-                sessionDirectory,
-                generation,
-                revision,
-                state,
-                previous,
-            );
-            this._manifest.sessions[sessionId] = {
-                ...previous,
-                revision,
-                journal,
-                updatedAt: Date.now(),
-            };
-            this._states.set(sessionId, state);
-            delete this._manifest.tombstones[sessionId];
-            if (
-                journal.recordCount < JournalCompactionRecordLimit &&
-                journal.byteLength < JournalCompactionBytesLimit
-            ) {
-                await this._writeManifest();
-                return;
-            }
-
-            await this._compactSession(sessionId, state, previous, journal);
-            return;
-        }
-
         const fileName = `checkpoint-${generationHash}-${revision}-${randomUUID()}.json`;
-        const relativeFile = path.relative(this._root, path.join(sessionDirectory, fileName));
-        await this._atomicWrite(path.join(this._root, relativeFile), serialized);
+        const relativeFile = path.relative(root, path.join(sessionDirectory, fileName));
+        await this._atomicWrite(path.join(root, relativeFile), serialized);
         this._manifest.sessions[sessionId] = {
             sessionId,
             file: relativeFile,
             generation,
             revision,
-            checkpointRevision: revision,
             byteLength: Buffer.byteLength(serialized, 'utf8'),
-            checksum: createHash('sha256').update(serialized, 'utf8').digest('hex'),
+            checksum,
             updatedAt: Date.now(),
         };
-        delete this._manifest.tombstones[sessionId];
         await this._writeManifest();
         this._states.set(sessionId, state);
+        this._logChannel.debug(
+            `[ConsoleRecovery] Checkpoint ${sessionId}: ` +
+            `bytes=${Buffer.byteLength(serialized, 'utf8')} revision=${revision}`,
+        );
 
         if (previous?.file && previous.file !== relativeFile) {
             await rm(this._resolveRelativeFile(previous.file), { force: true }).catch(() => undefined);
@@ -250,14 +253,7 @@ export class ConsoleRecoveryFileStore {
             return;
         }
         const previous = this._manifest.sessions[sessionId];
-        const previousGeneration = previous?.generation ?? 'legacy';
-        const previousRevision = previous?.revision ?? 0;
         delete this._manifest.sessions[sessionId];
-        this._manifest.tombstones[sessionId] = {
-            generation: previousGeneration,
-            revision: previousRevision,
-            deletedAt: Date.now(),
-        };
         if (this._manifest.activeSessionId === sessionId) {
             this._manifest.activeSessionId = undefined;
         }
@@ -268,77 +264,6 @@ export class ConsoleRecoveryFileStore {
         }
         if (previous?.journal?.file) {
             await rm(this._resolveRelativeFile(previous.journal.file), { force: true }).catch(() => undefined);
-        }
-    }
-
-    private async _appendJournal(
-        sessionId: string,
-        sessionDirectory: string,
-        generation: string,
-        revision: number,
-        state: SerializedConsoleState,
-        previous: RecoveryManifestSession,
-    ): Promise<NonNullable<RecoveryManifestSession['journal']>> {
-        const journalFile = previous.journal?.file ??
-            path.relative(
-                this._root!,
-                path.join(sessionDirectory, `journal-${randomUUID()}.ndjson`),
-            );
-        const recordWithoutChecksum = {
-            schemaVersion: SchemaVersion as typeof SchemaVersion,
-            generation,
-            revision,
-            timestamp: Date.now(),
-            state,
-        };
-        const serializedRecord = JSON.stringify({
-            ...recordWithoutChecksum,
-            checksum: createHash('sha256')
-                .update(JSON.stringify(recordWithoutChecksum), 'utf8')
-                .digest('hex'),
-        } satisfies RecoveryJournalRecord) + '\n';
-        const journalPath = this._resolveRelativeFile(journalFile);
-        await appendFile(journalPath, serializedRecord, 'utf8');
-        const previousJournal = previous.journal;
-        return {
-            file: journalFile,
-            fromRevision: previousJournal?.fromRevision ?? revision,
-            toRevision: revision,
-            byteLength: (previousJournal?.byteLength ?? 0) + Buffer.byteLength(serializedRecord, 'utf8'),
-            recordCount: (previousJournal?.recordCount ?? 0) + 1,
-        };
-    }
-
-    private async _compactSession(
-        sessionId: string,
-        state: SerializedConsoleState,
-        previous: RecoveryManifestSession,
-        journal: NonNullable<RecoveryManifestSession['journal']>,
-    ): Promise<void> {
-        const generationHash = createHash('sha256')
-            .update(state.generation ?? 'legacy')
-            .digest('hex')
-            .slice(0, 16);
-        const sessionDirectory = path.dirname(this._resolveRelativeFile(previous.file));
-        const fileName = `checkpoint-${generationHash}-${state.revision ?? 0}-${randomUUID()}.json`;
-        const relativeFile = path.relative(this._root!, path.join(sessionDirectory, fileName));
-        const serialized = JSON.stringify(state);
-        await this._atomicWrite(path.join(this._root!, relativeFile), serialized);
-        this._manifest.sessions[sessionId] = {
-            ...previous,
-            file: relativeFile,
-            revision: state.revision ?? 0,
-            checkpointRevision: state.revision ?? 0,
-            byteLength: Buffer.byteLength(serialized, 'utf8'),
-            checksum: createHash('sha256').update(serialized, 'utf8').digest('hex'),
-            journal: undefined,
-            updatedAt: Date.now(),
-        };
-        await this._writeManifest();
-        this._states.set(sessionId, state);
-        await rm(this._resolveRelativeFile(journal.file), { force: true }).catch(() => undefined);
-        if (previous.file && previous.file !== relativeFile) {
-            await rm(this._resolveRelativeFile(previous.file), { force: true }).catch(() => undefined);
         }
     }
 

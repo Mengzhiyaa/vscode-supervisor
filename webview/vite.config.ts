@@ -55,7 +55,8 @@ export default defineConfig(({ mode }) => ({
         include: [
             'monaco-editor/editor',
             'monaco-editor/features/register.all',
-            'monaco-editor/languages/definitions/register.all',
+            'monaco-editor/languages/definitions/r/register',
+            'monaco-editor/languages/definitions/python/register',
             'vscode-textmate',
             'vscode-oniguruma'
         ]

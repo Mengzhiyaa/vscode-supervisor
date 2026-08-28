@@ -516,6 +516,13 @@
     // --- Keyboard shortcut handling ---
 
     function handleKeyDown(e: KeyboardEvent) {
+        // Keep native text editing shortcuts working in the find input. This
+        // handler owns the console-level Ctrl/Cmd+C/V/A shortcuts, but must
+        // not redirect them while the search widget is focused.
+        const isSearchWidgetTarget =
+            e.target instanceof Element &&
+            e.target.closest(".search-widget") !== null;
+
         if (showContextMenu) {
             closeContextMenu();
         }
@@ -525,7 +532,7 @@
         const onlyShiftKey =
             e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey;
 
-        if (isCmdOrCtrl && noOtherModifiers) {
+        if (isCmdOrCtrl && noOtherModifiers && !isSearchWidgetTarget) {
             switch (e.key.toLowerCase()) {
                 case "f": {
                     // Open search

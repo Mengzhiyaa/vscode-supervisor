@@ -200,6 +200,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
     private readonly _onDidChangePendingInputEmitter = new vscode.EventEmitter<{ code?: string; inputPrompt: string }>();
     private readonly _onDidChangePromptEmitter = new vscode.EventEmitter<void>();
     private readonly _onDidChangeWorkingDirectoryEmitter = new vscode.EventEmitter<string | undefined>();
+    private readonly _onDidChangePersistableStateEmitter = new vscode.EventEmitter<void>();
 
     // New event emitters for history and reveal (1:1 Positron)
     private readonly _onDidNavigateInputHistoryUpEmitter = new vscode.EventEmitter<DidNavigateInputHistoryEventArgs>();
@@ -262,6 +263,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
     readonly onDidChangePendingInput = this._onDidChangePendingInputEmitter.event;
     readonly onDidChangePrompt = this._onDidChangePromptEmitter.event;
     readonly onDidChangeWorkingDirectory = this._onDidChangeWorkingDirectoryEmitter.event;
+    readonly onDidChangePersistableState = this._onDidChangePersistableStateEmitter.event;
 
     // New events for history and reveal (1:1 Positron)
     readonly onDidNavigateInputHistoryUp = this._onDidNavigateInputHistoryUpEmitter.event;
@@ -305,8 +307,13 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
         };
     }
 
-    private _emitRuntimeItemsChange(change: ConsoleRuntimeItemsChangeEvent): void {
-        this._touchRecoveryRevision();
+    private _emitRuntimeItemsChange(
+        change: ConsoleRuntimeItemsChangeEvent,
+        persistable = true,
+    ): void {
+        if (persistable) {
+            this._markPersistableStateChanged();
+        }
         this._onDidChangeRuntimeItemsEmitter.fire([change]);
     }
 
@@ -314,8 +321,13 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
         this._recoveryRevision += 1;
     }
 
-    private _emitRuntimeItemsRestoreRequired(): void {
-        this._emitRuntimeItemsChange({ kind: 'restore' });
+    private _markPersistableStateChanged(): void {
+        this._touchRecoveryRevision();
+        this._onDidChangePersistableStateEmitter.fire();
+    }
+
+    private _emitRuntimeItemsRestoreRequired(persistable = true): void {
+        this._emitRuntimeItemsChange({ kind: 'restore' }, persistable);
     }
 
     private _emitAppendRuntimeItem(item: RuntimeItem): void {
@@ -533,7 +545,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
         this._refreshActiveActivityItemPrompt();
         this.optimizeScrollback();
 
-        this._emitRuntimeItemsRestoreRequired();
+        this._emitRuntimeItemsRestoreRequired(false);
         this._onDidChangeTraceEmitter.fire(this._trace);
         this._onDidChangeWordWrapEmitter.fire(this._wordWrap);
     }
@@ -613,13 +625,13 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
 
     toggleTrace(): void {
         this._trace = !this._trace;
-        this._touchRecoveryRevision();
+        this._markPersistableStateChanged();
         this._onDidChangeTraceEmitter.fire(this._trace);
     }
 
     toggleWordWrap(): void {
         this._wordWrap = !this._wordWrap;
-        this._touchRecoveryRevision();
+        this._markPersistableStateChanged();
         this._onDidChangeWordWrapEmitter.fire(this._wordWrap);
     }
 
@@ -1089,6 +1101,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
             code: interactiveCode,
             inputPrompt: this._inputPrompt,
         });
+        this._markPersistableStateChanged();
     }
 
     private addPendingInput(
@@ -1486,7 +1499,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
         }
 
         if (changed) {
-            this._touchRecoveryRevision();
+            this._markPersistableStateChanged();
             this._onDidChangePromptEmitter.fire();
         }
     }
@@ -1497,7 +1510,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
         }
 
         this._workingDirectory = data.directory;
-        this._touchRecoveryRevision();
+        this._markPersistableStateChanged();
         this._onDidChangeWorkingDirectoryEmitter.fire(this._workingDirectory);
     }
 
@@ -1532,11 +1545,13 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
             }
 
             if (promptChanged) {
+                this._markPersistableStateChanged();
                 this._onDidChangePromptEmitter.fire();
             }
 
             if (workingDirectory !== this._workingDirectory) {
                 this._workingDirectory = workingDirectory;
+                this._markPersistableStateChanged();
                 this._onDidChangeWorkingDirectoryEmitter.fire(this._workingDirectory);
             }
 
@@ -1661,6 +1676,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
         this._inputHistoryIndex = -1;
         this._savedCurrentInput = '';
         this._executionHistoryService?.clearSessionInputEntries(this.sessionId);
+        this._markPersistableStateChanged();
         this._onDidClearInputHistoryEmitter.fire();
         this._outputChannel.debug('[ConsoleInstance] Input history cleared');
     }
@@ -1692,6 +1708,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
         // Reset navigation index
         this._inputHistoryIndex = -1;
         this._savedCurrentInput = '';
+        this._markPersistableStateChanged();
     }
     //#endregion
 
@@ -2085,6 +2102,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
         this._onDidChangePendingInputEmitter.dispose();
         this._onDidChangePromptEmitter.dispose();
         this._onDidChangeWorkingDirectoryEmitter.dispose();
+        this._onDidChangePersistableStateEmitter.dispose();
         this._onDidNavigateInputHistoryUpEmitter.dispose();
         this._onDidNavigateInputHistoryDownEmitter.dispose();
         this._onDidClearInputHistoryEmitter.dispose();
@@ -2376,7 +2394,6 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
 
         // Set the new state and fire the event
         this._state = state;
-        this._touchRecoveryRevision();
         this._onDidChangeStateEmitter.fire(this._state);
     }
 

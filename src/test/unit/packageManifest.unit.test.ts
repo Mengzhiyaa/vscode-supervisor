@@ -377,7 +377,11 @@ suite('[Unit] Supervisor package manifest', () => {
         assert.match(setup, /"monaco-editor\/features\/register\.all"/);
         assert.match(
             setup,
-            /"monaco-editor\/languages\/definitions\/register\.all"/,
+            /"monaco-editor\/languages\/definitions\/r\/register"/,
+        );
+        assert.match(
+            setup,
+            /"monaco-editor\/languages\/definitions\/python\/register"/,
         );
         assert.match(
             setup,

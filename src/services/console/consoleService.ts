@@ -83,9 +83,13 @@ export class PositronConsoleService implements IPositronConsoleService {
             const historyStorage = vscode.workspace.workspaceFolders?.length
                 ? context.workspaceState
                 : context.globalState;
+            const historyStorageUri = vscode.workspace.workspaceFolders?.length
+                ? context.storageUri
+                : context.globalStorageUri;
             this._executionHistoryService = new ExecutionHistoryService(
                 historyStorage,
                 this._outputChannel,
+                historyStorageUri,
             );
             this._disposables.push(this._consoleStateStore, this._executionHistoryService);
         }
@@ -217,6 +221,7 @@ export class PositronConsoleService implements IPositronConsoleService {
         // Console is constructed and published. RuntimeSessionService starts
         // only after Application awaits this initialize method.
         await this._consoleStateStore?.initialize();
+        await this._executionHistoryService?.initialize();
         await this._restorePositronConsoleInstances();
 
         // Create console instances for existing sessions
