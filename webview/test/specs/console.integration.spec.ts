@@ -244,6 +244,53 @@ test('console loads shared Monaco styles and colorizes activity input through th
     await expect.poll(() => colorizedInput.innerHTML()).toMatch(/class="mtk\d+"/u);
 });
 
+test('console keeps the reduced Monaco language setup functional', async ({ page }) => {
+    const backend = await openWebviewPage(page, 'console', {
+        configure: (mockBackend) => {
+            registerConsoleDefaults(mockBackend, {
+                sessions: [createSession()],
+                activeSessionId: 'session-1',
+            });
+        },
+    });
+    await expect.poll(() => backend.notificationCount(ConsoleMethods.ready)).toBeGreaterThan(0);
+
+    const readRuntime = () => page.evaluate(() => {
+        const monaco = (globalThis as typeof globalThis & {
+            monaco?: {
+                editor?: {
+                    getEditors?: () => Array<{
+                        getContribution?: (id: string) => unknown;
+                    }>;
+                };
+                languages?: { getLanguages?: () => Array<{ id: string }> };
+            };
+        }).monaco;
+        const editor = monaco?.editor?.getEditors?.()[0];
+        return {
+            editorApiReady: typeof monaco?.editor?.getEditors === 'function',
+            workerReady: typeof (globalThis as typeof globalThis & {
+                MonacoEnvironment?: { getWorker?: unknown };
+            }).MonacoEnvironment?.getWorker === 'function',
+            languageIds: monaco?.languages?.getLanguages?.().map((language) => language.id) ?? [],
+            requiredContributions: [
+                'editor.contrib.contentHover',
+                'editor.contrib.suggestController',
+                'snippetController2',
+            ].map((id) => Boolean(editor?.getContribution?.(id))),
+        };
+    });
+    await expect.poll(readRuntime).toMatchObject({
+        editorApiReady: true,
+        workerReady: true,
+        requiredContributions: [true, true, true],
+    });
+    const runtime = await readRuntime();
+
+    expect(runtime.languageIds).toEqual(expect.arrayContaining(['plaintext', 'r', 'python']));
+    expect(runtime.languageIds).not.toContain('javascript');
+});
+
 test('console copies output and copies or cuts Monaco selections before treating Ctrl+C as interrupt', async ({ page }) => {
     const backend = await openWebviewPage(page, 'console', {
         configure: (mockBackend) => {

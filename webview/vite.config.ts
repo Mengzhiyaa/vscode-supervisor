@@ -46,8 +46,6 @@ export default defineConfig(({ mode }) => ({
         alias: {
             '$lib': resolve(__dirname, 'src/lib'),
             '@shared': resolve(__dirname, '..', 'src', 'shared')
-            // Use full Monaco bundle (includes suggest, hover, etc.)
-            // Previously used minimal ESM which excluded suggest widget
         }
     },
     // Optimize deps for Monaco and TextMate integration

@@ -9,7 +9,6 @@ type MonacoEnv = {
     MonacoEnvironment?: { getWorker: (id: string, label: string) => Worker };
 };
 
-let runtimeInitialized = false;
 let readyMonaco: typeof monaco | undefined;
 let initPromise: Promise<typeof monaco> | undefined;
 
@@ -36,14 +35,13 @@ function exposeMonacoOnWindow(): void {
 }
 
 function initializeMonacoRuntime(): typeof monaco {
-    if (runtimeInitialized && readyMonaco) {
+    if (readyMonaco) {
         return readyMonaco;
     }
 
     configureMonacoEnvironment();
     exposeMonacoOnWindow();
 
-    runtimeInitialized = true;
     readyMonaco = monaco;
 
     return monaco;
@@ -64,14 +62,6 @@ export function ensureMonacoRuntime(): Promise<typeof monaco> {
     }
 
     return initPromise;
-}
-
-export function getMonacoIfReady(): typeof monaco | undefined {
-    return readyMonaco;
-}
-
-export function isMonacoReady(): boolean {
-    return readyMonaco !== undefined;
 }
 
 void ensureMonacoRuntime();
