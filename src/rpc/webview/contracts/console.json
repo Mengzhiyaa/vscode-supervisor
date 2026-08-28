@@ -198,7 +198,7 @@
         {
           "name": "state",
           "optional": true,
-          "type": "'provisional' | 'executing' | 'completed' | 'cancelled'"
+          "type": "'provisional' | 'executing' | 'completed' | 'cancelled' | 'unknown-after-reload'"
         },
         {
           "name": "runtimeItem",
@@ -1093,6 +1093,21 @@
           "type": "number"
         },
         {
+          "name": "generation",
+          "optional": true,
+          "type": "string"
+        },
+        {
+          "name": "revision",
+          "optional": true,
+          "type": "number"
+        },
+        {
+          "name": "truncatedBefore",
+          "optional": true,
+          "type": "boolean"
+        },
+        {
           "name": "items",
           "type": "unknown[]"
         },
@@ -1147,6 +1162,42 @@
               "name": "state",
               "type": "SerializedConsoleState"
             }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "ConsoleStateChunkNotification",
+      "method": "console/stateChunk",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            { "name": "sessionId", "type": "string" },
+            { "name": "syncSeq", "type": "number" },
+            { "name": "batchId", "type": "string" },
+            { "name": "chunkId", "type": "string" },
+            { "name": "index", "type": "number" },
+            { "name": "total", "type": "number" },
+            { "name": "data", "type": "string" }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "ConsoleStateChunkAckNotification",
+      "method": "console/stateChunkAck",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            { "name": "chunkId", "type": "string" }
           ]
         }
       ]

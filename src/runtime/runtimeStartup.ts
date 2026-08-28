@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import { createHash, randomUUID } from 'crypto';
 import * as vscode from 'vscode';
 import {
     type IRuntimeManager,
@@ -31,6 +32,18 @@ export const EPHEMERAL_WORKSPACE_SESSIONS =
     'vscode-supervisor.workspaceSessionList.ephemeral.v1';
 const DISMISSED_ARCHITECTURE_MISMATCH_KEY_PREFIX = 'vscode-supervisor.dismissedArchMismatch.v1';
 const LAST_DISCOVERY_RUNTIME_COUNT = 'vscode-supervisor.lastDiscoveryRuntimeCount.v1';
+const ReconnectLeaseTtlMs = 30 * 24 * 60 * 60 * 1000;
+
+function workspaceRecoveryFingerprint(): string {
+    const workspaceUris = vscode.workspace.workspaceFolders
+        ?.map(folder => folder.uri.toString())
+        .sort()
+        .join('|') ?? vscode.workspace.workspaceFile?.toString() ?? '';
+    const remoteAuthority = vscode.env.remoteName ?? '';
+    return createHash('sha256')
+        .update(`${workspaceUris}|${remoteAuthority}|vscode-supervisor`, 'utf8')
+        .digest('hex');
+}
 
 interface IAffiliatedRuntimeMetadata {
     metadata: LanguageRuntimeMetadata;
@@ -41,6 +54,15 @@ interface IAffiliatedRuntimeMetadata {
 export interface ISessionRestoreFailedEvent {
     sessionId: string;
     error: Error;
+}
+
+/**
+ * Fired immediately before a failed restore is removed from the runtime
+ * session manager. Consumers that own recoverable UI state can retain it
+ * instead of treating the runtime cleanup as an explicit user deletion.
+ */
+export interface ISessionRestoreDiscardingEvent {
+    sessionId: string;
 }
 
 export enum LanguageStartupBehavior {
@@ -82,6 +104,9 @@ export class RuntimeStartupService implements vscode.Disposable {
 
     private readonly _onSessionRestoreFailure = new vscode.EventEmitter<ISessionRestoreFailedEvent>();
     readonly onSessionRestoreFailure = this._onSessionRestoreFailure.event;
+
+    private readonly _onSessionRestoreDiscarding = new vscode.EventEmitter<ISessionRestoreDiscardingEvent>();
+    readonly onSessionRestoreDiscarding = this._onSessionRestoreDiscarding.event;
 
     private readonly _localWindowId = `window-${Math.random().toString(16).slice(2, 10)}`;
     private readonly _shownArchitectureMismatchWarnings = new Set<string>();
@@ -131,6 +156,7 @@ export class RuntimeStartupService implements vscode.Disposable {
             this._onDidChangeRuntimeStartupPhase,
             this._onWillAutoStartRuntime,
             this._onSessionRestoreFailure,
+            this._onSessionRestoreDiscarding,
             this._sessionManager.onWillStartSession((event) => {
                 this._attachSessionLifecycleListeners(event.session);
             }),
@@ -843,6 +869,42 @@ export class RuntimeStartupService implements vscode.Disposable {
                     ? await provider.validateMetadata(persisted.runtimeMetadata)
                     : persisted.runtimeMetadata;
 
+                const recoveryKey = persisted.recoveryKey;
+                const existingSession = this._sessionManager.getSession(persisted.metadata.sessionId);
+                if (
+                    recoveryKey &&
+                    (recoveryKey.sessionId !== persisted.metadata.sessionId ||
+                        recoveryKey.runtimeId !== runtimeMetadata.runtimeId ||
+                        (existingSession?.created !== undefined &&
+                            existingSession.created !== recoveryKey.createdTimestamp) ||
+                        recoveryKey.workspaceFingerprint !== workspaceRecoveryFingerprint() ||
+                        (recoveryKey.remoteAuthority ?? '') !== (vscode.env.remoteName ?? ''))
+                ) {
+                    this._outputChannel.warn(
+                        `[RuntimeStartup] Skipping session ${persisted.metadata.sessionId}: recovery identity mismatch`,
+                    );
+                    await this._discardFailedRestoredSession(persisted.metadata.sessionId);
+                    this._onSessionRestoreFailure.fire({
+                        sessionId: persisted.metadata.sessionId,
+                        error: new Error('Session recovery identity no longer matches this workspace'),
+                    });
+                    return undefined;
+                }
+                if (
+                    persisted.reconnectLease &&
+                    persisted.reconnectLease.expiresAt <= Date.now()
+                ) {
+                    this._outputChannel.warn(
+                        `[RuntimeStartup] Skipping session ${persisted.metadata.sessionId}: reconnect lease expired`,
+                    );
+                    await this._discardFailedRestoredSession(persisted.metadata.sessionId);
+                    this._onSessionRestoreFailure.fire({
+                        sessionId: persisted.metadata.sessionId,
+                        error: new Error('Reconnect lease expired'),
+                    });
+                    return undefined;
+                }
+
                 const isValid = await this._sessionManager.validateRuntimeSession(
                     runtimeMetadata,
                     persisted.metadata.sessionId,
@@ -954,6 +1016,12 @@ export class RuntimeStartupService implements vscode.Disposable {
             return;
         }
 
+        // Notify stateful surfaces before RuntimeSessionService emits its
+        // deletion event. The latter is intentionally retained for normal
+        // user/session deletion, but a failed reconnect must not erase the
+        // Console checkpoint that can still be viewed or retried offline.
+        this._onSessionRestoreDiscarding.fire({ sessionId });
+
         try {
             await this._sessionManager.deleteSession(sessionId);
         } catch (error) {
@@ -977,6 +1045,13 @@ export class RuntimeStartupService implements vscode.Disposable {
                 const provider = this._runtimeManager.getRuntimeProvider(
                     session.runtimeMetadata.languageId,
                 );
+                const previous = this._restoredSessions.find(
+                    restored => restored.metadata.sessionId === session.sessionId,
+                );
+                const reconnectLease = previous?.reconnectLease &&
+                    previous.reconnectLease.expiresAt > Date.now()
+                    ? previous.reconnectLease
+                    : { leaseId: randomUUID(), expiresAt: Date.now() + ReconnectLeaseTtlMs };
                 const metadata: SerializedSessionMetadata = {
                     sessionName: session.dynState.sessionName || session.sessionMetadata.sessionName,
                     runtimeMetadata: {
@@ -993,6 +1068,14 @@ export class RuntimeStartupService implements vscode.Disposable {
                     hasConsole: activeSession?.hasConsole ?? session.sessionMetadata.sessionMode === LanguageRuntimeSessionMode.Console,
                     lastUsed: session.sessionId === this._sessionManager.activeSessionId ? Date.now() : session.created,
                     localWindowId: this._localWindowId,
+                    recoveryKey: {
+                        sessionId: session.sessionId,
+                        runtimeId: session.runtimeMetadata.runtimeId,
+                        createdTimestamp: session.created,
+                        remoteAuthority: vscode.env.remoteName ?? undefined,
+                        workspaceFingerprint: workspaceRecoveryFingerprint(),
+                    },
+                    reconnectLease,
                 };
 
                 return metadata;

@@ -206,6 +206,7 @@ export namespace VariableEntriesChangedNotification {
     export interface Params {
         sessionId: string;
         entries: VariableEntry[];
+        revision: number;
     }
 
     export const type = new NotificationType<Params>('variables/entriesChanged');
@@ -215,10 +216,13 @@ export namespace ListVariableEntriesRequest {
 
     export interface Params {
         sessionId?: string;
+        knownRevision?: number;
     }
 
     export interface Result {
         entries: VariableEntry[];
+        revision: number;
+        unchanged: boolean;
     }
 
     export const type = new RequestType<Params, Result, void>('variables/listEntries');

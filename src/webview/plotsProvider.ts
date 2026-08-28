@@ -1330,9 +1330,22 @@ export class PlotsViewProvider extends BaseWebviewProvider {
         // Supports newest-anchor pagination for lazy-loading history:
         // - cursor: number of newest plots already loaded
         // - limit: page size to fetch
-        connection.onRequest('plots/list', async (params?: { cursor?: number; limit?: number }) => {
+        connection.onRequest('plots/list', async (params?: { cursor?: number; limit?: number; knownRevision?: number }) => {
             const ordered = orderedPlots(this._plots.values());
             const totalCount = ordered.length;
+            const unchanged = params?.knownRevision !== undefined &&
+                params.knownRevision === this._plotRevision;
+            if (unchanged) {
+                return {
+                    plots: [],
+                    selectedPlotId: this._getStateForConnection(connection).selectedPlotId,
+                    totalCount,
+                    nextCursor: params?.cursor ?? 0,
+                    hasMore: false,
+                    revision: this._plotRevision,
+                    unchanged: true,
+                };
+            }
 
             const rawCursor = typeof params?.cursor === 'number' && Number.isFinite(params.cursor)
                 ? params.cursor
@@ -1364,6 +1377,7 @@ export class PlotsViewProvider extends BaseWebviewProvider {
                 nextCursor: cursor + plots.length,
                 hasMore: startInclusive > 0,
                 revision: this._plotRevision,
+                unchanged: false,
             };
         });
 

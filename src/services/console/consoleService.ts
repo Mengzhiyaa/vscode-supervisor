@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
-import { ViewCommands, ViewIds } from '../../coreCommandIds';
+import { CoreConfigurationKeys, CoreConfigurationSections, ViewCommands, ViewIds } from '../../coreCommandIds';
 import {
     IPositronConsoleService,
     IPositronConsoleInstance,
@@ -51,6 +51,9 @@ export class PositronConsoleService implements IPositronConsoleService {
     private readonly _disposables: vscode.Disposable[] = [];
     private readonly _consoleStateStore?: ConsoleStateStore;
     private readonly _executionHistoryService?: ExecutionHistoryService;
+    private _scrollbackSize = 10000;
+    /** Restore cleanup is runtime-owned, not an explicit Console deletion. */
+    private readonly _restoreDiscardsInProgress = new Set<string>();
 
     // Event emitters (1:1 Positron naming)
     private readonly _onDidStartPositronConsoleInstanceEmitter = new vscode.EventEmitter<IPositronConsoleInstance>();
@@ -72,7 +75,11 @@ export class PositronConsoleService implements IPositronConsoleService {
     ) {
         this._outputChannel.debug('[PositronConsoleService] Created');
         if (context) {
-            this._consoleStateStore = new ConsoleStateStore(context.workspaceState, this._outputChannel);
+            this._consoleStateStore = new ConsoleStateStore(
+                context.workspaceState,
+                this._outputChannel,
+                context.storageUri,
+            );
             const historyStorage = vscode.workspace.workspaceFolders?.length
                 ? context.workspaceState
                 : context.globalState;
@@ -110,11 +117,23 @@ export class PositronConsoleService implements IPositronConsoleService {
         return vscode.window.activeTextEditor;
     }
 
-    initialize(): void {
+    async initialize(): Promise<void> {
         this._outputChannel.debug('[PositronConsoleService] Initializing...');
 
+        this._scrollbackSize = this._getConfiguredScrollbackSize();
+        this._disposables.push(
+            vscode.workspace.onDidChangeConfiguration(event => {
+                if (!event.affectsConfiguration(CoreConfigurationKeys.consoleScrollbackSize)) {
+                    return;
+                }
+                this._scrollbackSize = this._getConfiguredScrollbackSize();
+                for (const instance of this._consoleInstancesBySessionId.values()) {
+                    instance.setScrollbackSize(this._scrollbackSize);
+                }
+            }),
+        );
+
         this._subscribeToRuntimeEvents();
-        void this._restorePositronConsoleInstances();
 
         // Listen for session starts BEFORE kernel starts (Positron pattern: onWillStartSession)
         this._disposables.push(
@@ -164,16 +183,41 @@ export class PositronConsoleService implements IPositronConsoleService {
         this._disposables.push(
             this._sessionManager.onDidDeleteRuntimeSession((sessionId: string) => {
                 this._outputChannel.debug(`[PositronConsoleService] Session deleted: ${sessionId}`);
-                this.deletePositronConsoleSession(sessionId);
-            }),
-            this._runtimeStartupService?.onSessionRestoreFailure((event) => {
-                if (this._sessionManager.getSession(event.sessionId)) {
+                // RuntimeStartup removes a session after a failed reconnect.
+                // Preserve the hydrated Console for offline inspection; the
+                // corresponding restore-failure event will add diagnostics.
+                if (this._restoreDiscardsInProgress.delete(sessionId)) {
+                    this._outputChannel.debug(
+                        `[PositronConsoleService] Retaining console after failed restore: ${sessionId}`,
+                    );
                     return;
                 }
-
-                this.deletePositronConsoleSession(event.sessionId);
+                this.deletePositronConsoleSession(sessionId);
+            }),
+            this._runtimeStartupService &&
+                typeof this._runtimeStartupService.onSessionRestoreDiscarding === 'function'
+                ? this._runtimeStartupService.onSessionRestoreDiscarding((event) => {
+                    if (this._consoleInstancesBySessionId.has(event.sessionId)) {
+                        this._restoreDiscardsInProgress.add(event.sessionId);
+                    }
+                })
+                : new vscode.Disposable(() => undefined),
+            this._runtimeStartupService?.onSessionRestoreFailure((event) => {
+                // A failed reconnect is not a user-requested deletion. Keep the
+                // hydrated transcript available offline so it can be retried,
+                // exported or explicitly cleared by the user.
+                this._restoreDiscardsInProgress.delete(event.sessionId);
+                this._consoleInstancesBySessionId
+                    .get(event.sessionId)
+                    ?.showRestoreFailure(event.error);
             }) ?? new vscode.Disposable(() => undefined),
         );
+
+        // File-backed recovery must be available before any provisional
+        // Console is constructed and published. RuntimeSessionService starts
+        // only after Application awaits this initialize method.
+        await this._consoleStateStore?.initialize();
+        await this._restorePositronConsoleInstances();
 
         // Create console instances for existing sessions
         for (const session of this._sessionManager.sessions) {
@@ -233,7 +277,7 @@ export class PositronConsoleService implements IPositronConsoleService {
         if (instance) {
             this._outputChannel.debug(`[PositronConsoleService] Deleting console: ${sessionId}`);
             this._consoleInstancesBySessionId.delete(sessionId);
-            this._consoleStateStore?.delete(sessionId);
+            void this._consoleStateStore?.delete(sessionId);
             this._executionHistoryService?.deleteSessionHistory(sessionId);
             this._onDidDeletePositronConsoleInstanceEmitter.fire(instance);
             instance.dispose();
@@ -310,7 +354,10 @@ export class PositronConsoleService implements IPositronConsoleService {
      */
     getSerializedState(sessionId: string): SerializedConsoleState | undefined {
         const instance = this._consoleInstancesBySessionId.get(sessionId);
-        return instance?.serializeState();
+        const state = instance?.serializeState();
+        return state && this._consoleStateStore
+            ? this._consoleStateStore.prepareForTransport(state)
+            : state;
     }
 
     /**
@@ -347,6 +394,7 @@ export class PositronConsoleService implements IPositronConsoleService {
 
     dispose(): void {
         this._outputChannel.debug('[PositronConsoleService] Disposing...');
+        this._restoreDiscardsInProgress.clear();
 
         // Dispose all console instances
         for (const instance of this._consoleInstancesBySessionId.values()) {
@@ -398,6 +446,7 @@ export class PositronConsoleService implements IPositronConsoleService {
 
         this._outputChannel.debug(`[PositronConsoleService] Setting active console: ${instance.sessionId}`);
         this._activeConsoleInstance = instance;
+        void this._consoleStateStore?.setActiveSessionId(instance.sessionId);
         this._onDidChangeActivePositronConsoleInstanceEmitter.fire(instance);
     }
 
@@ -408,6 +457,7 @@ export class PositronConsoleService implements IPositronConsoleService {
 
         this._outputChannel.debug('[PositronConsoleService] Clearing active console');
         this._activeConsoleInstance = undefined;
+        void this._consoleStateStore?.setActiveSessionId(undefined);
         this._onDidChangeActivePositronConsoleInstanceEmitter.fire(undefined);
     }
 
@@ -561,10 +611,9 @@ export class PositronConsoleService implements IPositronConsoleService {
     ): PositronConsoleInstance {
         this._outputChannel.debug(`[PositronConsoleService] Starting console instance for: ${session.sessionId}`);
 
-        const instance = this._createPositronConsoleInstance(
+        const instance = this._constructPositronConsoleInstance(
             session.sessionMetadata,
             session.runtimeMetadata,
-            activate,
         );
 
         // Restore persisted state (if any) before attaching the runtime
@@ -576,6 +625,10 @@ export class PositronConsoleService implements IPositronConsoleService {
         // Attach session - RuntimeSession itself is the runtime session
         instance.attachRuntimeSession(session, mode);
 
+        // Publish only after persisted hydration and runtime attachment have
+        // produced one coherent initial model.
+        this._publishPositronConsoleInstance(instance, activate);
+
         return instance;
     }
 
@@ -585,20 +638,24 @@ export class PositronConsoleService implements IPositronConsoleService {
         }
 
         try {
-            const restoredSessions = await this._runtimeStartupService.getRestoredSessions();
-            let first = !this._activeConsoleInstance;
+            const restoredSessions = (await this._runtimeStartupService.getRestoredSessions())
+                .filter(session => this._shouldRestorePositronConsole(session));
+            const persistedActiveSessionId = this._consoleStateStore?.getActiveSessionId();
+            const activeSessionId = !this._activeConsoleInstance
+                ? restoredSessions.some(session => session.metadata.sessionId === persistedActiveSessionId)
+                    ? persistedActiveSessionId
+                    : restoredSessions[0]?.metadata.sessionId
+                : undefined;
 
             for (const session of restoredSessions) {
-                if (!this._shouldRestorePositronConsole(session)) {
-                    continue;
-                }
-
                 if (this._consoleInstancesBySessionId.has(session.metadata.sessionId)) {
                     continue;
                 }
 
-                this._restorePositronConsole(session, first);
-                first = false;
+                this._restorePositronConsole(
+                    session,
+                    session.metadata.sessionId === activeSessionId,
+                );
             }
         } catch (error) {
             this._outputChannel.error(`[PositronConsoleService] Failed to restore console instances: ${error}`);
@@ -619,37 +676,55 @@ export class PositronConsoleService implements IPositronConsoleService {
             sessionName: session.sessionName || session.metadata.sessionName || session.runtimeMetadata.runtimeName,
             workingDirectory: session.workingDirectory ?? session.metadata.workingDirectory,
         };
-        const instance = this._createPositronConsoleInstance(
+        const instance = this._constructPositronConsoleInstance(
             sessionMetadata,
             session.runtimeMetadata,
-            activate,
         );
 
+        // ConsoleState is the canonical transcript/metadata restore source.
+        // ExecutionHistory is only a lossy legacy fallback when no ConsoleState
+        // exists; a non-empty history must never suppress prompt/cwd/settings.
+        const legacyState = this._consoleStateStore?.restore(
+            instance,
+            SessionAttachMode.Reconnecting,
+        );
         const executionEntries = this._executionHistoryService?.getExecutionEntries(
             instance.sessionId,
         ) ?? [];
-        if (executionEntries.length > 0) {
-            instance.replayExecutions(executionEntries);
-        } else {
-            const legacyState = this._consoleStateStore?.restore(
-                instance,
-                SessionAttachMode.Reconnecting,
+        if (legacyState) {
+            this._executionHistoryService?.restoreLegacyExecutionEntries(
+                instance.sessionId,
+                legacyState,
             );
-            if (legacyState) {
-                this._executionHistoryService?.restoreLegacyExecutionEntries(
-                    instance.sessionId,
-                    legacyState,
-                );
-            }
+        } else if (executionEntries.length > 0) {
+            instance.replayExecutions(executionEntries);
         }
         this._consoleStateStore?.bind(instance);
+        this._publishPositronConsoleInstance(instance, activate);
         return instance;
     }
 
+    /**
+     * Backward-compatible test/helper entry point. Production restore paths
+     * use construct/hydrate/publish explicitly so no consumer observes an
+     * empty pre-hydration instance.
+     */
     private _createPositronConsoleInstance(
         sessionMetadata: RuntimeSession['sessionMetadata'],
         runtimeMetadata: RuntimeSession['runtimeMetadata'],
         activate: boolean,
+    ): PositronConsoleInstance {
+        const instance = this._constructPositronConsoleInstance(
+            sessionMetadata,
+            runtimeMetadata,
+        );
+        this._publishPositronConsoleInstance(instance, activate);
+        return instance;
+    }
+
+    private _constructPositronConsoleInstance(
+        sessionMetadata: RuntimeSession['sessionMetadata'],
+        runtimeMetadata: RuntimeSession['runtimeMetadata'],
     ): PositronConsoleInstance {
         const instance = new PositronConsoleInstance(
             sessionMetadata,
@@ -660,6 +735,7 @@ export class PositronConsoleService implements IPositronConsoleService {
         );
 
         instance.setWidthInChars(this._consoleWidth);
+        instance.setScrollbackSize(this._scrollbackSize);
 
         this._disposables.push(
             instance.onDidExecuteCode(event => {
@@ -687,15 +763,40 @@ export class PositronConsoleService implements IPositronConsoleService {
             }),
         );
 
-        this._consoleInstancesBySessionId.set(sessionMetadata.sessionId, instance);
+        return instance;
+    }
+
+    private _publishPositronConsoleInstance(
+        instance: PositronConsoleInstance,
+        activate: boolean,
+    ): void {
+        const existing = this._consoleInstancesBySessionId.get(instance.sessionId);
+        if (existing && existing !== instance) {
+            instance.dispose();
+            return;
+        }
+        if (existing === instance) {
+            if (activate) {
+                this._setActivePositronConsoleInstance(instance);
+            }
+            return;
+        }
+
+        this._consoleInstancesBySessionId.set(instance.sessionId, instance);
         this._onDidStartPositronConsoleInstanceEmitter.fire(instance);
 
         if (activate) {
-            this._activeConsoleInstance = instance;
-            this._onDidChangeActivePositronConsoleInstanceEmitter.fire(instance);
+            this._setActivePositronConsoleInstance(instance);
         }
+    }
 
-        return instance;
+    private _getConfiguredScrollbackSize(): number {
+        const value = vscode.workspace
+            .getConfiguration(CoreConfigurationSections.supervisor)
+            .get<number>('console.scrollbackSize');
+        return typeof value === 'number' && Number.isFinite(value)
+            ? Math.max(1000, Math.min(20000, Math.floor(value)))
+            : 10000;
     }
 
     /**

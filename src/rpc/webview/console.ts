@@ -66,7 +66,7 @@ export interface ConsoleRuntimeChange {
     targetId?: string;
     parentId?: string;
     outputId?: string;
-    state?: 'provisional' | 'executing' | 'completed' | 'cancelled';
+    state?: 'provisional' | 'executing' | 'completed' | 'cancelled' | 'unknown-after-reload';
     runtimeItem?: SerializedRuntimeItemPayload;
     activityItem?: SerializedActivityItemPayload;
 }
@@ -458,6 +458,9 @@ export namespace RuntimeStartupPhaseNotification {
 
 export interface SerializedConsoleState {
     version: number;
+    generation?: string;
+    revision?: number;
+    truncatedBefore?: boolean;
     items: unknown[];
     inputHistory: string[];
     trace: boolean;
@@ -476,6 +479,30 @@ export namespace ConsoleRestoreStateNotification {
     }
 
     export const type = new NotificationType<Params>('console/restoreState');
+}
+
+export namespace ConsoleStateChunkNotification {
+
+    export interface Params {
+        sessionId: string;
+        syncSeq: number;
+        batchId: string;
+        chunkId: string;
+        index: number;
+        total: number;
+        data: string;
+    }
+
+    export const type = new NotificationType<Params>('console/stateChunk');
+}
+
+export namespace ConsoleStateChunkAckNotification {
+
+    export interface Params {
+        chunkId: string;
+    }
+
+    export const type = new NotificationType<Params>('console/stateChunkAck');
 }
 
 export namespace ConsoleSessionMetadataChangedNotification {

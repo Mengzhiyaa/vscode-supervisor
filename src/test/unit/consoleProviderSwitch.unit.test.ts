@@ -49,6 +49,7 @@ function createDeferred<T = void>(): {
 
 class FakeConnection {
     readonly requests = new Map<string, (params: any) => Promise<any> | any>();
+    readonly notifications: Array<{ method: string; params: unknown }> = [];
 
     onRequest(type: { method: string }, handler: (params: any) => Promise<any> | any): vscode.Disposable {
         this.requests.set(type.method, handler);
@@ -59,8 +60,8 @@ class FakeConnection {
         return { dispose: () => undefined };
     }
 
-    sendNotification(): void {
-        // No-op for this unit test.
+    sendNotification(type: { method: string }, params?: unknown): void {
+        this.notifications.push({ method: type.method, params });
     }
 }
 
@@ -90,7 +91,7 @@ suite('[Unit] console provider session switching', () => {
         }
     });
 
-    test('awaits foreground-session switching before sending a session snapshot', async () => {
+    test('awaits foreground-session switching without duplicating its event-driven snapshot', async () => {
         const calls: string[] = [];
         const deferred = createDeferred<void>();
 
@@ -132,8 +133,48 @@ suite('[Unit] console provider session switching', () => {
         assert.deepStrictEqual(calls, [
             'focus:start:session-2',
             'focus:end:session-2',
-            'snapshot',
         ]);
+    });
+
+    test('hydrates only the active console during initial Webview sync', () => {
+        const provider = new ConsoleViewProvider(
+            vscode.Uri.file('/tmp'),
+            makeNoopLogChannel(),
+        );
+        const instances = [
+            { sessionId: 'session-active', inputPrompt: '>', continuationPrompt: '+', workingDirectory: '/active' },
+            { sessionId: 'session-inactive', inputPrompt: '>', continuationPrompt: '+', workingDirectory: '/inactive' },
+        ];
+        (provider as any)._consoleService = {
+            positronConsoleInstances: instances,
+            activePositronConsoleInstance: instances[0],
+            getConsoleInstance: (sessionId: string) =>
+                instances.find(instance => instance.sessionId === sessionId),
+            getSerializedState: (sessionId: string) => ({
+                version: 3,
+                generation: `generation-${sessionId}`,
+                revision: 1,
+                items: [],
+                inputHistory: [],
+                trace: false,
+                wordWrap: true,
+            }),
+        };
+        const connection = new FakeConnection();
+        (provider as any)._connection = connection;
+        (provider as any)._webviewReady = true;
+
+        (provider as any)._sendRestoreStatesForInstances();
+
+        const restores = connection.notifications.filter(notification =>
+            notification.method === ConsoleProtocol.ConsoleRestoreStateNotification.type.method
+        );
+        assert.strictEqual(restores.length, 1);
+        assert.strictEqual((restores[0].params as any).sessionId, 'session-active');
+        assert.deepStrictEqual(
+            [...(provider as any)._initializedSessions],
+            ['session-active'],
+        );
     });
 
     test('executes submitted console input directly instead of enqueueing it', async () => {

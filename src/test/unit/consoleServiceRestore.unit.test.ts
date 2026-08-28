@@ -60,7 +60,7 @@ function createEventStub<T>(): vscode.Event<T> {
 }
 
 suite('[Unit] console service restored session placeholders', () => {
-    test('creates provisional console instances for restored sessions and deletes failed placeholders', async () => {
+    test('creates hydrated provisional consoles and preserves them when reconnect fails', async () => {
         const sessionId = 'restored-r-session';
         const onSessionRestoreFailure = new vscode.EventEmitter<{ sessionId: string; error: Error }>();
         const context = makeContext({
@@ -115,9 +115,14 @@ suite('[Unit] console service restored session placeholders', () => {
             } as any,
         );
 
-        service.initialize();
-        await Promise.resolve();
-        await Promise.resolve();
+        let publishedWorkingDirectory: string | undefined;
+        let publishedInputHistory: readonly string[] | undefined;
+        const published = service.onDidStartPositronConsoleInstance(instance => {
+            publishedWorkingDirectory = instance.workingDirectory;
+            publishedInputHistory = [...instance.inputHistory];
+        });
+
+        await service.initialize();
 
         const instance = service.getConsoleInstance(sessionId);
         assert.ok(instance);
@@ -125,19 +130,27 @@ suite('[Unit] console service restored session placeholders', () => {
         assert.strictEqual(instance?.runtimeAttached, false);
         assert.strictEqual(instance?.workingDirectory, '/tmp/restored');
         assert.deepStrictEqual(instance?.inputHistory, ['1 + 1']);
+        assert.strictEqual(
+            publishedWorkingDirectory,
+            '/tmp/restored',
+            'the instance must be hydrated before onDidStart publishes it',
+        );
+        assert.deepStrictEqual(publishedInputHistory, ['1 + 1']);
 
         onSessionRestoreFailure.fire({
             sessionId,
             error: new Error('Session is no longer available'),
         });
 
-        assert.strictEqual(service.getConsoleInstance(sessionId), undefined);
-        assert.strictEqual(service.activePositronConsoleInstance, undefined);
-        assert.strictEqual(
+        const failedInstance = service.getConsoleInstance(sessionId);
+        assert.ok(failedInstance, 'the recovered transcript must remain available offline');
+        assert.strictEqual(service.activePositronConsoleInstance?.sessionId, sessionId);
+        assert.ok(
             context.workspaceState.get(`vscode-supervisor.console.state.${sessionId}`),
-            undefined,
+            'a transient reconnect failure must not delete persisted state',
         );
         service.dispose();
+        published.dispose();
         onSessionRestoreFailure.dispose();
     });
 });

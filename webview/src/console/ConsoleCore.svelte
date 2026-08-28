@@ -66,6 +66,9 @@
         runtimeItemsMarker: number;
         executeScrollMarker: number;
         hydrated: boolean;
+        generation?: string;
+        revision?: number;
+        truncatedBefore?: boolean;
     }
 
     interface RuntimeStartupEvent {
@@ -124,6 +127,12 @@
     let userSelectedForegroundSessionId = $state<string | undefined>();
     const sessionDataMap = new SvelteMap<string, SessionData>();
     const sessionSyncSeqMap = new Map<string, number>();
+    const pendingConsoleStateChunks = new Map<string, {
+        sessionId: string;
+        syncSeq: number;
+        total: number;
+        chunks: Array<string | undefined>;
+    }>();
     const pendingFullStateRequests = new Set<string>();
     let inputCommand = $state<ConsoleInputCommandEnvelope | undefined>(
         undefined,
@@ -1548,7 +1557,7 @@
         sessionId: string,
         state: SerializedConsoleState,
     ): void {
-        if (!state || (state.version !== 1 && state.version !== 2)) {
+        if (!state || (state.version !== 1 && state.version !== 2 && state.version !== 3)) {
             return;
         }
 
@@ -1576,6 +1585,9 @@
         data.runtimeItems = runtimeItems;
         data.runtimeItemActivities = runtimeItemActivities;
         data.hydrated = true;
+        data.generation = state.generation;
+        data.revision = state.revision;
+        data.truncatedBefore = state.truncatedBefore === true;
         applySessionMetadataUpdate(sessionId, state);
 
         const historyEntries = state.inputHistory ?? [];
@@ -1655,6 +1667,60 @@
             },
         );
 
+        connection.onNotification(
+            "console/stateChunk",
+            (params: {
+                sessionId: string;
+                syncSeq: number;
+                batchId: string;
+                chunkId: string;
+                index: number;
+                total: number;
+                data: string;
+            }) => {
+                let batch = pendingConsoleStateChunks.get(params.batchId);
+                if (!batch) {
+                    batch = {
+                        sessionId: params.sessionId,
+                        syncSeq: params.syncSeq,
+                        total: params.total,
+                        chunks: new Array(params.total),
+                    };
+                    pendingConsoleStateChunks.set(params.batchId, batch);
+                }
+                if (
+                    batch.sessionId !== params.sessionId ||
+                    batch.syncSeq !== params.syncSeq ||
+                    batch.total !== params.total ||
+                    params.index < 0 ||
+                    params.index >= batch.total
+                ) {
+                    pendingConsoleStateChunks.delete(params.batchId);
+                    return;
+                }
+                batch.chunks[params.index] = params.data;
+                connection?.sendNotification("console/stateChunkAck", {
+                    chunkId: params.chunkId,
+                });
+                if (batch.chunks.some(chunk => chunk === undefined)) {
+                    return;
+                }
+                pendingConsoleStateChunks.delete(params.batchId);
+                try {
+                    const state = JSON.parse(batch.chunks.join("")) as SerializedConsoleState;
+                    const localSyncSeq = sessionSyncSeqMap.get(batch.sessionId) ?? 0;
+                    if (batch.syncSeq < localSyncSeq) {
+                        return;
+                    }
+                    sessionSyncSeqMap.set(batch.sessionId, batch.syncSeq);
+                    restoreConsoleState(batch.sessionId, state);
+                } catch {
+                    // A later restore request can recover from a malformed or
+                    // interrupted bulk transfer; never apply partial state.
+                }
+            },
+        );
+
         // Restore console state after reload (Positron-style)
         connection.onNotification(
             "console/restoreState",
@@ -1669,6 +1735,18 @@
                 const localSyncSeq =
                     sessionSyncSeqMap.get(params.sessionId) ?? 0;
                 if (params.syncSeq < localSyncSeq) {
+                    return;
+                }
+                const localData = getSessionData(params.sessionId);
+                const incomingGeneration = params.state.generation;
+                const incomingRevision = params.state.revision;
+                if (
+                    incomingGeneration &&
+                    localData.generation === incomingGeneration &&
+                    incomingRevision !== undefined &&
+                    localData.revision !== undefined &&
+                    incomingRevision < localData.revision
+                ) {
                     return;
                 }
                 pendingFullStateRequests.delete(params.sessionId);

@@ -35,6 +35,18 @@ export interface SerializedSessionMetadata {
     hasConsole?: boolean;
     lastUsed: number;
     localWindowId?: string;
+    /** Identity tuple used to prevent a reused session id from mounting old state. */
+    recoveryKey?: {
+        sessionId: string;
+        runtimeId: string;
+        createdTimestamp: number;
+        remoteAuthority?: string;
+        workspaceFingerprint: string;
+    };
+    reconnectLease?: {
+        leaseId: string;
+        expiresAt: number;
+    };
 }
 
 export interface IRuntimeSessionRestoreOptions {

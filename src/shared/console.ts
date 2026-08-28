@@ -14,6 +14,13 @@ export enum ActivityItemInputState {
     Executing = 'executing',
     Completed = 'completed',
     Cancelled = 'cancelled',
+    /**
+     * The extension host was reloaded while the input was provisional or
+     * executing and the reconnected runtime could not prove its final state.
+     * This state is deliberately non-executable: restoring it must never
+     * enqueue or re-run the original code.
+     */
+    UnknownAfterReload = 'unknown-after-reload',
 }
 
 export type ILanguageRuntimeMessageOutputData = {

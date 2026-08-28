@@ -1199,7 +1199,7 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
         this._dataScienceSurfaceLifecycle.initialize();
         this._notebookSurfaceLifecycle.initialize();
         this._connectionsService.initialize();
-        this._consoleService.initialize();
+        await this._consoleService.initialize();
         this._variablesService.initialize();
         this._plotsService.initialize(this._sessionManager);
         this._packagesService.initialize();

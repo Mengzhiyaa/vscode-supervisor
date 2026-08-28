@@ -44,6 +44,7 @@ export class VariablesViewProvider extends BaseWebviewProvider {
 
     private readonly _instanceDisposables = new Map<string, vscode.Disposable[]>();
     private readonly _sessionEntries = new Map<string, VariablesProtocol.VariableEntry[]>();
+    private readonly _sessionRevisions = new Map<string, number>();
     private readonly _sessionVariables = new Map<string, VariablesProtocol.Variable[]>();
     private readonly _lastInstancePayloads = new Map<string, string>();
 
@@ -137,8 +138,15 @@ export class VariablesViewProvider extends BaseWebviewProvider {
                 this._handleVariablesInstanceStopped(instance);
             }),
             this._variablesService.onDidChangeActivePositronVariablesInstance(instance => {
-                this._sendActiveVariablesInstanceChanged(instance?.session.sessionId);
+                const sessionId = instance?.session.sessionId;
+                this._sendActiveVariablesInstanceChanged(sessionId);
                 this._sendSessionInfoUpdate();
+                if (sessionId) {
+                    this.sendVariableEntriesChanged(
+                        this._sessionEntries.get(sessionId) ?? [],
+                        sessionId,
+                    );
+                }
             }),
             this._memoryUsageService.onDidUpdateMemoryUsage(snapshot => {
                 this._sendMemoryUsageSnapshot(snapshot);
@@ -195,6 +203,8 @@ export class VariablesViewProvider extends BaseWebviewProvider {
         const previousEntries = this._sessionEntries.get(sessionId) ?? [];
         this._sessionVariables.delete(sessionId);
         this._sessionEntries.delete(sessionId);
+        const revision = (this._sessionRevisions.get(sessionId) ?? 0) + 1;
+        this._sessionRevisions.set(sessionId, revision);
 
         if (previousEntries.length > 0) {
             this.sendVariableEntriesChanged([], sessionId);
@@ -210,7 +220,13 @@ export class VariablesViewProvider extends BaseWebviewProvider {
         const sessionId = instance.session.sessionId;
         const currentEntries = this._convertVariableEntriesToProtocol(entries);
         this._sessionEntries.set(sessionId, currentEntries);
-        this.sendVariableEntriesChanged(currentEntries, sessionId);
+        const revision = (this._sessionRevisions.get(sessionId) ?? 0) + 1;
+        this._sessionRevisions.set(sessionId, revision);
+        // Keep inactive session data on the Extension Host. The Webview pulls
+        // it through variables/listEntries when that session becomes active.
+        if (this._variablesService.activePositronVariablesInstance?.session.sessionId === sessionId) {
+            this.sendVariableEntriesChanged(currentEntries, sessionId);
+        }
 
         // Update the cached flat variables for variables/list fallback.
         this._sessionVariables.set(sessionId, this._convertEntriesToProtocol(entries));
@@ -328,11 +344,16 @@ export class VariablesViewProvider extends BaseWebviewProvider {
         connection.onRequest(VariablesProtocol.ListVariableEntriesRequest.type, async (params) => {
             const sessionId = this._resolveSessionId(params?.sessionId);
             if (!sessionId) {
-                return { entries: [] };
+                return { entries: [], revision: 0, unchanged: false };
             }
 
+            const revision = this._sessionRevisions.get(sessionId) ?? 0;
+            const unchanged = params?.knownRevision !== undefined &&
+                params.knownRevision === revision;
             return {
-                entries: this._sessionEntries.get(sessionId) ?? []
+                entries: unchanged ? [] : this._sessionEntries.get(sessionId) ?? [],
+                revision,
+                unchanged,
             };
         });
 
@@ -536,7 +557,8 @@ export class VariablesViewProvider extends BaseWebviewProvider {
 
         this._connection?.sendNotification(VariablesProtocol.VariableEntriesChangedNotification.type, {
             sessionId,
-            entries
+            entries,
+            revision: this._sessionRevisions.get(sessionId) ?? 0,
         });
     }
 
@@ -574,8 +596,13 @@ export class VariablesViewProvider extends BaseWebviewProvider {
         this._sendActiveVariablesInstanceChanged(
             this._variablesService.activePositronVariablesInstance?.session.sessionId
         );
-        for (const [sessionId, entries] of this._sessionEntries.entries()) {
-            this.sendVariableEntriesChanged(entries, sessionId);
+        const activeSessionId =
+            this._variablesService.activePositronVariablesInstance?.session.sessionId;
+        if (activeSessionId) {
+            this.sendVariableEntriesChanged(
+                this._sessionEntries.get(activeSessionId) ?? [],
+                activeSessionId,
+            );
         }
         this._sendMemoryUsageEnabled(this._memoryUsageService.enabled);
         if (this._memoryUsageService.currentSnapshot) {

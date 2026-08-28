@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { createHash, randomUUID } from 'crypto';
 import { MessageConnection } from 'vscode-jsonrpc/node';
 import { ContextKeys, CoreConfigurationKeys, CoreConfigurationSections, ViewIds } from '../coreCommandIds';
 import { BaseWebviewProvider } from './baseProvider';
@@ -22,6 +23,7 @@ import {
     ConsoleResourceUsageCoordinator,
     ConsoleResourceUsagePublication,
 } from './consoleResourceUsageCoordinator';
+import { ConsoleSyncCoordinator } from './consoleSyncCoordinator';
 
 /**
  * Webview provider for the R Console panel.
@@ -45,6 +47,7 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
     // Prevents redundant initial restore-state sends before instance-driven updates take over.
     private readonly _initializedSessions = new Set<string>();
     private readonly _sessionSyncSeq = new Map<string, number>();
+    private readonly _publishedSessionIconHashes = new Map<string, string>();
     private _pendingLanguageSupportAssetsRefresh = false;
     private _pendingFindCommand: ConsoleProtocol.ConsoleFindCommandNotification.Params['command'] | undefined;
 
@@ -56,6 +59,15 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
     private readonly _resourceUsageSurfaceDisposables: vscode.Disposable[] = [];
     private readonly _resourceUsageCoordinator = new ConsoleResourceUsageCoordinator(
         publication => this._publishResourceUsage(publication),
+    );
+    private readonly _consoleSyncCoordinator = new ConsoleSyncCoordinator(
+        2,
+        1,
+        10_000,
+        chunk => this.log(
+            `[ConsoleSync] ACK timeout session=${chunk.sessionId} chunk=${chunk.chunkId} bytes=${chunk.bytes}`,
+            vscode.LogLevel.Warning,
+        ),
     );
     private _consoleViewVisible = false;
     private _windowFocused = false;
@@ -151,6 +163,9 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
 
     protected override _onDidDisposeWebviewView(): void {
         this._webviewReady = false;
+        for (const sessionId of this._allSessionSubscriptions.keys()) {
+            this._consoleSyncCoordinator.cancelSession(sessionId);
+        }
         this._consoleViewVisible = false;
         this._resourceUsageCoordinator.resetPublication();
         this._disposeResourceUsageSurfaceListeners();
@@ -332,6 +347,7 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
         this._pendingRestoreStatesForInstances = true;
         // Webview was (re)created — all sessions need restore state on reconnect.
         this._initializedSessions.clear();
+        this._publishedSessionIconHashes.clear();
 
         // Deterministic readiness signal from webview.
         connection.onNotification(ConsoleProtocol.ConsoleReadyNotification.type, () => {
@@ -347,6 +363,11 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
                 );
             }
         });
+
+        connection.onNotification(
+            ConsoleProtocol.ConsoleStateChunkAckNotification.type,
+            params => this._consoleSyncCoordinator.acknowledge(params.chunkId),
+        );
 
         connection.onNotification(
             ConsoleProtocol.ResourceUsageSnapshotAckNotification.type,
@@ -394,9 +415,11 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
                 `[SyncSeq] Full state requested: session=${params.sessionId} reason=${params.reason}`,
                 vscode.LogLevel.Warning,
             );
-            this._sendRestoreStateForInstance(params.sessionId, {
+            if (this._sendRestoreStateForInstance(params.sessionId, {
                 useCurrentSyncSeq: true,
-            });
+            })) {
+                this._initializedSessions.add(params.sessionId);
+            }
         });
 
         // Handle execute request from webview
@@ -713,7 +736,12 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
                 return;
             }
             await this._sessionManager.focusSession(params.sessionId);
-            this._sendSessionInfoUpdate();
+            // Inactive sessions are intentionally not hydrated on Webview
+            // startup. Pull the current bounded snapshot only when the user
+            // actually switches to the session.
+            this._ensureSessionInitialized(params.sessionId);
+            // Foreground/active-session events publish the authoritative
+            // session snapshot. Avoid a second identical full session/info.
         });
 
         // Handle rename session request
@@ -976,7 +1004,28 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
     }
 
     private _buildSessionInfoSnapshot(): SessionProtocol.SessionInfoNotification.Params {
-        const sessions = this._sessionSnapshotBuilder.buildSessionsWithConsoleOverlay();
+        const sessions = this._sessionSnapshotBuilder
+            .buildSessionsWithConsoleOverlay()
+            .map(session => {
+                const icon = session.base64EncodedIconSvg;
+                if (!icon) {
+                    this._publishedSessionIconHashes.delete(session.id);
+                    return session;
+                }
+                const hash = createHash('sha256').update(icon).digest('hex');
+                if (this._publishedSessionIconHashes.get(session.id) === hash) {
+                    const { base64EncodedIconSvg: _omitted, ...withoutRepeatedIcon } = session;
+                    return withoutRepeatedIcon;
+                }
+                this._publishedSessionIconHashes.set(session.id, hash);
+                return session;
+            });
+        const liveSessionIds = new Set(sessions.map(session => session.id));
+        for (const sessionId of this._publishedSessionIconHashes.keys()) {
+            if (!liveSessionIds.has(sessionId)) {
+                this._publishedSessionIconHashes.delete(sessionId);
+            }
+        }
 
         return {
             sessions,
@@ -1296,6 +1345,13 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
             return;
         }
 
+        // The latest metadata will be included in the initial snapshot when
+        // this inactive session is selected. Sending deltas before hydration
+        // would create a sequence gap and force another full state request.
+        if (!this._initializedSessions.has(sessionId)) {
+            return;
+        }
+
         const syncSeq = this._nextSyncSeq(sessionId);
         this._connection.sendNotification(
             ConsoleProtocol.ConsoleSessionMetadataChangedNotification.type,
@@ -1313,6 +1369,10 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
     ): void {
         if (!this._connection || !this._webviewReady) {
             this._pendingRestoreStatesForInstances = true;
+            return;
+        }
+
+        if (!this._initializedSessions.has(sessionId)) {
             return;
         }
 
@@ -1399,6 +1459,9 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
             this._consoleService.onDidChangeActivePositronConsoleInstance(instance => {
                 this.log(`[ConsoleViewProvider] Active console instance changed: ${instance?.sessionId || 'none'}`, vscode.LogLevel.Debug);
                 this._sendSessionInfoUpdate();
+                if (instance) {
+                    this._ensureSessionInitialized(instance.sessionId);
+                }
             })
         );
 
@@ -1544,7 +1607,9 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
         disposables.push(instance.onDidChangeRuntimeItems((events) => {
             if (events.some((event) => event.kind === 'restore')) {
                 this._sendSessionInfoUpdate();
-                this._sendRestoreStateForInstance(sessionId);
+                if (this._initializedSessions.has(sessionId)) {
+                    this._sendRestoreStateForInstance(sessionId);
+                }
                 return;
             }
 
@@ -1609,10 +1674,9 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
         // in the current webview lifecycle. Afterwards, runtime item updates
         // are mirrored through onDidChangeRuntimeItems.
         if (!this._initializedSessions.has(sessionId)) {
-            this._sendRestoreStateForInstance(sessionId, {
-                useCurrentSyncSeq: true,
-            });
-            this._initializedSessions.add(sessionId);
+            if (this._isActiveConsoleSession(sessionId)) {
+                this._ensureSessionInitialized(sessionId);
+            }
         }
 
         this._consoleInstanceSubscriptions.set(sessionId, disposables);
@@ -1641,13 +1705,29 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
             return;
         }
 
-        for (const instance of this._consoleService.positronConsoleInstances) {
-            this._sendRestoreStateForInstance(instance.sessionId, {
-                useCurrentSyncSeq: true,
-            });
+        const activeSessionId = this._consoleService.activePositronConsoleInstance?.sessionId;
+        if (activeSessionId) {
+            this._ensureSessionInitialized(activeSessionId);
         }
 
         this._pendingRestoreStatesForInstances = false;
+    }
+
+    private _isActiveConsoleSession(sessionId: string): boolean {
+        return this._consoleService?.activePositronConsoleInstance?.sessionId === sessionId;
+    }
+
+    private _ensureSessionInitialized(sessionId: string): boolean {
+        if (this._initializedSessions.has(sessionId)) {
+            return true;
+        }
+        const sent = this._sendRestoreStateForInstance(sessionId, {
+            useCurrentSyncSeq: true,
+        });
+        if (sent) {
+            this._initializedSessions.add(sessionId);
+        }
+        return sent;
     }
 
     private _sendRestoreStateForInstance(
@@ -1655,20 +1735,20 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
         options?: {
             useCurrentSyncSeq?: boolean;
         },
-    ): void {
+    ): boolean {
         if (!this._connection || !this._consoleService || !this._webviewReady) {
             this._pendingRestoreStatesForInstances = true;
-            return;
+            return false;
         }
 
         const instance = this._consoleService.getConsoleInstance(sessionId);
         if (!instance) {
-            return;
+            return false;
         }
 
         const serializedState = this._consoleService.getSerializedState(sessionId);
         if (!serializedState) {
-            return;
+            return false;
         }
 
         const state = {
@@ -1681,11 +1761,43 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
             ? this._currentSyncSeq(sessionId)
             : this._nextSyncSeq(sessionId);
 
-        this._connection.sendNotification(ConsoleProtocol.ConsoleRestoreStateNotification.type, {
-            sessionId,
-            syncSeq,
-            state
-        });
+        const serialized = JSON.stringify(state);
+        const encodedBytes = Buffer.byteLength(serialized, 'utf8');
+        if (encodedBytes <= 60 * 1024) {
+            this._connection.sendNotification(ConsoleProtocol.ConsoleRestoreStateNotification.type, {
+                sessionId,
+                syncSeq,
+                state,
+            });
+        } else {
+            // Keep every message safely below the Remote Webview transport's
+            // 64KB target. Twelve thousand UTF-16 code units fit even when
+            // every character expands to four UTF-8 bytes.
+            const chunkSize = 12 * 1024;
+            const total = Math.ceil(serialized.length / chunkSize);
+            const batchId = randomUUID();
+            this._consoleSyncCoordinator.cancelSession(sessionId);
+            for (let index = 0; index < total; index++) {
+                const chunkId = randomUUID();
+                const data = serialized.slice(index * chunkSize, (index + 1) * chunkSize);
+                this._consoleSyncCoordinator.enqueue({
+                    sessionId,
+                    chunkId,
+                    priority: 3,
+                    bytes: Buffer.byteLength(data, 'utf8'),
+                    send: () => this._connection?.sendNotification(
+                        ConsoleProtocol.ConsoleStateChunkNotification.type,
+                        { sessionId, syncSeq, batchId, chunkId, index, total, data },
+                    ),
+                });
+            }
+        }
+        this.log(
+            `[ConsoleSync] restoreState session=${sessionId} seq=${syncSeq} ` +
+            `bytes=${encodedBytes} items=${state.items.length}`,
+            encodedBytes > 64 * 1024 ? vscode.LogLevel.Warning : vscode.LogLevel.Debug,
+        );
+        return true;
     }
 
 }

@@ -6,7 +6,13 @@ import type {
 } from './console';
 
 export interface SerializedConsoleState {
-    version: 1 | 2;
+    version: 1 | 2 | 3;
+    /** Stable for one logical transcript generation; changes on clear. */
+    generation?: string;
+    /** Monotonic within a generation and persisted with the snapshot. */
+    revision?: number;
+    /** True when older scrollback was deliberately omitted by retention. */
+    truncatedBefore?: boolean;
     items: SerializedRuntimeItem[];
     inputHistory: string[];
     trace: boolean;

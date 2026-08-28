@@ -565,6 +565,10 @@
             {
               "name": "entries",
               "type": "VariableEntry[]"
+            },
+            {
+              "name": "revision",
+              "type": "number"
             }
           ]
         }
@@ -586,6 +590,11 @@
               "name": "sessionId",
               "optional": true,
               "type": "string"
+            },
+            {
+              "name": "knownRevision",
+              "optional": true,
+              "type": "number"
             }
           ]
         },
@@ -596,6 +605,14 @@
             {
               "name": "entries",
               "type": "VariableEntry[]"
+            },
+            {
+              "name": "revision",
+              "type": "number"
+            },
+            {
+              "name": "unchanged",
+              "type": "boolean"
             }
           ]
         }

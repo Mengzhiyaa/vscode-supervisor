@@ -2,7 +2,13 @@ import * as assert from 'assert';
 import * as vscode from 'vscode';
 import { LanguageRuntimeSessionMode } from '../../api';
 import { RuntimeState } from '../../internal/runtimeTypes';
-import { PositronConsoleInstance, SessionAttachMode } from '../../services/console';
+import {
+    ActivityItemInput,
+    ActivityItemInputState,
+    PositronConsoleInstance,
+    RuntimeItemActivity,
+    SessionAttachMode,
+} from '../../services/console';
 import type { SerializedConsoleState } from '../../services/console/consoleInstance';
 
 function makeNoopLogChannel(): vscode.LogOutputChannel {
@@ -87,6 +93,61 @@ function createRuntimeSession(overrides?: {
 }
 
 suite('[Unit] console instance prompt normalization', () => {
+    test('restores pending input as non-executable unknown transcript activity', () => {
+        const instance = createConsoleInstance();
+        instance.restoreState({
+            version: 2,
+            items: [{
+                type: 'pendingInput',
+                id: 'pending-before-reload',
+                when: Date.now(),
+                inputPrompt: '>',
+                code: 'dangerous_side_effect()',
+                submitting: true,
+            }],
+            inputHistory: [],
+            trace: false,
+            wordWrap: true,
+        });
+
+        assert.strictEqual(instance.runtimeItems.length, 1);
+        const activity = instance.runtimeItems[0] as RuntimeItemActivity;
+        assert.ok(activity instanceof RuntimeItemActivity);
+        const input = activity.activityItems[0] as ActivityItemInput;
+        assert.ok(input instanceof ActivityItemInput);
+        assert.strictEqual(input.state, ActivityItemInputState.UnknownAfterReload);
+        assert.strictEqual(input.code, 'dangerous_side_effect()');
+    });
+
+    test('does not restore or reserialize password prompt answers', () => {
+        const instance = createConsoleInstance();
+        instance.restoreState({
+            version: 2,
+            items: [{
+                type: 'activity',
+                parentId: 'password-prompt',
+                items: [{
+                    type: 'prompt',
+                    id: 'prompt-1',
+                    parentId: 'password-prompt',
+                    when: Date.now(),
+                    prompt: 'Password:',
+                    password: true,
+                    state: 'Answered' as any,
+                    answer: 'must-not-survive',
+                }],
+            }],
+            inputHistory: [],
+            trace: false,
+            wordWrap: true,
+        });
+
+        const restored = instance.serializeState();
+        const prompt = (restored.items[0] as any).items[0];
+        assert.strictEqual(prompt.password, true);
+        assert.strictEqual(prompt.answer, undefined);
+    });
+
     test('falls back to default prompts when restored state contains empty prompt strings', () => {
         const instance = createConsoleInstance();
         const state: SerializedConsoleState = {

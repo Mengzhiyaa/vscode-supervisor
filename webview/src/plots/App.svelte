@@ -75,6 +75,7 @@
         nextCursor?: number;
         hasMore?: boolean;
         revision?: number;
+        unchanged?: boolean;
     }
 
     type PlotPatch = Partial<Omit<Plot, "id">>;
@@ -665,6 +666,7 @@
             return (await connection.sendRequest("plots/list", {
                 cursor,
                 limit,
+                knownRevision: cursor === 0 ? lastAppliedRevision : undefined,
             })) as PlotsListResult;
         } catch (e) {
             console.error("Failed to list plots page:", e);

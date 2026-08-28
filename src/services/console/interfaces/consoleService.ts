@@ -132,7 +132,7 @@ export type ConsoleRuntimeItemsChangeEvent =
     | { kind: 'appendActivityItem'; parentId: string; item: SerializedConsoleActivityItemPayload }
     | { kind: 'replaceActivityOutput'; parentId: string; outputId: string; item: SerializedConsoleActivityItemPayload }
     | { kind: 'clearActivityOutput'; parentId: string }
-    | { kind: 'updateActivityInputState'; parentId: string; state: 'provisional' | 'executing' | 'completed' | 'cancelled' };
+    | { kind: 'updateActivityInputState'; parentId: string; state: 'provisional' | 'executing' | 'completed' | 'cancelled' | 'unknown-after-reload' };
 
 /**
  * Input history navigation event args (1:1 Positron pattern).
@@ -167,7 +167,7 @@ export interface IPositronConsoleService extends vscode.Disposable {
      */
     readonly activeCodeEditor: vscode.TextEditor | undefined;
 
-    initialize(): void;
+    initialize(): Promise<void>;
     revealConsole(preserveFocus?: boolean): Promise<void>;
     focusConsole(): Promise<void>;
     showConsole(): Promise<void>;
@@ -280,6 +280,8 @@ export interface IPositronConsoleInstance extends vscode.Disposable {
         executionMetadata?: Record<string, unknown>,
     ): void;
     readonly codeSubmissionInProgress: boolean;
+    /** Apply the effective host-side scrollback retention. */
+    setScrollbackSize(scrollbackSize: number): void;
     submitCode(
         code: string,
         attribution: IConsoleCodeAttribution,

@@ -358,6 +358,30 @@ suite('[Unit] ConsoleStateStore — progressive truncation', () => {
 
 suite('[Unit] ConsoleStateStore — version-based flush', () => {
 
+    test('delete returns a barrier for the underlying storage update', async () => {
+        let release!: () => void;
+        let removed = false;
+        const gate = new Promise<void>(resolve => { release = resolve; });
+        const memento: vscode.Memento = {
+            get: <T>(_key: string, defaultValue?: T) => defaultValue as T,
+            update: async (_key: string, value: unknown) => {
+                await gate;
+                removed = value === undefined;
+            },
+            keys: () => [],
+        };
+        const store = new ConsoleStateStore(memento, makeNoopLogChannel());
+
+        const deletion = store.delete('session-1');
+        await Promise.resolve();
+        assert.strictEqual(removed, false, 'delete must not report completion before storage commits');
+
+        release();
+        await deletion;
+        assert.strictEqual(removed, true);
+        store.dispose();
+    });
+
     test('delete() cleans up version tracking state', () => {
         const memento = createMemento();
         const store = new ConsoleStateStore(memento, makeNoopLogChannel());

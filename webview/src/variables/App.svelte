@@ -55,6 +55,7 @@
 
     interface SessionVariablesData {
         entries: VariableEntry[];
+        revision: number;
         recentEntryIds: Set<string>;
         loaded: boolean;
         selectedEntryId: string | null;
@@ -118,6 +119,7 @@
         return (
             sessionDataMap.get(sessionId) ?? {
                 entries: [],
+                revision: 0,
                 recentEntryIds: new Set(),
                 loaded: false,
                 selectedEntryId: null,
@@ -132,6 +134,7 @@
         if (!data) {
             data = {
                 entries: [],
+                revision: 0,
                 recentEntryIds: new Set(),
                 loaded: false,
                 selectedEntryId: null,
@@ -291,9 +294,13 @@
 
         rpc.onNotification(
             "variables/entriesChanged",
-            (params: { sessionId: string; entries: VariableEntry[] }) => {
+            (params: { sessionId: string; entries: VariableEntry[]; revision: number }) => {
                 const data = ensureSessionData(params.sessionId);
+                if (params.revision < (data.revision ?? 0)) {
+                    return;
+                }
                 data.loaded = true;
+                data.revision = params.revision;
                 const { entries, changed } = patchEntries(
                     data.entries,
                     params.entries,
@@ -573,11 +580,16 @@
                 "variables/listEntries",
                 {
                     sessionId: targetSessionId,
+                    knownRevision: ensureSessionData(targetSessionId).revision,
                 },
-            )) as { entries: VariableEntry[] };
+            )) as { entries: VariableEntry[]; revision: number; unchanged: boolean };
 
             const data = ensureSessionData(targetSessionId);
             data.loaded = true;
+            data.revision = result.revision;
+            if (result.unchanged) {
+                return;
+            }
             const { entries, changed } = patchEntries(
                 data.entries,
                 result.entries,

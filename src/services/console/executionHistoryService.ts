@@ -5,6 +5,10 @@ const SessionHistoryKeyPrefix = 'vscode-supervisor.inputHistory.session.';
 const LanguageHistoryKeyPrefix = 'vscode-supervisor.inputHistory.language.';
 const ExecutionHistoryKeyPrefix = 'vscode-supervisor.executionHistory.v1.';
 const DefaultHistorySize = 1000;
+const ExecutionPersistDebounceMs = 250;
+const MaxExecutionIndexEntries = 200;
+const MaxExecutionIndexTextChars = 64 * 1024;
+const ExecutionTruncatedMarker = '…(earlier output omitted from execution index)\n';
 
 export interface InputHistoryEntry {
     readonly when: number;
@@ -43,6 +47,7 @@ export class ExecutionHistoryService implements vscode.Disposable {
     private readonly _languageEntries = new Map<string, InputHistoryEntry[]>();
     private readonly _executionEntries = new Map<string, ExecutionHistoryEntry[]>();
     private readonly _knownEmptySessions = new Set<string>();
+    private readonly _executionPersistTimers = new Map<string, ReturnType<typeof setTimeout>>();
     private _writeQueue: Promise<void> = Promise.resolve();
     private _disposed = false;
 
@@ -151,7 +156,7 @@ export class ExecutionHistoryService implements vscode.Disposable {
         const entry = this._getOrCreateExecution(sessionId, executionId, when);
         entry.prompt = prompt;
         entry.input = input;
-        this._persistExecutionEntries(sessionId);
+        this._scheduleExecutionPersist(sessionId);
     }
 
     recordExecutionOutput(
@@ -166,8 +171,11 @@ export class ExecutionHistoryService implements vscode.Disposable {
         }
         const entry = this._getOrCreateExecution(sessionId, executionId, when);
         const current = typeof entry.output === 'string' ? entry.output : '';
-        entry.output = replace ? output : current + output;
-        this._persistExecutionEntries(sessionId);
+        const combined = replace ? output : current + output;
+        entry.output = combined.length > MaxExecutionIndexTextChars
+            ? ExecutionTruncatedMarker + combined.slice(-MaxExecutionIndexTextChars)
+            : combined;
+        this._scheduleExecutionPersist(sessionId);
     }
 
     clearExecutionOutput(sessionId: string, executionId: string): void {
@@ -177,7 +185,7 @@ export class ExecutionHistoryService implements vscode.Disposable {
             return;
         }
         entry.output = '';
-        this._persistExecutionEntries(sessionId);
+        this._scheduleExecutionPersist(sessionId);
     }
 
     recordExecutionError(
@@ -188,7 +196,7 @@ export class ExecutionHistoryService implements vscode.Disposable {
     ): void {
         const entry = this._getOrCreateExecution(sessionId, executionId, when);
         entry.error = error;
-        this._persistExecutionEntries(sessionId);
+        this._persistExecutionEntriesNow(sessionId);
     }
 
     completeExecution(sessionId: string, executionId: string): void {
@@ -198,7 +206,7 @@ export class ExecutionHistoryService implements vscode.Disposable {
             return;
         }
         entry.durationMs = Math.max(0, Date.now() - entry.when);
-        this._persistExecutionEntries(sessionId);
+        this._persistExecutionEntriesNow(sessionId);
     }
 
     recordStartup(sessionId: string, id: string, banner: string, version: string): void {
@@ -217,10 +225,11 @@ export class ExecutionHistoryService implements vscode.Disposable {
                 durationMs: 0,
             });
         }
-        this._persistExecutionEntries(sessionId);
+        this._scheduleExecutionPersist(sessionId);
     }
 
     clearExecutionEntries(sessionId: string): void {
+        this._cancelScheduledExecutionPersist(sessionId);
         this._executionEntries.set(sessionId, []);
         this._persist(this._executionKey(sessionId), []);
     }
@@ -277,6 +286,7 @@ export class ExecutionHistoryService implements vscode.Disposable {
     }
 
     deleteSessionHistory(sessionId: string): void {
+        this._cancelScheduledExecutionPersist(sessionId);
         this._sessionEntries.delete(sessionId);
         this._knownEmptySessions.delete(sessionId);
         this._persist(this._sessionKey(sessionId), undefined);
@@ -285,11 +295,18 @@ export class ExecutionHistoryService implements vscode.Disposable {
     }
 
     async flush(): Promise<void> {
+        for (const sessionId of [...this._executionPersistTimers.keys()]) {
+            this._persistExecutionEntriesNow(sessionId);
+        }
         await this._writeQueue;
     }
 
     dispose(): void {
         this._disposed = true;
+        for (const timer of this._executionPersistTimers.values()) {
+            clearTimeout(timer);
+        }
+        this._executionPersistTimers.clear();
     }
 
     private _loadSessionEntries(sessionId: string): InputHistoryEntry[] {
@@ -357,10 +374,50 @@ export class ExecutionHistoryService implements vscode.Disposable {
         return entry;
     }
 
-    private _persistExecutionEntries(sessionId: string): void {
+    private _scheduleExecutionPersist(sessionId: string): void {
+        if (this._disposed || this._executionPersistTimers.has(sessionId)) {
+            return;
+        }
+        const timer = setTimeout(() => {
+            this._executionPersistTimers.delete(sessionId);
+            this._persistExecutionEntriesNow(sessionId);
+        }, ExecutionPersistDebounceMs);
+        this._executionPersistTimers.set(sessionId, timer);
+    }
+
+    private _cancelScheduledExecutionPersist(sessionId: string): void {
+        const timer = this._executionPersistTimers.get(sessionId);
+        if (timer) {
+            clearTimeout(timer);
+            this._executionPersistTimers.delete(sessionId);
+        }
+    }
+
+    private _persistExecutionEntriesNow(sessionId: string): void {
+        this._cancelScheduledExecutionPersist(sessionId);
+        const entries = this._loadExecutionEntries(sessionId);
+        if (entries.length > MaxExecutionIndexEntries) {
+            entries.splice(0, entries.length - MaxExecutionIndexEntries);
+        }
+        const snapshot = entries.map(entry => ({
+            ...entry,
+            input: entry.input.slice(0, MaxExecutionIndexTextChars),
+            output: typeof entry.output === 'string'
+                ? entry.output.slice(-MaxExecutionIndexTextChars)
+                : { ...entry.output },
+            error: entry.error
+                ? {
+                    ...entry.error,
+                    message: entry.error.message.slice(0, MaxExecutionIndexTextChars),
+                    traceback: entry.error.traceback
+                        .slice(-100)
+                        .map(line => line.slice(0, 4096)),
+                }
+                : undefined,
+        }));
         this._persist(
             this._executionKey(sessionId),
-            this._loadExecutionEntries(sessionId),
+            snapshot,
         );
     }
 

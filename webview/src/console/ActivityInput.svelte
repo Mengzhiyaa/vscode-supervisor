@@ -158,6 +158,11 @@
     class="activity-input"
     class:executing={inputState === ActivityItemInputState.Executing}
     class:cancelled={inputState === ActivityItemInputState.Cancelled}
+    class:unknown-after-reload={inputState ===
+        ActivityItemInputState.UnknownAfterReload}
+    title={inputState === ActivityItemInputState.UnknownAfterReload
+        ? "Execution state could not be confirmed after reload. The code was not re-run."
+        : undefined}
 >
     <div class="progress-bar"></div>
 
@@ -201,6 +206,12 @@
         top: 0;
         left: -10px;
         opacity: 0;
+    }
+
+    .activity-input.unknown-after-reload {
+        opacity: 0.85;
+        border-left: 2px dotted var(--vscode-descriptionForeground);
+        padding-left: 6px;
     }
 
     /* Positron fadeIn animation */

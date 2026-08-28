@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
+import { randomUUID } from 'crypto';
 import { deserializePromptState } from '../../shared/console';
 import type {
     SerializedActivityItem,
@@ -151,6 +152,8 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
     private _scrollbackSize = 1000;
     private _widthInChars = 80;
     private _nextId = 0;
+    private _recoveryGeneration: string = randomUUID();
+    private _recoveryRevision = 0;
     private _startupFailureHandled = false;
     private _startupFailureFallbackHandle: ReturnType<typeof setTimeout> | undefined;
     private _runtimeLifecycleBusy = false;
@@ -272,6 +275,12 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
     serializeState(): SerializedConsoleState {
         const items: SerializedRuntimeItem[] = [];
         for (const item of this._runtimeItems) {
+            // Hidden items are outside the effective host-side scrollback
+            // window. Do not persist or send them to a Webview only for the
+            // frontend to discard them after crossing the Remote boundary.
+            if (item.isHidden) {
+                continue;
+            }
             const serialized = this._serializeRuntimeItem(item);
             if (serialized) {
                 items.push(serialized);
@@ -282,7 +291,10 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
         const inputHistory = [...this._inputHistory].reverse();
 
         return {
-            version: 2,
+            version: 3,
+            generation: this._recoveryGeneration,
+            revision: this._recoveryRevision,
+            truncatedBefore: this._runtimeItems.some(item => item.isHidden),
             items,
             inputHistory,
             trace: this._trace,
@@ -294,7 +306,12 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
     }
 
     private _emitRuntimeItemsChange(change: ConsoleRuntimeItemsChangeEvent): void {
+        this._touchRecoveryRevision();
         this._onDidChangeRuntimeItemsEmitter.fire([change]);
+    }
+
+    private _touchRecoveryRevision(): void {
+        this._recoveryRevision += 1;
     }
 
     private _emitRuntimeItemsRestoreRequired(): void {
@@ -369,8 +386,13 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
      * Restores the console state from persisted data.
      */
     restoreState(state: SerializedConsoleState): void {
-        if (!state || (state.version !== 1 && state.version !== 2)) {
+        if (!state || (state.version !== 1 && state.version !== 2 && state.version !== 3)) {
             return;
+        }
+
+        if (state.version === 3 && typeof state.generation === 'string') {
+            this._recoveryGeneration = state.generation;
+            this._recoveryRevision = Math.max(0, Math.floor(state.revision ?? 0));
         }
 
         this._runtimeItems = [];
@@ -450,17 +472,22 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
                 case 'pendingInput': {
                     const inputPrompt = item.inputPrompt ?? item.prompt ?? '';
                     const code = item.code ?? '';
-                    const pendingInput = new RuntimeItemPendingInput(
+                    // A persisted pending item has lost the request,
+                    // cancellation token and submit promise that owned it.
+                    // Preserve the code as a transcript activity, but never
+                    // restore it as live pending work or automatically run it.
+                    const input = new ActivityItemInput(
+                        `${item.id}-input`,
                         item.id,
                         new Date(item.when),
+                        ActivityItemInputState.UnknownAfterReload,
                         inputPrompt,
-                        { source: 'console' },
-                        undefined,
+                        ' '.repeat(inputPrompt.length),
                         code,
-                        RuntimeCodeExecutionMode.Interactive
                     );
-                    this._runtimeItems.push(pendingInput);
-                    this._runtimeItemPendingInput = pendingInput;
+                    const activity = new RuntimeItemActivity(item.id, input);
+                    this._runtimeItemActivities.set(item.id, activity);
+                    this._runtimeItems.push(activity);
                     break;
                 }
                 case 'trace':
@@ -504,6 +531,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
         this._continuationPrompt = resolvePromptValue(state.continuationPrompt, DEFAULT_CONTINUATION_PROMPT);
         this._workingDirectory = state.workingDirectory;
         this._refreshActiveActivityItemPrompt();
+        this.optimizeScrollback();
 
         this._emitRuntimeItemsRestoreRequired();
         this._onDidChangeTraceEmitter.fire(this._trace);
@@ -570,15 +598,28 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
         }
     }
 
+    setScrollbackSize(scrollbackSize: number): void {
+        const normalized = Number.isFinite(scrollbackSize)
+            ? Math.max(0, Math.floor(scrollbackSize))
+            : 1000;
+        if (normalized === this._scrollbackSize) {
+            return;
+        }
+        this._scrollbackSize = normalized;
+        this.optimizeScrollback();
+    }
+
     getWidthInChars(): number { return this._widthInChars; }
 
     toggleTrace(): void {
         this._trace = !this._trace;
+        this._touchRecoveryRevision();
         this._onDidChangeTraceEmitter.fire(this._trace);
     }
 
     toggleWordWrap(): void {
         this._wordWrap = !this._wordWrap;
+        this._touchRecoveryRevision();
         this._onDidChangeWordWrapEmitter.fire(this._wordWrap);
     }
 
@@ -598,6 +639,8 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
             return false;
         }
         this._runtimeItems = [];
+        this._recoveryGeneration = randomUUID();
+        this._recoveryRevision = 0;
         this._runtimeItemActivities.clear();
         this._runtimeItemPendingInput = undefined;
         this._pendingCodeQueue = [];
@@ -1443,6 +1486,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
         }
 
         if (changed) {
+            this._touchRecoveryRevision();
             this._onDidChangePromptEmitter.fire();
         }
     }
@@ -1453,6 +1497,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
         }
 
         this._workingDirectory = data.directory;
+        this._touchRecoveryRevision();
         this._onDidChangeWorkingDirectoryEmitter.fire(this._workingDirectory);
     }
 
@@ -1538,7 +1583,10 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
             this.detachRuntimeSession();
         }
 
-        this.setState(PositronConsoleState.Exited);
+        // A reconnect failure leaves the transcript usable but the runtime is
+        // unavailable. Keep the console explicitly offline so the UI can
+        // offer retry/export/clear instead of presenting a terminal exit.
+        this.setState(PositronConsoleState.Offline);
     }
 
     get attachedRuntimeSession(): RuntimeSession | undefined { return this._session; }
@@ -1678,6 +1726,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
     private _serializeRuntimeItem(item: RuntimeItem): SerializedRuntimeItem | undefined {
         if (item instanceof RuntimeItemActivity) {
             const activityItems = item.activityItems
+                .filter(activity => !activity.isHidden)
                 .map(activity => this._serializeActivityItem(activity))
                 .filter((entry): entry is SerializedActivityItem => entry !== undefined);
             return {
@@ -1909,7 +1958,9 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
                 prompt: item.prompt,
                 password: item.password,
                 state: item.state,
-                answer: item.answer
+                // Password answers must never enter reload state, logs, or a
+                // Remote Webview payload.
+                answer: item.password ? undefined : item.answer
             };
         }
 
@@ -1923,7 +1974,10 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
                     item.id,
                     item.parentId,
                     new Date(item.when),
-                    item.state,
+                    item.state === ActivityItemInputState.Executing ||
+                        item.state === ActivityItemInputState.Provisional
+                        ? ActivityItemInputState.UnknownAfterReload
+                        : item.state,
                     item.inputPrompt,
                     item.continuationPrompt,
                     item.code
@@ -1997,7 +2051,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
                     if (promptState) {
                         promptItem.state = promptState;
                     }
-                    if (typeof item.answer === 'string') {
+                    if (!item.password && typeof item.answer === 'string') {
                         promptItem.answer = item.answer;
                     }
                     return promptItem;
@@ -2322,6 +2376,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
 
         // Set the new state and fire the event
         this._state = state;
+        this._touchRecoveryRevision();
         this._onDidChangeStateEmitter.fire(this._state);
     }
 
@@ -2336,7 +2391,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
                 item => item instanceof ActivityItemInput
             ) as ActivityItemInput | undefined;
             if (inputItem && inputItem.state === ActivityItemInputState.Executing) {
-                inputItem.state = ActivityItemInputState.Completed;
+                inputItem.state = ActivityItemInputState.UnknownAfterReload;
                 this._onDidChangeInputStateEmitter.fire({
                     executionId,
                     state: 'idle'
@@ -2600,6 +2655,27 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
     private optimizeScrollback(): void {
         for (let scrollbackSize = this._scrollbackSize, i = this._runtimeItems.length - 1; i >= 0; i--) {
             scrollbackSize = this._runtimeItems[i].optimizeScrollback(scrollbackSize);
+        }
+
+        // Hidden items are outside the configured host-side retention window.
+        // Remove them from the model instead of keeping an ever-growing array
+        // that is merely filtered during serialization. A restore notification
+        // is required because the existing runtime-change protocol has no
+        // remove-item operation.
+        const retainedItems = this._runtimeItems.filter(item => !item.isHidden);
+        if (retainedItems.length !== this._runtimeItems.length) {
+            const retainedActivities = new Set(
+                retainedItems
+                    .filter(item => item instanceof RuntimeItemActivity)
+                    .map(item => (item as RuntimeItemActivity).parentId),
+            );
+            for (const parentId of this._runtimeItemActivities.keys()) {
+                if (!retainedActivities.has(parentId)) {
+                    this._runtimeItemActivities.delete(parentId);
+                }
+            }
+            this._runtimeItems = retainedItems;
+            this._emitRuntimeItemsRestoreRequired();
         }
     }
 
