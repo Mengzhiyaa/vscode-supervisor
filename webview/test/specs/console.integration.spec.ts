@@ -2158,6 +2158,18 @@ test('console find caps matches, handles regex edges, navigates in Positron dire
     await findInput.fill('needle');
     await expect(page.getByText('1 of 1000+')).toBeVisible();
 
+    // Clicking an already-open find box must leave focus there. The console
+    // instance has a bubbling click handler that focuses Monaco by default;
+    // this regression check protects native selection and clipboard editing
+    // in the search input.
+    await panel.focus();
+    await findInput.click();
+    await expect(findInput).toBeFocused();
+    await findInput.press('Control+A');
+    await expect(findInput).toHaveJSProperty('selectionStart', 0);
+    await expect(findInput).toHaveJSProperty('selectionEnd', 'needle'.length);
+    await findInput.press('End');
+
     // Ctrl/Cmd+V in the find box must not be redirected to the console input
     // by ConsoleInstance's global clipboard shortcut handler.
     const consoleValuesBeforePaste = await page.evaluate(() =>

@@ -290,8 +290,20 @@
     /**
      * Handle click to focus input
      */
-    function handleClick(_e: MouseEvent) {
+    function handleClick(event: MouseEvent) {
         closeContextMenu();
+
+        // The search widget is an interactive control inside the console
+        // instance. Do not move focus to the Monaco input when a click starts
+        // in the find box (or one of its buttons); doing so prevents native
+        // text selection and clipboard shortcuts in the search input.
+        if (
+            event.target instanceof Element &&
+            event.target.closest(".search-widget")
+        ) {
+            return;
+        }
+
         const selection = window.getSelection();
         if ((!selection || selection.type !== "Range") && !scrollLocked) {
             onFocusInput();
