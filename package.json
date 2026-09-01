@@ -36,6 +36,7 @@
     "compile-tests": "node -e \"require('fs').rmSync('out', { recursive: true, force: true })\" && tsc -p . --outDir out",
     "install:binaries": "node scripts/install-binaries.mjs",
     "test:binaries": "node --test scripts/install-binaries.test.mjs",
+    "test:duckdb-assets": "node --test scripts/copy-duckdb-assets.test.mjs",
     "test:kallichore-api-sync": "node --test scripts/sync-kallichore-api.test.mjs",
     "sync:kallichore-api": "node scripts/sync-kallichore-api.mjs",
     "verify:kallichore-api": "node scripts/sync-kallichore-api.mjs --check",
@@ -1277,7 +1278,7 @@
     ]
   },
   "dependencies": {
-    "@duckdb/duckdb-wasm": "^1.32.0",
+    "@duckdb/duckdb-wasm": "^1.33.1-dev57.0",
     "apache-arrow": "^21.1.0",
     "axios": "^1.13.6",
     "p-queue": "^6.6.2",

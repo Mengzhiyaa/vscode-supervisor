@@ -61,6 +61,12 @@ export class PositronDataExplorerCustomEditorProvider implements vscode.CustomRe
     ): Promise<void> {
         const modelIdentifier = getDataExplorerIdentifier(document.uri);
         const identifier = modelIdentifier ?? `duckdb:${document.uri.toString()}`;
+        const displayName = document.uri.path.split('/').pop() || 'data';
+
+        // Resolve can spend time initializing the extension-host DuckDB worker.
+        // Install a script-free, CSP-restricted shell immediately so failures or
+        // slow initialization can never leave VS Code displaying a blank editor.
+        this._editorProvider.showLoading(webviewPanel, displayName);
 
         try {
             this._logChannel.info(
@@ -90,12 +96,7 @@ export class PositronDataExplorerCustomEditorProvider implements vscode.CustomRe
             this._logChannel.error(
                 `[DataExplorerCustomEditor] Failed to open file: ${error}`
             );
-            webviewPanel.webview.html = `
-                <html><body>
-                    <h2>Failed to open in Data Explorer</h2>
-                    <p>${String(error)}</p>
-                </body></html>
-            `;
+            this._editorProvider.showError(webviewPanel, error);
         }
     }
 }

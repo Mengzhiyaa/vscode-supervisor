@@ -62,6 +62,19 @@ import { DataExplorerPreviewEnabled } from './positronDataExplorerSummary';
 
 const DATA_EXPLORER_EDITOR_NAME_MAX_LENGTH = 30;
 
+export function escapeDataExplorerHtml(value: string): string {
+    return value.replace(/[&<>"']/g, character => {
+        switch (character) {
+            case '&': return '&amp;';
+            case '<': return '&lt;';
+            case '>': return '&gt;';
+            case '"': return '&quot;';
+            case '\'': return '&#39;';
+            default: return character;
+        }
+    });
+}
+
 export function formatDataExplorerEditorTitle(displayName: string | undefined): string {
     const fallbackName = vscode.l10n.t('Data Explorer');
     if (!displayName) {
@@ -595,6 +608,28 @@ export class PositronDataExplorerEditorProvider implements vscode.Disposable {
     }
 
     /**
+     * Installs a script-free shell while a file-backed Data Explorer is created.
+     * DuckDB runs in a Node worker in the extension host; this page deliberately
+     * does not relax the Webview CSP or start a browser worker.
+     */
+    public showLoading(panel: vscode.WebviewPanel, displayName: string): void {
+        panel.iconPath = new vscode.ThemeIcon('table');
+        panel.title = formatDataExplorerEditorTitle(displayName);
+        panel.webview.html = this._getStatusHtml(
+            vscode.l10n.t('Loading Data Explorer'),
+            vscode.l10n.t('Opening {0}…', displayName),
+        );
+    }
+
+    public showError(panel: vscode.WebviewPanel, error: unknown): void {
+        panel.webview.html = this._getStatusHtml(
+            vscode.l10n.t('Failed to open in Data Explorer'),
+            String(error),
+            true,
+        );
+    }
+
+    /**
      * Attaches a Data Explorer instance to an existing WebviewPanel.
      * Used by both openInstance() (self-created panels) and
      * PositronDataExplorerCustomEditorProvider (VS Code-created panels from "Reopen With").
@@ -871,6 +906,43 @@ export class PositronDataExplorerEditorProvider implements vscode.Disposable {
         });
     </script>
     <script nonce="${nonce}" type="module" src="${scriptUri}"></script>
+</body>
+</html>`;
+    }
+
+    private _getStatusHtml(title: string, message: string, isError = false): string {
+        const nonce = this._getNonce();
+        const escapedTitle = escapeDataExplorerHtml(title);
+        const escapedMessage = escapeDataExplorerHtml(message);
+        const role = isError ? 'alert' : 'status';
+
+        return `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'nonce-${nonce}';">
+    <title>${escapedTitle}</title>
+    <style nonce="${nonce}">
+        body {
+            display: grid;
+            height: 100vh;
+            margin: 0;
+            place-items: center;
+            color: var(--vscode-foreground);
+            background: var(--vscode-editor-background);
+            font-family: var(--vscode-font-family);
+        }
+        main { max-width: 560px; padding: 24px; text-align: center; }
+        h2 { margin: 0 0 8px; font-size: 16px; font-weight: 600; }
+        p { margin: 0; color: var(--vscode-descriptionForeground); overflow-wrap: anywhere; }
+    </style>
+</head>
+<body>
+    <main role="${role}">
+        <h2>${escapedTitle}</h2>
+        <p>${escapedMessage}</p>
+    </main>
 </body>
 </html>`;
     }

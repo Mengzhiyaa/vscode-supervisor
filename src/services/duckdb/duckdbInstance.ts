@@ -10,13 +10,14 @@
 
 // Use the default @duckdb/duckdb-wasm import for types.
 // At runtime, esbuild bundles duckdb-node.cjs (and apache-arrow) into extension.js.
-// The WASM binaries and worker files are copied separately by scripts/copy-duckdb-assets.mjs.
+// The WASM binaries and standalone worker bundles are produced by scripts/copy-duckdb-assets.mjs.
 import type * as DuckDBTypes from '@duckdb/duckdb-wasm';
 import * as path from 'path';
 
-// The DuckDB WASM/worker files are copied to dist/duckdb/ by copy-duckdb-assets.mjs.
+// The DuckDB WASM/worker files are built in dist/duckdb/ by copy-duckdb-assets.mjs.
 // __dirname resolves to the dist/ folder at runtime after bundling.
 const DUCKDB_BUNDLE_DIR = path.join(__dirname, 'duckdb');
+const DUCKDB_INITIALIZATION_TIMEOUT_MS = 30_000;
 
 // Dynamically load the Node.js entry of duckdb-wasm — esbuild will bundle this
 // along with its apache-arrow dependency into extension.js.
@@ -42,11 +43,34 @@ type DuckDBWorkerListener = (event: unknown) => void;
 class NodeWebWorkerAdapter {
     private readonly _worker: import('worker_threads').Worker;
     private readonly _listeners = new Map<DuckDBWorkerEvent, Map<DuckDBWorkerListener, (...args: any[]) => void>>();
+    private readonly _failure: Promise<never>;
+    private _rejectFailure: (error: Error) => void = () => undefined;
+    private _terminating = false;
 
     constructor(workerBootstrapPath: string, workerModulePath: string) {
+        this._failure = new Promise<never>((_resolve, reject) => {
+            this._rejectFailure = reject;
+        });
+        // A worker can fail while idle. Mark the promise as observed here while
+        // retaining its rejected state for the next guarded DuckDB operation.
+        this._failure.catch(() => undefined);
         this._worker = new workerThreads.Worker(workerBootstrapPath, {
             workerData: { mod: workerModulePath },
         });
+        this._worker.once('error', (error: Error) => {
+            this._rejectFailure(new Error(`DuckDB worker failed: ${error.message}`, {
+                cause: error,
+            }));
+        });
+        this._worker.once('exit', code => {
+            if (!this._terminating) {
+                this._rejectFailure(new Error(`DuckDB worker exited unexpectedly with code ${code}.`));
+            }
+        });
+    }
+
+    get failure(): Promise<never> {
+        return this._failure;
     }
 
     addEventListener(type: DuckDBWorkerEvent, listener: DuckDBWorkerListener): void {
@@ -105,6 +129,7 @@ class NodeWebWorkerAdapter {
     }
 
     terminate(): Promise<number> {
+        this._terminating = true;
         return this._worker.terminate();
     }
 }
@@ -124,6 +149,7 @@ export class DuckDBInstance {
 
     private _db: DuckDBTypes.AsyncDuckDB | undefined;
     private _conn: DuckDBTypes.AsyncDuckDBConnection | undefined;
+    private _worker: NodeWebWorkerAdapter | undefined;
     private _initPromise: Promise<void> | undefined;
     private _disposed = false;
 
@@ -157,7 +183,7 @@ export class DuckDBInstance {
         if (this._disposed) {
             throw new Error('DuckDBInstance has been disposed');
         }
-        if (this._db) {
+        if (this.isReady) {
             return;
         }
         if (this._initPromise) {
@@ -183,16 +209,73 @@ export class DuckDBInstance {
         // Use NodeWebWorkerAdapter with bootstrap trampoline (duckdb-node.cjs loads the worker module)
         const workerBootstrapPath = path.resolve(DUCKDB_BUNDLE_DIR, 'duckdb-node.cjs');
         const worker = new NodeWebWorkerAdapter(workerBootstrapPath, bundle.mainWorker);
+        this._worker = worker;
 
         // Use VoidLogger to eliminate logging overhead (aligned with positron)
         const logger = new duckdb.VoidLogger();
 
-        this._db = new duckdb.AsyncDuckDB(logger, worker as any);
-        await this._db.instantiate(bundle.mainModule);
-        this._conn = await this._db.connect();
+        const db = new duckdb.AsyncDuckDB(logger, worker as any);
+        this._db = db;
+        try {
+            await this._runWorkerOperation(
+                db.instantiate(bundle.mainModule),
+                'initialize DuckDB-WASM',
+                DUCKDB_INITIALIZATION_TIMEOUT_MS,
+            );
+            const conn = await this._runWorkerOperation(
+                db.connect(),
+                'connect to DuckDB-WASM',
+                DUCKDB_INITIALIZATION_TIMEOUT_MS,
+            );
+            this._conn = conn;
 
-        // Load ICU extension and set timezone to UTC (aligned with positron)
-        await this._conn.query(`LOAD icu; SET TIMEZONE='UTC';`);
+            // Load ICU extension and set timezone to UTC (aligned with positron)
+            await this._runWorkerOperation(
+                conn.query(`LOAD icu; SET TIMEZONE='UTC';`),
+                'configure DuckDB-WASM',
+                DUCKDB_INITIALIZATION_TIMEOUT_MS,
+            );
+        } catch (error) {
+            this._conn = undefined;
+            this._db = undefined;
+            this._worker = undefined;
+            await db.terminate().catch(() => undefined);
+            throw error;
+        }
+    }
+
+    private async _runWorkerOperation<T>(
+        operation: Promise<T>,
+        description: string,
+        timeoutMs?: number,
+    ): Promise<T> {
+        const worker = this._worker;
+        if (!worker) {
+            throw new Error(`Cannot ${description}: DuckDB worker is not available.`);
+        }
+
+        const guardedOperation = Promise.race([operation, worker.failure]);
+        if (timeoutMs === undefined) {
+            return guardedOperation;
+        }
+
+        let timeout: ReturnType<typeof setTimeout> | undefined;
+        try {
+            return await Promise.race([
+                guardedOperation,
+                new Promise<never>((_resolve, reject) => {
+                    timeout = setTimeout(() => {
+                        reject(new Error(
+                            `Timed out after ${timeoutMs}ms while attempting to ${description}.`,
+                        ));
+                    }, timeoutMs);
+                }),
+            ]);
+        } finally {
+            if (timeout) {
+                clearTimeout(timeout);
+            }
+        }
     }
 
     /**
@@ -202,17 +285,18 @@ export class DuckDBInstance {
      * before executing, preventing concurrent execution issues in duckdb-wasm.
      */
     async query(sql: string): Promise<any> {
-        if (!this._conn) {
-            await this.initialize();
-        }
+        await this.initialize();
         if (!this._conn) {
             throw new Error('DuckDB connection not available');
         }
 
         // Serialize queries: wait for the previous one to finish
-        await this._runningQuery;
+        await this._runWorkerOperation(this._runningQuery, 'wait for the previous DuckDB query');
         try {
-            this._runningQuery = this._conn.query(sql);
+            this._runningQuery = this._runWorkerOperation(
+                this._conn.query(sql),
+                'execute a DuckDB query',
+            );
             const result = await this._runningQuery;
             return result;
         } catch (error) {
@@ -226,13 +310,14 @@ export class DuckDBInstance {
      * Register a file buffer in DuckDB's virtual filesystem.
      */
     async registerFileBuffer(name: string, buffer: Uint8Array): Promise<void> {
-        if (!this._db) {
-            await this.initialize();
-        }
+        await this.initialize();
         if (!this._db) {
             throw new Error('DuckDB not initialized');
         }
-        await this._db.registerFileBuffer(name, buffer);
+        await this._runWorkerOperation(
+            this._db.registerFileBuffer(name, buffer),
+            'register a file with DuckDB-WASM',
+        );
     }
 
     /**
@@ -241,7 +326,10 @@ export class DuckDBInstance {
     async dropFile(name: string): Promise<void> {
         if (this._db) {
             try {
-                await this._db.dropFile(name);
+                await this._runWorkerOperation(
+                    this._db.dropFile(name),
+                    'drop a DuckDB-WASM file',
+                );
             } catch {
                 // Ignore errors when dropping files that may not exist
             }
@@ -253,14 +341,19 @@ export class DuckDBInstance {
      */
     async dispose(): Promise<void> {
         this._disposed = true;
+        await this._initPromise?.catch(() => undefined);
         if (this._conn) {
-            await this._conn.close();
+            await this._runWorkerOperation(
+                this._conn.close(),
+                'close the DuckDB-WASM connection',
+            ).catch(() => undefined);
             this._conn = undefined;
         }
         if (this._db) {
-            await this._db.terminate();
+            await this._db.terminate().catch(() => undefined);
             this._db = undefined;
         }
+        this._worker = undefined;
         DuckDBInstance._instance = undefined;
     }
 }

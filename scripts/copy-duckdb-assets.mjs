@@ -1,39 +1,78 @@
 /**
- * Copies DuckDB WASM assets from node_modules to dist/duckdb/.
- * Replaces the CopyWebpackPlugin functionality from the webpack config.
+ * Builds self-contained DuckDB worker assets in dist/duckdb/.
+ *
+ * The upstream Node worker entry points contain runtime require('apache-arrow')
+ * calls. The extension bundle cannot satisfy those calls from a worker thread,
+ * and node_modules is intentionally excluded from the VSIX. Bundle the worker
+ * entry points separately so they remain deployable without node_modules.
  */
 
-import { existsSync, mkdirSync, copyFileSync } from 'fs';
-import { resolve, basename } from 'path';
-import { fileURLToPath } from 'url';
+import { copyFileSync, existsSync, mkdirSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { build } from 'esbuild';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const projectRoot = resolve(__dirname, '..');
-const duckdbDist = resolve(projectRoot, 'node_modules/@duckdb/duckdb-wasm/dist');
-const outDir = resolve(projectRoot, 'dist/duckdb');
+const defaultDuckdbDist = resolve(projectRoot, 'node_modules/@duckdb/duckdb-wasm/dist');
+const defaultOutDir = resolve(projectRoot, 'dist/duckdb');
 
-const assets = [
+const copiedAssets = [
 	'duckdb-eh.wasm',
 	'duckdb-mvp.wasm',
-	'duckdb-node-eh.worker.cjs',
-	'duckdb-node-eh.worker.cjs.map',
-	'duckdb-node-mvp.worker.cjs',
-	'duckdb-node-mvp.worker.cjs.map',
-	'duckdb-node.cjs',
-	'duckdb-node.cjs.map',
 ];
 
-mkdirSync(outDir, { recursive: true });
+const bundledAssets = [
+	'duckdb-node-eh.worker.cjs',
+	'duckdb-node-mvp.worker.cjs',
+	'duckdb-node.cjs',
+];
 
-let copied = 0;
-for (const asset of assets) {
-	const src = resolve(duckdbDist, asset);
-	if (!existsSync(src)) {
-		console.warn(`[copy-duckdb] WARNING: asset not found: ${asset}`);
-		continue;
+export async function buildDuckDBAssets({
+	duckdbDist = defaultDuckdbDist,
+	outDir = defaultOutDir,
+} = {}) {
+	mkdirSync(outDir, { recursive: true });
+
+	let copied = 0;
+	for (const asset of copiedAssets) {
+		const src = resolve(duckdbDist, asset);
+		if (!existsSync(src)) {
+			throw new Error(`[copy-duckdb] Required asset not found: ${asset}`);
+		}
+		copyFileSync(src, resolve(outDir, asset));
+		copied++;
 	}
-	copyFileSync(src, resolve(outDir, basename(asset)));
-	copied++;
+
+	let bundled = 0;
+	for (const asset of bundledAssets) {
+		const src = resolve(duckdbDist, asset);
+		if (!existsSync(src)) {
+			throw new Error(`[copy-duckdb] Required worker entry point not found: ${asset}`);
+		}
+		await build({
+			entryPoints: [src],
+			outfile: resolve(outDir, asset),
+			bundle: true,
+			platform: 'node',
+			format: 'cjs',
+			target: 'node18',
+			minify: true,
+			sourcemap: false,
+			legalComments: 'none',
+			logLevel: 'silent',
+		});
+		bundled++;
+	}
+
+	return { copied, bundled };
 }
 
-console.log(`[copy-duckdb] copied ${copied}/${assets.length} assets to dist/duckdb/`);
+const isMain = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+if (isMain) {
+	const result = await buildDuckDBAssets();
+	console.log(
+		`[copy-duckdb] copied ${result.copied} WASM assets and bundled ` +
+		`${result.bundled} standalone worker assets in dist/duckdb/`,
+	);
+}

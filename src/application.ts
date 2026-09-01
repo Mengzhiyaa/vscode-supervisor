@@ -66,7 +66,6 @@ import {
     POSITRON_DATA_EXPLORER_CUSTOM_EDITOR_OPTIONS,
     PositronDataExplorerEditorContribution,
 } from './services/dataExplorer';
-import { DuckDBInstance } from './services/duckdb/duckdbInstance';
 import { PositronDataExplorerCommandId } from './services/dataExplorer/positronDataExplorerActions';
 import { CoreCommandIds, ContextKeys, InternalCommandIds, TestCommandIds, ViewIds } from './coreCommandIds';
 import { UiFrontendEvent } from './runtime/comms/positronUiComm';
@@ -1218,12 +1217,6 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
         this._helpService.initialize();
         this._positronDataExplorerService.initialize();
         this._runtimeFrontendEventService.initialize();
-
-        // Pre-initialize DuckDB-WASM engine so it's ready when a file is opened.
-        // Fire-and-forget: failure here is non-fatal (DuckDB will retry on first use).
-        DuckDBInstance.getInstance().initialize().catch(err => {
-            this._outputChannel.warn(`[DuckDB] Pre-initialization failed (will retry on first use): ${err}`);
-        });
 
         // Initialize session manager (acquires Supervisor API + restores sessions)
         await this._sessionManager.initialize();

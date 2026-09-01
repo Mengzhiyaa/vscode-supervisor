@@ -12,7 +12,10 @@ import {
     resolveDataFrameAtPosition,
 } from '../../services/dataExplorer/positronDataExplorerResolveDataFrame';
 import { PositronDataExplorerCodeActionProvider } from '../../services/dataExplorer/positronDataExplorerEditorContribution';
-import { formatDataExplorerEditorTitle } from '../../services/dataExplorer/positronDataExplorerEditorProvider';
+import {
+    escapeDataExplorerHtml,
+    formatDataExplorerEditorTitle,
+} from '../../services/dataExplorer/positronDataExplorerEditorProvider';
 import { POSITRON_DATA_EXPLORER_CUSTOM_EDITOR_OPTIONS } from '../../services/dataExplorer/positronDataExplorerCustomEditorProvider';
 import {
     createDefaultDataExplorerUiState,
@@ -203,6 +206,13 @@ suite('[Unit] Data Explorer editor contribution', () => {
                 retainContextWhenHidden: true,
             },
         });
+    });
+
+    test('escapes untrusted status page content', () => {
+        assert.strictEqual(
+            escapeDataExplorerHtml(`<script>alert('x')</script>&"`),
+            '&lt;script&gt;alert(&#39;x&#39;)&lt;/script&gt;&amp;&quot;',
+        );
     });
 
     test('recognizes only Excel-backed Data Explorer resources as spreadsheets', () => {
