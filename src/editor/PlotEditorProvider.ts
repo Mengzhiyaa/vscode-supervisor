@@ -22,6 +22,7 @@ import {
     SurfaceLifecycleService,
     SurfaceModelKind,
 } from '../services/surfaces/surfaceLifecycleService';
+import { EditorWindowMover, findActivePanel } from './EditorWindowMover';
 
 export type PlotEditorContent =
     | {
@@ -77,6 +78,7 @@ export class PlotEditorProvider implements vscode.Disposable {
     private readonly _connections = new Map<string, MessageConnection>();
     private readonly _currentPlotContent = new Map<string, PlotEditorContent>();
     private readonly _newWindowPanels = new Set<string>();
+    private readonly _newWindowPanelGroups = new Map<string, vscode.TabGroup>();
     private readonly _disposables: vscode.Disposable[] = [];
 
     constructor(
@@ -84,7 +86,25 @@ export class PlotEditorProvider implements vscode.Disposable {
         private readonly _outputChannel: vscode.LogOutputChannel,
         private readonly _plotsService?: PositronPlotsService,
         private readonly _surfaceLifecycle?: SurfaceLifecycleService,
-    ) { }
+        private readonly _editorWindowMover: EditorWindowMover = new EditorWindowMover(),
+    ) {
+        this._disposables.push(vscode.window.tabGroups.onDidChangeTabGroups(event => {
+            for (const [plotId, group] of this._newWindowPanelGroups) {
+                if (!event.closed.includes(group)) {
+                    continue;
+                }
+
+                this._newWindowPanels.delete(plotId);
+                this._newWindowPanelGroups.delete(plotId);
+                const panel = this._panels.get(plotId);
+                setTimeout(() => {
+                    if (panel && this._panels.get(plotId) === panel) {
+                        panel.dispose();
+                    }
+                }, 0);
+            }
+        }));
+    }
 
     /**
      * Opens a plot in a new editor tab.
@@ -97,6 +117,7 @@ export class PlotEditorProvider implements vscode.Disposable {
         plotContent: string | PlotEditorContent,
         title?: string,
         viewColumn: vscode.ViewColumn = vscode.ViewColumn.Active,
+        revealExisting = true,
     ): void {
         const content = typeof plotContent === 'string'
             ? { kind: 'image' as const, data: plotContent }
@@ -105,7 +126,9 @@ export class PlotEditorProvider implements vscode.Disposable {
 
         const existingPanel = this._panels.get(plotId);
         if (existingPanel) {
-            existingPanel.reveal(viewColumn);
+            if (revealExisting) {
+                existingPanel.reveal(viewColumn);
+            }
             this._sendContent(plotId, content);
             return;
         }
@@ -148,6 +171,7 @@ export class PlotEditorProvider implements vscode.Disposable {
             this._panels.delete(plotId);
             this._currentPlotContent.delete(plotId);
             this._newWindowPanels.delete(plotId);
+            this._newWindowPanelGroups.delete(plotId);
             this._outputChannel.debug(`Plot editor closed: ${plotId}`);
         });
 
@@ -160,41 +184,9 @@ export class PlotEditorProvider implements vscode.Disposable {
      * Returns true when a panel was closed.
      */
     closeActivePanel(): boolean {
-        const newWindowPanels = [...this._newWindowPanels]
-            .map(plotId => this._panels.get(plotId))
-            .filter((panel): panel is vscode.WebviewPanel => panel !== undefined);
-
-        for (const panel of newWindowPanels) {
-            if (panel.active) {
-                panel.dispose();
-                return true;
-            }
-        }
-
-        for (const panel of newWindowPanels) {
-            if (panel.visible) {
-                panel.dispose();
-                return true;
-            }
-        }
-
-        for (const panel of this._panels.values()) {
-            if (panel.active) {
-                panel.dispose();
-                return true;
-            }
-        }
-
-        for (const panel of this._panels.values()) {
-            if (panel.visible) {
-                panel.dispose();
-                return true;
-            }
-        }
-
-        const firstPanel = this._panels.values().next().value as vscode.WebviewPanel | undefined;
-        if (firstPanel) {
-            firstPanel.dispose();
+        const activePanel = findActivePanel(this._panels.values());
+        if (activePanel) {
+            activePanel.dispose();
             return true;
         }
 
@@ -203,8 +195,8 @@ export class PlotEditorProvider implements vscode.Disposable {
 
     /**
      * Marks a panel as having been moved to a new window.
-     * Sets up auto-dispose when the panel returns from the new window
-     * (e.g. when the user closes the new window via the OS close button).
+     * Tracks the exact destination tab group so closing the auxiliary group
+     * disposes this panel without relying on non-unique viewColumn values.
      */
     async markAsNewWindowPanel(plotId: string): Promise<void> {
         const panel = this._panels.get(plotId);
@@ -212,42 +204,18 @@ export class PlotEditorProvider implements vscode.Disposable {
             return;
         }
 
+        if (this._newWindowPanels.has(plotId)) {
+            panel.reveal(undefined, false);
+            return;
+        }
+
+        const destinationGroup = await this._editorWindowMover.move(panel);
+        if (this._panels.get(plotId) !== panel) {
+            return;
+        }
+
         this._newWindowPanels.add(plotId);
-
-        // Ensure the target panel is active so moveEditorToNewWindow applies to it.
-        panel.reveal(vscode.ViewColumn.Active, false);
-
-        // Move the panel to a new window
-        await new Promise<void>(resolve => {
-            if (typeof queueMicrotask === 'function') {
-                queueMicrotask(resolve);
-            } else {
-                setTimeout(resolve, 0);
-            }
-        });
-        await vscode.commands.executeCommand('workbench.action.moveEditorToNewWindow');
-
-        // Record the initial viewColumn after moving to the new window
-        const initialColumn = panel.viewColumn;
-
-        // Listen for state changes: if the panel returns from the new window
-        // (viewColumn changes), auto-dispose it to prevent ghost panels.
-        panel.onDidChangeViewState((e) => {
-            if (!this._newWindowPanels.has(plotId)) {
-                return;
-            }
-            // When the new window is closed, VS Code moves the editor back
-            // to the original window, which changes its viewColumn.
-            if (e.webviewPanel.visible && e.webviewPanel.viewColumn !== initialColumn) {
-                this._outputChannel.debug(
-                    `Plot editor ${plotId} returned from new window, auto-disposing`
-                );
-                this._newWindowPanels.delete(plotId);
-                setTimeout(() => {
-                    e.webviewPanel.dispose();
-                }, 0);
-            }
-        }, undefined, this._disposables);
+        this._newWindowPanelGroups.set(plotId, destinationGroup);
 
         this._outputChannel.debug(`Plot editor ${plotId} moved to new window`);
     }
@@ -535,6 +503,7 @@ export class PlotEditorProvider implements vscode.Disposable {
 
         this._currentPlotContent.clear();
         this._newWindowPanels.clear();
+        this._newWindowPanelGroups.clear();
 
         for (const d of this._disposables) {
             d.dispose();

@@ -5,3 +5,4 @@
 export { PlotEditorProvider } from './PlotEditorProvider';
 export type { PlotEditorContent } from './PlotEditorProvider';
 export { PlotsGalleryEditorProvider, registerPlotsGalleryCommand } from './PlotsGalleryEditorProvider';
+export { EditorWindowMover } from './EditorWindowMover';

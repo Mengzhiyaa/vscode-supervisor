@@ -1430,8 +1430,12 @@ export class RuntimeSession implements vscode.Disposable {
         debugName: string,
     ): Promise<void> {
         if (!this._kernel) {
-            this.log('Cannot start DAP: kernel not started', vscode.LogLevel.Warning);
-            return;
+            const message = 'Cannot start DAP: kernel not started';
+            this.log(message, vscode.LogLevel.Warning);
+            // Do not report a successful start to language integrations. They
+            // use rejection to retain the ability to retry when the runtime
+            // reaches Ready and the kernel becomes available.
+            throw new Error(message);
         }
 
         if (this._dapComm) {

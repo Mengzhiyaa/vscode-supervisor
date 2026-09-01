@@ -8,6 +8,7 @@
 import * as vscode from 'vscode';
 import { CoreCommandIds } from '../coreCommandIds';
 import type { PlotsViewProvider } from '../webview/plotsProvider';
+import { EditorWindowMover, findActivePanel } from './EditorWindowMover';
 
 /**
  * Manages the Plots Gallery editor for viewing all plots in an editor tab.
@@ -16,14 +17,31 @@ import type { PlotsViewProvider } from '../webview/plotsProvider';
 export class PlotsGalleryEditorProvider implements vscode.Disposable {
     private _panel: vscode.WebviewPanel | undefined;
     private _secondaryPanels = new Set<vscode.WebviewPanel>();
+    private _secondaryPanelGroups = new Map<vscode.WebviewPanel, vscode.TabGroup>();
     private _disposables: vscode.Disposable[] = [];
     private _panelRpcDisposables = new Map<vscode.WebviewPanel, vscode.Disposable>();
 
     constructor(
         private readonly _extensionUri: vscode.Uri,
         private readonly _outputChannel: vscode.LogOutputChannel,
-        private readonly _getPlotsProvider: () => PlotsViewProvider | undefined
-    ) { }
+        private readonly _getPlotsProvider: () => PlotsViewProvider | undefined,
+        private readonly _editorWindowMover: EditorWindowMover = new EditorWindowMover(),
+    ) {
+        this._disposables.push(vscode.window.tabGroups.onDidChangeTabGroups(event => {
+            for (const [panel, group] of this._secondaryPanelGroups) {
+                if (!event.closed.includes(group)) {
+                    continue;
+                }
+
+                this._secondaryPanelGroups.delete(panel);
+                setTimeout(() => {
+                    if (this._secondaryPanels.has(panel)) {
+                        panel.dispose();
+                    }
+                }, 0);
+            }
+        }));
+    }
 
     /**
      * Opens the Plots Gallery in an editor tab.
@@ -45,7 +63,12 @@ export class PlotsGalleryEditorProvider implements vscode.Disposable {
         }
 
         if (openInNewWindow) {
-            await this._movePanelToNewWindow(targetPanel);
+            try {
+                await this._movePanelToNewWindow(targetPanel);
+            } catch (error) {
+                targetPanel.dispose();
+                throw error;
+            }
         }
     }
 
@@ -101,6 +124,7 @@ export class PlotsGalleryEditorProvider implements vscode.Disposable {
                 this._panel = undefined;
             }
             this._secondaryPanels.delete(panel);
+            this._secondaryPanelGroups.delete(panel);
             this._outputChannel.debug('Plots Gallery editor closed');
         }, null, this._disposables);
 
@@ -182,38 +206,10 @@ export class PlotsGalleryEditorProvider implements vscode.Disposable {
      * Returns true when a panel was closed.
      */
     closeActivePanel(): boolean {
-        for (const panel of this._secondaryPanels) {
-            if (panel.active) {
-                panel.dispose();
-                return true;
-            }
-        }
-
-        for (const panel of this._secondaryPanels) {
-            if (panel.visible) {
-                panel.dispose();
-                return true;
-            }
-        }
-
-        if (this._panel?.active) {
-            this._panel.dispose();
-            return true;
-        }
-
-        if (this._panel?.visible) {
-            this._panel.dispose();
-            return true;
-        }
-
-        const firstSecondaryPanel = this._secondaryPanels.values().next().value as vscode.WebviewPanel | undefined;
-        if (firstSecondaryPanel) {
-            firstSecondaryPanel.dispose();
-            return true;
-        }
-
-        if (this._panel) {
-            this._panel.dispose();
+        const activePanel = findActivePanel(this._secondaryPanels)
+            ?? (this._panel?.active ? this._panel : undefined);
+        if (activePanel) {
+            activePanel.dispose();
             return true;
         }
 
@@ -222,35 +218,16 @@ export class PlotsGalleryEditorProvider implements vscode.Disposable {
 
     private async _movePanelToNewWindow(panel: vscode.WebviewPanel): Promise<void> {
         try {
-            panel.reveal(vscode.ViewColumn.Active, false);
-            await new Promise<void>(resolve => {
-                if (typeof queueMicrotask === 'function') {
-                    queueMicrotask(resolve);
-                } else {
-                    setTimeout(resolve, 0);
-                }
-            });
-            await vscode.commands.executeCommand('workbench.action.moveEditorToNewWindow');
-
-            // Record the initial viewColumn after moving to the new window
-            const initialColumn = panel.viewColumn;
-
-            // Auto-dispose when the panel returns from the new window
-            // (e.g. user closes the new window via the OS close button)
-            panel.onDidChangeViewState((e) => {
-                if (e.webviewPanel.visible && e.webviewPanel.viewColumn !== initialColumn) {
-                    this._outputChannel.debug(
-                        'Plots gallery returned from new window, auto-disposing'
-                    );
-                    setTimeout(() => {
-                        e.webviewPanel.dispose();
-                    }, 0);
-                }
-            }, null, this._disposables);
+            const destinationGroup = await this._editorWindowMover.move(panel);
+            if (!this._secondaryPanels.has(panel)) {
+                return;
+            }
+            this._secondaryPanelGroups.set(panel, destinationGroup);
 
             this._outputChannel.debug('Moved plots gallery to new window');
         } catch (error) {
             this._outputChannel.warn(`Failed to move plots gallery to new window: ${error}`);
+            throw error;
         }
     }
 
@@ -261,6 +238,7 @@ export class PlotsGalleryEditorProvider implements vscode.Disposable {
             panel.dispose();
         }
         this._secondaryPanels.clear();
+        this._secondaryPanelGroups.clear();
 
         for (const disposable of this._panelRpcDisposables.values()) {
             disposable.dispose();

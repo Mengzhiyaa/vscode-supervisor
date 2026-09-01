@@ -52,7 +52,12 @@ import {
     SurfaceLifecycleService,
 } from './services/surfaces';
 import { ConnectionsTreeProvider, PositronConnectionsService } from './services/connections';
-import { PlotEditorProvider, PlotsGalleryEditorProvider, type PlotEditorContent } from './editor';
+import {
+    EditorWindowMover,
+    PlotEditorProvider,
+    PlotsGalleryEditorProvider,
+    type PlotEditorContent,
+} from './editor';
 import { registerConsoleActions } from './services/console/consoleActions';
 import {
     PositronDataExplorerService,
@@ -336,12 +341,16 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
         this._helpService = new PositronHelpService(this._sessionManager, this._outputChannel, this._context.extensionUri);
         this._disposables.push(this._helpService);
 
+        // Serialize plot/gallery moves because VS Code's public command targets the active editor.
+        const editorWindowMover = new EditorWindowMover();
+
         // Initialize editor providers for plots
         this._plotEditorProvider = new PlotEditorProvider(
             this._context.extensionUri,
             this._outputChannel,
             this._plotsService,
             this._surfaceLifecycle,
+            editorWindowMover,
         );
         this._disposables.push(this._plotEditorProvider);
 
@@ -457,7 +466,8 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
         this._plotsGalleryEditorProvider = new PlotsGalleryEditorProvider(
             this._context.extensionUri,
             this._outputChannel,
-            () => this._webviewManager.plotsProvider
+            () => this._webviewManager.plotsProvider,
+            editorWindowMover,
         );
         this._disposables.push(this._plotsGalleryEditorProvider);
 
@@ -1435,7 +1445,13 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
                 moveToNewWindow?: boolean,
             ) => {
                 if (plotId && plotData) {
-                    this._plotEditorProvider.openPlotInEditor(plotId, plotData, undefined, viewColumn);
+                    this._plotEditorProvider.openPlotInEditor(
+                        plotId,
+                        plotData,
+                        undefined,
+                        viewColumn,
+                        !moveToNewWindow,
+                    );
                     if (moveToNewWindow) {
                         await this._plotEditorProvider.markAsNewWindowPanel(plotId);
                     }
