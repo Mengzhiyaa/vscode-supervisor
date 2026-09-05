@@ -798,7 +798,7 @@ export class RuntimeStartupService implements vscode.Disposable {
 
     private _getStartupBehavior(languageId: string): LanguageStartupBehavior {
         const config = vscode.workspace.getConfiguration(CoreConfigurationSections.supervisor, { languageId });
-        const configured = config.get<string>('interpreters.startupBehavior', LanguageStartupBehavior.Auto);
+        const configured = config.get<string>('interpreters.startupBehavior', LanguageStartupBehavior.Manual);
 
         switch (configured) {
             case LanguageStartupBehavior.Always:
@@ -808,7 +808,7 @@ export class RuntimeStartupService implements vscode.Disposable {
             case LanguageStartupBehavior.Disabled:
                 return configured;
             default:
-                return LanguageStartupBehavior.Auto;
+                return LanguageStartupBehavior.Manual;
         }
     }
 
@@ -1232,12 +1232,12 @@ export class RuntimeStartupService implements vscode.Disposable {
             .map((languageId) => this._getAffiliatedRuntime(languageId))
             .filter((value): value is IAffiliatedRuntimeMetadata => !!value)
             .filter((affiliation) => {
-                if (languageIds.length === 1) {
-                    return true;
-                }
-
                 if (affiliation.lastStarted === 0 && affiliation.lastUsed === 0) {
                     return false;
+                }
+
+                if (languageIds.length === 1) {
+                    return true;
                 }
 
                 return affiliation.lastStarted <= affiliation.lastUsed;

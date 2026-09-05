@@ -1,7 +1,11 @@
 import * as assert from 'assert';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { LanguageRuntimeMetadata, LanguageRuntimeSessionMode } from '../../api';
+import {
+    type LanguageRuntimeMetadata,
+    LanguageRuntimeSessionMode,
+    LanguageRuntimeStartupBehavior,
+} from '../../api';
 import { RuntimeState } from '../../internal/runtimeTypes';
 import { RuntimeSessionService } from '../../runtime/runtimeSession';
 
@@ -58,7 +62,14 @@ function makeNoopLogChannel(): vscode.LogOutputChannel {
 }
 
 suite('[Unit] runtime session persisted restore state', () => {
-    test('records the provider extension when normalizing runtime metadata', () => {
+    test('does not allow automatic startup by default', () => {
+        const service = new RuntimeSessionService(makeContext(), makeNoopLogChannel());
+
+        assert.strictEqual((service as any)._isAutoStartupAllowed('r'), false);
+        service.dispose();
+    });
+
+    test('normalizes provider identity and conservative startup for legacy metadata', () => {
         const service = new RuntimeSessionService(makeContext(), makeNoopLogChannel());
         const extensionId = 'publisher.runtime-r';
         (service as any)._runtimeProviders.set('r', { extensionId });
@@ -73,11 +84,15 @@ suite('[Unit] runtime session persisted restore state', () => {
             languageId: 'r',
             languageName: 'R',
             languageVersion: '4.4.1',
-        } satisfies LanguageRuntimeMetadata;
+        } as unknown as LanguageRuntimeMetadata;
 
         const normalized = (service as any)._normalizeRuntimeMetadata(metadata);
 
         assert.strictEqual(normalized.extensionId, extensionId);
+        assert.strictEqual(
+            normalized.startupBehavior,
+            LanguageRuntimeStartupBehavior.Explicit,
+        );
         service.dispose();
     });
 

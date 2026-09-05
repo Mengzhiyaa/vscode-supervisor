@@ -3,6 +3,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import {
     LanguageRuntimeSessionMode,
+    LanguageRuntimeStartupBehavior,
     type IRuntimeSessionMetadata,
     type LanguageRuntimeMetadata,
 } from '../../api';
@@ -73,6 +74,7 @@ function makeRuntimeMetadata(): LanguageRuntimeMetadata {
         languageId: 'r',
         languageName: 'R',
         languageVersion: '4.4.1',
+        startupBehavior: LanguageRuntimeStartupBehavior.Explicit,
     };
 }
 

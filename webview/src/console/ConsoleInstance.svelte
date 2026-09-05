@@ -333,6 +333,9 @@
     }
 
     async function handleContextMenu(event: MouseEvent) {
+        if (isPromptInputTarget(event.target)) {
+            return;
+        }
         event.preventDefault();
         event.stopPropagation();
 
@@ -527,7 +530,17 @@
 
     // --- Keyboard shortcut handling ---
 
+    function isPromptInputTarget(target: EventTarget | null): boolean {
+        return target instanceof Element &&
+            target.closest(".activity-prompt .editor-input-container, .activity-prompt .password-input") !== null;
+    }
+
     function handleKeyDown(e: KeyboardEvent) {
+        // Prompt editors own typing, selection, clipboard and cursor movement.
+        // They live in the transcript, outside the ordinary input anchor.
+        if (isPromptInputTarget(e.target)) {
+            return;
+        }
         // Keep native text editing shortcuts working in the find input. This
         // handler owns the console-level Ctrl/Cmd+C/V/A shortcuts, but must
         // not redirect them while the search widget is focused.
@@ -647,11 +660,17 @@
         }
     }
 
-    function handleCompositionStart() {
+    function handleCompositionStart(event: CompositionEvent) {
+        if (isPromptInputTarget(event.target)) {
+            return;
+        }
         composingInput = true;
     }
 
     function handleCompositionEnd(event: CompositionEvent) {
+        if (isPromptInputTarget(event.target)) {
+            return;
+        }
         composingInput = false;
 
         if (!event.data || searchVisible) {

@@ -3,10 +3,11 @@ import { promises as fs } from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import type {
-    ILanguageRuntimeProvider,
-    LanguageRuntimeMetadata,
-    RuntimeRootSignature,
+import {
+    type ILanguageRuntimeProvider,
+    LanguageRuntimeStartupBehavior,
+    type LanguageRuntimeMetadata,
+    type RuntimeRootSignature,
 } from '../../api';
 import { RuntimeManager } from '../../runtime/manager';
 import {
@@ -198,6 +199,7 @@ suite('[Unit] Runtime discovery cache', () => {
             languageId: 'python',
             languageName: 'Python',
             languageVersion: '3',
+            startupBehavior: LanguageRuntimeStartupBehavior.Explicit,
         }], { entries: [] });
 
         assert.deepStrictEqual(
@@ -233,6 +235,7 @@ suite('[Unit] Runtime discovery cache', () => {
             languageId: 'cache-language',
             languageName: 'Cache',
             languageVersion: '1',
+            startupBehavior: LanguageRuntimeStartupBehavior.Explicit,
             cacheable: true,
         };
         const provider: ILanguageRuntimeProvider<{ path: string }> = {
@@ -318,6 +321,7 @@ suite('[Unit] Runtime discovery cache', () => {
                 languageId: 'python',
                 languageName: 'Python',
                 languageVersion: '3',
+                startupBehavior: LanguageRuntimeStartupBehavior.Explicit,
             }),
             createKernelSpec: async () => ({
                 argv: [],

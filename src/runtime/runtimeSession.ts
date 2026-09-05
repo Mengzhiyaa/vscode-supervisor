@@ -1778,8 +1778,10 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
 
     private _isAutoStartupAllowed(languageId: string): boolean {
         const config = vscode.workspace.getConfiguration(CoreConfigurationSections.supervisor, { languageId });
-        const startupBehavior = config.get<string>('interpreters.startupBehavior', 'auto');
-        return startupBehavior !== 'disabled' && startupBehavior !== 'manual';
+        const startupBehavior = config.get<string>('interpreters.startupBehavior', 'manual');
+        return startupBehavior === 'always' ||
+            startupBehavior === 'auto' ||
+            startupBehavior === 'recommended';
     }
 
     private _toLanguageSessionMode(sessionMode: LanguageRuntimeSessionMode): LanguageSessionMode {
@@ -1795,7 +1797,9 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
         return {
             ...metadata,
             extensionId: metadata.extensionId ?? provider?.extensionId,
-            startupBehavior: metadata.startupBehavior ?? LanguageRuntimeStartupBehavior.Immediate,
+            // Keep a defensive fallback for metadata persisted by older extension
+            // versions, but never turn an omitted policy into eager startup.
+            startupBehavior: metadata.startupBehavior ?? LanguageRuntimeStartupBehavior.Explicit,
             sessionLocation: metadata.sessionLocation ?? this.getSessionLocation(),
         };
     }

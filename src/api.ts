@@ -163,7 +163,7 @@ export interface LanguageRuntimeMetadata {
     extensionId?: string;
     base64EncodedIconSvg?: string;
     sessionLocation?: LanguageRuntimeSessionLocation;
-    startupBehavior?: LanguageRuntimeStartupBehavior;
+    startupBehavior: LanguageRuntimeStartupBehavior;
     cacheable?: boolean;
     extraRuntimeData?: unknown;
 }

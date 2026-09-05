@@ -1,6 +1,6 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
-import { LanguageRuntimeSessionMode } from '../../api';
+import { LanguageRuntimeSessionMode, LanguageRuntimeStartupBehavior } from '../../api';
 import {
     RuntimeCodeFragmentStatus,
     LanguageRuntimeMessageType,
@@ -67,6 +67,7 @@ function createConsoleInstance(): PositronConsoleInstance {
             languageId: 'r',
             languageName: 'R',
             languageVersion: '4.4.0',
+            startupBehavior: LanguageRuntimeStartupBehavior.Explicit,
         },
         makeNoopLogChannel(),
     );

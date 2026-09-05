@@ -242,6 +242,14 @@ suite('[Unit] Supervisor package manifest', () => {
         assert.strictEqual(properties['plots.darkFilterMode'], undefined);
         assert.strictEqual(properties['interpreters.showSessions']?.default, false);
         assert.strictEqual(properties['interpreters.showSessions']?.scope, 'machine');
+        assert.strictEqual(
+            properties['supervisor.interpreters.startupBehavior']?.default,
+            'manual',
+        );
+        assert.strictEqual(
+            properties['kernelSupervisor.shutdownTimeout']?.default,
+            'immediately',
+        );
 
         const commands = new Set((packageJson.contributes?.commands ?? []).map(entry => entry.command));
         assert.ok(commands.has('supervisor.runtimeSessions.refresh'));

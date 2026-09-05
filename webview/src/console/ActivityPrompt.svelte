@@ -6,12 +6,18 @@
     undo, and context-menu behaviour matches the normal Console input.
 -->
 <script lang="ts">
-    import { onMount, tick } from "svelte";
+    import { getContext, onMount, tick } from "svelte";
     import { monaco, ensureMonacoRuntime } from "$lib/monaco/setup";
     import { getRpcConnection } from "$lib/rpc/client";
     import ConsoleOutputLines from "./ConsoleOutputLines.svelte";
     import OutputRun from "./OutputRun.svelte";
     import { ActivityItemPrompt, ActivityItemPromptState } from "./classes";
+    import {
+        promptInputControllersContext,
+        type PromptInputController,
+        type PromptInputControllers,
+    } from "./services/promptInputController";
+    import { writeClipboardText } from "./utils/selectionUtils";
 
     interface Props {
         activityItemPrompt: ActivityItemPrompt;
@@ -19,6 +25,9 @@
 
     let { activityItemPrompt }: Props = $props();
     const isMacintosh = navigator.platform.toLowerCase().includes("mac");
+    const promptInputs = getContext<PromptInputControllers | undefined>(
+        promptInputControllersContext,
+    );
 
     let passwordInputRef = $state<HTMLInputElement | undefined>(undefined);
     let editorContainerRef = $state<HTMLDivElement | undefined>(undefined);
@@ -30,6 +39,7 @@
     let mounted = false;
     let destroyed = false;
     let editorInitialization = 0;
+    let editorInitializationPromise: Promise<void> | undefined;
     let codeEditorWidget: monaco.editor.IStandaloneCodeEditor | undefined;
     let codeEditorModel: monaco.editor.ITextModel | undefined;
     let editorDisposables: monaco.IDisposable[] = [];
@@ -42,13 +52,31 @@
         if (promptState !== ActivityItemPromptState.Unanswered) {
             disposeEditor();
         } else if (mounted && !activityItemPrompt.password) {
-            void initializeEditor();
+            void initializeEditor().catch(reportInputError);
         }
+    });
+
+    $effect(() => {
+        const sessionId = activityItemPrompt.sessionId;
+        if (!promptInputs || !sessionId || promptState !== ActivityItemPromptState.Unanswered) {
+            return;
+        }
+
+        const controller: PromptInputController = {
+            focus: readyInput,
+            insertText: insertPromptText,
+        };
+        promptInputs.set(sessionId, controller);
+        return () => {
+            if (promptInputs.get(sessionId) === controller) {
+                promptInputs.delete(sessionId);
+            }
+        };
     });
 
     onMount(() => {
         mounted = true;
-        void readyInput();
+        void readyInput().catch(reportInputError);
 
         return () => {
             destroyed = true;
@@ -59,6 +87,7 @@
 
     function disposeEditor(): void {
         editorInitialization += 1;
+        editorInitializationPromise = undefined;
         editorResizeObserver?.disconnect();
         editorResizeObserver = undefined;
         editorDisposables.forEach((disposable) => disposable.dispose());
@@ -69,7 +98,19 @@
         codeEditorModel = undefined;
     }
 
-    async function initializeEditor(): Promise<void> {
+    function initializeEditor(): Promise<void> {
+        if (!editorInitializationPromise) {
+            const pending = createEditor().finally(() => {
+                if (editorInitializationPromise === pending) {
+                    editorInitializationPromise = undefined;
+                }
+            });
+            editorInitializationPromise = pending;
+        }
+        return editorInitializationPromise;
+    }
+
+    async function createEditor(): Promise<void> {
         if (
             destroyed ||
             codeEditorWidget ||
@@ -150,20 +191,21 @@
 
             event.preventDefault();
             event.stopPropagation();
-            insertTextAtSelection(pastedText.replace(/[\r\n]+/g, " "));
+            insertTextAtSelection(pastedText);
         };
+        container.addEventListener("keydown", handleKeyDownCapture, true);
         container.addEventListener("paste", handlePaste, true);
         editorDisposables.push({
-            dispose: () => container.removeEventListener("paste", handlePaste, true),
+            dispose: () => {
+                container.removeEventListener("keydown", handleKeyDownCapture, true);
+                container.removeEventListener("paste", handlePaste, true);
+            },
         });
 
         editorResizeObserver = new ResizeObserver(() => layoutEditor());
         editorResizeObserver.observe(container);
         layoutEditor();
-        if (shouldAutoFocusPrompt()) {
-            container.scrollIntoView({ behavior: "auto" });
-            codeEditorWidget.focus();
-        }
+        focusInput();
     }
 
     function layoutEditor(): void {
@@ -184,50 +226,106 @@
             return;
         }
 
+        const cleanedText = text.replace(/[\r\n]+/g, " ");
         const start = selection.getStartPosition();
         editor.pushUndoStop();
         editor.executeEdits("activity-prompt-paste", [
-            { range: selection, text, forceMoveMarkers: true },
+            { range: selection, text: cleanedText, forceMoveMarkers: true },
         ]);
         editor.pushUndoStop();
         editor.setPosition({
             lineNumber: start.lineNumber,
-            column: start.column + text.length,
+            column: start.column + cleanedText.length,
         });
     }
 
     async function readyInput(): Promise<void> {
         await tick();
-        if (activityItemPrompt.password) {
-            passwordInputRef?.scrollIntoView({ behavior: "auto" });
-            if (shouldAutoFocusPrompt()) {
-                passwordInputRef?.focus();
-            }
+        if (destroyed || promptState !== ActivityItemPromptState.Unanswered) {
             return;
         }
-        await initializeEditor();
+        if (!activityItemPrompt.password) {
+            await initializeEditor();
+        }
+        focusInput();
     }
 
-    function shouldAutoFocusPrompt(): boolean {
-        const activeElement = document.activeElement;
-        return (
-            activeElement instanceof HTMLElement &&
-            Boolean(
-                activeElement.closest(
-                    ".console-instance, .console-input, .activity-prompt",
-                ),
-            )
-        );
+    function focusInput(): void {
+        const container = activityItemPrompt.password ? passwordInputRef : editorContainerRef;
+        // Focus newly requested prompts even after the ordinary input is hidden.
+        // Hidden session tabs must not steal focus from the foreground session.
+        if (destroyed || promptState !== ActivityItemPromptState.Unanswered ||
+            !container?.getClientRects().length) {
+            return;
+        }
+        container.scrollIntoView({ behavior: "auto" });
+        if (activityItemPrompt.password) {
+            passwordInputRef?.focus();
+        } else {
+            codeEditorWidget?.focus();
+        }
+    }
+
+    async function insertPromptText(text: string): Promise<void> {
+        await readyInput();
+        if (destroyed || promptState !== ActivityItemPromptState.Unanswered) {
+            return;
+        }
+        if (activityItemPrompt.password) {
+            const input = passwordInputRef;
+            if (!input) {
+                return;
+            }
+            input.setRangeText(
+                text.replace(/[\r\n]+/g, " "),
+                input.selectionStart ?? input.value.length,
+                input.selectionEnd ?? input.value.length,
+                "end",
+            );
+            passwordValue = input.value;
+        } else {
+            insertTextAtSelection(text);
+        }
+    }
+
+    function reportInputError(error: unknown): void {
+        console.error("Failed to handle prompt input:", error);
+    }
+
+    async function pasteFromClipboard(): Promise<void> {
+        try {
+            const text = await navigator.clipboard.readText();
+            if (text) {
+                await insertPromptText(text);
+            }
+        } catch (error) {
+            reportInputError(error);
+        }
+    }
+
+    function handleKeyDownCapture(event: KeyboardEvent): void {
+        const cmdOrCtrl = isMacintosh
+            ? event.metaKey && !event.ctrlKey
+            : event.ctrlKey && !event.metaKey;
+        if (!cmdOrCtrl || event.shiftKey || event.altKey) {
+            return;
+        }
+
+        if (event.key.toLowerCase() === "v") {
+            event.preventDefault();
+            event.stopPropagation();
+            void pasteFromClipboard();
+        } else if (event.key.toLowerCase() === "a" && !activityItemPrompt.password) {
+            event.preventDefault();
+            event.stopPropagation();
+            if (codeEditorModel) {
+                codeEditorWidget?.setSelection(codeEditorModel.getFullModelRange());
+            }
+        }
     }
 
     function handleEditorKeyDown(event: monaco.IKeyboardEvent): void {
-        if (
-            event.keyCode === monaco.KeyCode.Enter &&
-            !event.ctrlKey &&
-            !event.metaKey &&
-            !event.shiftKey &&
-            !event.altKey
-        ) {
+        if (event.keyCode === monaco.KeyCode.Enter) {
             event.preventDefault();
             event.stopPropagation();
             void submitAnswer(codeEditorWidget?.getValue() ?? "");
@@ -241,11 +339,13 @@
             !event.shiftKey &&
             !event.altKey
         ) {
+            event.preventDefault();
+            event.stopPropagation();
             const selection = codeEditorWidget?.getSelection();
             if (isMacintosh || !selection || selection.isEmpty()) {
-                event.preventDefault();
-                event.stopPropagation();
                 void interruptPrompt();
+            } else if (codeEditorModel) {
+                void writeClipboardText(codeEditorModel.getValueInRange(selection));
             }
         }
     }
@@ -340,6 +440,7 @@
                     bind:value={passwordValue}
                     class="password-input"
                     type="password"
+                    onkeydowncapture={handleKeyDownCapture}
                     onkeydown={handlePasswordKeyDown}
                     onmousedown={stopPromptPropagation}
                     onclick={stopPromptPropagation}

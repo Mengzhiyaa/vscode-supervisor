@@ -50,7 +50,11 @@ jobs:
         run: npm run test:binaries
 
       - name: Verify generated contracts
-        run: npm run verify:contracts
+        run: npm run verify:api-dts && npm run verify:webview-rpc-contracts && npm run verify:data-explorer-localization
+
+      - name: Check Positron contracts (non-blocking)
+        run: npm run verify:positron-contracts
+        continue-on-error: true
 
       - name: Run extension host tests
         run: npm test

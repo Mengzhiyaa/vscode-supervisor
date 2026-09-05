@@ -943,7 +943,7 @@
         },
         "supervisor.interpreters.startupBehavior": {
           "type": "string",
-          "default": "auto",
+          "default": "manual",
           "scope": "language-overridable",
           "enum": [
             "always",
@@ -951,6 +951,13 @@
             "recommended",
             "manual",
             "disabled"
+          ],
+          "enumDescriptions": [
+            "Always start an interpreter when a new window opens.",
+            "Start an interpreter when needed or when it was previously used in the workspace.",
+            "Start an interpreter only when its providing extension recommends it.",
+            "Start interpreters only when manually selected.",
+            "Disable interpreters for this language."
           ],
           "description": "Controls interpreter auto-start behavior for the workspace."
         },
@@ -1020,8 +1027,8 @@
             "Shut down after 24 hours of idle time",
             "Never shut down automatically"
           ],
-          "default": "1",
-          "description": "Controls how long the kernel supervisor keeps sessions alive after the window closes. Non-immediate values enable session persistence across window restarts (default: 1 hour)."
+          "default": "immediately",
+          "description": "Controls how long the kernel supervisor keeps sessions alive after the window closes. Non-immediate values enable session persistence across window restarts."
         },
         "kernelSupervisor.attachOnStartup": {
           "type": "boolean",

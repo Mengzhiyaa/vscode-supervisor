@@ -172,12 +172,55 @@ const current = fs.existsSync(snapshotPath)
     ? fs.readFileSync(snapshotPath, 'utf8').replace(/\r\n/g, '\n')
     : undefined;
 
+function describeSnapshotDifferences(previousText, nextText, limit = 40) {
+    if (previousText === undefined) {
+        return [`Snapshot file does not exist: ${path.relative(repositoryRoot, snapshotPath)}`];
+    }
+
+    let previous;
+    let next;
+    try {
+        previous = JSON.parse(previousText);
+        next = JSON.parse(nextText);
+    } catch {
+        return ['Snapshot is not valid JSON; regenerate it with npm run sync:positron-contracts.'];
+    }
+
+    const differences = [];
+    const visit = (oldValue, newValue, location) => {
+        if (differences.length >= limit) return;
+        if (typeof oldValue !== typeof newValue || oldValue === null || newValue === null) {
+            differences.push(`${location}: ${JSON.stringify(oldValue)} -> ${JSON.stringify(newValue)}`);
+            return;
+        }
+        if (typeof oldValue !== 'object') {
+            if (oldValue !== newValue) {
+                differences.push(`${location}: ${JSON.stringify(oldValue)} -> ${JSON.stringify(newValue)}`);
+            }
+            return;
+        }
+        const keys = new Set([...Object.keys(oldValue), ...Object.keys(newValue)]);
+        for (const key of keys) {
+            visit(oldValue[key], newValue[key], `${location}.${key}`);
+            if (differences.length >= limit) return;
+        }
+    };
+    visit(previous, next, '$');
+    if (differences.length === 0) {
+        return ['Snapshot formatting differs from the generated contract.'];
+    }
+    if (differences.length === limit) differences.push(`... additional differences omitted (limit ${limit})`);
+    return differences;
+}
+
 if (checkOnly) {
     if (current !== generated) {
         throw new Error([
             'The watched Positron API/runtime structure changed.',
             `Upstream root: ${positronRoot}`,
             `Snapshot: ${path.relative(repositoryRoot, snapshotPath)}`,
+            'Differences:',
+            ...describeSnapshotDifferences(current, generated).map((difference) => `  - ${difference}`),
             'Review the upstream change, update compatibility/output routing, then run `npm run sync:positron-contracts`.',
         ].join('\n'));
     }

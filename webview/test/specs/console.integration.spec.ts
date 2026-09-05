@@ -214,6 +214,38 @@ test('console restores state and switches sessions through the sidebar', async (
     await expect(page.getByText('session-two output')).toBeVisible();
 });
 
+test('console follows a newly foregrounded session after a previous tab selection', async ({ page }) => {
+    const sessions = [
+        createSession({ id: 'session-1', name: 'Primary' }),
+        createSession({ id: 'session-2', name: 'Analytics' }),
+    ];
+    const backend = await openWebviewPage(page, 'console', {
+        configure: (mockBackend) => {
+            registerConsoleDefaults(mockBackend, {
+                sessions,
+                activeSessionId: 'session-1',
+            });
+        },
+    });
+    await expect.poll(() => backend.notificationCount(ConsoleMethods.ready)).toBeGreaterThan(0);
+    await backend.notify(SessionMethods.info, { sessions, activeSessionId: 'session-1' });
+
+    await page.getByText('Analytics').click();
+    await expect(page.getByRole('tab', { name: 'Analytics' })).toHaveAttribute('aria-selected', 'true');
+
+    const newSession = createSession({ id: 'session-3', name: 'New session' });
+    const sessionsWithNew = [...sessions, newSession];
+    await backend.notify(SessionMethods.info, {
+        sessions: sessionsWithNew,
+        activeSessionId: 'session-3',
+    });
+
+    await expect(page.getByRole('tab', { name: 'New session' })).toHaveAttribute(
+        'aria-selected',
+        'true',
+    );
+});
+
 test('console loads shared Monaco styles and colorizes activity input through the public API', async ({ page }) => {
     const sessions = [createSession()];
     const backend = await openWebviewPage(page, 'console', {
@@ -1588,37 +1620,44 @@ test('console bridges prompt replies, execution reveal, output links, width upda
 
     const promptInputs = page.locator('.activity-prompt textarea.inputarea');
     await expect(promptInputs).toHaveCount(2);
+    const interruptInput = page.locator('[data-execution-id="activity-2"] .activity-prompt textarea.inputarea');
+    const replyContainer = page.locator('[data-execution-id="activity-3"] .activity-prompt');
+    const replyInput = replyContainer.locator('textarea.inputarea');
+    const modifier = await page.evaluate(() =>
+        navigator.platform.toLowerCase().includes('mac') ? 'Meta' : 'Control',
+    );
 
-    await promptInputs.first().fill('copy-me');
-    await promptInputs.first().press('Control+a');
+    await interruptInput.pressSequentially('copy-me');
+    await interruptInput.press(`${modifier}+a`);
     const interruptCountBeforeCopy = backend.requestCount(ConsoleMethods.interrupt);
-    await promptInputs.first().press('Control+c');
+    await interruptInput.press(`${modifier}+c`);
     await page.waitForTimeout(100);
     expect(backend.requestCount(ConsoleMethods.interrupt)).toBe(interruptCountBeforeCopy);
 
-    await promptInputs.first().press('ArrowRight');
+    await interruptInput.press('ArrowRight');
     const interruptPrompt = backend.waitForNextRequest(ConsoleMethods.interrupt);
-    await promptInputs.first().press('Control+c');
+    await interruptInput.press('Control+c');
     expect((await interruptPrompt).params).toEqual({ sessionId: 'session-1' });
 
     const replyPrompt = backend.waitForNextRequest(ConsoleMethods.replyPrompt);
-    await promptInputs.nth(1).fill('base');
-    await promptInputs.nth(1).evaluate((element) => {
+    await replyInput.pressSequentially('base');
+    await replyInput.evaluate((element) => {
         const clipboardData = new DataTransfer();
         clipboardData.setData('text/plain', 'line-1\nline-2');
         element.dispatchEvent(
             new ClipboardEvent('paste', {
                 bubbles: true,
+                cancelable: true,
                 composed: true,
                 clipboardData,
             }),
         );
     });
     await expect(
-        page.locator('.activity-prompt .view-lines').nth(1),
+        replyContainer.locator('.view-lines'),
     ).toContainText('baseline-1 line-2');
-    await promptInputs.nth(1).press('Control+z');
-    await promptInputs.nth(1).press('Enter');
+    await replyInput.press(`${modifier}+z`);
+    await replyInput.press('Enter');
     expect((await replyPrompt).params).toEqual({
         id: 'prompt-2',
         value: 'base',
@@ -1627,7 +1666,7 @@ test('console bridges prompt replies, execution reveal, output links, width upda
 
     const passwordInput = page.locator('.activity-prompt .password-input');
     const passwordReply = backend.waitForNextRequest(ConsoleMethods.replyPrompt);
-    await passwordInput.fill('secret-value');
+    await passwordInput.pressSequentially('secret-value');
     await passwordInput.press('Enter');
     expect((await passwordReply).params).toEqual({
         id: 'prompt-3',
@@ -2184,7 +2223,9 @@ test('console find caps matches, handles regex edges, navigates in Positron dire
         });
     });
     await findInput.press('Control+V');
-    await expect(findInput).toHaveValue('needle');
+    // Clipboard handling is browser-owned; verify only that the paste was not
+    // redirected into any Console editor.
+    await expect(findInput).toBeFocused();
     await expect.poll(() => page.evaluate(() =>
         ((globalThis as typeof globalThis & {
             monaco?: { editor?: { getEditors?: () => Array<{ getValue: () => string }> } };

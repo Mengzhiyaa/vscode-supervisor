@@ -2,6 +2,7 @@ import * as assert from 'assert';
 import * as vscode from 'vscode';
 import {
     LanguageRuntimeSessionMode,
+    LanguageRuntimeStartupBehavior,
     LanguageLspState,
     type IRuntimeSessionMetadata,
     type LanguageRuntimeMetadata,
@@ -87,6 +88,7 @@ function makeRuntimeMetadata(): LanguageRuntimeMetadata {
         languageId: 'r',
         languageName: 'R',
         languageVersion: '4.4.1',
+        startupBehavior: LanguageRuntimeStartupBehavior.Explicit,
     };
 }
 

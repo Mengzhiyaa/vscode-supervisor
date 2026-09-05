@@ -263,6 +263,11 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 			positron.window.createRawLogOutputChannel(`${runtimeMetadata.languageName} Kernel`),
 			(msg) => `${metadata.sessionId} ${msg}`
 		);
+		// The channels belong to this kernel session. Register them with the
+		// session disposables so deleting the kernel also removes its channels
+		// from the VS Code output channel list.
+		this._disposables.push(this._consoleChannel);
+		this._disposables.push(this._kernelChannel);
 		this._kernelChannel.appendLine(`** Begin kernel log for session ${dynState.sessionName} (${metadata.sessionId}) at ${new Date().toLocaleString()} **`);
 
 		// Open the established barrier immediately if we're restoring an

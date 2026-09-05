@@ -5,6 +5,7 @@ import {
     type ILanguageLsp,
     LanguageLspState,
     LanguageRuntimeSessionMode,
+    LanguageRuntimeStartupBehavior,
     type LanguageRuntimeMetadata,
     type IRuntimeSessionMetadata,
 } from '../../api';
@@ -83,6 +84,7 @@ function makeRuntimeMetadata(runtimeId: string = 'runtime-1'): LanguageRuntimeMe
         languageId: 'r',
         languageName: 'R',
         languageVersion: '4.4.1',
+        startupBehavior: LanguageRuntimeStartupBehavior.Explicit,
         extraRuntimeData: {
             homepath: '/usr/lib/R',
             binpath: '/usr/bin/R',

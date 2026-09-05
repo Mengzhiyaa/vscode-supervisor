@@ -3,7 +3,7 @@
      * ConsoleCore.svelte - Console Core (Positron pattern)
      * Main container managing multi-session console with sidebar
      */
-    import { onMount } from "svelte";
+    import { onMount, setContext, tick } from "svelte";
     import { SvelteMap } from "svelte/reactivity";
     import { getRpcConnection } from "$lib/rpc/client";
     import ActionBar from "./ActionBar.svelte";
@@ -30,6 +30,11 @@
         type ConsoleSessionInfo as SessionInfo,
     } from "./models/consoleInstance";
     import type { ConsoleInputCommand } from "./services/sessionModelManager";
+    import {
+        promptInputControllersContext,
+        type PromptInputController,
+        type PromptInputControllers,
+    } from "./services/promptInputController";
     import type { MessageConnection } from "vscode-jsonrpc/browser";
     import {
         RuntimeItem,
@@ -53,11 +58,13 @@
         ActivityItemOutputMessage,
         ActivityItemOutputPlot,
         ActivityItemPrompt,
-        ActivityItemPromptState,
         type ILanguageRuntimeMessageOutputData,
     } from "./classes";
     import type { ConsoleThemeData } from "$lib/monaco/languageSupport";
     import { localize } from "$lib/localization";
+
+    const promptInputs: PromptInputControllers = new Map();
+    setContext(promptInputControllersContext, promptInputs);
 
     // Per-session data storage
     interface SessionData {
@@ -469,6 +476,7 @@
     function syncForegroundConsoleSession(
         nextSessions: SessionInfo[],
         requestedForegroundSessionId?: string,
+        preferRequestedForeground = false,
     ): void {
         const previousForegroundSessionId = activeConsoleSessionId;
         const hasPendingForegroundSession =
@@ -503,6 +511,18 @@
             !hasUserSelectedForegroundSession
         ) {
             userSelectedForegroundSessionId = undefined;
+        }
+
+        if (
+            preferRequestedForeground &&
+            requestedForegroundSessionId &&
+            nextSessions.some(
+                (session) => session.id === requestedForegroundSessionId,
+            )
+        ) {
+            activeConsoleSessionId = requestedForegroundSessionId;
+            userSelectedForegroundSessionId = undefined;
+            return;
         }
 
         if (
@@ -862,53 +882,36 @@
         };
     }
 
-    function escapeCssAttributeValue(value: string): string {
-        if (typeof CSS !== "undefined" && typeof CSS.escape === "function") {
-            return CSS.escape(value);
+    function dispatchPromptInput(
+        sessionId: string,
+        command: (input: PromptInputController) => Promise<void>,
+    ): boolean {
+        if (
+            !promptInputs.has(sessionId) &&
+            !consoleInstances.some(
+                (instance) => instance.sessionId === sessionId && instance.promptActive,
+            )
+        ) {
+            return false;
         }
-        return value.replace(/["\\]/g, "\\$&");
-    }
 
-    function findPromptInput(sessionId: string): HTMLInputElement | undefined {
-        if (!mainContainer) {
-            return undefined;
-        }
-
-        const escapedSessionId = escapeCssAttributeValue(sessionId);
-        const selector = `.activity-prompt[data-session-id="${escapedSessionId}"][data-prompt-state="${ActivityItemPromptState.Unanswered}"] .prompt-input`;
-        const promptInput = mainContainer.querySelector(selector);
-        return promptInput instanceof HTMLInputElement ? promptInput : undefined;
+        // Let pending transcript updates mount the prompt before dispatching.
+        // An active prompt must never fall back to the hidden code editor.
+        void tick().then(async () => {
+            const input = promptInputs.get(sessionId);
+            if (input) {
+                await command(input);
+            }
+        }).catch((error) => console.error("Failed to handle prompt input:", error));
+        return true;
     }
 
     function focusPromptInput(sessionId: string): boolean {
-        const promptInput = findPromptInput(sessionId);
-        if (!promptInput) {
-            return false;
-        }
-
-        promptInput.focus();
-        return true;
+        return dispatchPromptInput(sessionId, (input) => input.focus());
     }
 
     function insertPromptText(sessionId: string, text: string): boolean {
-        const promptInput = findPromptInput(sessionId);
-        if (!promptInput) {
-            return false;
-        }
-
-        const normalizedText = text.replace(/[\r\n]+/g, " ");
-        promptInput.focus();
-
-        const selectionStart = promptInput.selectionStart ?? promptInput.value.length;
-        const selectionEnd = promptInput.selectionEnd ?? promptInput.value.length;
-        promptInput.setRangeText(
-            normalizedText,
-            selectionStart,
-            selectionEnd,
-            "end",
-        );
-        promptInput.dispatchEvent(new Event("input", { bubbles: true }));
-        return true;
+        return dispatchPromptInput(sessionId, (input) => input.insertText(text));
     }
 
     function requestInputFocus(sessionId: string): void {
@@ -935,12 +938,11 @@
             return;
         }
 
-        if (insertPromptText(sessionId, text)) {
-            return;
-        }
-
         if (sessionId !== activeConsoleSessionId) {
             handleSetForegroundSession(sessionId);
+        }
+        if (insertPromptText(sessionId, text)) {
+            return;
         }
         emitInputCommand(sessionId, { kind: "insertText", text });
     }
@@ -951,12 +953,11 @@
             return;
         }
 
-        if (insertPromptText(sessionId, text)) {
-            return;
-        }
-
         if (sessionId !== activeConsoleSessionId) {
             handleSetForegroundSession(sessionId);
+        }
+        if (insertPromptText(sessionId, text)) {
+            return;
         }
         emitInputCommand(sessionId, { kind: "paste", text });
     }
@@ -1658,11 +1659,16 @@
         connection.onNotification(
             "session/info",
             (params: { sessions: SessionInfo[]; activeSessionId?: string }) => {
+                const previousSessionIds = new Set(sessions.map((session) => session.id));
+                const hasNewSession = params.sessions.some(
+                    (session) => !previousSessionIds.has(session.id),
+                );
                 const mergedSessions = applySessionSnapshot(params.sessions);
                 pruneRemovedSessions(mergedSessions);
                 syncForegroundConsoleSession(
                     mergedSessions,
                     params.activeSessionId,
+                    hasNewSession,
                 );
             },
         );
@@ -2116,6 +2122,11 @@
             })) as { session?: SessionInfo };
 
             if (result.session) {
+                // Session creation is an explicit request to foreground the
+                // new session. Clear any stale tab preference before syncing
+                // the response (the session/info notification may arrive
+                // before this response).
+                userSelectedForegroundSessionId = undefined;
                 const mergedSessions = upsertSession(result.session);
                 syncForegroundConsoleSession(mergedSessions, result.session.id);
             }

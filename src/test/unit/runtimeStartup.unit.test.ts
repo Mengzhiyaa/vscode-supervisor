@@ -11,6 +11,7 @@ import { RuntimeState } from '../../internal/runtimeTypes';
 import { PositronNewFolderService } from '../../newFolder/positronNewFolderService';
 import {
     EPHEMERAL_WORKSPACE_SESSIONS,
+    LanguageStartupBehavior,
     RuntimeStartupService,
 } from '../../runtime/runtimeStartup';
 import type { SerializedSessionMetadata } from '../../runtime/runtimeSessionService';
@@ -266,6 +267,25 @@ function makeNewFolderService(
 }
 
 suite('[Unit] runtime startup', () => {
+    test('defaults interpreter startup to manual', () => {
+        const context = makeContext();
+        const logChannel = makeNoopLogChannel();
+        const startupService = new RuntimeStartupService(
+            context,
+            makeRuntimeManager(),
+            makeSessionManager().value,
+            makeNewFolderService(context, logChannel),
+            logChannel,
+            createMemento(),
+        );
+
+        assert.strictEqual(
+            (startupService as any)._getStartupBehavior('r'),
+            LanguageStartupBehavior.Manual,
+        );
+        startupService.dispose();
+    });
+
     test('does not replace the last non-zero discovery count with an empty scan', () => {
         const discoveryCountKey = 'vscode-supervisor.lastDiscoveryRuntimeCount.v1';
         const context = makeContext({ [discoveryCountKey]: 5 });
@@ -823,6 +843,7 @@ suite('[Unit] runtime startup', () => {
             logChannel,
             createMemento(),
         );
+        (startupService as any)._getStartupBehavior = () => LanguageStartupBehavior.Auto;
 
         await (startupService as any)._startAffiliatedLanguageRuntimes();
         await secondaryStarted.promise;
@@ -887,6 +908,7 @@ suite('[Unit] runtime startup', () => {
             logChannel,
             createMemento(),
         );
+        (startupService as any)._getStartupBehavior = () => LanguageStartupBehavior.Auto;
         startupService.registerRuntimeManager({
             id: 1,
             discoverAllRuntimes: async () => undefined,
@@ -942,6 +964,7 @@ suite('[Unit] runtime startup', () => {
             logChannel,
             createMemento(),
         );
+        (startupService as any)._getStartupBehavior = () => LanguageStartupBehavior.Auto;
         startupService.registerRuntimeManager({
             id: 1,
             discoverAllRuntimes: async () => undefined,
@@ -1006,6 +1029,7 @@ suite('[Unit] runtime startup', () => {
             logChannel,
             createMemento(),
         );
+        (startupService as any)._getStartupBehavior = () => LanguageStartupBehavior.Auto;
 
         await (startupService as any)._startAffiliatedLanguageRuntimes();
         await secondaryStarted.promise;
@@ -1014,6 +1038,43 @@ suite('[Unit] runtime startup', () => {
             { runtimeId: 'r-primary', activate: true },
             { runtimeId: 'python-secondary', activate: false },
         ]);
+        startupService.dispose();
+    });
+
+    test('does not auto-start a never-used affiliation when it is the only language', async () => {
+        const runtime = makeRuntimeMetadata({
+            runtimeId: 'r-never-used',
+            startupBehavior: LanguageRuntimeStartupBehavior.Explicit,
+        });
+        const context = makeContext({}, {
+            'vscode-supervisor.affiliatedRuntimeMetadata.v1.r': {
+                metadata: runtime,
+                lastUsed: 0,
+                lastStarted: 0,
+            },
+        });
+        const logChannel = makeNoopLogChannel();
+        const localSessionManager = makeSessionManager();
+        let starts = 0;
+        localSessionManager.value.autoStartRuntime = async () => {
+            starts += 1;
+        };
+        const startupService = new RuntimeStartupService(
+            context,
+            {
+                ...makeRuntimeManager(),
+                getSupportedLanguageIds: () => ['r'],
+            } as any,
+            localSessionManager.value,
+            makeNewFolderService(context, logChannel),
+            logChannel,
+            createMemento(),
+        );
+        (startupService as any)._getStartupBehavior = () => LanguageStartupBehavior.Auto;
+
+        await (startupService as any)._startAffiliatedLanguageRuntimes();
+
+        assert.strictEqual(starts, 0);
         startupService.dispose();
     });
 

@@ -1,7 +1,10 @@
 import * as assert from 'assert';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import type { LanguageRuntimeMetadata } from '../../api';
+import {
+    LanguageRuntimeStartupBehavior,
+    type LanguageRuntimeMetadata,
+} from '../../api';
 import { NewFolderStartupPhase } from '../../newFolder/positronNewFolder';
 import { PositronNewFolderService } from '../../newFolder/positronNewFolderService';
 
@@ -79,6 +82,7 @@ function makeRuntimeMetadata(): LanguageRuntimeMetadata {
         languageId: 'r',
         languageName: 'R',
         languageVersion: '4.4.1',
+        startupBehavior: LanguageRuntimeStartupBehavior.Explicit,
         extraRuntimeData: {
             homepath: '/usr/lib/R',
             binpath: '/usr/bin/R',
