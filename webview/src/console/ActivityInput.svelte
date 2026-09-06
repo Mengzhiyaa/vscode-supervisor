@@ -181,9 +181,9 @@
             <div class="input-line">
                 <span class="prompt" style:width={promptWidthPx}
                     >{getPromptText(lineIndex)}</span
-                >{#each line.outputRuns as run (run.id)}<OutputRun
-                    outputRun={run}
-                />{/each}
+                ><span class="code">{#each line.outputRuns as run (run.id)}<OutputRun
+                        outputRun={run}
+                    />{/each}</span>
             </div>
         {/each}
     {/if}
@@ -254,11 +254,13 @@
     } */
 
     .input-line {
+        display: flex;
         white-space: var(--console-output-white-space, pre);
         line-height: var(--console-line-height, 1.35);
     }
 
     .prompt {
+        flex-shrink: 0;
         user-select: none;
         display: inline-block;
         box-sizing: content-box;
@@ -283,6 +285,10 @@
     }
 
     .code {
+        /* Start tab stops at the code column, independently of prompt width. */
+        flex: 1;
+        min-width: 0;
+        tab-size: 4;
         white-space: var(--console-output-white-space, pre-wrap);
     }
 

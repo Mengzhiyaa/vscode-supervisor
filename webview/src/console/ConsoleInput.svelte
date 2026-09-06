@@ -698,16 +698,18 @@
     }
 
     function addHistoryEntry(input: string, when?: number) {
-        const trimmed = input.trim();
-        if (!trimmed) return;
+        // Keep the submitted source byte-for-byte intact. trim() is only a
+        // validation check; removing indentation or trailing whitespace makes
+        // recalled history different from the code that was executed.
+        if (!input.trim()) return;
 
         const last = historyEntries[historyEntries.length - 1];
-        if (last?.input === trimmed) {
+        if (last?.input === input) {
             return;
         }
 
         const entry: IInputHistoryEntry = {
-            input: trimmed,
+            input,
             when: new Date(when ?? Date.now()),
         };
 
@@ -726,18 +728,19 @@
         let lastInput: string | undefined;
 
         for (const entry of entries) {
-            const trimmed = entry.input.trim();
-            if (!trimmed) {
+            // Preserve source text exactly as persisted by the host. Only use
+            // trim() to discard entries that contain no code.
+            if (!entry.input.trim()) {
                 continue;
             }
-            if (lastInput === trimmed) {
+            if (lastInput === entry.input) {
                 continue;
             }
             normalized.push({
-                input: trimmed,
+                input: entry.input,
                 when: new Date(entry.when ?? Date.now()),
             });
-            lastInput = trimmed;
+            lastInput = entry.input;
         }
 
         if (normalized.length > 1000) {

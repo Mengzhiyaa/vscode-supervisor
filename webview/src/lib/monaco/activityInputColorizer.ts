@@ -13,6 +13,8 @@ type MonacoApi = typeof import("monaco-editor/editor");
  * Colorizes plain code lines for activity input history.
  * Returns one HTML fragment per input line, or [] when Monaco returns an
  * unexpected result so the caller can fall back to plain text rendering.
+ * Token spans retain the original source characters so DOM selections can be
+ * copied without guessing which whitespace was introduced by the renderer.
  */
 export async function colorizeActivityInputLines(
     monaco: MonacoApi,
@@ -26,7 +28,9 @@ export async function colorizeActivityInputLines(
     const html = await monaco.editor.colorize(
         codeOutputLines.join("\n"),
         languageId,
-        { tabSize: 4 },
+        // Render each tab as one character so token text offsets still match
+        // source UTF-16 offsets. CSS controls the restored tabs' visual width.
+        { tabSize: 1 },
     );
     const colorizedLines = html.split(/<br\s*\/?>/iu);
 
@@ -35,7 +39,38 @@ export async function colorizeActivityInputLines(
         colorizedLines.pop();
     }
 
-    return colorizedLines.length === codeOutputLines.length
-        ? colorizedLines
-        : [];
+    if (colorizedLines.length !== codeOutputLines.length) {
+        return [];
+    }
+
+    const template = document.createElement('template');
+    const sourceLines: string[] = [];
+    for (let index = 0; index < colorizedLines.length; index++) {
+        template.innerHTML = colorizedLines[index];
+        const source = codeOutputLines[index];
+
+        // Monaco replaces spaces and certain control characters for display.
+        // With tabSize 1, each rendered text character has a source counterpart.
+        // Fall back if that contract changes or Monaco strips a leading BOM.
+        if (template.content.textContent?.length !== source.length) {
+            return [];
+        }
+
+        const walker = document.createTreeWalker(
+            template.content,
+            NodeFilter.SHOW_TEXT,
+        );
+        let offset = 0;
+        let node: Node | null;
+        while ((node = walker.nextNode())) {
+            const length = node.textContent?.length ?? 0;
+            // Assign text rather than interpolating HTML: source may contain
+            // markup, literal NBSPs, narrow NBSPs, tabs or ordinary spaces.
+            node.textContent = source.slice(offset, offset + length);
+            offset += length;
+        }
+        sourceLines.push(template.innerHTML);
+    }
+
+    return sourceLines;
 }
