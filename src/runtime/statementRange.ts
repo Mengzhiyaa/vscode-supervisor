@@ -7,13 +7,12 @@ import type { RuntimeSession } from './session';
 
 type StatementRangeSession = Pick<
     RuntimeSession,
-    'lsp' | 'activateLsp' | 'waitLsp'
+    'lsp' | 'waitLsp'
 >;
 
 /**
- * Resolves the session-owned statement range provider after its LSP has had a
- * chance to activate. Positron obtains this from the language feature registry;
- * Supervisor must explicitly bridge the equivalent session lifecycle.
+ * Resolves the provider owned by the session's active language client.
+ * Language contributions control activation and console ownership.
  */
 export async function resolveStatementRangeProvider(
     session: StatementRangeSession,
@@ -25,13 +24,6 @@ export async function resolveStatementRangeProvider(
     }
 
     try {
-        if (
-            lsp.state === LanguageLspState.Uninitialized ||
-            lsp.state === LanguageLspState.Stopped
-        ) {
-            await session.activateLsp();
-        }
-
         if (session.lsp.state === LanguageLspState.Starting) {
             lsp = (await session.waitLsp()) ?? session.lsp;
         } else {

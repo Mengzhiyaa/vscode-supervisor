@@ -855,6 +855,22 @@ suite('[Unit] supervisor core backports', () => {
         await session.dispose();
     });
 
+    test('rejects an LSP server startup failure so its owner can retry', async () => {
+        const session = new RuntimeSession(
+            'failed-lsp-session', makeRuntimeMetadata(), makeSessionMetadata(),
+            makeNoopLogChannel(), 'Session 1',
+        );
+        const error = new Error('server startup failed');
+        (session as any)._supportsLsp = true;
+        (session as any)._kernel = {
+            createPositronLspClientId: () => 'failed-lsp-client',
+            startPositronLsp: async () => { throw error; },
+        };
+        await assert.rejects(session.activateLsp(), failure => failure === error);
+        (session as any)._kernel = undefined;
+        await session.dispose();
+    });
+
     test('cancels a slow LSP activation when the explicit request is withdrawn', async () => {
         let resolvePort!: (port: number) => void;
         let activated = 0;
@@ -894,6 +910,19 @@ suite('[Unit] supervisor core backports', () => {
         assert.strictEqual(removedClients, 1);
         assert.strictEqual((session as any)._lspRequestedActive, false);
         await session.dispose();
+    });
+
+    test('re-emits a foreground request so language ownership can retry', async () => {
+        const service = new RuntimeSessionService(createMemento() as any, makeNoopLogChannel()) as any;
+        const session = { sessionId: 'python-session' };
+        service._sessions.set(session.sessionId, session);
+        service._foregroundSessionId = session.sessionId;
+        const events: unknown[] = [];
+        service.onDidChangeForegroundSession((value: unknown) => events.push(value));
+        await service._setForegroundSessionInternal(session.sessionId);
+        assert.deepStrictEqual(events, [session]);
+        service._sessions.delete(session.sessionId);
+        service.dispose();
     });
 
     test('does not reconcile LSPs when the global foreground changes languages', async () => {

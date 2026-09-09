@@ -1497,7 +1497,7 @@ export class RuntimeSession implements vscode.Disposable {
             port = await this._lspStartingPromise;
         } catch (err) {
             this.log(`Error starting Positron LSP: ${err}`, vscode.LogLevel.Error);
-            return;
+            throw err;
         }
 
         this._lspTransportKind = 'serverComm';

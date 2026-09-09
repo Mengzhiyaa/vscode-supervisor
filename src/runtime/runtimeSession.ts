@@ -1442,18 +1442,6 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
             ) {
                 await this._setForegroundSession(session.sessionId);
             }
-
-            // `activate` is an explicit request from the caller to make this
-            // console's language services available. Keep that request
-            // independent from the global UI foreground: a language manager
-            // may subsequently enforce same-language ownership, while a
-            // different language's LSP remains active.
-            if (
-                session.sessionMetadata.sessionMode === LanguageRuntimeSessionMode.Console &&
-                activate
-            ) {
-                await session.activateLsp();
-            }
         };
 
         const failStart = () => {
@@ -2215,6 +2203,7 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
 
     private async _setForegroundSessionInternal(sessionId: string | undefined): Promise<void> {
         if (this._foregroundSessionId === sessionId) {
+            this._onDidChangeForegroundSession.fire(this.foregroundSession);
             return;
         }
 

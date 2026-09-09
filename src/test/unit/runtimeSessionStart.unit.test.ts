@@ -441,7 +441,7 @@ suite('[Unit] runtime session start semantics', () => {
         service.dispose();
     });
 
-    test('finalizes and activates a console session that becomes ready after the startup wait times out', async () => {
+    test('finalizes a late-ready console and delegates LSP activation to the language contribution', async () => {
         const service = new RuntimeSessionService(makeContext(), makeNoopLogChannel());
         const runtimeMetadata = makeRuntimeMetadata();
         const { session, fireRuntimeState, dispose } = makeAttachableConsoleSession(
@@ -477,7 +477,7 @@ suite('[Unit] runtime session start semantics', () => {
         assert.deepStrictEqual(startedSessionIds, [session.sessionId]);
         assert.deepStrictEqual(failedSessionIds, []);
         assert.strictEqual(service.activeSessionId, session.sessionId);
-        assert.ok(activateLspCalls >= 1);
+        assert.strictEqual(activateLspCalls, 0);
 
         (service as any)._sessions.delete(session.sessionId);
         dispose();

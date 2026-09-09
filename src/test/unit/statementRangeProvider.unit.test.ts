@@ -61,7 +61,7 @@ suite('[Unit] statement range provider lifecycle', () => {
         assert.strictEqual(resolved, provider);
     });
 
-    test('activates an uninitialized session LSP before resolving the provider', async () => {
+    test('does not activate an uninitialized session outside language ownership', async () => {
         const provider = {
             provideStatementRange: () => undefined,
         } satisfies ILanguageStatementRangeProvider;
@@ -81,7 +81,7 @@ suite('[Unit] statement range provider lifecycle', () => {
             waitLsp: async () => lsp,
         } as any, makeNoopLogChannel([]));
 
-        assert.strictEqual(activateCalls, 1);
-        assert.strictEqual(resolved, provider);
+        assert.strictEqual(activateCalls, 0);
+        assert.strictEqual(resolved, undefined);
     });
 });
