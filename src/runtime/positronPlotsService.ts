@@ -1540,6 +1540,7 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
             return StaticPlotClient.fromMessage(
                 session.sessionId,
                 message.id,
+                message.when,
                 mimeType,
                 payload,
                 code,

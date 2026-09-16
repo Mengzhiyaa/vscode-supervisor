@@ -548,6 +548,12 @@
             e.target instanceof Element &&
             e.target.closest(".search-widget") !== null;
 
+        // Find controls own their keyboard input. Let these events continue to
+        // the webview/window keyboard layer so native clipboard shortcuts work.
+        if (isSearchWidgetTarget) {
+            return;
+        }
+
         if (showContextMenu) {
             closeContextMenu();
         }
@@ -557,7 +563,7 @@
         const onlyShiftKey =
             e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey;
 
-        if (isCmdOrCtrl && noOtherModifiers && !isSearchWidgetTarget) {
+        if (isCmdOrCtrl && noOtherModifiers) {
             switch (e.key.toLowerCase()) {
                 case "f": {
                     // Open search

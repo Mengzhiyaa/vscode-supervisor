@@ -21,7 +21,6 @@ import { WebviewMessageReader, WebviewMessageWriter } from '../rpc/webview/trans
 import { PositronConsoleService } from '../services/console';
 import {
     createSelectedPlotChangedPayload,
-    orderedPlots,
     serializePlotRecord,
     toPlotAddedParams,
     type SerializedPlotRecord,
@@ -604,9 +603,7 @@ export class PlotsViewProvider extends BaseWebviewProvider {
     }
 
     private _seedPlotsFromService(): void {
-        const plots = [...this._plotsService.positronPlotInstances].sort((left, right) =>
-            (left.metadata.created || 0) - (right.metadata.created || 0) || left.id.localeCompare(right.id));
-        for (const plot of plots) {
+        for (const plot of this._plotsService.positronPlotInstances) {
             if (this._plots.has(plot.id)) {
                 continue;
             }
@@ -684,8 +681,7 @@ export class PlotsViewProvider extends BaseWebviewProvider {
         this._renderRequestSerials.clear();
         this._plotRevision++;
 
-        for (const plot of [...plots].sort((left, right) =>
-            (left.metadata.created || 0) - (right.metadata.created || 0) || left.id.localeCompare(right.id))) {
+        for (const plot of plots) {
             const plotData = this._createPlotDataFromClient(plot);
             if (!plotData.sessionId) {
                 this.log(`Dropping plot ${plotData.id} without sessionId`, vscode.LogLevel.Debug);
@@ -1331,7 +1327,7 @@ export class PlotsViewProvider extends BaseWebviewProvider {
         // - cursor: number of newest plots already loaded
         // - limit: page size to fetch
         connection.onRequest('plots/list', async (params?: { cursor?: number; limit?: number; knownRevision?: number }) => {
-            const ordered = orderedPlots(this._plots.values());
+            const ordered = Array.from(this._plots.values());
             const totalCount = ordered.length;
             const unchanged = params?.knownRevision !== undefined &&
                 params.knownRevision === this._plotRevision;

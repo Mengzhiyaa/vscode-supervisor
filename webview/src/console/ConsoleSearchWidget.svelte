@@ -111,14 +111,6 @@
         }
     }
 
-    function handleWidgetKeyDown(e: KeyboardEvent) {
-        // Prevent keyboard events from propagating to the console instance
-        // (except Escape which is handled in handleInputKeyDown)
-        if (e.key !== "Escape") {
-            e.stopPropagation();
-        }
-    }
-
     function toggleCaseSensitive() {
         caseSensitive = !caseSensitive;
     }
@@ -187,7 +179,11 @@
             onpointercancel={finishResize}
         ></div>
         <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <div class="search-widget" onkeydown={handleWidgetKeyDown}>
+        <div
+            class="search-widget"
+            onmousedown={(event) => event.stopPropagation()}
+            oncontextmenu={(event) => event.stopPropagation()}
+        >
             <div class="search-row">
                 <div class="search-input-container" class:invalid={isInvalidRegex}>
                     <input

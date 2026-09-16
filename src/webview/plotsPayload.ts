@@ -29,10 +29,10 @@ export interface PlotHistoryEntry {
     created: number;
 }
 
-/** Sort mixed static, dynamic, and HTML plots by their creation metadata. */
+/** Sort plots by creation time while preserving registration order for ties. */
 export function orderedPlots<T extends PlotHistoryEntry>(plots: Iterable<T>): T[] {
     return Array.from(plots).sort((left, right) =>
-        (left.created || 0) - (right.created || 0) || left.id.localeCompare(right.id));
+        (left.created || 0) - (right.created || 0));
 }
 
 function cloneSize(size: IPlotSize | undefined): IPlotSize | undefined {

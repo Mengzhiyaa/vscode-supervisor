@@ -42,6 +42,7 @@ export class StaticPlotClient implements IPositronPlotClient, IZoomablePlotClien
      * 
      * @param sessionId The session ID
      * @param messageId The message ID
+     * @param when The runtime message timestamp
      * @param mimeType The MIME type of the image
      * @param data The image data (base64 encoded for binary formats, raw for SVG)
      * @param code The code that generated this plot (optional)
@@ -50,6 +51,7 @@ export class StaticPlotClient implements IPositronPlotClient, IZoomablePlotClien
     static fromMessage(
         sessionId: string,
         messageId: string,
+        when: string,
         mimeType: string,
         data: string,
         code?: string,
@@ -57,7 +59,7 @@ export class StaticPlotClient implements IPositronPlotClient, IZoomablePlotClien
     ): StaticPlotClient {
         const metadata: PlotMetadata = {
             id: messageId || `static-plot-${StaticPlotClient._nextId++}`,
-            created: Date.now(),
+            created: Date.parse(when),
             session_id: sessionId,
             output_id: outputId,
             code: code ?? '',

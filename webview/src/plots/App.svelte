@@ -397,8 +397,7 @@
             nextPlots[existingIndex] = nextPlot;
             allPlots = nextPlots;
         } else {
-            allPlots = [...allPlots, nextPlot].sort((left, right) =>
-                (left.created ?? 0) - (right.created ?? 0) || left.id.localeCompare(right.id));
+            allPlots = [...allPlots, nextPlot];
         }
         if (typeof params.revision === "number") {
             lastAppliedRevision = Math.max(lastAppliedRevision, params.revision);
