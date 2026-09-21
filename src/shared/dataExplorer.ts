@@ -323,4 +323,9 @@ export interface BackendState {
     connected?: boolean;
     error_message?: string;
     available_sheets?: string[];
+    /** The options actually committed by a file backend, including automatic sheet fallback. */
+    file_import_options?: {
+        has_header_row: boolean;
+        sheet_name?: string;
+    };
 }

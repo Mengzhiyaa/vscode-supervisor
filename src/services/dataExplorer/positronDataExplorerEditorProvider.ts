@@ -419,6 +419,9 @@ export class PositronDataExplorerEditorProvider implements vscode.Disposable {
                 await active.instance.clientInstance.updateBackendState();
             });
         } catch (error) {
+            if (error instanceof vscode.CancellationError) {
+                return;
+            }
             vscode.window.showErrorMessage(
                 vscode.l10n.t('Failed to select worksheet: {0}', String(error)),
             );

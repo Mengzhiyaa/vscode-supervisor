@@ -6,6 +6,8 @@
 import * as vscode from 'vscode';
 import { RuntimeSessionService } from '../../runtime/runtimeSession';
 import { PositronPlotsService } from '../../runtime/positronPlotsService';
+import type { IPositronPlotClient } from '../../runtime/positronPlots';
+import { HtmlPlotClient } from '../../runtime/htmlPlotClient';
 import { HtmlProxyService } from './htmlProxyService';
 import {
     ShowHtmlFileDestination,
@@ -39,6 +41,8 @@ export interface PreviewItem {
     modelId?: string;
     /** Original URI used to rebuild proxy/external URIs after restoration. */
     restoreUri?: vscode.Uri;
+    /** Keep root-relative links stable when recreating a file proxy after navigation. */
+    proxyRoot?: string;
     /** Runtime/terminal source supplied by the producer, independent of UI route origin. */
     sourceIdentity?: PreviewSource;
 }
@@ -60,6 +64,7 @@ export class PositronPreviewService implements vscode.Disposable {
     private readonly _disposables: vscode.Disposable[] = [];
     private readonly _proxyService: HtmlProxyService;
     private readonly _executingTerminals = new Set<vscode.Terminal>();
+    private readonly _plotProxyLeases = new Map<IPositronPlotClient, vscode.Disposable>();
 
     private readonly _onDidShowPreviewEmitter = new vscode.EventEmitter<PreviewItem>();
     private readonly _onDidChangePreviewInterruptStateEmitter = new vscode.EventEmitter<void>();
@@ -90,6 +95,21 @@ export class PositronPreviewService implements vscode.Disposable {
         this._outputChannel.debug('[PositronPreviewService] Initializing...');
 
         this._disposables.push(
+            this._plotsService.onDidEmitPlot(plot => this._retainPlotProxy(plot)),
+            this._plotsService.onDidRemovePlot(plot => {
+                this._plotProxyLeases.get(plot)?.dispose();
+                this._plotProxyLeases.delete(plot);
+            }),
+            this._plotsService.onDidReplacePlots(plots => {
+                const retained = new Set(plots);
+                for (const [plot, lease] of this._plotProxyLeases) {
+                    if (!retained.has(plot)) {
+                        lease.dispose();
+                        this._plotProxyLeases.delete(plot);
+                    }
+                }
+                plots.forEach(plot => this._retainPlotProxy(plot));
+            }),
             this._sessionManager.onDidReceiveRuntimeEvent((runtimeEvent) => {
                 void this._handleRuntimeEvent(runtimeEvent);
             }),
@@ -113,14 +133,56 @@ export class PositronPreviewService implements vscode.Disposable {
             }),
         );
 
+        this._plotsService.positronPlotInstances.forEach(plot => this._retainPlotProxy(plot));
+
         this._outputChannel.debug('[PositronPreviewService] Initialized');
     }
 
     dispose(): void {
+        this._plotProxyLeases.forEach(lease => lease.dispose());
+        this._plotProxyLeases.clear();
         this._proxyService.dispose();
         this._onDidShowPreviewEmitter.dispose();
         this._onDidChangePreviewInterruptStateEmitter.dispose();
         this._disposables.forEach(d => d.dispose());
+    }
+
+    retainProxyUri(uri: vscode.Uri): vscode.Disposable {
+        return this._proxyService.retainUri(uri);
+    }
+
+    keepProxyForExternalWindow(uri: vscode.Uri): void {
+        this._proxyService.keepAliveForExternalWindow(uri);
+    }
+
+    getProxySourceUri(uri: vscode.Uri): vscode.Uri | undefined {
+        return this._proxyService.sourceUri(uri);
+    }
+
+    async refreshPreviewUri(preview: PreviewItem): Promise<vscode.Uri> {
+        const source = preview.restoreUri;
+        if (source?.scheme === 'file') {
+            const uri = await this._proxyService.resolvePath(source.fsPath, preview.proxyRoot);
+            return uri.with({ query: source.query, fragment: source.fragment });
+        }
+        if (source && shouldOpenUrlInViewer(source.toString(true), true)) {
+            return this._proxyService.resolvePath(source.toString(true));
+        }
+        return preview.uri;
+    }
+
+    private _retainPlotProxy(plot: IPositronPlotClient): void {
+        if (!this._plotProxyLeases.has(plot) && plot.metadata.html_uri) {
+            const uri = vscode.Uri.parse(plot.metadata.html_uri);
+            const lease = this.retainProxyUri(uri);
+            const external = plot instanceof HtmlPlotClient
+                ? plot.onDidOpenExternal(() => this.keepProxyForExternalWindow(uri))
+                : undefined;
+            this._plotProxyLeases.set(plot, new vscode.Disposable(() => {
+                lease.dispose();
+                external?.dispose();
+            }));
+        }
     }
 
     private async _handleRuntimeEvent(runtimeEvent: ILanguageRuntimeGlobalEvent): Promise<void> {
@@ -204,7 +266,8 @@ export class PositronPreviewService implements vscode.Disposable {
                 this._publishPreview({
                     type: 'html',
                     uri,
-                    restoreUri: vscode.Uri.file(event.path),
+                    restoreUri: event.path.startsWith('file://')
+                        ? vscode.Uri.parse(event.path) : vscode.Uri.file(event.path),
                     title: event.title,
                     height: event.height,
                     sessionId,
@@ -213,6 +276,7 @@ export class PositronPreviewService implements vscode.Disposable {
                 break;
             }
             case ShowHtmlFileDestination.Editor: {
+                this.keepProxyForExternalWindow(uri);
                 await vscode.commands.executeCommand('vscode.open', uri, {
                     preview: true
                 });
@@ -435,7 +499,10 @@ export class PositronPreviewService implements vscode.Disposable {
         let uri = restoreUri;
         try {
             if (restoreUri.scheme === 'file') {
-                uri = await this._proxyService.resolvePath(restoreUri.fsPath);
+                uri = await this._proxyService.resolvePath(
+                    restoreUri.fsPath,
+                    typeof preview.proxyRoot === 'string' ? preview.proxyRoot : undefined,
+                );
             } else if (restoreUri.scheme === 'http' || restoreUri.scheme === 'https') {
                 try {
                     uri = await vscode.env.asExternalUri(restoreUri);
@@ -454,6 +521,7 @@ export class PositronPreviewService implements vscode.Disposable {
             uri,
             restoreUri,
             title: typeof preview.title === 'string' ? preview.title : undefined,
+            proxyRoot: typeof preview.proxyRoot === 'string' ? preview.proxyRoot : this._proxyService.fileRoot(uri),
             height: typeof preview.height === 'number' ? preview.height : undefined,
             sessionId: preview.sessionId,
             outputId: typeof preview.outputId === 'string' ? preview.outputId : undefined,
@@ -465,6 +533,7 @@ export class PositronPreviewService implements vscode.Disposable {
     }
 
     private _publishPreview(preview: PreviewItem): PreviewItem {
+        preview.proxyRoot ??= this._proxyService.fileRoot(preview.uri);
         if (!this._surfaceLifecycle) {
             this._onDidShowPreviewEmitter.fire(preview);
             return preview;
@@ -488,6 +557,7 @@ export class PositronPreviewService implements vscode.Disposable {
                 preview: {
                     type: preview.type,
                     uri: (preview.restoreUri ?? preview.uri).toString(),
+                    proxyRoot: preview.proxyRoot,
                     title: preview.title,
                     height: preview.height,
                     sessionId: preview.sessionId,

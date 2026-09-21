@@ -9,9 +9,9 @@
 
 import * as vscode from 'vscode';
 import * as path from 'path';
-import * as zlib from 'zlib';
+import { readImportFile, throwIfImportCancelled } from './fileImport';
 import { DuckDBInstance } from './duckdbInstance';
-import { readXlsxWorksheetNames } from './xlsxWorkbook';
+import { readXlsxWorksheetMetadata, type XlsxWorksheetMetadata } from './xlsxWorkbook';
 import {
     escapeIdentifier,
     buildWhereClause,
@@ -152,6 +152,9 @@ export class DuckDBTableView {
     private readonly _duckdb: DuckDBInstance;
     private _tableName: string;
     private readonly _uri: vscode.Uri;
+    private readonly _importLifetime = new vscode.CancellationTokenSource();
+    private _importQueue: Promise<void> = Promise.resolve();
+    private _disposed = false;
 
     private _fullSchema: ColumnSchema[] = [];
     private _rowFilters: RowFilter[] = [];
@@ -159,13 +162,14 @@ export class DuckDBTableView {
     private _columnFilters: ColumnFilter[] = [];
     private _unfilteredRowCount = 0;
     private _filteredRowCount = 0;
-    /** Promise for the initial row count (non-blocking import) */
-    private _rowCountPromise: Promise<void> = Promise.resolve();
     private _hasHeaderRow = true;
     private _displayName = '';
     private _fileType: 'csv' | 'tsv' | 'parquet' | 'xlsx' = 'csv';
     private _isGzipped = false;
     private _availableSheets: readonly string[] = [];
+    private _xlsxMetadata: XlsxWorksheetMetadata = {};
+    private _xlsxImportedAsText = false;
+    private _xlsxRecoverySkipped = false;
 
     // Cached clause strings for performance (aligned with positron)
     private _whereClause = '';
@@ -198,28 +202,107 @@ export class DuckDBTableView {
      * Import a file into DuckDB. Reads file, optionally decompresses gzip,
      * registers buffer, creates TABLE (not VIEW), retrieves schema.
      */
-    async importFile(options?: DatasetImportOptions): Promise<void> {
+    importFile(options?: DatasetImportOptions, token?: vscode.CancellationToken): Promise<void> {
+        const operation = this._importQueue.then(async () => {
+            if (this._disposed) {
+                throw new vscode.CancellationError();
+            }
+            throwIfImportCancelled(token);
+            await vscode.window.withProgress({
+                location: vscode.ProgressLocation.Notification,
+                title: `Importing ${this._displayName}`,
+                cancellable: true,
+            }, async (progress, progressToken) => {
+                const cancellation = new vscode.CancellationTokenSource();
+                const subscriptions = [
+                    this._importLifetime.token.onCancellationRequested(() => cancellation.cancel()),
+                    progressToken.onCancellationRequested(() => cancellation.cancel()),
+                    token?.onCancellationRequested(() => cancellation.cancel()),
+                ];
+                if (this._disposed || token?.isCancellationRequested || progressToken.isCancellationRequested) {
+                    cancellation.cancel();
+                }
+                const staged = new DuckDBTableView(this._uri);
+                const optionsChanged = options?.sheet_name !== this.importOptions?.sheet_name ||
+                    (options?.has_header_row ?? true) !== this._hasHeaderRow;
+                let committed = false;
+                try {
+                    staged._rowFilters = optionsChanged ? [] : this._rowFilters;
+                    staged._rebuildWhereClause();
+                    await staged._importFile(options, cancellation.token, progress);
+                    throwIfImportCancelled(cancellation.token);
+                    const notifyTextImport = staged._xlsxImportedAsText && (!this._xlsxImportedAsText || optionsChanged);
+                    const notifySkippedRecovery = staged._xlsxRecoverySkipped && !this._xlsxRecoverySkipped;
+                    const previousTable = this._tableName;
+                    this._tableName = staged._tableName;
+                    this._fullSchema = staged._fullSchema;
+                    this._availableSheets = staged._availableSheets;
+                    this._hasHeaderRow = staged._hasHeaderRow;
+                    this._xlsxImportedAsText = staged._xlsxImportedAsText;
+                    this._xlsxRecoverySkipped = staged._xlsxRecoverySkipped;
+                    this.importOptions = staged.importOptions;
+                    this._unfilteredRowCount = staged._unfilteredRowCount;
+                    this._filteredRowCount = staged._filteredRowCount;
+                    this._rowFilters = staged._rowFilters;
+                    if (optionsChanged) {
+                        this._sortKeys = [];
+                        this._columnFilters = [];
+                    }
+                    this._rebuildWhereClause();
+                    this._rebuildSortClause();
+                    committed = true;
+                    if (notifyTextImport) {
+                        void vscode.window.showWarningMessage(vscode.l10n.t(
+                            'The worksheet in {0} contains mixed cell types and was imported as text to preserve its values. Numbers and dates will use text sorting and filtering.',
+                            this._displayName,
+                        ));
+                    }
+                    if (notifySkippedRecovery) {
+                        void vscode.window.showWarningMessage(vscode.l10n.t(
+                            'The declared worksheet range in {0} is too large for automatic recovery. The displayed table may be incomplete.',
+                            this._displayName,
+                        ));
+                    }
+                    await this._duckdb.query(`DROP TABLE IF EXISTS ${escapeIdentifier(previousTable)}`)
+                        .catch(() => undefined);
+                } finally {
+                    subscriptions.forEach(subscription => subscription?.dispose());
+                    cancellation.dispose();
+                    if (!committed) {
+                        await staged.dispose();
+                    } else {
+                        staged._importLifetime.dispose();
+                    }
+                }
+            });
+        });
+        this._importQueue = operation.then(() => undefined, () => undefined);
+        return operation;
+    }
+
+    private async _importFile(
+        options: DatasetImportOptions | undefined,
+        token: vscode.CancellationToken,
+        progress: vscode.Progress<{ message?: string }>,
+    ): Promise<void> {
         this.importOptions = options;
         if (options?.has_header_row !== undefined) {
             this._hasHeaderRow = options.has_header_row;
         }
 
         // Read the file
-        let fileData = await vscode.workspace.fs.readFile(this._uri);
+        const fileData = await readImportFile(this._uri, this._isGzipped, token, progress);
+        throwIfImportCancelled(token);
 
         if (this._fileType === 'xlsx') {
-            this._availableSheets = readXlsxWorksheetNames(fileData) ?? [];
-            if (options?.sheet_name && !this._availableSheets.includes(options.sheet_name)) {
+            this._xlsxMetadata = await readXlsxWorksheetMetadata(fileData, options?.sheet_name, token);
+            this._availableSheets = this._xlsxMetadata.sheets ?? [];
+            if (options?.sheet_name && this._xlsxMetadata.sheets && !this._availableSheets.includes(options.sheet_name)) {
                 throw new Error(
                     `Worksheet '${options.sheet_name}' was not found. Available worksheets: ` +
                     `${this._availableSheets.join(', ') || '(unknown)'}.`,
                 );
             }
-        }
-
-        // Gzip decompression (aligned with positron)
-        if (this._isGzipped) {
-            fileData = new Uint8Array(zlib.gunzipSync(fileData));
         }
 
         // Register the file buffer in DuckDB VFS.
@@ -231,26 +314,31 @@ export class DuckDBTableView {
         const vfsName = `${this._tableName}_${virtualPath}`;
 
         // Use a tightly packed Uint8Array to avoid transfer issues
-        const buffer = new Uint8Array(fileData.buffer.slice(
-            fileData.byteOffset, fileData.byteOffset + fileData.byteLength
-        ));
+        const buffer = fileData.byteOffset === 0 && fileData.byteLength === fileData.buffer.byteLength
+            ? fileData
+            : new Uint8Array(fileData.buffer.slice(
+                fileData.byteOffset, fileData.byteOffset + fileData.byteLength,
+            ));
+        throwIfImportCancelled(token);
+        progress.report({ message: 'Importing table…' });
         await this._duckdb.registerFileBuffer(vfsName, buffer);
 
         try {
             // Create a TABLE (not VIEW) based on file type.
             // Using CREATE OR REPLACE TABLE — no need for a separate DROP TABLE query.
-            await this._createTable(vfsName);
+            throwIfImportCancelled(token);
+            await this._createTable(vfsName, token);
         } finally {
             // Release the VFS buffer — data is now materialized in the TABLE
             await this._duckdb.dropFile(vfsName);
         }
 
         // Retrieve schema
-        await this._loadSchema();
+        throwIfImportCancelled(token);
+        await this._loadSchema(token);
 
-        // Count rows (non-blocking: start counting but don't wait)
-        // The count will be awaited lazily when getState() or data values are needed.
-        this._rowCountPromise = this._updateRowCounts();
+        progress.report({ message: 'Reading table metadata…' });
+        await this._updateRowCounts(token);
     }
 
     /**
@@ -265,32 +353,23 @@ export class DuckDBTableView {
      * Re-imports data and reapplies existing filters (aligned with positron).
      */
     async onFileUpdated(): Promise<void> {
-        // Create a new table name for the updated data
-        const oldTableName = this._tableName;
-        this._tableName = `__dex_${_tableCounter++}`;
-
+        const options = this.importOptions;
         try {
-            await this.importFile(this.importOptions);
-
-            // Ensure row counts are resolved before reapplying filters
-            await this._rowCountPromise;
-
-            // Reapply existing row filters
-            if (this._rowFilters.length > 0) {
-                this._rebuildWhereClause();
-                await this._updateFilteredCount();
-            }
-
-            // Drop old table
-            try {
-                await this._duckdb.query(`DROP TABLE IF EXISTS ${escapeIdentifier(oldTableName)}`);
-            } catch {
-                // ignore
-            }
+            await this.importFile(options);
         } catch (error) {
-            // Restore old table name on failure
-            this._tableName = oldTableName;
-            throw error;
+            if (error instanceof vscode.CancellationError || this._fileType !== 'xlsx' ||
+                !options?.sheet_name || !/(?:work)?sheet\b.*\bnot found/i.test(String(error))) {
+                throw error;
+            }
+            if (this.importOptions !== options) {
+                return;
+            }
+            const previousSheet = options.sheet_name;
+            await this.importFile({ ...options, sheet_name: undefined });
+            void vscode.window.showInformationMessage(vscode.l10n.t(
+                'Worksheet {0} is no longer available in {1}. The first worksheet has been opened instead.',
+                previousSheet, this._displayName,
+            ));
         }
     }
 
@@ -322,32 +401,16 @@ export class DuckDBTableView {
      * Create a TABLE from file. For CSV/TSV, retries with sample_size=-1 on failure
      * (aligned with positron's error recovery).
      */
-    private async _createTable(vfsName: string): Promise<void> {
+    private async _createTable(vfsName: string, token?: vscode.CancellationToken): Promise<void> {
         if (this._fileType === 'parquet') {
             await this._duckdb.query(
-                `CREATE OR REPLACE TABLE ${escapeIdentifier(this._tableName)} AS SELECT * FROM parquet_scan('${vfsName}')`
+                `CREATE OR REPLACE TABLE ${escapeIdentifier(this._tableName)} AS SELECT * FROM parquet_scan(${escapeValue(vfsName)})`, token
             );
             return;
         }
 
         if (this._fileType === 'xlsx') {
-            try {
-                await this._duckdb.query('LOAD excel');
-            } catch {
-                try {
-                    await this._duckdb.query('INSTALL excel; LOAD excel');
-                } catch (error) {
-                    throw new Error(`DuckDB Excel support could not be loaded: ${String(error)}`);
-                }
-            }
-            const options = [`header=${this._hasHeaderRow}`];
-            if (this.importOptions?.sheet_name) {
-                options.push(`sheet='${this.importOptions.sheet_name.replace(/'/g, "''")}'`);
-            }
-            await this._duckdb.query(
-                `CREATE OR REPLACE TABLE ${escapeIdentifier(this._tableName)} AS ` +
-                `SELECT * FROM read_xlsx('${vfsName.replace(/'/g, "''")}', ${options.join(', ')})`,
-            );
+            await this._createXlsxTable(vfsName, token);
             return;
         }
 
@@ -358,20 +421,127 @@ export class DuckDBTableView {
                 options.push(`delim='\\t'`);
             }
             options.push(...extraOptions);
-            return `CREATE OR REPLACE TABLE ${escapeIdentifier(this._tableName)} AS SELECT * FROM read_csv_auto('${vfsName}', ${options.join(', ')})`;
+            return `CREATE OR REPLACE TABLE ${escapeIdentifier(this._tableName)} AS SELECT * FROM read_csv_auto(${escapeValue(vfsName)}, ${options.join(', ')})`;
         };
 
         try {
-            await this._duckdb.query(buildSql());
+            await this._duckdb.query(buildSql(), token);
         } catch {
+            throwIfImportCancelled(token);
             // Retry with sample_size=-1 to disable sampling if type inference fails
             // (aligned with positron's error recovery)
-            await this._duckdb.query(buildSql(['sample_size=-1']));
+            await this._duckdb.query(buildSql(['sample_size=-1']), token);
         }
     }
 
-    private async _loadSchema(): Promise<void> {
-        const result = await this._duckdb.query(`DESCRIBE ${escapeIdentifier(this._tableName)}`);
+    private async _ensureExcelExtension(token?: vscode.CancellationToken): Promise<void> {
+        try {
+            await this._duckdb.query('LOAD excel', token);
+        } catch {
+            throwIfImportCancelled(token);
+            try {
+                await this._duckdb.query('INSTALL excel', token);
+                await this._duckdb.query('LOAD excel', token);
+            } catch (error) {
+                throwIfImportCancelled(token);
+                throw new Error(`DuckDB Excel support could not be loaded: ${String(error)}`);
+            }
+        }
+    }
+
+    /** A conversion error retries as text; cells are never silently replaced with NULL. */
+    private async _readXlsxTable(
+        vfsName: string,
+        tableName: string,
+        range: string | undefined,
+        asText: boolean,
+        token?: vscode.CancellationToken,
+    ): Promise<boolean> {
+        const query = (text: boolean) => {
+            const options = [`header=${this._hasHeaderRow}`, 'stop_at_empty=false'];
+            if (this.importOptions?.sheet_name) {
+                options.push(`sheet=${escapeValue(this.importOptions.sheet_name)}`);
+            }
+            if (range) { options.push(`range=${escapeValue(range)}`); }
+            if (text) { options.push('all_varchar=true'); }
+            return `CREATE OR REPLACE TABLE ${escapeIdentifier(tableName)} AS ` +
+                `SELECT * FROM read_xlsx(${escapeValue(vfsName)}, ${options.join(', ')})`;
+        };
+        try {
+            await this._duckdb.query(query(asText), token);
+            return asText;
+        } catch (error) {
+            throwIfImportCancelled(token);
+            if (asText || !/(?:could not|cannot|can't|failed to) (?:convert|cast)|conversion error|failed to parse cell/i.test(String(error))) {
+                throw error;
+            }
+            await this._duckdb.query(query(true), token);
+            return true;
+        }
+    }
+
+    private async _createXlsxTable(vfsName: string, token?: vscode.CancellationToken): Promise<void> {
+        await this._ensureExcelExtension(token);
+        let firstError: unknown;
+        let firstReadFailed = false;
+        try {
+            this._xlsxImportedAsText = await this._readXlsxTable(vfsName, this._tableName, undefined, false, token);
+        } catch (error) {
+            throwIfImportCancelled(token);
+            firstError = error;
+            firstReadFailed = true;
+        }
+        const shape = firstReadFailed ? undefined : await this._xlsxTableShape(this._tableName, token);
+        const range = this._xlsxMetadata.range;
+        const needsRecovery = range && (firstReadFailed || (shape &&
+            (shape.columns <= 1 || shape.rows === 0) &&
+            (shape.columns < range.width || shape.rows === 0)));
+        if (range && needsRecovery) {
+            // Some producers mark an entire worksheet as used. Never materialize
+            // such an advisory range without a bound, even for a tiny ZIP file.
+            const maxRecoveryCells = 5_000_000;
+            if (range.width * range.height > maxRecoveryCells) {
+                if (firstReadFailed) {
+                    throw new Error(`${String(firstError)}. The declared worksheet range is too large for automatic recovery.`);
+                }
+                this._xlsxRecoverySkipped = true;
+                return;
+            }
+            const recoveryTable = `__dex_${_tableCounter++}`;
+            let recovered = false;
+            try {
+                const asText = await this._readXlsxTable(vfsName, recoveryTable, range.ref, this._xlsxImportedAsText, token);
+                const recoveredShape = await this._xlsxTableShape(recoveryTable, token);
+                throwIfImportCancelled(token);
+                if (!shape || (recoveredShape.columns >= shape.columns && recoveredShape.rows >= shape.rows)) {
+                    const previousTable = this._tableName;
+                    this._tableName = recoveryTable;
+                    this._xlsxImportedAsText = asText;
+                    recovered = true;
+                    await this._duckdb.query(`DROP TABLE IF EXISTS ${escapeIdentifier(previousTable)}`).catch(() => undefined);
+                    return;
+                }
+            } catch (error) {
+                throwIfImportCancelled(token);
+                if (firstReadFailed) { throw firstError; }
+                // Keep the successfully imported table when advisory metadata is stale.
+            } finally {
+                if (!recovered) {
+                    await this._duckdb.query(`DROP TABLE IF EXISTS ${escapeIdentifier(recoveryTable)}`).catch(() => undefined);
+                }
+            }
+        }
+        if (firstReadFailed) { throw firstError; }
+    }
+
+    private async _xlsxTableShape(table: string, token?: vscode.CancellationToken): Promise<{ columns: number; rows: number }> {
+        const schema = await this._duckdb.query(`DESCRIBE ${escapeIdentifier(table)}`, token);
+        const count = await this._duckdb.query(`SELECT COUNT(*) AS cnt FROM ${escapeIdentifier(table)}`, token);
+        return { columns: schema.numRows, rows: Number(getFirstRowValue(count, ['cnt']) ?? 0) };
+    }
+
+    private async _loadSchema(token?: vscode.CancellationToken): Promise<void> {
+        const result = await this._duckdb.query(`DESCRIBE ${escapeIdentifier(this._tableName)}`, token);
         this._fullSchema = [];
 
         for (let i = 0; i < result.numRows; i++) {
@@ -425,21 +595,21 @@ export class DuckDBTableView {
         return ColumnDisplayType.Unknown;
     }
 
-    private async _updateRowCounts(): Promise<void> {
+    private async _updateRowCounts(token?: vscode.CancellationToken): Promise<void> {
         // Unfiltered count
         const unfilteredResult = await this._duckdb.query(
-            buildCountQuery(this._tableName, [])
+            buildCountQuery(this._tableName, []), token
         );
         this._unfilteredRowCount = Number(getFirstRowValue(unfilteredResult, ['cnt']) ?? 0);
 
         // Filtered count
-        await this._updateFilteredCount();
+        await this._updateFilteredCount(token);
     }
 
-    private async _updateFilteredCount(): Promise<void> {
+    private async _updateFilteredCount(token?: vscode.CancellationToken): Promise<void> {
         if (this._rowFilters.length > 0) {
             const countSql = `SELECT COUNT(*) AS cnt FROM ${escapeIdentifier(this._tableName)}${this._whereClause}`;
-            const filteredResult = await this._duckdb.query(countSql);
+            const filteredResult = await this._duckdb.query(countSql, token);
             this._filteredRowCount = Number(getFirstRowValue(filteredResult, ['cnt']) ?? 0);
         } else {
             this._filteredRowCount = this._unfilteredRowCount;
@@ -451,8 +621,6 @@ export class DuckDBTableView {
     // =========================================================================
 
     async getState(): Promise<BackendState> {
-        // Ensure row counts are available (lazily resolved from importFile)
-        await this._rowCountPromise;
         return {
             display_name: path.basename(this._uri.path),
             table_shape: {
@@ -470,6 +638,10 @@ export class DuckDBTableView {
             supported_features: this._getSupportedFeatures(),
             connected: true,
             available_sheets: [...this._availableSheets],
+            file_import_options: {
+                has_header_row: this._hasHeaderRow,
+                sheet_name: this.importOptions?.sheet_name ?? this._availableSheets[0],
+            },
         };
     }
 
@@ -488,8 +660,6 @@ export class DuckDBTableView {
         columns: ColumnSelection[],
         formatOptions: FormatOptions
     ): Promise<TableData> {
-        // Ensure row counts are available (lazily resolved from importFile)
-        await this._rowCountPromise;
 
         // Early return if table has 0 rows
         if (this._filteredRowCount === 0) {
@@ -953,13 +1123,14 @@ END`;
             }
             case TableSelectionKind.RowIndices: {
                 const sel = selection.selection as DataSelectionIndices;
-                const whereIn = `rowid IN (${sel.indices.join(', ')})`;
-                const composedWhere = this._whereClause
-                    ? `${this._whereClause} AND ${whereIn}`
-                    : `\nWHERE ${whereIn}`;
-                const selectors = getColumnSelectors(this._fullSchema);
-                const query = `SELECT ${selectors.join(',')} FROM ${tableName}${composedWhere}${this._sortClause}`;
-                return await exportQueryOutput(query, this._fullSchema);
+                // Row indexes refer to the displayed table, just like cell indexes.
+                return this.exportDataSelection({
+                    kind: TableSelectionKind.CellIndices,
+                    selection: {
+                        column_indices: this._fullSchema.map((_, index) => index),
+                        row_indices: sel.indices,
+                    },
+                }, format);
             }
             case TableSelectionKind.ColumnIndices: {
                 const sel = selection.selection as DataSelectionIndices;
@@ -971,6 +1142,9 @@ END`;
             case TableSelectionKind.CellIndices: {
                 const sel = selection.selection as DataSelectionCellIndices;
                 const columns = sel.column_indices.map(i => this._fullSchema[i]).filter(Boolean);
+                if (sel.row_indices.length === 0 || columns.length === 0) {
+                    return { data: '', format };
+                }
                 const selectors = getColumnSelectors(columns);
 
                 if (this._sortClause || this._whereClause) {
@@ -1047,10 +1221,12 @@ ORDER BY row_order.sort_order`;
         options: DatasetImportOptions
     ): Promise<SetDatasetImportOptionsResult> {
         try {
-            this.importOptions = options;
             await this.reimport(options);
             return {};
         } catch (error) {
+            if (error instanceof vscode.CancellationError) {
+                throw error;
+            }
             return { error_message: String(error) };
         }
     }
@@ -1060,6 +1236,10 @@ ORDER BY row_order.sort_order`;
     // =========================================================================
 
     async dispose(): Promise<void> {
+        this._disposed = true;
+        this._importLifetime.cancel();
+        await this._importQueue;
+        this._importLifetime.dispose();
         try {
             await this._duckdb.query(`DROP TABLE IF EXISTS ${escapeIdentifier(this._tableName)}`);
         } catch {

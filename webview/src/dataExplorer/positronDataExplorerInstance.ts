@@ -2,7 +2,7 @@
  *  Positron data explorer instance
  *--------------------------------------------------------------------------------------------*/
 
-import { get } from 'svelte/store';
+import { get, writable } from 'svelte/store';
 import { createDataExplorerStores, type DataExplorerStores } from './stores';
 import { TableSummaryDataGridInstance } from './tableSummaryDataGridInstance';
 import { TableDataDataGridInstance } from './tableDataDataGridInstance';
@@ -90,6 +90,9 @@ export class PositronDataExplorerInstance {
         return get(this.stores.state).summaryCollapsed ?? false;
     }
 
+    readonly summaryExpansionRequests = writable(0);
+    private _receivedSummaryState = false;
+
     get summaryWidth(): number {
         return get(this.stores.state).summaryWidth ?? 350;
     }
@@ -121,6 +124,7 @@ export class PositronDataExplorerInstance {
     }
 
     expandSummary(): void {
+        this.summaryExpansionRequests.update(revision => revision + 1);
         this._setSummaryCollapsed(false, true);
     }
 
@@ -133,6 +137,10 @@ export class PositronDataExplorerInstance {
     }
 
     handleSummaryCollapsedChanged(collapsed: boolean): void {
+        if (this._receivedSummaryState && !collapsed && this.isSummaryCollapsed) {
+            this.summaryExpansionRequests.update(revision => revision + 1);
+        }
+        this._receivedSummaryState = true;
         this._setSummaryCollapsed(collapsed, false);
     }
 

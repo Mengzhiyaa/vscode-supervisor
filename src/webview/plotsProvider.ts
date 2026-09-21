@@ -1164,6 +1164,18 @@ export class PlotsViewProvider extends BaseWebviewProvider {
                 position: this._plotsService.historyPosition
             });
         }
+        this._registerHistorySettingsHandlers(connection);
+        this._registerHtmlPlotHandlers(connection);
+        this._registerRenderingHandlers(connection);
+        this._registerPlotListHandlers(connection);
+        this._registerPlotExportHandlers(connection);
+        this._registerSizingHandlers(connection);
+        this._registerSelectionHandlers(connection);
+        this._registerEditorHandlers(connection);
+        this._registerSourceNavigationHandlers(connection);
+    }
+
+    private _registerHistorySettingsHandlers(connection: MessageConnection): void {
 
         // Handle session/list request - provides activeSessionId to webview
         connection.onRequest('session/list', async () => {
@@ -1188,6 +1200,9 @@ export class PlotsViewProvider extends BaseWebviewProvider {
         connection.onRequest(PlotsProtocol.SelectDarkFilterModeRequest.type, async (params) => {
             this._plotsService.setDarkFilterMode(params.mode as DarkFilter);
         });
+    }
+
+    private _registerHtmlPlotHandlers(connection: MessageConnection): void {
 
         connection.onRequest(PlotsProtocol.ClaimHtmlPlotRequest.type, async (params) => {
             return this._claimHtmlPlot(connection, params.plotId);
@@ -1200,6 +1215,9 @@ export class PlotsViewProvider extends BaseWebviewProvider {
         connection.onNotification(PlotsProtocol.HtmlPlotLayoutNotification.type, (params) => {
             this._layoutHtmlPlot(params.plotId, params.width, params.height);
         });
+    }
+
+    private _registerRenderingHandlers(connection: MessageConnection): void {
 
         // Track viewport size changes from the webview for pre-render settings.
         // Debounce to avoid flooding the R graphics device during continuous resize.
@@ -1321,6 +1339,9 @@ export class PlotsViewProvider extends BaseWebviewProvider {
                 }
             }
         });
+    }
+
+    private _registerPlotListHandlers(connection: MessageConnection): void {
 
         // Handle get plots list request.
         // Supports newest-anchor pagination for lazy-loading history:
@@ -1412,6 +1433,9 @@ export class PlotsViewProvider extends BaseWebviewProvider {
             this._plotsService.removeAllPlots();
             this.log('Cleared all plots', vscode.LogLevel.Debug);
         });
+    }
+
+    private _registerPlotExportHandlers(connection: MessageConnection): void {
 
         // Handle save plot request
         connection.onRequest('plots/save', async (params: { plotId: string }) => {
@@ -1471,6 +1495,9 @@ export class PlotsViewProvider extends BaseWebviewProvider {
             this.log(`Cannot copy plot ${params.plotId}: ${error}`, vscode.LogLevel.Warning);
             return { success: false, error };
         });
+    }
+
+    private _registerSizingHandlers(connection: MessageConnection): void {
 
         // ============================================================
         // Sizing Policy RPC Handlers (Positron integration)
@@ -1605,6 +1632,9 @@ export class PlotsViewProvider extends BaseWebviewProvider {
 
             this._sendPlotsRenderSettings(state);
         });
+    }
+
+    private _registerSelectionHandlers(connection: MessageConnection): void {
         // Handle plot selection request
         connection.onRequest(PlotsProtocol.SelectPlotRequest.type, async (params) => {
             const state = this._getStateForConnection(connection);
@@ -1672,6 +1702,9 @@ export class PlotsViewProvider extends BaseWebviewProvider {
                 renderEstimateMs: 0
             };
         });
+    }
+
+    private _registerEditorHandlers(connection: MessageConnection): void {
 
         // Handle open in new window request
         connection.onRequest('plots/openInNewWindow', async (params: { plotId?: string }) => {
@@ -1755,6 +1788,9 @@ export class PlotsViewProvider extends BaseWebviewProvider {
                 return { success: false, error: String(e) };
             }
         });
+    }
+
+    private _registerSourceNavigationHandlers(connection: MessageConnection): void {
 
         connection.onRequest('plots/revealInConsole', async (params: { sessionId: string; executionId?: string }) => {
             try {

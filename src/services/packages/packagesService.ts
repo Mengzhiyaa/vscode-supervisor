@@ -260,6 +260,7 @@ export class PositronPackagesService implements IPositronPackagesService {
                 }
                 instance.setRuntimeSession(session, packageManager);
             }
+            instance.attachRuntime();
         } else {
             const packageManager = provider.createPackageManager(session);
             if (!packageManager) {

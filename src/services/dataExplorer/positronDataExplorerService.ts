@@ -111,6 +111,9 @@ export interface PositronDataExplorerCreateOptions {
 export class PositronDataExplorerService implements IPositronDataExplorerService {
     private readonly _disposables: vscode.Disposable[] = [];
     private readonly _backendRegistry = new DataExplorerBackendRegistry();
+    private readonly _openingFiles = new Map<string, Promise<IPositronDataExplorerInstance>>();
+    private readonly _importingTables = new Set<DuckDBTableView>();
+    private _disposed = false;
     private readonly _instances = new Map<string, IPositronDataExplorerInstance>();
     private readonly _variableToInstanceMap = new Map<string, string>();
     private readonly _variablePathToInstanceMap = new Map<string, string>();
@@ -328,6 +331,9 @@ export class PositronDataExplorerService implements IPositronDataExplorerService
      * If a Data Explorer for this URI is already open, focuses it instead.
      */
     async openWithDuckDB(uri: vscode.Uri): Promise<IPositronDataExplorerInstance> {
+        if (this._disposed) {
+            throw new vscode.CancellationError();
+        }
         const identifier = `duckdb:${uri.toString()}`;
 
         // Check for existing instance
@@ -337,12 +343,30 @@ export class PositronDataExplorerService implements IPositronDataExplorerService
             return existing;
         }
 
+        const pending = this._openingFiles.get(identifier);
+        if (pending) {
+            return pending;
+        }
+        const opening = this._openDuckDBFile(uri);
+        this._openingFiles.set(identifier, opening);
+        try {
+            return await opening;
+        } finally {
+            this._openingFiles.delete(identifier);
+        }
+    }
+
+    private async _openDuckDBFile(uri: vscode.Uri): Promise<IPositronDataExplorerInstance> {
         this._logChannel.info(`[PositronDataExplorerService] Opening file with DuckDB: ${uri.toString()}`);
 
+        const tableView = new DuckDBTableView(uri);
+        this._importingTables.add(tableView);
         try {
             // Create table view and import file
-            const tableView = new DuckDBTableView(uri);
             await tableView.importFile();
+            if (this._disposed) {
+                throw new vscode.CancellationError();
+            }
 
             // Create the comm adapter
             const comm = new DuckDBDataExplorerComm(tableView, this._logChannel);
@@ -355,6 +379,10 @@ export class PositronDataExplorerService implements IPositronDataExplorerService
 
             return instance;
         } catch (error) {
+            await tableView.dispose();
+            if (error instanceof vscode.CancellationError) {
+                throw error;
+            }
             const errorMsg = String(error);
             this._logChannel.error(`[PositronDataExplorerService] Failed to open file with DuckDB: ${errorMsg}`);
 
@@ -369,6 +397,8 @@ export class PositronDataExplorerService implements IPositronDataExplorerService
             }
 
             throw error;
+        } finally {
+            this._importingTables.delete(tableView);
         }
     }
 
@@ -389,8 +419,11 @@ export class PositronDataExplorerService implements IPositronDataExplorerService
     }
 
     dispose(): void {
-        // Dispose DuckDB instance if it was initialized
-        DuckDBInstance.getInstance().dispose().catch(() => { });
+        this._disposed = true;
+        for (const table of this._importingTables) {
+            void table.dispose();
+        }
+        this._importingTables.clear();
 
         // Dispose all instances
         for (const instance of this._instances.values()) {
@@ -405,5 +438,6 @@ export class PositronDataExplorerService implements IPositronDataExplorerService
         this._variablePathToInstanceMap.clear();
         this._disposables.forEach(d => d.dispose());
         this._backendRegistry.dispose();
+        DuckDBInstance.getInstance().dispose().catch(() => { });
     }
 }

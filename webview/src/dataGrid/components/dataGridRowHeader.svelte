@@ -3,6 +3,8 @@
   Port from Positron's dataGridRowHeader.tsx
 -->
 <script lang="ts">
+    import { onDestroy } from "svelte";
+    import VerticalSplitter from "../../dataExplorer/components/splitters/verticalSplitter.svelte";
     import { getPositronDataGridContext } from "../positronDataGridContext";
     import { RowSelectionState } from "../classes/dataGridInstance";
     import { selectionType } from "../utilities/mouseUtilities";
@@ -63,45 +65,10 @@
         }
     }
 
-    let resizingWidth = $state(false);
-    let widthStartX = $state(0);
-    let widthStartValue = $state(0);
-
-    function beginWidthResize(event: MouseEvent) {
-        if (!instance.rowHeadersResize) {
-            return;
-        }
-
-        event.preventDefault();
-        event.stopPropagation();
-
-        resizingWidth = true;
-        widthStartX = event.clientX;
-        widthStartValue = instance.rowHeadersWidth;
-
-        window.addEventListener("mousemove", onWidthResize);
-        window.addEventListener("mouseup", endWidthResize);
-    }
-
-    function onWidthResize(event: MouseEvent) {
-        if (!resizingWidth) {
-            return;
-        }
-
-        const delta = event.clientX - widthStartX;
-        const nextWidth = Math.max(
-            instance.minimumColumnWidth,
-            Math.min(instance.maximumColumnWidth, widthStartValue + delta),
-        );
-
-        void instance.setRowHeadersWidth(nextWidth);
-    }
-
-    function endWidthResize() {
-        resizingWidth = false;
-        window.removeEventListener("mousemove", onWidthResize);
-        window.removeEventListener("mouseup", endWidthResize);
-    }
+    const rowHeadersWidth = $derived.by(() => {
+        $updateTrigger;
+        return instance.rowHeadersWidth;
+    });
 
     let resizingHeight = $state(false);
     let heightStartY = $state(0);
@@ -142,6 +109,7 @@
         window.removeEventListener("mousemove", onHeightResize);
         window.removeEventListener("mouseup", endHeightResize);
     }
+    onDestroy(endHeightResize);
 </script>
 
 <div
@@ -175,16 +143,21 @@
         {/if}
     {/if}
 
-    <div class="content">{rowHeaderText}</div>
+    <div class="content"><div class="text" title={rowHeaderText}>{rowHeaderText}</div></div>
 
-    <button
-        type="button"
-        class="vertical-splitter"
-        class:active={resizingWidth}
-        tabindex="-1"
-        aria-label="Resize row header width"
-        onmousedown={beginWidthResize}
-    ></button>
+    {#if instance.rowHeadersResize}
+        <div class="vertical-splitter">
+            <VerticalSplitter
+                resizeAriaLabel="Resize row header width"
+                onBeginResize={() => ({
+                    minimumWidth: instance.minimumColumnWidth,
+                    maximumWidth: instance.maximumColumnWidth,
+                    startingWidth: rowHeadersWidth,
+                })}
+                onResize={(width) => { void instance.setRowHeadersWidth(width); }}
+            />
+        </div>
+    {/if}
 
     {#if instance.rowResize}
         <button
@@ -207,7 +180,7 @@
         align-items: center;
         justify-content: center;
         grid-template-rows: [content] 1fr [splitter] 1px [end];
-        grid-template-columns: [content] 1fr [splitter] 1px [end];
+        grid-template-columns: [content] minmax(0, 1fr) [splitter] 1px [end];
         background-color: var(
             --vscode-positronDataGrid-contrastBackground,
             var(--vscode-editorWidget-background)
@@ -309,20 +282,25 @@
         position: relative;
         grid-row: content / splitter;
         grid-column: content / splitter;
-        display: flex;
-        align-items: center;
-        justify-content: center;
+        min-width: 0;
         font-variant-numeric: tabular-nums;
-        font-size: 11px;
+    }
+
+    .data-grid-row-header .text {
+        font-size: 75%;
+        font-weight: 600;
+        overflow: hidden;
+        text-align: center;
+        margin: 0 4px;
+        white-space: nowrap;
+        line-height: normal;
+        text-overflow: ellipsis;
     }
 
     .data-grid-row-header .vertical-splitter {
         grid-row: content / end;
         grid-column: splitter / end;
-        border: 0;
-        cursor: col-resize;
-        padding: 0;
-        background-color: transparent;
+        align-self: stretch;
     }
 
     .data-grid-row-header .horizontal-splitter {
@@ -334,8 +312,6 @@
         background-color: transparent;
     }
 
-    .data-grid-row-header .vertical-splitter:hover,
-    .data-grid-row-header .vertical-splitter.active,
     .data-grid-row-header .horizontal-splitter:hover,
     .data-grid-row-header .horizontal-splitter.active {
         background-color: var(

@@ -35,6 +35,21 @@ interface ResolvedExecutionTarget {
  */
 const trimNewlines = (str: string): string => str.replace(/^\n+|\n+$/g, '');
 
+/**
+ * Normalize code returned by a statement range provider before sending it to
+ * an interactive runtime. Python compound statements need a terminating
+ * newline so that the REPL can recognize the dedent and execute the block.
+ * Positron's Python statement-range provider returns normalized code with this
+ * newline already present; Supervisor providers may return only the document
+ * range, whose end position excludes it.
+ */
+function normalizeStatementCode(document: vscode.TextDocument, code: string): string {
+    if (document.languageId === 'python' && code.includes('\n') && !code.endsWith('\n')) {
+        return `${code}\n`;
+    }
+    return code;
+}
+
 function toUtf8Character(document: vscode.TextDocument, position: vscode.Position): number {
     return Buffer.byteLength(
         document.lineAt(position.line).text.slice(0, position.character),
@@ -526,7 +541,10 @@ async function executeCodeWithAdvancement(
                 return undefined;
             }
 
-            code = statementRange.code ?? document.getText(statementRange.range);
+            code = normalizeStatementCode(
+                document,
+                statementRange.code ?? document.getText(statementRange.range),
+            );
             codeRange = statementRange.range;
             // A successful statement-range provider has already identified one
             // executable statement. Do not ask the runtime to re-check the raw

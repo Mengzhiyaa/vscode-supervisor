@@ -31,6 +31,11 @@
     const updateTrigger = instance.updateTrigger;
     const viewport = instance.viewport;
 
+    const rowHeadersWidth = $derived.by(() => {
+        $updateTrigger;
+        return instance.rowHeadersWidth;
+    });
+
     const width = $derived.by(() => {
         $updateTrigger;
         return $viewport.width;
@@ -578,6 +583,7 @@
 <div
     bind:this={waffleRef}
     class="data-grid-waffle"
+    style:grid-template-columns="[headers] {rowHeadersWidth}px [waffle] minmax(0, 1fr) [end-waffle]"
     role="grid"
     tabindex="0"
     onblur={() => {
@@ -599,7 +605,7 @@
         <DataGridColumnHeaders
             {columnDescriptors}
             height={instance.columnHeadersHeight}
-            width={width - instance.rowHeadersWidth}
+            width={Math.max(0, width - rowHeadersWidth)}
         />
     {/if}
 
@@ -613,7 +619,7 @@
     {#if instance.horizontalScrollbar}
         <div
             class="scrollbar-horizontal"
-            style:left="{instance.rowHeadersWidth}px"
+            style:left="{rowHeadersWidth}px"
             style:height="{instance.scrollbarThickness}px"
         >
             <DataGridScrollbar
@@ -651,7 +657,7 @@
     <div
         class="data-grid-rows-container"
         class:use-editor-font={instance.useEditorFont}
-        style:width="{width - instance.rowHeadersWidth}px"
+        style:width="{Math.max(0, width - rowHeadersWidth)}px"
         style:height="{height - instance.columnHeadersHeight}px"
     >
         <div class="data-grid-rows" style:margin="{instance.rowsMargin}px">

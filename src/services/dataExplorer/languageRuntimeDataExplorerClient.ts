@@ -543,7 +543,7 @@ export class DataExplorerClientInstance implements vscode.Disposable {
     async setDatasetImportOptions(options: DatasetImportOptions): Promise<SetDatasetImportOptionsResult> {
         return this._runBackendTask(
             () => this._comm.setDatasetImportOptions(options),
-            () => ({})
+            () => ({ error_message: 'The dataset is disconnected. File options were not changed.' })
         );
     }
 

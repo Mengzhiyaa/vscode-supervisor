@@ -89,9 +89,13 @@ export class PositronDataExplorerInstance implements IPositronDataExplorerInstan
     get numColumns(): number { return this.backendState?.table_shape.num_columns ?? 0; }
     get numRows(): number { return this.backendState?.table_shape.num_rows ?? 0; }
     get supportsFileOptions(): boolean { return this.identifier.startsWith('duckdb:'); }
-    get fileHasHeaderRow(): boolean { return this._fileHasHeaderRow; }
+    get fileHasHeaderRow(): boolean { return this.backendState?.file_import_options?.has_header_row ?? this._fileHasHeaderRow; }
     get fileAvailableSheets(): readonly string[] { return this.backendState?.available_sheets ?? []; }
-    get fileSelectedSheet(): string | undefined { return this._fileSheetName ?? this.fileAvailableSheets[0]; }
+    get fileSelectedSheet(): string | undefined {
+        const committed = this.backendState?.file_import_options;
+        return committed ? committed.sheet_name ?? this.fileAvailableSheets[0]
+            : this._fileSheetName ?? this.fileAvailableSheets[0];
+    }
     get inlineOnly(): boolean { return this._inlineOnly; }
     get uiState(): PositronDataExplorerUiState { return this._uiState; }
     get focused(): boolean { return this._focused; }
@@ -274,8 +278,12 @@ export class PositronDataExplorerInstance implements IPositronDataExplorerInstan
         let result: SetDatasetImportOptionsResult = {};
         await this.runDataMutation(async () => {
             result = await this._clientInstance.setDatasetImportOptions(options);
+            if (result.error_message) {
+                return;
+            }
             if (options.has_header_row !== undefined) { this._fileHasHeaderRow = options.has_header_row; }
             if (Object.prototype.hasOwnProperty.call(options, 'sheet_name')) { this._fileSheetName = options.sheet_name; }
+            await this._clientInstance.updateBackendState();
         }, true);
         return result;
     }

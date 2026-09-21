@@ -11,7 +11,10 @@ import { IPositronConsoleService } from '../services/console';
  */
 interface ViewerHistoryEntry {
     preview: PreviewItem;
+    proxyLease?: vscode.Disposable;
 }
+
+const MaxViewerHistoryEntries = 50;
 
 /**
  * Webview provider for the Viewer sidebar view.
@@ -27,6 +30,8 @@ export class ViewerViewProvider extends BaseWebviewProvider {
     private _historyIndex = -1;
     /** Flag to suppress pushing to history when navigating back/forward */
     private _navigating = false;
+    private _previewSendGeneration = 0;
+    private _disposed = false;
 
     constructor(
         extensionUri: vscode.Uri,
@@ -80,19 +85,31 @@ export class ViewerViewProvider extends BaseWebviewProvider {
     }
 
     private _acceptPreview(preview: PreviewItem): void {
+        if (this._disposed) {
+            return;
+        }
         const replacesCurrentOutput = !!preview.outputId &&
             preview.outputId === this._lastPreview?.outputId &&
             preview.sessionId === this._lastPreview.sessionId;
         this._lastPreview = preview;
 
         if (replacesCurrentOutput && this._historyIndex >= 0) {
+            this._history[this._historyIndex].proxyLease?.dispose();
             this._history[this._historyIndex] = { preview };
         } else if (!this._navigating) {
             if (this._historyIndex < this._history.length - 1) {
-                this._history.splice(this._historyIndex + 1);
+                this._history.splice(this._historyIndex + 1).forEach(entry => entry.proxyLease?.dispose());
             }
             this._history.push({ preview });
+            while (this._history.length > MaxViewerHistoryEntries) {
+                this._history.shift()?.proxyLease?.dispose();
+            }
             this._historyIndex = this._history.length - 1;
+        }
+
+        const entry = this._history[this._historyIndex];
+        if (entry && entry.preview === preview) {
+            entry.proxyLease ??= this._previewService.retainProxyUri?.(preview.uri);
         }
 
         this._attachPreviewSurface(preview);
@@ -173,9 +190,11 @@ export class ViewerViewProvider extends BaseWebviewProvider {
         });
 
         _connection.onNotification('viewer/clear', () => {
+            this._previewSendGeneration++;
             this._surfaceAttachment?.dispose();
             this._surfaceAttachment = undefined;
             this._lastPreview = undefined;
+            this._history.forEach(entry => entry.proxyLease?.dispose());
             this._history = [];
             this._historyIndex = -1;
             this._sendInterruptStateNotification(false, false);
@@ -183,6 +202,7 @@ export class ViewerViewProvider extends BaseWebviewProvider {
 
         _connection.onNotification('viewer/openInBrowser', () => {
             if (this._lastPreview) {
+                this._previewService.keepProxyForExternalWindow?.(this._lastPreview.uri);
                 void vscode.env.openExternal(this._lastPreview.uri);
             }
         });
@@ -303,6 +323,8 @@ export class ViewerViewProvider extends BaseWebviewProvider {
                 this._acceptPreview({
                     ...current,
                     uri: vscode.Uri.parse(resolved.toString()),
+                    restoreUri: this._previewService.getProxySourceUri?.(vscode.Uri.parse(resolved.toString()))
+                        ?? current.restoreUri,
                     title: title || current.title,
                 });
                 return;
@@ -402,6 +424,7 @@ export class ViewerViewProvider extends BaseWebviewProvider {
     }
 
     private async _openPreview(preview: PreviewItem, target: PreviewOpenTarget): Promise<boolean> {
+        this._previewService.keepProxyForExternalWindow?.(preview.uri);
         try {
             if (target === 'browser') {
                 return await vscode.env.openExternal(preview.uri);
@@ -437,6 +460,7 @@ export class ViewerViewProvider extends BaseWebviewProvider {
     }
 
     private async _openPreviewInSimpleBrowser(preview: PreviewItem): Promise<boolean> {
+        this._previewService.keepProxyForExternalWindow?.(preview.uri);
         try {
             await vscode.commands.executeCommand('simpleBrowser.api.open', preview.uri, {
                 preserveFocus: false,
@@ -471,8 +495,26 @@ export class ViewerViewProvider extends BaseWebviewProvider {
             return;
         }
 
+        const generation = ++this._previewSendGeneration;
+        const entry = this._history.find(candidate => candidate.preview === preview);
+        if (entry && !entry.proxyLease && this._previewService.refreshPreviewUri) {
+            void this._previewService.refreshPreviewUri(preview).then(uri => {
+                if (!this._connection || generation !== this._previewSendGeneration) {
+                    return;
+                }
+                preview.uri = uri;
+                entry.proxyLease = this._previewService.retainProxyUri(uri);
+                this._publishPreviewToWebview(preview);
+            }).catch(error => this.log(`Failed to restore preview: ${error}`, vscode.LogLevel.Warning));
+            return;
+        }
+        this._publishPreviewToWebview(preview);
+    }
+
+    private _publishPreviewToWebview(preview: PreviewItem): void {
+
         void this._revealViewerIfHidden(true);
-        this._connection.sendNotification(ViewerProtocol.ViewerShowNotification.type, {
+        this._connection?.sendNotification(ViewerProtocol.ViewerShowNotification.type, {
             url: preview.uri.toString(),
             title: preview.title,
             height: preview.height,
@@ -482,11 +524,20 @@ export class ViewerViewProvider extends BaseWebviewProvider {
     }
 
     protected override _onDidDisposeWebviewView(): void {
+        this._previewSendGeneration++;
+        this._history.forEach(entry => {
+            entry.proxyLease?.dispose();
+            entry.proxyLease = undefined;
+        });
         this._surfaceAttachment?.dispose();
         this._surfaceAttachment = undefined;
     }
 
     dispose(): void {
+        this._disposed = true;
+        this._previewSendGeneration++;
+        this._history.forEach(entry => entry.proxyLease?.dispose());
+        this._history = [];
         this._surfaceAttachment?.dispose();
         this._surfaceAttachment = undefined;
         this._disposables.forEach(disposable => disposable.dispose());

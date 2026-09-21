@@ -38,6 +38,8 @@ export class HtmlPlotClient implements IPositronPlotClient, vscode.Disposable {
     private readonly _onDidUpdateMetadata = new vscode.EventEmitter<PlotMetadata>();
     private readonly _onDidActivate = new vscode.EventEmitter<void>();
     private readonly _onDidDeactivate = new vscode.EventEmitter<void>();
+    private readonly _onDidOpenExternal = new vscode.EventEmitter<void>();
+    readonly onDidOpenExternal = this._onDidOpenExternal.event;
 
     /** Disposables */
     private readonly _disposables: vscode.Disposable[] = [];
@@ -114,6 +116,7 @@ export class HtmlPlotClient implements IPositronPlotClient, vscode.Disposable {
         };
 
         this._disposables.push(this._onDidUpdateMetadata, this._onDidActivate, this._onDidDeactivate);
+        this._disposables.push(this._onDidOpenExternal);
     }
 
     /** Gets the unique ID of the plot */
@@ -200,6 +203,7 @@ export class HtmlPlotClient implements IPositronPlotClient, vscode.Disposable {
      * Opens the HTML content in an external browser.
      */
     async openInBrowser(): Promise<void> {
+        this._onDidOpenExternal.fire();
         await vscode.env.openExternal(this._uri);
     }
 

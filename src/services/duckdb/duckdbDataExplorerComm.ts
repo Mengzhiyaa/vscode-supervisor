@@ -241,6 +241,9 @@ export class DuckDBDataExplorerComm implements IDataExplorerComm {
                     this._onDidSchemaUpdate.fire({});
                     this._onDidDataUpdate.fire({});
                 } catch (error) {
+                    if (error instanceof vscode.CancellationError) {
+                        return;
+                    }
                     this._logChannel.error(`[DuckDB] File reload failed: ${error}`);
                 }
             });

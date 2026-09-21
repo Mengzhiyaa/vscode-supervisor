@@ -83,6 +83,7 @@ export class PositronPackagesInstance implements IPositronPackagesInstance, vsco
         session: ILanguageRuntimeSession,
         packageManager: ILanguageRuntimePackageManager,
     ): void {
+        this.detachRuntime();
         this._session = session;
         this._packageManager = packageManager;
         this._metadataTokenSource?.cancel();
@@ -182,7 +183,9 @@ export class PositronPackagesInstance implements IPositronPackagesInstance, vsco
     }
 
     attachRuntime(): void {
-        this.detachRuntime();
+        if (this._runtimeDisposables.length > 0) {
+            return;
+        }
         this._runtimeDisposables.push(
             this._session.onDidChangeRuntimeState(state => {
                 if (state === RuntimeState.Ready) {

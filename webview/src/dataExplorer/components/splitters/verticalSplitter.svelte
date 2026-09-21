@@ -2,6 +2,7 @@
   verticalSplitter.svelte - Resizable vertical splitter (Positron-style behavior parity)
 -->
 <script lang="ts">
+    import { onDestroy } from "svelte";
     const EXPAND_COLLAPSE_BUTTON_TOP = 4;
     const EXPAND_COLLAPSE_BUTTON_SIZE = 25;
 
@@ -56,6 +57,12 @@
     const sashResizeParams = $derived.by(() => onBeginResize());
 
     let hoverTimer: ReturnType<typeof setTimeout> | undefined;
+    let disposeResize: (() => void) | undefined;
+
+    onDestroy(() => {
+        clearHoverTimer();
+        disposeResize?.();
+    });
 
     const isMacintosh =
         typeof navigator !== "undefined" &&
@@ -153,17 +160,24 @@
         const resizeParams = onBeginResize();
         if (event.key === "Home") {
             event.preventDefault();
-            setCollapsed(true);
+            event.stopPropagation();
+            if (collapsible) {
+                setCollapsed(true);
+            } else {
+                onResize(resizeParams.minimumWidth);
+            }
             return;
         }
         if (event.key === "End") {
             event.preventDefault();
+            event.stopPropagation();
             setCollapsed(false);
             onResize(resizeParams.maximumWidth);
             return;
         }
         if (event.key === "Enter") {
             event.preventDefault();
+            event.stopPropagation();
             onInvert?.(!invert);
             return;
         }
@@ -171,6 +185,7 @@
             return;
         }
         event.preventDefault();
+        event.stopPropagation();
         const direction = event.key === "ArrowRight" ? 1 : -1;
         const delta = direction * (event.shiftKey ? 50 : 10) * (invert ? -1 : 1);
         const width = Math.max(
@@ -217,6 +232,7 @@
         event.preventDefault();
         event.stopPropagation();
 
+        disposeResize?.();
         syncConfigurationValues();
 
         const resizeParams = onBeginResize();
@@ -236,7 +252,7 @@
             let newCollapsed = false;
             let cursor = isMacintosh ? "col-resize" : "ew-resize";
 
-            if (newWidth < resizeParams.minimumWidth / 2) {
+            if (collapsible && newWidth < resizeParams.minimumWidth / 2) {
                 newWidth = resizeParams.minimumWidth;
                 newCollapsed = true;
             } else if (newWidth < resizeParams.minimumWidth) {
@@ -257,13 +273,7 @@
 
         const pointerUpHandler = (upEvent: PointerEvent) => {
             pointerMoveHandler(upEvent);
-
-            target.removeEventListener("pointermove", pointerMoveHandler);
-            target.removeEventListener("pointerup", pointerUpHandler);
-
-            styleElement.remove();
-
-            resizing = false;
+            disposeResize?.();
             clearHoverTimer();
             hovering = isPointInsideElement(upEvent.clientX, upEvent.clientY, sashRef);
             updateHighlightFromPointer(upEvent.clientY);
@@ -271,8 +281,20 @@
 
         resizing = true;
 
+        const cancelResize = () => disposeResize?.();
+        disposeResize = () => {
+            target.removeEventListener("pointermove", pointerMoveHandler);
+            target.removeEventListener("pointerup", pointerUpHandler);
+            target.removeEventListener("pointercancel", cancelResize);
+            window.removeEventListener("blur", cancelResize);
+            styleElement.remove();
+            resizing = false;
+            disposeResize = undefined;
+        };
         target.addEventListener("pointermove", pointerMoveHandler);
         target.addEventListener("pointerup", pointerUpHandler, { once: true });
+        target.addEventListener("pointercancel", cancelResize, { once: true });
+        window.addEventListener("blur", cancelResize, { once: true });
     }
 
     $effect(() => {

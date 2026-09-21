@@ -23,6 +23,7 @@
     const context = getDataExplorerContext();
     const { notifyFocusChanged, stores } = context;
     const { state: explorerState } = stores;
+    const summaryExpansionRequests = context.instance.summaryExpansionRequests;
     const layout = $derived(
         $explorerState.layout ?? PositronDataExplorerLayout.SummaryOnLeft,
     );
@@ -45,8 +46,9 @@
     let width = $state(0);
     let columnsWidth = $state(0);
     let animateColumnsWidth = $state(false);
-    let columnsCollapsed = $state(false);
-    let initialLayoutFrame: number | undefined;
+    const columnsCollapsed = $derived(isSummaryCollapsed);
+    let manualExpansionWidth: number | undefined;
+    let seenExpansionRequest = 0;
     const reducedMotion = new MediaQuery(
         "prefers-reduced-motion: reduce",
         false,
@@ -69,10 +71,6 @@
     );
 
     $effect(() => {
-        columnsCollapsed = isSummaryCollapsed;
-    });
-
-    $effect(() => {
         if (!columnsCollapsed) {
             const base =
                 summaryWidth > 0 ? summaryWidth : DEFAULT_SUMMARY_WIDTH;
@@ -80,54 +78,35 @@
         }
     });
 
-    function initializeLayoutState(measuredWidth: number) {
-        width = measuredWidth;
-
-        const savedWidth =
-            context.instance.summaryWidth > 0
-                ? Math.max(context.instance.summaryWidth, MIN_COLUMN_WIDTH)
-                : 0;
-        const initialColumnsWidth =
-            savedWidth > 0 ? savedWidth : DEFAULT_SUMMARY_WIDTH;
-        columnsWidth = initialColumnsWidth;
-
-        if (
-            measuredWidth > 0 &&
-            initialColumnsWidth > measuredWidth * 0.5 &&
-            !context.instance.isSummaryCollapsed
-        ) {
+    $effect(() => {
+        // clientWidth is observed by Svelte, including initially hidden editors.
+        // Apply Positron's 50% rule after sizing and restored state arrive.
+        const measuredWidth = width;
+        const expansionRequest = $summaryExpansionRequests;
+        const preferredWidth = Math.max(summaryWidth || DEFAULT_SUMMARY_WIDTH, MIN_COLUMN_WIDTH);
+        const collapsed = isSummaryCollapsed;
+        if (measuredWidth <= 0) {
+            return;
+        }
+        if (expansionRequest !== seenExpansionRequest) {
+            seenExpansionRequest = expansionRequest;
+            manualExpansionWidth = measuredWidth;
+        }
+        // Respect an explicit expansion until the editor becomes narrower.
+        if (manualExpansionWidth !== undefined && measuredWidth >= manualExpansionWidth) {
+            return;
+        }
+        if (!collapsed && preferredWidth > measuredWidth * 0.5) {
+            animateColumnsWidth = false;
             context.instance.collapseSummary();
         }
-    }
+    });
 
     onMount(() => {
         if (!dataExplorerRef) return;
 
-        initializeLayoutState(dataExplorerRef.offsetWidth);
-
-        if (
-            dataExplorerRef.offsetWidth <= 0 &&
-            typeof requestAnimationFrame === "function"
-        ) {
-            initialLayoutFrame = requestAnimationFrame(() => {
-                initialLayoutFrame = undefined;
-                if (dataExplorerRef) {
-                    initializeLayoutState(dataExplorerRef.offsetWidth);
-                }
-            });
-        }
-
         // Initialize WidthCalculators from exemplar divs
         initWidthCalculators();
-
-        return () => {
-            if (
-                initialLayoutFrame !== undefined &&
-                typeof cancelAnimationFrame === "function"
-            ) {
-                cancelAnimationFrame(initialLayoutFrame);
-            }
-        };
     });
 
     function initWidthCalculators() {
@@ -175,11 +154,12 @@
 
     const beginResizeHandler = () => ({
         minimumWidth: MIN_COLUMN_WIDTH,
-        maximumWidth: Math.trunc((2 * width) / 3),
+        maximumWidth: Math.max(MIN_COLUMN_WIDTH, Math.trunc((2 * width) / 3)),
         startingWidth: columnsWidth,
     });
 
     const resizeHandler = (newColumnsWidth: number) => {
+        manualExpansionWidth = width;
         columnsWidth = newColumnsWidth;
         context.instance.summaryWidth = newColumnsWidth;
     };

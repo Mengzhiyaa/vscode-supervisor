@@ -311,6 +311,17 @@ export class DataExplorerWebviewBridge {
     }
 
     registerNotificationHandlers(): void {
+        this._registerSurfaceHandlers();
+        this._registerDataHandlers();
+        this._registerColumnProfileHandlers();
+        this._registerFilterHandlers();
+        this._registerClipboardSelectionHandler();
+        this._registerExportHandlers();
+        this._registerCodeNavigationHandlers();
+        this._registerFileHandlers();
+    }
+
+    private _registerSurfaceHandlers(): void {
         const { connection, panel, instance, logChannel } = this._options;
 
         connection.onNotification(DataExplorerReadyNotification.type, async () => {
@@ -363,6 +374,10 @@ export class DataExplorerWebviewBridge {
         connection.onNotification(DataExplorerSetSelectionNotification.type, (params) => {
             instance.setSelection(params);
         });
+    }
+
+    private _registerDataHandlers(): void {
+        const { connection, instance, logChannel } = this._options;
 
         connection.onNotification(DataExplorerRequestDataNotification.type, async (params) => {
             logChannel.debug('[DataExplorerEditor] Received: dataExplorer/requestData');
@@ -476,6 +491,10 @@ export class DataExplorerWebviewBridge {
                 });
             }
         });
+    }
+
+    private _registerColumnProfileHandlers(): void {
+        const { connection, instance, logChannel } = this._options;
 
         connection.onNotification(
             DataExplorerCancelColumnProfilesNotification.type,
@@ -540,10 +559,6 @@ export class DataExplorerWebviewBridge {
                             )
                             .map((typeSupport) => typeSupport.profile_type),
                     );
-                    const isProfileTypeSupported = (
-                        profileType: ColumnProfileType,
-                    ) =>
-                        supportedProfileTypes.has(profileType);
                     const expandedColumnIndices = new Set(
                         params.expandedColumnIndices ?? [],
                     );
@@ -552,125 +567,9 @@ export class DataExplorerWebviewBridge {
                     if (tokenSource.token.isCancellationRequested) {
                         return;
                     }
-                    const schemaByIndex = new Map(
-                        schema.columns.map((column) => [
-                            column.column_index,
-                            column,
-                        ]),
+                    const requests = this._buildColumnProfileRequests(
+                        params.columnIndices, schema.columns, expandedColumnIndices, supportedProfileTypes,
                     );
-
-                    const requests: ColumnProfileRequest[] =
-                        params.columnIndices.map((columnIndex) => {
-                            const columnSchema = schemaByIndex.get(columnIndex);
-                            // Positron always requests the null count whenever
-                            // column profiles are globally supported.
-                            const profiles: ColumnProfileSpec[] = [{
-                                profile_type: ColumnProfileType.NullCount,
-                            }];
-
-                            const expanded =
-                                expandedColumnIndices.has(columnIndex);
-                            if (
-                                expanded &&
-                                isProfileTypeSupported(
-                                    ColumnProfileType.SummaryStats,
-                                )
-                            ) {
-                                profiles.push({
-                                    profile_type:
-                                        ColumnProfileType.SummaryStats,
-                                });
-                            }
-
-                            const columnType = normalizeColumnDisplayType(
-                                columnSchema?.type_display,
-                                columnSchema?.type_name,
-                            );
-                            const isNumericColumn =
-                                isNumericColumnDisplayType(columnType);
-                            const isBooleanColumn =
-                                isBooleanColumnDisplayType(columnType);
-                            const isStringColumn =
-                                isStringColumnDisplayType(columnType);
-
-                            if (
-                                isNumericColumn &&
-                                isProfileTypeSupported(
-                                    ColumnProfileType.SmallHistogram,
-                                )
-                            ) {
-                                profiles.push({
-                                    profile_type:
-                                        ColumnProfileType.SmallHistogram,
-                                    params: {
-                                        method:
-                                            ColumnHistogramParamsMethod.FreedmanDiaconis,
-                                        num_bins: SMALL_HISTOGRAM_NUM_BINS,
-                                    },
-                                });
-                                if (
-                                    expanded &&
-                                    isProfileTypeSupported(
-                                        ColumnProfileType.SmallHistogram,
-                                    )
-                                ) {
-                                    profiles.push({
-                                        profile_type:
-                                            ColumnProfileType.LargeHistogram,
-                                        params: {
-                                            method:
-                                                ColumnHistogramParamsMethod.FreedmanDiaconis,
-                                            num_bins: LARGE_HISTOGRAM_NUM_BINS,
-                                        },
-                                    });
-                                }
-                            } else if (
-                                isBooleanColumn &&
-                                isProfileTypeSupported(
-                                    ColumnProfileType.SmallFrequencyTable,
-                                )
-                            ) {
-                                profiles.push({
-                                    profile_type:
-                                        ColumnProfileType.SmallFrequencyTable,
-                                    params: {
-                                        limit: BOOLEAN_FREQUENCY_TABLE_LIMIT,
-                                    },
-                                });
-                            } else if (
-                                isStringColumn &&
-                                isProfileTypeSupported(
-                                    ColumnProfileType.SmallFrequencyTable,
-                                )
-                            ) {
-                                profiles.push({
-                                    profile_type:
-                                        ColumnProfileType.SmallFrequencyTable,
-                                    params: {
-                                        limit: SMALL_FREQUENCY_TABLE_LIMIT,
-                                    },
-                                });
-                                if (
-                                    expanded &&
-                                    isProfileTypeSupported(
-                                        ColumnProfileType.SmallFrequencyTable,
-                                    )
-                                ) {
-                                    profiles.push({
-                                        profile_type:
-                                            ColumnProfileType.LargeFrequencyTable,
-                                        params: {
-                                            limit: LARGE_FREQUENCY_TABLE_LIMIT,
-                                        },
-                                    });
-                                }
-                            }
-
-                            return {
-                                column_index: columnIndex,
-                                profiles,
-                            };
-                        });
 
                     const requestsWithProfiles = requests.filter(
                         (request) => request.profiles.length > 0,
@@ -749,6 +648,57 @@ export class DataExplorerWebviewBridge {
                 }
             },
         );
+    }
+
+    private _buildColumnProfileRequests(
+        columnIndices: readonly number[],
+        schema: readonly ColumnSchema[],
+        expandedColumnIndices: ReadonlySet<number>,
+        supportedProfileTypes: ReadonlySet<ColumnProfileType>,
+    ): ColumnProfileRequest[] {
+        const schemaByIndex = new Map(schema.map(column => [column.column_index, column]));
+        return columnIndices.map(columnIndex => {
+            const column = schemaByIndex.get(columnIndex);
+            const expanded = expandedColumnIndices.has(columnIndex);
+            const type = normalizeColumnDisplayType(column?.type_display, column?.type_name);
+            const profiles: ColumnProfileSpec[] = [{ profile_type: ColumnProfileType.NullCount }];
+            if (expanded && supportedProfileTypes.has(ColumnProfileType.SummaryStats)) {
+                profiles.push({ profile_type: ColumnProfileType.SummaryStats });
+            }
+            if (isNumericColumnDisplayType(type) && supportedProfileTypes.has(ColumnProfileType.SmallHistogram)) {
+                profiles.push({
+                    profile_type: ColumnProfileType.SmallHistogram,
+                    params: { method: ColumnHistogramParamsMethod.FreedmanDiaconis, num_bins: SMALL_HISTOGRAM_NUM_BINS },
+                });
+                if (expanded) {
+                    profiles.push({
+                        profile_type: ColumnProfileType.LargeHistogram,
+                        params: { method: ColumnHistogramParamsMethod.FreedmanDiaconis, num_bins: LARGE_HISTOGRAM_NUM_BINS },
+                    });
+                }
+            } else if (isBooleanColumnDisplayType(type) && supportedProfileTypes.has(ColumnProfileType.SmallFrequencyTable)) {
+                profiles.push({
+                    profile_type: ColumnProfileType.SmallFrequencyTable,
+                    params: { limit: BOOLEAN_FREQUENCY_TABLE_LIMIT },
+                });
+            } else if (isStringColumnDisplayType(type) && supportedProfileTypes.has(ColumnProfileType.SmallFrequencyTable)) {
+                profiles.push({
+                    profile_type: ColumnProfileType.SmallFrequencyTable,
+                    params: { limit: SMALL_FREQUENCY_TABLE_LIMIT },
+                });
+                if (expanded) {
+                    profiles.push({
+                        profile_type: ColumnProfileType.LargeFrequencyTable,
+                        params: { limit: LARGE_FREQUENCY_TABLE_LIMIT },
+                    });
+                }
+            }
+            return { column_index: columnIndex, profiles };
+        });
+    }
+
+    private _registerFilterHandlers(): void {
+        const { connection, instance, logChannel } = this._options;
 
         connection.onNotification(DataExplorerRefreshNotification.type, async () => {
             logChannel.debug('[DataExplorerEditor] Received: dataExplorer/refresh');
@@ -841,6 +791,10 @@ export class DataExplorerWebviewBridge {
                 this._sendError(String(error), 'removeFilter');
             }
         });
+    }
+
+    private _registerClipboardSelectionHandler(): void {
+        const { connection, instance, logChannel } = this._options;
 
         connection.onNotification(
             DataExplorerCopyToClipboardNotification.type,
@@ -946,6 +900,10 @@ export class DataExplorerWebviewBridge {
                 }
             },
         );
+    }
+
+    private _registerExportHandlers(): void {
+        const { connection, instance, logChannel } = this._options;
 
         connection.onNotification(DataExplorerCopyTableDataNotification.type, async () => {
             logChannel.debug(
@@ -1084,6 +1042,10 @@ export class DataExplorerWebviewBridge {
                 vscode.window.showErrorMessage(`Export failed: ${String(error)}`);
             }
         });
+    }
+
+    private _registerCodeNavigationHandlers(): void {
+        const { connection, instance, logChannel } = this._options;
 
         connection.onNotification(
             DataExplorerMoveToNewWindowNotification.type,
@@ -1185,6 +1147,10 @@ export class DataExplorerWebviewBridge {
                 });
             }
         });
+    }
+
+    private _registerFileHandlers(): void {
+        const { connection, instance, logChannel } = this._options;
 
         connection.onNotification(DataExplorerOpenAsPlaintextNotification.type, async () => {
             logChannel.debug(
@@ -1235,6 +1201,9 @@ export class DataExplorerWebviewBridge {
                         await this.sendInitialize();
                     });
                 } catch (error) {
+                    if (error instanceof vscode.CancellationError) {
+                        return;
+                    }
                     this._sendError(
                         `File options update failed: ${String(error)}`,
                         'applyFileOptions',

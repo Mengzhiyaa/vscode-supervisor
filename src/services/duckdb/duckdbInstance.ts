@@ -13,6 +13,9 @@
 // The WASM binaries and standalone worker bundles are produced by scripts/copy-duckdb-assets.mjs.
 import type * as DuckDBTypes from '@duckdb/duckdb-wasm';
 import * as path from 'path';
+import * as vscode from 'vscode';
+import { tableFromIPC } from 'apache-arrow';
+import { throwIfImportCancelled } from './fileImport';
 
 // The DuckDB WASM/worker files are built in dist/duckdb/ by copy-duckdb-assets.mjs.
 // __dirname resolves to the dist/ folder at runtime after bundling.
@@ -154,7 +157,8 @@ export class DuckDBInstance {
     private _disposed = false;
 
     /** Promise chain to serialize concurrent queries */
-    private _runningQuery: Promise<any> = Promise.resolve();
+    private _runningQuery: Promise<void> = Promise.resolve();
+    private _disposePromise: Promise<void> | undefined;
 
     private constructor() { }
 
@@ -284,26 +288,55 @@ export class DuckDBInstance {
      * Queries are serialized: each query waits for the previous one to finish
      * before executing, preventing concurrent execution issues in duckdb-wasm.
      */
-    async query(sql: string): Promise<any> {
-        await this.initialize();
-        if (!this._conn) {
-            throw new Error('DuckDB connection not available');
-        }
+    query(sql: string, token?: vscode.CancellationToken): Promise<any> {
+        const query = this._runningQuery.then(async () => {
+            throwIfImportCancelled(token);
+            await this.initialize();
+            throwIfImportCancelled(token);
+            if (this._disposed || !this._conn) {
+                throw new Error('DuckDB connection not available');
+            }
+            const connection = this._conn;
+            if (!token) {
+                return this._runWorkerOperation(connection.query(sql), 'execute a DuckDB query');
+            }
 
-        // Serialize queries: wait for the previous one to finish
-        await this._runWorkerOperation(this._runningQuery, 'wait for the previous DuckDB query');
-        try {
-            this._runningQuery = this._runWorkerOperation(
-                this._conn.query(sql),
-                'execute a DuckDB query',
-            );
-            const result = await this._runningQuery;
-            return result;
-        } catch (error) {
-            // Reset the chain so subsequent queries can proceed
-            this._runningQuery = Promise.resolve();
-            throw error;
-        }
+            let cancellation: Promise<unknown> | undefined;
+            const listener = token.onCancellationRequested(() => {
+                cancellation = connection.cancelSent().catch(() => undefined);
+            });
+            try {
+                const result = await this._runWorkerOperation(
+                    connection.useUnsafe(async (bindings, connectionId) => {
+                        let header = await bindings.startPendingQuery(connectionId, sql, false);
+                        while (header === null) {
+                            throwIfImportCancelled(token);
+                            header = await bindings.pollPendingQuery(connectionId);
+                        }
+                        const firstChunk = header;
+                        async function* chunks(): AsyncGenerator<Uint8Array> {
+                            yield firstChunk;
+                            for (;;) {
+                                throwIfImportCancelled(token);
+                                const chunk = await bindings.fetchQueryResults(connectionId);
+                                if (chunk === null) { continue; }
+                                if (chunk.byteLength === 0) { return; }
+                                yield chunk;
+                            }
+                        }
+                        return tableFromIPC(chunks());
+                    }),
+                    'execute a cancellable DuckDB query',
+                );
+                throwIfImportCancelled(token);
+                return result;
+            } finally {
+                listener.dispose();
+                await cancellation;
+            }
+        });
+        this._runningQuery = query.then(() => undefined, () => undefined);
+        return query;
     }
 
     /**
@@ -339,21 +372,19 @@ export class DuckDBInstance {
     /**
      * Dispose the DuckDB instance and free resources.
      */
-    async dispose(): Promise<void> {
+    dispose(): Promise<void> {
+        if (this._disposePromise) { return this._disposePromise; }
         this._disposed = true;
-        await this._initPromise?.catch(() => undefined);
-        if (this._conn) {
-            await this._runWorkerOperation(
-                this._conn.close(),
-                'close the DuckDB-WASM connection',
-            ).catch(() => undefined);
+        this._disposePromise = (async () => {
+            await this._initPromise?.catch(() => undefined);
+            await this._runningQuery;
+            await this._conn?.close().catch(() => undefined);
             this._conn = undefined;
-        }
-        if (this._db) {
-            await this._db.terminate().catch(() => undefined);
+            await this._db?.terminate().catch(() => undefined);
             this._db = undefined;
-        }
-        this._worker = undefined;
-        DuckDBInstance._instance = undefined;
+            this._worker = undefined;
+            if (DuckDBInstance._instance === this) { DuckDBInstance._instance = undefined; }
+        })();
+        return this._disposePromise;
     }
 }

@@ -1108,6 +1108,20 @@
           "default": true,
           "description": "Show a one-time notification when the system enters a low-memory state."
         },
+        "dataExplorer.maxImportFileSizeMB": {
+          "type": "number",
+          "default": 256,
+          "minimum": 1,
+          "maximum": 1024,
+          "description": "Maximum file size in MB accepted by the Data Explorer file importer."
+        },
+        "dataExplorer.maxDecompressedFileSizeMB": {
+          "type": "number",
+          "default": 512,
+          "minimum": 1,
+          "maximum": 1024,
+          "description": "Maximum decompressed size in MB accepted for gzip data files."
+        },
         "dataExplorer.enablePreview": {
           "type": "boolean",
           "default": false,

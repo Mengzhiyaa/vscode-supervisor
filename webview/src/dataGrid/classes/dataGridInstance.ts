@@ -1116,6 +1116,8 @@ export abstract class DataGridInstance {
     async setRowHeadersWidth(rowHeadersWidth: number): Promise<void> {
         if (rowHeadersWidth !== this._rowHeadersWidth) {
             this._rowHeadersWidth = rowHeadersWidth;
+            // Redraw the sash and viewport immediately, even if fetching is slow.
+            this.fireOnDidUpdateEvent();
             await this.fetchData();
             this.fireOnDidUpdateEvent();
         }

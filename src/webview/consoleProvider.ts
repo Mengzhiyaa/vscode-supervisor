@@ -421,6 +421,14 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
                 this._initializedSessions.add(params.sessionId);
             }
         });
+        this._registerExecutionHandlers(connection);
+        this._registerConsoleActionHandlers(connection);
+        this._registerSessionHandlers(connection);
+        this._registerOutputNavigationHandlers(connection);
+        this._registerLanguageServiceHandlers(connection);
+    }
+
+    private _registerExecutionHandlers(connection: MessageConnection): void {
 
         // Handle execute request from webview
         connection.onRequest(ConsoleProtocol.ExecuteRequest.type, async (params) => {
@@ -576,6 +584,9 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
                 instance.interrupt();
             }
         });
+    }
+
+    private _registerConsoleActionHandlers(connection: MessageConnection): void {
 
         connection.onRequest(ConsoleProtocol.WorkspaceRequestTrustRequest.type, async () => {
             await vscode.commands.executeCommand('workbench.trust.manage');
@@ -639,6 +650,9 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
                 instance.replyToPrompt(params.value);
             }
         });
+    }
+
+    private _registerSessionHandlers(connection: MessageConnection): void {
 
         // Handle list sessions request
         connection.onRequest(SessionProtocol.ListSessionsRequest.type, async () => {
@@ -757,6 +771,9 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
             this._sessionManager.updateSessionName(params.sessionId, params.newName);
             this._sendSessionInfoUpdate();
         });
+    }
+
+    private _registerOutputNavigationHandlers(connection: MessageConnection): void {
 
         connection.onRequest(SessionProtocol.ListOutputChannelsRequest.type, async (params) => {
             if (!this._sessionManager) {
@@ -811,6 +828,9 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
                 this.log(`Failed to open external URL from console output: ${error}`, vscode.LogLevel.Warning);
             }
         });
+    }
+
+    private _registerLanguageServiceHandlers(connection: MessageConnection): void {
 
         // =====================================================================
         // LSP RPC Handlers (Console LSP Bridge)

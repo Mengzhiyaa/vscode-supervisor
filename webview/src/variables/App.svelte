@@ -63,8 +63,8 @@
         nameColumnWidth: number;
     }
 
-    const DEFAULT_NAME_COLUMN_WIDTH = 130;
-    const MINIMUM_NAME_COLUMN_WIDTH = 100;
+    const DEFAULT_NAME_COLUMN_WIDTH = 100;
+    const MINIMUM_NAME_COLUMN_WIDTH = 80;
     const RIGHT_COLUMN_VISIBILITY_THRESHOLD = 250;
     const DEFAULT_GROUPING: GroupingMode = "kind";
     const DEFAULT_SORTING: SortingMode = "name";

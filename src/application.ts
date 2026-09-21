@@ -350,6 +350,8 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
             this._plotsService,
             this._surfaceLifecycle,
             editorWindowMover,
+            uri => this._previewService.retainProxyUri(uri),
+            uri => this._previewService.keepProxyForExternalWindow(uri),
         );
         this._disposables.push(this._plotEditorProvider);
 

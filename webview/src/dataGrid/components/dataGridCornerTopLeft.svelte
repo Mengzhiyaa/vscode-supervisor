@@ -3,13 +3,17 @@
   Port from Positron's dataGridCornerTopLeft.tsx
 -->
 <script lang="ts">
+    import VerticalSplitter from "../../dataExplorer/components/splitters/verticalSplitter.svelte";
     import { getPositronDataGridContext } from "../positronDataGridContext";
 
     const { instance } = getPositronDataGridContext();
 
     const tooltipText = "Scroll to top-left";
 
-    async function handleClick() {
+    async function handleClick(event?: MouseEvent) {
+        if (event?.target instanceof Element && event.target.closest('[role="separator"]')) {
+            return;
+        }
         await instance.setScrollOffsets(0, 0);
     }
 
@@ -26,41 +30,11 @@
         instance.hoverManager?.hideHover();
     }
 
-    let resizing = $state(false);
-    let startX = $state(0);
-    let startingWidth = $state(0);
-
-    function beginResize(event: MouseEvent) {
-        event.preventDefault();
-        event.stopPropagation();
-
-        resizing = true;
-        startX = event.clientX;
-        startingWidth = instance.rowHeadersWidth;
-
-        window.addEventListener("mousemove", onResize);
-        window.addEventListener("mouseup", endResize);
-    }
-
-    function onResize(event: MouseEvent) {
-        if (!resizing) {
-            return;
-        }
-
-        const delta = event.clientX - startX;
-        const nextWidth = Math.max(
-            20,
-            Math.min(instance.maximumColumnWidth, startingWidth + delta),
-        );
-
-        void instance.setRowHeadersWidth(nextWidth);
-    }
-
-    function endResize() {
-        resizing = false;
-        window.removeEventListener("mousemove", onResize);
-        window.removeEventListener("mouseup", endResize);
-    }
+    const updateTrigger = instance.updateTrigger;
+    const rowHeadersWidth = $derived.by(() => {
+        $updateTrigger;
+        return instance.rowHeadersWidth;
+    });
 </script>
 
 <div
@@ -72,6 +46,9 @@
     role="button"
     tabindex="0"
     onkeydown={(event) => {
+        if (event.target !== event.currentTarget) {
+            return;
+        }
         if (event.key === "Enter" || event.key === " ") {
             event.preventDefault();
             void handleClick();
@@ -79,14 +56,19 @@
     }}
 >
     <div class="border-overlay"></div>
-    <button
-        type="button"
-        class="vertical-splitter"
-        class:active={resizing}
-        tabindex="-1"
-        aria-label="Resize row header width"
-        onmousedown={beginResize}
-    ></button>
+    {#if instance.rowHeadersResize}
+        <div class="vertical-splitter">
+            <VerticalSplitter
+                resizeAriaLabel="Resize row header width"
+                onBeginResize={() => ({
+                    minimumWidth: 20,
+                    maximumWidth: instance.maximumColumnWidth,
+                    startingWidth: rowHeadersWidth,
+                })}
+                onResize={(width) => { void instance.setRowHeadersWidth(width); }}
+            />
+        </div>
+    {/if}
 </div>
 
 <style>
@@ -125,17 +107,7 @@
 
     .data-grid-corner-top-left .vertical-splitter {
         grid-column: splitter / end-columns;
-        border: 0;
-        cursor: col-resize;
-        padding: 0;
-        background-color: transparent;
+        align-self: stretch;
     }
 
-    .data-grid-corner-top-left .vertical-splitter:hover,
-    .data-grid-corner-top-left .vertical-splitter.active {
-        background-color: var(
-            --vscode-sash-hoverBorder,
-            var(--vscode-focusBorder)
-        );
-    }
 </style>

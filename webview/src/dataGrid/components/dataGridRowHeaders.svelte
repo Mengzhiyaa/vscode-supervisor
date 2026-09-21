@@ -15,9 +15,18 @@
     let { rowDescriptors }: Props = $props();
 
     const { instance } = getPositronDataGridContext();
+    const updateTrigger = instance.updateTrigger;
+    const rowHeadersWidth = $derived.by(() => {
+        $updateTrigger;
+        return instance.rowHeadersWidth;
+    });
+    const verticalScrollOffset = $derived.by(() => {
+        $updateTrigger;
+        return instance.verticalScrollOffset;
+    });
 </script>
 
-<div class="data-grid-row-headers" style:width="{instance.rowHeadersWidth}px">
+<div class="data-grid-row-headers" style:width="{rowHeadersWidth}px">
     {#each rowDescriptors.pinnedRowDescriptors as row (row.rowIndex)}
         <DataGridRowHeader
             rowIndex={row.rowIndex}
@@ -30,7 +39,7 @@
     {#each rowDescriptors.unpinnedRowDescriptors as row (row.rowIndex)}
         <DataGridRowHeader
             rowIndex={row.rowIndex}
-            top={row.top - instance.verticalScrollOffset}
+            top={row.top - verticalScrollOffset}
             height={row.height}
             pinned={false}
         />

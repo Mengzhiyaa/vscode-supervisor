@@ -79,6 +79,7 @@ export class PlotEditorProvider implements vscode.Disposable {
     private readonly _currentPlotContent = new Map<string, PlotEditorContent>();
     private readonly _newWindowPanels = new Set<string>();
     private readonly _newWindowPanelGroups = new Map<string, vscode.TabGroup>();
+    private readonly _proxyLeases = new Map<string, vscode.Disposable>();
     private readonly _disposables: vscode.Disposable[] = [];
 
     constructor(
@@ -87,6 +88,8 @@ export class PlotEditorProvider implements vscode.Disposable {
         private readonly _plotsService?: PositronPlotsService,
         private readonly _surfaceLifecycle?: SurfaceLifecycleService,
         private readonly _editorWindowMover: EditorWindowMover = new EditorWindowMover(),
+        private readonly _retainProxyUri?: (uri: vscode.Uri) => vscode.Disposable,
+        private readonly _keepProxyForExternalWindow?: (uri: vscode.Uri) => void,
     ) {
         this._disposables.push(vscode.window.tabGroups.onDidChangeTabGroups(event => {
             for (const [plotId, group] of this._newWindowPanelGroups) {
@@ -165,6 +168,8 @@ export class PlotEditorProvider implements vscode.Disposable {
         this._sendContent(plotId, content);
 
         panel.onDidDispose(() => {
+            this._proxyLeases.get(plotId)?.dispose();
+            this._proxyLeases.delete(plotId);
             attachmentLease?.dispose();
             connection.dispose();
             this._connections.delete(plotId);
@@ -249,6 +254,7 @@ export class PlotEditorProvider implements vscode.Disposable {
         connection.onNotification(RpcProtocol.PlotEditorOpenInBrowserNotification.type, () => {
             const content = this._currentPlotContent.get(plotId);
             if (content?.kind === 'html') {
+                this._keepProxyForExternalWindow?.(vscode.Uri.parse(content.uri));
                 void vscode.env.openExternal(vscode.Uri.parse(content.uri));
             }
         });
@@ -263,6 +269,12 @@ export class PlotEditorProvider implements vscode.Disposable {
     }
 
     private _sendContent(plotId: string, content: PlotEditorContent): void {
+        const lease = content.kind === 'html'
+            ? this._retainProxyUri?.(vscode.Uri.parse(content.uri))
+            : undefined;
+        this._proxyLeases.get(plotId)?.dispose();
+        this._proxyLeases.delete(plotId);
+        if (lease) { this._proxyLeases.set(plotId, lease); }
         const connection = this._connections.get(plotId);
         if (!connection) {
             return;
