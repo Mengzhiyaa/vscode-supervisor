@@ -25,6 +25,7 @@
         onInvert?: (invert: boolean) => void;
         onResize: (newWidth: number) => void;
         resizeAriaLabel?: string;
+        rootClass?: string;
     }
 
     let {
@@ -40,6 +41,7 @@
         onInvert,
         onResize,
         resizeAriaLabel = "Resize summary panel",
+        rootClass = "vertical-splitter",
     }: Props = $props();
 
     let sashRef = $state<HTMLDivElement | undefined>(undefined);
@@ -325,7 +327,7 @@
 </script>
 
 <div
-    class="vertical-splitter"
+    class={rootClass}
     class:collapsible
     style={`width: ${splitterWidth}px;`}
 >

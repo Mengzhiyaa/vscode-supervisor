@@ -59,6 +59,7 @@
     {#if instance.rowHeadersResize}
         <div class="data-grid-vertical-splitter">
             <VerticalSplitter
+                rootClass="data-grid-vertical-splitter"
                 resizeAriaLabel="Resize row header width"
                 onBeginResize={() => ({
                     minimumWidth: 20,
