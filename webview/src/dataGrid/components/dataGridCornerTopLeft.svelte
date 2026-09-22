@@ -57,7 +57,7 @@
 >
     <div class="border-overlay"></div>
     {#if instance.rowHeadersResize}
-        <div class="vertical-splitter">
+        <div class="data-grid-vertical-splitter">
             <VerticalSplitter
                 resizeAriaLabel="Resize row header width"
                 onBeginResize={() => ({
@@ -105,7 +105,7 @@
             );
     }
 
-    .data-grid-corner-top-left .vertical-splitter {
+    .data-grid-corner-top-left .data-grid-vertical-splitter {
         grid-column: splitter / end-columns;
         align-self: stretch;
     }

@@ -146,7 +146,7 @@
     <div class="content"><div class="text" title={rowHeaderText}>{rowHeaderText}</div></div>
 
     {#if instance.rowHeadersResize}
-        <div class="vertical-splitter">
+        <div class="data-grid-vertical-splitter">
             <VerticalSplitter
                 resizeAriaLabel="Resize row header width"
                 onBeginResize={() => ({
@@ -297,7 +297,7 @@
         text-overflow: ellipsis;
     }
 
-    .data-grid-row-header .vertical-splitter {
+    .data-grid-row-header .data-grid-vertical-splitter {
         grid-row: content / end;
         grid-column: splitter / end;
         align-self: stretch;

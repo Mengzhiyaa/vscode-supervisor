@@ -385,7 +385,7 @@
     {#if instance.columnResize}
         <button
             type="button"
-            class="vertical-splitter"
+            class="data-grid-vertical-splitter"
             class:active={resizingWidth}
             tabindex="-1"
             aria-label="Resize column"
@@ -560,7 +560,7 @@
         opacity: 0.5;
     }
 
-    .data-grid-row-cell .vertical-splitter {
+    .data-grid-row-cell .data-grid-vertical-splitter {
         top: 0;
         right: 0;
         bottom: 0;
@@ -584,8 +584,8 @@
         background-color: transparent;
     }
 
-    .data-grid-row-cell .vertical-splitter:hover,
-    .data-grid-row-cell .vertical-splitter.active,
+    .data-grid-row-cell .data-grid-vertical-splitter:hover,
+    .data-grid-row-cell .data-grid-vertical-splitter.active,
     .data-grid-row-cell .horizontal-splitter:hover,
     .data-grid-row-cell .horizontal-splitter.active {
         background-color: var(

@@ -14,6 +14,7 @@ import { DuckDBInstance } from './duckdbInstance';
 import { readXlsxWorksheetMetadata, type XlsxWorksheetMetadata } from './xlsxWorkbook';
 import {
     escapeIdentifier,
+    escapeValue,
     buildWhereClause,
     buildCountQuery,
 } from './sqlBuilder';

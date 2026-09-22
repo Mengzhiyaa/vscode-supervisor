@@ -92,12 +92,25 @@ export class ExecutionHistoryService implements vscode.Disposable {
     }
 
     getExecutionEntries(sessionId: string): ExecutionHistoryEntry[] {
-        return this._loadExecutionEntries(sessionId).map(entry => ({
-            ...entry,
-            output: typeof entry.output === 'string' ? entry.output : { ...entry.output },
-            outputs: entry.outputs?.map(output => ({ ...output })),
-            error: entry.error && { ...entry.error, traceback: [...entry.error.traceback] },
-        }));
+        return this._loadExecutionEntries(sessionId).map(entry => {
+            const copy: ExecutionHistoryEntry = {
+                ...entry,
+                output: typeof entry.output === 'string' ? entry.output : { ...entry.output },
+            };
+            // Omit absent optional fields, including those introduced by loading
+            // a legacy record. An own property set to undefined is not equivalent.
+            if (entry.outputs?.some(output => output.outputId !== undefined)) {
+                copy.outputs = entry.outputs.map(output => ({ ...output }));
+            } else {
+                delete copy.outputs;
+            }
+            if (entry.error) {
+                copy.error = { ...entry.error, traceback: [...entry.error.traceback] };
+            } else {
+                delete copy.error;
+            }
+            return copy;
+        });
     }
 
     restoreLegacyExecutionEntries(
@@ -189,15 +202,19 @@ export class ExecutionHistoryService implements vscode.Disposable {
         }
         const entry = this._getOrCreateExecution(sessionId, executionId, when);
         const current = typeof entry.output === 'string' ? entry.output : '';
-        const outputs = this._getOutputParts(entry);
-        if (replace) {
-            entry.outputs = [{ outputId, text: output }];
-        } else if (!outputId && outputs.length > 0 && !outputs[outputs.length - 1].outputId) {
-            outputs[outputs.length - 1].text += output;
+        if (!outputId && !entry.outputs) {
+            entry.output = replace ? output : current + output;
         } else {
-            outputs.push({ outputId, text: output });
+            const outputs = this._getOutputParts(entry);
+            if (replace) {
+                entry.outputs = [{ outputId, text: output }];
+            } else if (!outputId && outputs.length > 0 && !outputs[outputs.length - 1].outputId) {
+                outputs[outputs.length - 1].text += output;
+            } else {
+                outputs.push({ outputId, text: output });
+            }
+            entry.output = replace ? output : outputs.map(part => part.text).join('');
         }
-        entry.output = replace ? output : current + output;
         this._persistExecutionEntries(sessionId);
     }
 

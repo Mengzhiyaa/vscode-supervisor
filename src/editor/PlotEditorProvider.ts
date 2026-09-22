@@ -8,6 +8,7 @@
 import * as vscode from 'vscode';
 import { createMessageConnection, type MessageConnection } from 'vscode-jsonrpc/node';
 import { PlotClientInstance } from '../runtime/PlotClientInstance';
+import { savePlotImage } from '../runtime/plotImageExport';
 import { PlotRenderFormat } from '../runtime/comms/positronPlotComm';
 import { PositronPlotsService } from '../runtime/positronPlotsService';
 import * as RpcProtocol from '../rpc/webview/plotEditor';
@@ -364,30 +365,29 @@ export class PlotEditorProvider implements vscode.Disposable {
         }
 
         try {
-            const image = content.kind === 'image'
-                ? decodeImageDataUri(content.data)
-                : undefined;
-            const extension = image ? imageExtension(image.mimeType) : 'html';
-            const uri = await vscode.window.showSaveDialog({
-                defaultUri: vscode.Uri.file(`plot-${plotId.substring(0, 8)}.${extension}`),
-                filters: image ? {
-                    [`${extension.toUpperCase()} Image`]: [extension],
-                    'All Files': ['*']
-                } : {
-                    'HTML Document': ['html', 'htm'],
-                    'All Files': ['*'],
-                },
-            });
+            const plot = this._plotsService?.getEditorInstance(plotId) ??
+                this._plotsService?.positronPlotInstances.find(candidate => candidate.id === plotId);
+            const uri = content.kind === 'image'
+                ? await savePlotImage(content.data, `plot-${plotId}`, plot?.metadata.suggested_file_name)
+                : await vscode.window.showSaveDialog({
+                    defaultUri: vscode.Uri.file(`plot-${plotId.substring(0, 8)}.html`),
+                    filters: {
+                        'HTML Document': ['html', 'htm'],
+                        'All Files': ['*'],
+                    },
+                });
 
             if (uri) {
-                const bytes = image?.bytes ?? Buffer.from(
+                const bytes = content.kind === 'html' ? Buffer.from(
                     addHtmlBaseUri(
-                        await this._readHtml(content.kind === 'html' ? content.uri : ''),
-                        content.kind === 'html' ? content.uri : '',
+                        await this._readHtml(content.uri),
+                        content.uri,
                     ),
                     'utf8',
-                );
-                await vscode.workspace.fs.writeFile(uri, bytes);
+                ) : undefined;
+                if (bytes) {
+                    await vscode.workspace.fs.writeFile(uri, bytes);
+                }
                 const message = vscode.l10n.t('Plot exported to {0}', uri.fsPath);
                 this._sendStatus(plotId, message);
                 void vscode.window.showInformationMessage(message);

@@ -40,7 +40,7 @@ suite('[Unit] Plot image encoding', () => {
     });
 
     test('decodes the real StaticPlotClient SVG URI', () => {
-        const plot = StaticPlotClient.fromMessage('session', 'plot', 'image/svg+xml', svg);
+        const plot = StaticPlotClient.fromMessage('session', 'plot', '2026-09-22T00:00:00Z', 'image/svg+xml', svg);
         try {
             assert.deepStrictEqual(Buffer.from(decodeImageDataUri(plot.uri).bytes), Buffer.from(svg));
         } finally { plot.dispose(); }
@@ -107,7 +107,7 @@ suite('[Unit] Plot image export routes', () => {
 
     // Exercise the real handlers without creating visible Webviews or live comms.
     async function saveVia(route: string, dynamic = false): Promise<void> {
-        const plot = StaticPlotClient.fromMessage('session', 'plot', 'image/svg+xml', svg);
+        const plot = StaticPlotClient.fromMessage('session', 'plot', '2026-09-22T00:00:00Z', 'image/svg+xml', svg);
         plot.metadata.suggested_file_name = 'figure.png';
         const client = dynamic ? Object.assign(Object.create(PlotClientInstance.prototype), {
             _lastRender: { uri: svgUri }, metadata: plot.metadata,
@@ -170,7 +170,7 @@ suite('[Unit] Plot image export routes', () => {
 
     test('service clipboard fallback offers image export', async () => {
         vscode.window.showWarningMessage = (async (_message: string, action: string) => action) as unknown as typeof vscode.window.showWarningMessage;
-        const plot = StaticPlotClient.fromMessage('session', 'plot', 'image/svg+xml', svg);
+        const plot = StaticPlotClient.fromMessage('session', 'plot', '2026-09-22T00:00:00Z', 'image/svg+xml', svg);
         const service: PositronPlotsService = Object.assign(Object.create(PositronPlotsService.prototype), {
             _plots: [plot], _selectedPlotId: 'plot', _editorPlotClients: new Map([['plot', plot]]),
         });
