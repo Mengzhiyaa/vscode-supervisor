@@ -148,6 +148,10 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
     private _variablesClient: RuntimeVariablesClientInstance | undefined;
     private _variablesClientId: string | undefined;
     private _pendingClientRequests = 0;
+    private _clientEpoch = 0;
+    private _refreshId = 0;
+    private _dataRevision = 0;
+    private readonly _childLoads = new WeakMap<VariableItem, object>();
     private _clientHandlerRegistered = false;
     private _warnedMissingClient = false;
     private readonly _disposables: vscode.Disposable[] = [];
@@ -214,12 +218,16 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
         }
 
         this._expandedPaths.clear();
+        const refreshId = ++this._refreshId;
+        const revision = this._dataRevision;
         try {
-            await this._runWithClientRequest(async () => {
-                const list = await this._variablesClient!.requestRefresh();
+            const list = await this._runWithClientRequest(client => client.requestRefresh());
+            // A newer refresh or kernel notification is authoritative.
+            if (refreshId === this._refreshId && revision === this._dataRevision) {
                 await this.processList(list);
-            });
+            }
         } catch (error) {
+            if (error instanceof vscode.CancellationError) { return; }
             await this._notifyRequestError('refreshing', error);
             throw error;
         }
@@ -233,10 +241,11 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
         }
 
         try {
-            await this._runWithClientRequest(() =>
-                this._variablesClient!.requestClear(includeHiddenVariables)
+            await this._runWithClientRequest(client =>
+                client.requestClear(includeHiddenVariables)
             );
         } catch (error) {
+            if (error instanceof vscode.CancellationError) { return; }
             await this._notifyRequestError('clearing', error);
             throw error;
         }
@@ -250,12 +259,18 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
             return;
         }
 
+        const revision = this._dataRevision;
         try {
-            await this._runWithClientRequest(async () => {
-                const update = await this._variablesClient!.requestDelete(names);
+            const update = await this._runWithClientRequest(client => client.requestDelete(names));
+            if (revision === this._dataRevision) {
                 await this.processUpdate(update);
-            });
+            } else {
+                // An assignment may have recreated a deleted name while the RPC
+                // was pending. Reconcile with the kernel instead of deleting it again.
+                await this.requestRefresh();
+            }
         } catch (error) {
+            if (error instanceof vscode.CancellationError) { return; }
             await this._notifyRequestError('deleting', error);
             throw error;
         }
@@ -277,14 +292,20 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
 
     async expandVariableItem(path: string[]): Promise<void> {
         const pathString = JSON.stringify(path);
-        if (!this._expandedPaths.has(pathString)) {
-            this._expandedPaths.add(pathString);
-            const variableItem = this.locateVariableItem(path);
-            if (variableItem) {
-                await this.loadChildItems(variableItem);
-            }
+        const variableItem = this.locateVariableItem(path);
+        if (!variableItem || this._expandedPaths.has(pathString)) { return; }
+        const epoch = this._clientEpoch;
+        this._expandedPaths.add(pathString);
+        try {
+            await this.loadChildItems(variableItem, true);
+        } catch (error) {
+            if (error instanceof vscode.CancellationError || epoch !== this._clientEpoch) { return; }
+            this._expandedPaths.delete(pathString);
             this.fireEntriesChanged();
+            await this._notifyRequestError('expanding', error);
+            throw error;
         }
+        if (epoch === this._clientEpoch) { this.fireEntriesChanged(); }
     }
 
     collapseVariableItem(path: string[]): void {
@@ -312,7 +333,7 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
             return [];
         }
 
-        const list = await this._runWithClientRequest(() => this._variablesClient!.list());
+        const list = await this._runWithClientRequest(client => client.list());
         return Array.isArray(list) ? list : (list.variables ?? []);
     }
 
@@ -322,7 +343,7 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
             return { children: [], length: 0 };
         }
 
-        const result = await this._runWithClientRequest(() => this._variablesClient!.inspect(path));
+        const result = await this._runWithClientRequest(client => client.inspect(path));
         return {
             children: result.children ?? [],
             length: result.length ?? 0,
@@ -335,8 +356,8 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
             return '';
         }
 
-        return this._runWithClientRequest(() =>
-            this._variablesClient!.clipboardFormat(path, format)
+        return this._runWithClientRequest(client =>
+            client.clipboardFormat(path, format)
         );
     }
 
@@ -346,7 +367,7 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
             return undefined;
         }
 
-        return this._runWithClientRequest(() => this._variablesClient!.view(path));
+        return this._runWithClientRequest(client => client.view(path));
     }
 
     getClientInstance(): VariablesClientInstance | undefined { return this._variablesClient; }
@@ -379,6 +400,7 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
     }
 
     updateVariables(variables: Variable[]): void {
+        this._dataRevision++;
         this._variableItems.forEach(item => { item.isRecent = false; });
 
         for (const variable of variables) {
@@ -500,6 +522,11 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
     }
 
     private _syncClientState(state: RuntimeClientState): void {
+        if (state !== RuntimeClientState.Connected && state !== this._state) {
+            this._clientEpoch++;
+            this._refreshId++;
+            this._pendingClientRequests = 0;
+        }
         switch (state) {
             case RuntimeClientState.Uninitialized:
                 this._pendingClientRequests = 0;
@@ -520,6 +547,8 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
                 this.setStatus(RuntimeClientStatus.Disconnected);
                 break;
             case RuntimeClientState.Closed:
+                this._disposeClientDisposables();
+                this._variablesClient?.dispose();
                 this._pendingClientRequests = 0;
                 this.setState(RuntimeClientState.Closed);
                 this.setStatus(RuntimeClientStatus.Disconnected);
@@ -538,6 +567,9 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
     }
 
     private _disposeClientDisposables(): void {
+        this._clientEpoch++;
+        this._refreshId++;
+        this._pendingClientRequests = 0;
         this._clientDisposables.forEach(d => d.dispose());
         this._clientDisposables = [];
     }
@@ -597,19 +629,31 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
         );
     }
 
-    private async _runWithClientRequest<T>(action: () => Promise<T>): Promise<T> {
-        this._pendingClientRequests += 1;
+    private async _runWithClientRequest<T>(action: (client: RuntimeVariablesClientInstance) => Promise<T>): Promise<T> {
+        const client = this._variablesClient;
+        const epoch = this._clientEpoch;
+        if (!client) { throw new vscode.CancellationError(); }
+        this._pendingClientRequests++;
         this._updateClientRequestStatus();
-
         try {
-            return await action();
+            const result = await action(client);
+            if (epoch !== this._clientEpoch) { throw new vscode.CancellationError(); }
+            return result;
+        } catch (error) {
+            if (epoch !== this._clientEpoch) { throw new vscode.CancellationError(); }
+            throw error;
         } finally {
-            this._pendingClientRequests = Math.max(0, this._pendingClientRequests - 1);
-            this._updateClientRequestStatus();
+            // An old request must not decrement a replacement client's counter.
+            if (epoch === this._clientEpoch) {
+                this._pendingClientRequests--;
+                this._updateClientRequestStatus();
+            }
         }
     }
 
     private async processList(list: PositronVariablesList): Promise<void> {
+        const epoch = this._clientEpoch;
+        const revision = ++this._dataRevision;
         const variableItems = new Map<string, VariableItem>();
         const promises: Promise<void>[] = [];
         for (const variable of list.data) {
@@ -621,10 +665,14 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
         }
         this._variableItems = variableItems;
         await Promise.all(promises);
-        this.updateEntries();
+        if (epoch === this._clientEpoch && revision === this._dataRevision) {
+            this.updateEntries();
+        }
     }
 
     private async processUpdate(update: PositronVariablesUpdate): Promise<void> {
+        const epoch = this._clientEpoch;
+        const revision = ++this._dataRevision;
         this._variableItems.forEach(item => { item.isRecent = false; });
 
         const promises: Promise<void>[] = [];
@@ -643,7 +691,9 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
         }
 
         await Promise.all(promises);
-        this.updateEntries();
+        if (epoch === this._clientEpoch && revision === this._dataRevision) {
+            this.updateEntries();
+        }
     }
 
     private updateEntries(): void {
@@ -712,7 +762,7 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
         return rootItem.locateVariableItem(path.slice(1));
     }
 
-    private async loadChildItems(variableItem: VariableItem): Promise<void> {
+    private async loadChildItems(variableItem: VariableItem, reportErrors = false): Promise<void> {
         if (!this._variablesClient || !variableItem.hasChildren) {
             variableItem.childItems = [];
             variableItem.overflowEntry = undefined;
@@ -720,10 +770,15 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
             return;
         }
 
+        const epoch = this._clientEpoch;
+        const request = {};
+        this._childLoads.set(variableItem, request);
+        const isCurrent = () => epoch === this._clientEpoch &&
+            this._childLoads.get(variableItem) === request && this.isPathExpanded(variableItem.path) &&
+            (!reportErrors || this.locateVariableItem(variableItem.path) === variableItem);
         try {
-            const inspected = await this._runWithClientRequest(() =>
-                this._variablesClient!.inspect(variableItem.path)
-            );
+            const inspected = await this._runWithClientRequest(client => client.inspect(variableItem.path));
+            if (!isCurrent()) { return; }
             const childItems: VariableItem[] = [];
             const promises: Promise<void>[] = [];
 
@@ -737,6 +792,7 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
             }
 
             await Promise.all(promises);
+            if (!isCurrent()) { return; }
 
             variableItem.childItems = childItems;
             variableItem.totalChildren = inspected.length ?? childItems.length;
@@ -752,6 +808,8 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
                 )
                 : undefined;
         } catch (error) {
+            if (!isCurrent() || error instanceof vscode.CancellationError) { return; }
+            if (reportErrors) { throw error; }
             this._outputChannel.warn(
                 `[VariablesInstance] Failed to load children for ${JSON.stringify(variableItem.path)}: ${error}`
             );
@@ -797,7 +855,7 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
     private async _notifyRequestError(action: string, error: unknown): Promise<void> {
         const message = error instanceof Error ? error.message : String(error);
         this._outputChannel.warn(`[VariablesInstance] Error ${action} variables: ${message}`);
-        await vscode.window.showErrorMessage(`Error ${action} variables: ${message}`);
+        void vscode.window.showErrorMessage(`Error ${action} variables: ${message}`);
     }
 
     private fireEntriesChanged(): void {

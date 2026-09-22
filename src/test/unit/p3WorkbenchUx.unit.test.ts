@@ -1,9 +1,8 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
+import { decodeImageDataUri, imageExtension } from '../../shared/imageDataUri';
 import {
     addHtmlBaseUri,
-    decodeImageDataUri,
-    imageExtension,
 } from '../../editor/PlotEditorProvider';
 import {
     ExecutionEntryType,

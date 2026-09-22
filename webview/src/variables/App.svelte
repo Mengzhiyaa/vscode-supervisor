@@ -113,6 +113,8 @@
     let filterTimer: ReturnType<typeof setTimeout> | undefined;
     let busyProgressTimer: ReturnType<typeof setTimeout> | undefined;
     let observedSettledInstance = false;
+    const entryRequests = new Map<string, object>();
+    let selectionVersion = 0;
     const recentExpiryTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
     function getSessionData(sessionId: string): SessionVariablesData {
@@ -295,6 +297,7 @@
         rpc.onNotification(
             "variables/entriesChanged",
             (params: { sessionId: string; entries: VariableEntry[]; revision: number }) => {
+                entryRequests.delete(params.sessionId);
                 const data = ensureSessionData(params.sessionId);
                 if (params.revision < (data.revision ?? 0)) {
                     return;
@@ -324,6 +327,7 @@
             "session/info",
             (params: { sessions: SessionInfo[]; activeSessionId?: string }) => {
                 const previousActiveSessionId = activeSessionId;
+                selectionVersion++;
                 for (const session of params.sessions) {
                     ensureSessionData(session.id);
                 }
@@ -333,9 +337,10 @@
                     params.sessions.map((session) => session.id),
                 );
                 for (const sessionId of Array.from(
-                    variablesInstanceMap.keys(),
+                    sessionDataMap.keys(),
                 )) {
                     if (!knownSessionIds.has(sessionId)) {
+                        entryRequests.delete(sessionId);
                         variablesInstanceMap.delete(sessionId);
                         sessionDataMap.delete(sessionId);
                         clearRecentTimersForSession(sessionId);
@@ -391,6 +396,7 @@
         rpc.onNotification(
             "variables/instanceStopped",
             (params: { sessionId: string }) => {
+                entryRequests.delete(params.sessionId);
                 variablesInstanceMap.delete(params.sessionId);
                 sessionDataMap.delete(params.sessionId);
                 clearRecentTimersForSession(params.sessionId);
@@ -411,6 +417,7 @@
             "variables/activeInstanceChanged",
             (params: { sessionId?: string }) => {
                 const previousActiveSessionId = activeSessionId;
+                selectionVersion++;
                 activeVariablesInstanceId = params.sessionId;
                 const nextActiveSessionId = resolveActiveSessionId(
                     sessions,
@@ -489,6 +496,8 @@
         void hydrateMemoryUsage(rpc);
 
         return () => {
+            entryRequests.clear();
+            selectionVersion++;
             if (filterTimer) clearTimeout(filterTimer);
             if (busyProgressTimer) clearTimeout(busyProgressTimer);
             for (const timer of recentExpiryTimers.values()) clearTimeout(timer);
@@ -574,7 +583,9 @@
         const targetSessionId = sessionId ?? activeSessionId;
         if (!connection || !targetSessionId) return;
 
-        loading = true;
+        const request = {};
+        entryRequests.set(targetSessionId, request);
+        if (activeSessionId === targetSessionId) { loading = true; }
         try {
             const result = (await connection.sendRequest(
                 "variables/listEntries",
@@ -584,6 +595,7 @@
                 },
             )) as { entries: VariableEntry[]; revision: number; unchanged: boolean };
 
+            if (entryRequests.get(targetSessionId) !== request) { return; }
             const data = ensureSessionData(targetSessionId);
             data.loaded = true;
             data.revision = result.revision;
@@ -602,7 +614,10 @@
         } catch (error) {
             console.error("Failed to fetch variable entries:", error);
         } finally {
-            loading = false;
+            if (entryRequests.get(targetSessionId) === request) {
+                entryRequests.delete(targetSessionId);
+                if (activeSessionId === targetSessionId) { loading = false; }
+            }
         }
     }
 
@@ -636,11 +651,13 @@
     async function selectVariablesInstance(sessionId: string) {
         if (!connection || !sessionId || sessionId === activeSessionId) return;
 
+        const version = ++selectionVersion;
         try {
             saveSessionUiState(activeSessionId);
             await connection.sendRequest("variables/setActiveSession", {
                 sessionId,
             });
+            if (version !== selectionVersion) { return; }
             activeVariablesInstanceId = sessionId;
             activeSessionId = sessionId;
             restoreSessionUiState(sessionId);
@@ -664,6 +681,7 @@
     }
 
     function restoreSessionUiState(sessionId: string) {
+        showDeleteAllDialog = false;
         const data = ensureSessionData(sessionId);
         selectedEntryId = data.selectedEntryId;
         nameColumnWidth = data.nameColumnWidth;

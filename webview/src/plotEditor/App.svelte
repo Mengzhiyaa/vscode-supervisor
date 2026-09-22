@@ -6,6 +6,7 @@
      */
 
     import { onMount } from "svelte";
+    import { copyImageToClipboard } from "$lib/imageClipboard";
     import { getRpcConnection } from "$lib/rpc/client";
     import type { MessageConnection } from "vscode-jsonrpc/browser";
     import PanZoomImage from "../plots/PanZoomImage.svelte";
@@ -106,38 +107,14 @@
                 statusError = false;
             })
             .catch(() => {
+                statusMessage = localize("plots.copyUnavailable", "Image could not be copied. Use Save Plot to export it.");
+                statusError = true;
                 connection?.sendNotification("plotEditor/copy");
             });
     }
 
     function handleOpenInBrowser() {
         connection?.sendNotification("plotEditor/openInBrowser");
-    }
-
-    async function copyImageToClipboard(dataUri: string): Promise<void> {
-        const ClipboardItemCtor = window.ClipboardItem;
-        if (!navigator.clipboard || !ClipboardItemCtor)
-            throw new Error("Clipboard API not available");
-
-        const match = dataUri.match(/^data:([^;]+);base64,(.+)$/);
-        if (!match) throw new Error("Unsupported data URI format");
-
-        const mime = match[1];
-        const base64 = match[2];
-        const byteString = atob(base64);
-        const bytes = new Uint8Array(byteString.length);
-        for (let i = 0; i < byteString.length; i++) {
-            bytes[i] = byteString.charCodeAt(i);
-        }
-        const blob = new Blob([bytes], { type: mime });
-
-        if (ClipboardItemCtor.supports && !ClipboardItemCtor.supports(mime)) {
-            throw new Error(`Unsupported image format: ${mime}`);
-        }
-
-        await navigator.clipboard.write([
-            new ClipboardItemCtor({ [mime]: blob }),
-        ]);
     }
 
     function handleWindowKeyDown(event: KeyboardEvent) {

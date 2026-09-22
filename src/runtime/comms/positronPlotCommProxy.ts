@@ -28,6 +28,7 @@ export interface UpdateEvent {
         settings?: {
             size?: IPlotSize;
             pixel_ratio?: number;
+            format?: PlotRenderFormat;
         };
     };
 }
@@ -42,6 +43,7 @@ export interface UpdateEvent {
  * Matches Positron's PositronPlotCommProxy class.
  */
 export class PositronPlotCommProxy implements vscode.Disposable {
+    private _disposed = false;
     /**
      * The currently active render request, if any.
      */
@@ -153,7 +155,8 @@ export class PositronPlotCommProxy implements vscode.Disposable {
                         mime_type: evt.pre_render.mime_type,
                         settings: evt.pre_render.settings ? {
                             size: evt.pre_render.settings.size,
-                            pixel_ratio: evt.pre_render.settings.pixel_ratio
+                            pixel_ratio: evt.pre_render.settings.pixel_ratio,
+                            format: evt.pre_render.settings.format
                         } : undefined
                     };
                 }
@@ -294,6 +297,11 @@ export class PositronPlotCommProxy implements vscode.Disposable {
      * Dispose the comm proxy and clean up resources.
      */
     dispose(): void {
+        if (this._disposed) { return; }
+        this._disposed = true;
+        // Notify comm/queue listeners before detaching them. Only the final
+        // surface reference disposes this shared owner.
+        this._client.dispose();
         // Cancel any pending render
         this._currentRender?.cancel();
 

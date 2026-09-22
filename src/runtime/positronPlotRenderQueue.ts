@@ -28,6 +28,8 @@ export type PlotOperationResult = IRenderedPlot | IntrinsicSize | PlotMetadata |
  * Matches Positron's IRenderedPlot interface.
  */
 export interface IRenderedPlot {
+    /** Format is part of the render cache key. */
+    format?: PlotRenderFormat;
     /** The size of the plot, in logical pixels, if known */
     size?: IPlotSize;
 
@@ -562,6 +564,7 @@ export class PositronPlotRenderQueue implements vscode.Disposable {
                 const renderResult: IRenderedPlot = {
                     size: operationRequest.size,
                     pixel_ratio: operationRequest.pixel_ratio!,
+                    format: operationRequest.format,
                     uri,
                     renderTimeMs
                 };

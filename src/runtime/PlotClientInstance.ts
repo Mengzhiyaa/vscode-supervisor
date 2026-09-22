@@ -5,12 +5,14 @@
 
 import * as vscode from 'vscode';
 import {
+    type LanguageRuntimeMessageCommData,
     type LanguageRuntimeMessageCommOpen,
+    RuntimeClientType,
 } from '../internal/runtimeTypes';
 import { RuntimeClientInstance, RuntimeClientMessageSender } from './RuntimeClientInstance';
 import type { IPlotSize, IPositronPlotSizingPolicy } from './sizingPolicy';
 import type { IntrinsicSize, PlotOrigin, PlotRenderSettings, PlotResult } from './comms/positronPlotComm';
-import { PlotRenderFormat } from './comms/positronPlotComm';
+import { PlotRenderFormat, PlotUnit } from './comms/positronPlotComm';
 import { DeferredRender, IRenderedPlot } from './positronPlotRenderQueue';
 import { PlotSizingPolicyAuto } from './sizingPolicyAuto';
 import { PlotSizingPolicyCustom } from './sizingPolicyCustom';
@@ -107,8 +109,8 @@ export class PlotClientInstance extends RuntimeClientInstance {
     // The currently active render request, if any (for smart pre-render checking)
     private _currentRender?: DeferredRender;
 
-    // The render request queued for processing after an update
-    private _queuedRender?: DeferredRender;
+    private readonly _plotSubscriptions: vscode.Disposable[] = [];
+    private _disposedPlot = false;
 
     // Current state of the plot client
     private _plotState: PlotClientState = PlotClientState.Unrendered;
@@ -219,93 +221,76 @@ export class PlotClientInstance extends RuntimeClientInstance {
                 uri,
                 size: preRender.settings.size,
                 pixel_ratio: preRender.settings.pixel_ratio,
+                format: preRender.settings.format ?? this._preRenderFormat(preRender.mime_type),
                 renderTimeMs: 0,
             };
         }
 
-        // Listen for close events from the comm proxy
-        commProxy.onDidClose(() => {
-            this._onDidClose.fire();
-            this._currentRender?.cancel();
-            this._stateEmitter.fire(PlotClientState.Closed);
-        });
+        this._plotSubscriptions.push(commProxy.onDidClose(() => this.dispose()));
 
-        // Listen for render update events from the comm proxy (Positron-style with queuePlotUpdateRequest)
-        commProxy.onDidRenderUpdate(async (evt) => {
+        this._plotSubscriptions.push(commProxy.onDidRenderUpdate(async (evt) => {
             const preRender = evt.pre_render;
+            // Preserve the viewport request before installing the new kernel image.
+            const desired = this._currentRender?.renderRequest ?? this._lastRender;
             let needsSelect = true;
-
             if (preRender?.data && preRender?.mime_type && preRender?.settings) {
-                const uri = `data:${preRender.mime_type};base64,${preRender.data}`;
-                const preRenderPlot: IRenderedPlot = {
-                    uri,
+                const rendered: IRenderedPlot = {
+                    uri: `data:${preRender.mime_type};base64,${this._padBase64(preRender.data)}`,
                     size: preRender.settings.size,
                     pixel_ratio: preRender.settings.pixel_ratio || 1,
+                    format: preRender.settings.format ?? this._preRenderFormat(preRender.mime_type),
                     renderTimeMs: 0,
                 };
-
-                // Store the pre-rendering as the last render
-                this._lastRender = preRenderPlot;
-
-                // Fire the render update event to select the updated plot in the UI
-                this._renderUpdateEmitter.fire(preRenderPlot);
-
-                // Smart pre-render checking: Check if settings match current render request
-                const currentRenderRequest = this._currentRender?.renderRequest ?? this._lastRender;
-                const normalizedSettings = {
-                    size: preRender.settings.size,
-                    pixel_ratio: preRender.settings.pixel_ratio || 1
-                };
-                if (currentRenderRequest && this._settingsEqual(
-                    normalizedSettings,
-                    currentRenderRequest
-                )) {
-                    // Settings match — treat pre-render as final, notify listeners
-                    this._completeRenderEmitter.fire(preRenderPlot);
-                    return;
+                if (this._currentRender && this._settingsEqual(rendered, this._currentRender.renderRequest)) {
+                    this._currentRender.complete(rendered);
+                } else {
+                    this._currentRender?.cancel();
                 }
-
-                // Settings mismatch — skip pre-render notification to avoid
-                // transmitting an image that will be immediately replaced by
-                // the re-render below. Also don't select plot again to avoid
-                // unexpected jerkiness.
+                this._currentRender = undefined;
+                this._lastRender = rendered;
+                this._stateEmitter.fire(PlotClientState.Rendered);
+                this._completeRenderEmitter.fire(rendered);
+                this._renderUpdateEmitter.fire(rendered);
+                if (!desired || this._settingsEqual(rendered, desired)) { return; }
                 needsSelect = false;
             }
-
-            // No pre-render or settings mismatch: Queue a render request
             try {
-                const rendered = await this._queuePlotUpdateRequest();
-
-                // Fire the update event to select it in the UI
-                if (needsSelect) {
-                    this._renderUpdateEmitter.fire(rendered);
-                }
-            } catch (err) {
-                // Log error but don't crash - plot may not have been rendered yet
-                logFrameworkDiagnostic('PlotClientInstance', `Failed to queue plot update request: ${err}`);
+                const rendered = await this._queuePlotUpdateRequest(desired);
+                if (needsSelect && !this._disposedPlot) { this._renderUpdateEmitter.fire(rendered); }
+            } catch (error) {
+                if (this._disposedPlot || (error instanceof Error && error.message === 'Canceled')) { return; }
+                logFrameworkDiagnostic('PlotClientInstance', `Failed to queue plot update request: ${error}`);
                 this._onDidUpdatePlot.fire();
             }
-        });
+        }));
 
         // Listen for show plot events from the comm proxy
-        commProxy.onDidShowPlot(() => {
+        this._plotSubscriptions.push(commProxy.onDidShowPlot(() => {
             this._showPlotEmitter.fire();
-        });
+        }));
 
         // Listen for intrinsic size changes from the comm proxy
-        commProxy.onDidSetIntrinsicSize((size) => {
+        this._plotSubscriptions.push(commProxy.onDidSetIntrinsicSize((size) => {
             this._intrinsicSizeEmitter.fire(size);
-        });
+        }));
 
         // Listen for state changes
-        this.onDidChangeState((state) => {
+        this._plotSubscriptions.push(this.onDidChangeState((state) => {
             this._plotState = state;
-        });
+        }));
     }
 
-    /**
-     * Pad base64 string to ensure proper decoding.
-     */
+    /** Infer the format for older kernels that omit it from pre-render settings. */
+    private _preRenderFormat(mime: string): PlotRenderFormat {
+        switch (mime.toLowerCase()) {
+            case 'image/svg+xml': return PlotRenderFormat.Svg;
+            case 'image/jpeg': return PlotRenderFormat.Jpeg;
+            case 'application/pdf': return PlotRenderFormat.Pdf;
+            case 'image/tiff': return PlotRenderFormat.Tiff;
+            default: return PlotRenderFormat.Png;
+        }
+    }
+
     private _padBase64(data: string): string {
         const padding = data.length % 4;
         if (padding > 0) {
@@ -393,7 +378,7 @@ export class PlotClientInstance extends RuntimeClientInstance {
         if (left.size?.height !== right.size?.height) {return false;}
         if (left.size?.width !== right.size?.width) {return false;}
         if (left.pixel_ratio !== right.pixel_ratio) {return false;}
-        return left.format === right.format;
+        return (left.format ?? PlotRenderFormat.Png) === (right.format ?? PlotRenderFormat.Png);
     }
 
     /**
@@ -405,109 +390,56 @@ export class PlotClientInstance extends RuntimeClientInstance {
      * @returns A promise that resolves to a rendered image
      */
     renderPlot(size: IPlotSize | undefined, pixel_ratio: number, format = PlotRenderFormat.Png, suppressCompleteEvent = false): Promise<IRenderedPlot> {
-        // Deal with whole pixels only
-        const sizeInt = size && {
-            height: Math.floor(size.height),
-            width: Math.floor(size.width)
+        if (this._disposedPlot) { return Promise.reject(new vscode.CancellationError()); }
+        const settings = {
+            size: size && { height: Math.floor(size.height), width: Math.floor(size.width) },
+            pixel_ratio,
+            format,
         };
-
-        // Compare against the last render request
-        if (sizeInt && this._lastRender?.size && this._settingsEqual(
-            { size: sizeInt, pixel_ratio, format },
-            this._lastRender
-        )) {
-            // The last render request was the same size; return the last render result
+        if (!this._currentRender && this._lastRender && this._settingsEqual(settings, this._lastRender)) {
             return Promise.resolve(this._lastRender);
         }
-
-        // Create and track the render request for smart pre-render checking
-        const request = new DeferredRender({
-            size: sizeInt,
-            pixel_ratio,
-            format
-        });
-        this._currentRender = request;
-
-        // Use queue-based rendering via the comm proxy
-        this._stateEmitter.fire(PlotClientState.RenderPending);
-        this._commProxy.render(request);
-
-        return request.promise.then((rendered) => {
-            const isFirstRender = !this._lastRender;
-            const freezeSlowPlots = vscode.workspace
-                .getConfiguration()
-                .get<boolean>(PlotsConfiguration.freezeSlowPlots, true);
-            if (shouldFreezeSlowPlot(isFirstRender, rendered, freezeSlowPlots)) {
-                // Freeze the first expensive render at its actual dimensions so
-                // viewport changes do not repeatedly trigger the same work.
-                this.sizingPolicy = new PlotSizingPolicyCustom(rendered.size, true);
-            }
-            this._lastRender = rendered;
-            this._lastRenderTimeMs = rendered.renderTimeMs;
-            if (!suppressCompleteEvent) {
-                this._completeRenderEmitter.fire(rendered);
-            }
-            this._stateEmitter.fire(PlotClientState.Rendered);
-            this._currentRender = undefined;
-            return rendered;
-        }).catch((err) => {
-            this._stateEmitter.fire(PlotClientState.Rendered);
-            this._currentRender = undefined;
-            throw err;
-        });
+        return this._performRender(settings, suppressCompleteEvent);
     }
 
-    /**
-     * Queues a plot update request, if necessary. Returns a promise that
-     * resolves with the rendered plot.
-     * 
-     * Matches Positron's queuePlotUpdateRequest() pattern.
-     */
-    private _queuePlotUpdateRequest(): Promise<IRenderedPlot> {
-        if (this._queuedRender) {
-            // There is already a queued render request; it will take care of
-            // updating the plot.
-            return this._queuedRender.promise;
-        }
-
-        // If we have never rendered this plot, we can't process any updates yet.
-        const render = this._currentRender?.renderRequest ?? this._lastRender;
-        if (!render) {
-            return Promise.reject(new Error('Cannot update plot before it has been rendered'));
-        }
-
-        // Use the dimensions of the last or current render request to determine
-        // the size and DPI of the plot to update.
-        const sizeInt = render.size && {
-            height: Math.floor(render.size.height),
-            width: Math.floor(render.size.width)
-        };
-
-        // Create the render request
-        // Note: IRenderedPlot doesn't have format, so default to Png
-        const format = 'format' in render ? render.format : PlotRenderFormat.Png;
-        const request = new DeferredRender({
-            size: sizeInt,
-            pixel_ratio: render.pixel_ratio,
-            format
-        });
-        this._queuedRender = request;
-
-        // Use queue-based rendering via the comm proxy
+    private _performRender(settings: { size?: IPlotSize; pixel_ratio: number; format: PlotRenderFormat }, suppressCompleteEvent = false): Promise<IRenderedPlot> {
+        if (this._disposedPlot) { return Promise.reject(new vscode.CancellationError()); }
+        this._currentRender?.cancel();
+        const request = new DeferredRender(settings);
+        this._currentRender = request;
         this._stateEmitter.fire(PlotClientState.RenderPending);
+        // Install promise handlers before the proxy can synchronously complete/cancel it.
+        const result = request.promise.then(rendered => {
+            const result = { ...rendered, format: settings.format };
+            if (this._disposedPlot || this._currentRender !== request) { return result; }
+            const frozen = vscode.workspace.getConfiguration().get<boolean>(PlotsConfiguration.freezeSlowPlots, true);
+            if (shouldFreezeSlowPlot(!this._lastRender, result, frozen)) {
+                this.sizingPolicy = new PlotSizingPolicyCustom(result.size, true);
+            }
+            this._lastRender = result;
+            this._lastRenderTimeMs = result.renderTimeMs;
+            this._currentRender = undefined;
+            if (!suppressCompleteEvent) { this._completeRenderEmitter.fire(result); }
+            this._stateEmitter.fire(PlotClientState.Rendered);
+            return result;
+        }, error => {
+            if (!this._disposedPlot && this._currentRender === request) {
+                this._currentRender = undefined;
+                this._stateEmitter.fire(PlotClientState.Rendered);
+            }
+            throw error;
+        });
         this._commProxy.render(request);
+        return result;
+    }
 
-        return request.promise.then((rendered) => {
-            this._lastRender = rendered;
-            this._lastRenderTimeMs = rendered.renderTimeMs;
-            this._completeRenderEmitter.fire(rendered);
-            this._stateEmitter.fire(PlotClientState.Rendered);
-            this._queuedRender = undefined;
-            return rendered;
-        }).catch((err) => {
-            this._stateEmitter.fire(PlotClientState.Rendered);
-            this._queuedRender = undefined;
-            throw err;
+    private _queuePlotUpdateRequest(settings = this._currentRender?.renderRequest ?? this._lastRender): Promise<IRenderedPlot> {
+        if (!settings) { return Promise.reject(new Error('Cannot update plot before it has been rendered')); }
+        // Kernel updates invalidate the cached pixels even when dimensions match.
+        return this._performRender({
+            size: settings.size,
+            pixel_ratio: settings.pixel_ratio,
+            format: settings.format ?? PlotRenderFormat.Png,
         });
     }
 
@@ -554,8 +486,14 @@ export class PlotClientInstance extends RuntimeClientInstance {
      * Disposes the plot client.
      */
     override dispose(): void {
+        if (this._disposedPlot) { return; }
+        this._disposedPlot = true;
+        this._currentRender?.cancel();
+        this._currentRender = undefined;
         this._stateEmitter.fire(PlotClientState.Closed);
         this._onDidClose.fire();
+        this._plotSubscriptions.forEach(subscription => subscription.dispose());
+        this._plotSubscriptions.length = 0;
 
         // Dispose emitters
         this._onDidRenderPlot.dispose();
@@ -568,6 +506,7 @@ export class PlotClientInstance extends RuntimeClientInstance {
         this._zoomLevelEmitter.dispose();
         this._showPlotEmitter.dispose();
         this._metadataUpdateEmitter.dispose();
+        this._renderUpdateEmitter.dispose();
 
         super.dispose();
     }

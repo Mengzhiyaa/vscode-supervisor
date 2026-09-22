@@ -1,4 +1,9 @@
 {
+  "Image could not be copied. Use Save Plot to export it.": "无法复制图片。请使用“保存绘图”导出。",
+  "Image clipboard is not available in this environment.": "当前环境不支持图片剪贴板。",
+  "Save Plot": "保存绘图",
+  "Plot exported to {0}": "绘图已导出至 {0}",
+  "Failed to export plot: {0}": "导出绘图失败：{0}",
   "Add Filter": "添加筛选器",
   "All values are missing ({0} values)": "所有值均缺失（{0} 个值）",
   "Apply": "应用",

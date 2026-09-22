@@ -9,6 +9,7 @@ export type WebviewLocalizationMessages = Readonly<Record<string, string>>;
  */
 export function createWebviewLocalizationMessages(): WebviewLocalizationMessages {
     return {
+        'plots.copyUnavailable': vscode.l10n.t('Image could not be copied. Use Save Plot to export it.'),
         'common.cancel': vscode.l10n.t('Cancel'),
         'common.close': vscode.l10n.t('Close'),
         'common.copy': vscode.l10n.t('Copy'),

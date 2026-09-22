@@ -10,5 +10,7 @@ webview/dist/
 webview/test-results/
 webview/playwright-report/
 docs/*
+!docs/agent-development.md
+!docs/agent-instructions-audit.md
 # Added by code-review-graph
 .code-review-graph/

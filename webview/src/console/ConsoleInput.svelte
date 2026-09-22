@@ -1105,7 +1105,6 @@
                 resubmitQueuedRef.current = false;
 
                 let status = "executed";
-                let cancelled = false;
 
                 if (connection) {
                     const cancellationSource = new CancellationTokenSource();
@@ -1121,22 +1120,20 @@
                             },
                             cancellationSource.token,
                         )) as { status: string };
-                        if (cancellationSource.token.isCancellationRequested) {
-                            cancelled = true;
-                        } else {
-                            status = result.status;
-                        }
+                        // Cancellation is a request, not proof that execution
+                        // was cancelled. In particular, an executed response
+                        // must never be restored and submitted a second time.
+                        status = result.status;
                     } catch (error) {
-                        if (cancellationSource.token.isCancellationRequested) {
-                            cancelled = true;
-                        } else {
-                            console.error("Cannot execute code:", error);
-                            restoreSubmittedCodeWithTypeAhead(
-                                submissionModel,
-                                submittedCode,
-                            );
-                            return true;
-                        }
+                        // A transport error leaves execution status unknown.
+                        // Preserve the input for manual recovery, but do not
+                        // automatically retry it even if Enter was queued.
+                        console.error("Cannot execute code:", error);
+                        restoreSubmittedCodeWithTypeAhead(
+                            submissionModel,
+                            submittedCode,
+                        );
+                        return true;
                     } finally {
                         if (
                             submissionCancellationSourceRef.current ===
@@ -1149,20 +1146,6 @@
                 } else {
                     await submitCodeEditorWidgetCode(
                         submittedSessionId,
-                        submissionModel,
-                        submittedCode,
-                    );
-                    if (
-                        resubmitQueuedRef.current &&
-                        submissionModel.getValue().trim()
-                    ) {
-                        continue;
-                    }
-                    return true;
-                }
-
-                if (cancelled) {
-                    restoreSubmittedCodeWithTypeAhead(
                         submissionModel,
                         submittedCode,
                     );

@@ -5,6 +5,9 @@
      * Follows Positron's pattern of maintaining separate state per session.
      */
     import { onMount, tick } from "svelte";
+    import { copyImageToClipboard } from "$lib/imageClipboard";
+    import { localize } from "$lib/localization";
+
     import { getRpcConnection } from "$lib/rpc/client";
     import ActionBar from "./ActionBar.svelte";
     import PlotsContainer from "./PlotsContainer.svelte";
@@ -17,6 +20,8 @@
         type EditorTarget,
     } from "./types";
     import CustomSizeDialog from "./CustomSizeDialog.svelte";
+
+    let copyError = $state("");
 
     interface Plot {
         id: string;
@@ -1082,68 +1087,20 @@
         }
     }
 
-    function dataUriToBlob(dataUri: string): Blob | null {
-        const match = dataUri.match(/^data:([^;]+);base64,(.+)$/);
-        if (!match) {
-            return null;
-        }
-        const mime = match[1];
-        const base64Data = match[2];
-        const byteString = atob(base64Data);
-        const bytes = new Uint8Array(byteString.length);
-        for (let i = 0; i < byteString.length; i++) {
-            bytes[i] = byteString.charCodeAt(i);
-        }
-        return new Blob([bytes], { type: mime });
-    }
-
-    async function copyImageToClipboard(dataUri: string): Promise<boolean> {
-        const clipboardItemCtor = (window as any).ClipboardItem as
-            | {
-                  new (items: Record<string, Blob>): any;
-                  supports?: (type: string) => boolean;
-              }
-            | undefined;
-
-        if (!navigator.clipboard || !clipboardItemCtor) {
-            return false;
-        }
-
-        try {
-            const blob = dataUriToBlob(dataUri);
-            if (!blob) {
-                throw new Error("Unsupported data URI format");
-            }
-            const mime = blob.type || "image/png";
-
-            if (
-                clipboardItemCtor.supports &&
-                !clipboardItemCtor.supports(mime)
-            ) {
-                throw new Error(`Unsupported image format: ${mime}`);
-            }
-
-            await navigator.clipboard.write([
-                new clipboardItemCtor({
-                    [mime]: blob,
-                }),
-            ]);
-            return true;
-        } catch (e) {
-            console.error("Failed to copy image to clipboard:", e);
-            return false;
-        }
-    }
-
     async function handleCopy() {
         if (!selectedPlotId) return;
         if (selectedPlot?.kind === "html") {
             console.warn("Copy not supported for HTML plots");
             return;
         }
+        copyError = "";
         const dataUri = await resolvePlotDataUri();
-        if (dataUri && (await copyImageToClipboard(dataUri))) {
+        try {
+            if (!dataUri) throw new Error("No image available");
+            await copyImageToClipboard(dataUri);
             return;
+        } catch {
+            copyError = localize("plots.copyUnavailable", "Image could not be copied. Use Save Plot to export it.");
         }
 
         try {
@@ -1632,6 +1589,9 @@
 <svelte:window onkeydowncapture={handleWindowKeyDown} />
 
 <div class="positron-plots-container">
+    {#if copyError}
+        <div role="alert" class="copy-error">{copyError}</div>
+    {/if}
     <ActionBar
         plotCount={plots.length}
         {currentIndex}
@@ -1723,6 +1683,12 @@
 />
 
 <style>
+    .copy-error {
+        padding: 6px;
+        color: var(--vscode-errorForeground);
+        font-size: var(--vscode-font-size);
+    }
+
     .positron-plots-container {
         display: flex;
         flex-direction: column;

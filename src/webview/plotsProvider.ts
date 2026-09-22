@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
-import { createMessageConnection, MessageConnection } from 'vscode-jsonrpc/node';
+import { savePlotImage, offerPlotImageExport } from '../runtime/plotImageExport';
+import { createMessageConnection, MessageConnection } from 'vscode-jsonrpc';
 import { BaseWebviewProvider } from './baseProvider';
 import * as PlotsProtocol from '../rpc/webview/plots';
 import * as SessionProtocol from '../rpc/webview/session';
@@ -10,7 +11,6 @@ import { PlotClientInstance, RenderedPlot, ZoomLevel } from '../runtime/PlotClie
 import { StaticPlotClient } from '../runtime/staticPlotClient';
 import { HtmlPlotClient } from '../runtime/htmlPlotClient';
 import { PositronPlotsService } from '../runtime/positronPlotsService';
-import { decodeImageDataUrl, extensionForMimeType, mimeTypeFromDataUrl } from '../runtime/imageDataUrl';
 import { PlotSizingPolicyAuto } from '../runtime/sizingPolicyAuto';
 import { PlotSizingPolicyCustom } from '../runtime/sizingPolicyCustom';
 import { PlotSizingPolicyIntrinsic } from '../runtime/sizingPolicyIntrinsic';
@@ -31,7 +31,7 @@ interface PlotData {
     id: string;
     sessionId: string;           // Session that created this plot (multi-session support)
     kind: 'static' | 'dynamic' | 'html';
-    data: string;                // Base64 encoded image data
+    data: string;                // Image data URI (base64 or percent encoded)
     mimeType: string;
     width: number;
     height: number;
@@ -88,13 +88,12 @@ export class PlotsViewProvider extends BaseWebviewProvider {
     private readonly _auxCloseHandlers = new Map<MessageConnection, () => void>();
     private readonly _connectionStates = new Map<MessageConnection, PlotsConnectionState>();
     private readonly _readyConnections = new Set<MessageConnection>();
-    private readonly _renderRequestConnections = new Map<string, Set<MessageConnection>>();
-    private readonly _renderRequestSerials = new Map<MessageConnection, Map<string, number>>();
+    private readonly _renderRequestConnection = new Map<string, MessageConnection>();
     private readonly _htmlClaimsByConnection = new Map<MessageConnection, Set<string>>();
     private readonly _sessionSnapshotBuilder: SessionSnapshotBuilder;
     private _plots = new Map<string, PlotData>();
     private _plotClients = new Map<string, PlotClientInstance>();
-    private _plotRevision = 0;
+    private _pendingSessionInfoUpdate = false;
 
     constructor(
         extensionUri: vscode.Uri,
@@ -138,8 +137,7 @@ export class PlotsViewProvider extends BaseWebviewProvider {
                 }
                 this._connectionStates.clear();
                 this._readyConnections.clear();
-                this._renderRequestConnections.clear();
-                this._renderRequestSerials.clear();
+                this._renderRequestConnection.clear();
                 for (const [connection] of this._htmlClaimsByConnection) {
                     this._releaseAllHtmlClaimsForConnection(connection);
                 }
@@ -186,13 +184,11 @@ export class PlotsViewProvider extends BaseWebviewProvider {
                 clearTimeout(state.renderSettingsTimeout);
             }
             this._connectionStates.delete(connection);
-            for (const [plotId, connections] of this._renderRequestConnections.entries()) {
-                connections.delete(connection);
-                if (connections.size === 0) {
-                    this._renderRequestConnections.delete(plotId);
+            for (const [plotId, targetConnection] of this._renderRequestConnection.entries()) {
+                if (targetConnection === connection) {
+                    this._renderRequestConnection.delete(plotId);
                 }
             }
-            this._renderRequestSerials.delete(connection);
             this._releaseAllHtmlClaimsForConnection(connection);
             connection.dispose();
             this.log('Detached auxiliary plots webview RPC connection', vscode.LogLevel.Debug);
@@ -628,7 +624,6 @@ export class PlotsViewProvider extends BaseWebviewProvider {
             return;
         }
         this._plots.set(plotData.id, plotData);
-        this._plotRevision++;
 
         // Track dynamic plot clients for render requests
         if (plot instanceof PlotClientInstance) {
@@ -650,13 +645,10 @@ export class PlotsViewProvider extends BaseWebviewProvider {
         if (existing) {
             this._plots.delete(plot.id);
             this._plotClients.delete(plot.id);
-            for (const [plotId] of this._renderRequestConnections.entries()) {
+            for (const [plotId] of this._renderRequestConnection.entries()) {
                 if (plotId === plot.id) {
-                    this._renderRequestConnections.delete(plotId);
+                    this._renderRequestConnection.delete(plotId);
                 }
-            }
-            for (const serials of this._renderRequestSerials.values()) {
-                serials.delete(plot.id);
             }
             for (const [connection, claims] of this._htmlClaimsByConnection.entries()) {
                 claims.delete(plot.id);
@@ -664,10 +656,7 @@ export class PlotsViewProvider extends BaseWebviewProvider {
                     this._htmlClaimsByConnection.delete(connection);
                 }
             }
-            this._plotRevision++;
-            this._notifyConnections('plots/removed', {
-                plotIds: [plot.id], sessionId: existing.sessionId, revision: this._plotRevision,
-            });
+            this._notifyConnections('plots/removed', { plotIds: [plot.id], sessionId: existing.sessionId });
         }
     }
 
@@ -677,9 +666,7 @@ export class PlotsViewProvider extends BaseWebviewProvider {
         }
         this._plots.clear();
         this._plotClients.clear();
-        this._renderRequestConnections.clear();
-        this._renderRequestSerials.clear();
-        this._plotRevision++;
+        this._renderRequestConnection.clear();
 
         for (const plot of plots) {
             const plotData = this._createPlotDataFromClient(plot);
@@ -694,7 +681,7 @@ export class PlotsViewProvider extends BaseWebviewProvider {
             }
         }
 
-        this._notifyConnections('plots/cleared', { revision: this._plotRevision });
+        this._notifyConnections('plots/cleared', {});
         for (const plot of this._plots.values()) {
             this.sendPlotAdded(plot);
         }
@@ -765,7 +752,6 @@ export class PlotsViewProvider extends BaseWebviewProvider {
                 sizingPolicyId: plot.sizingPolicyId,
                 customSize: plot.customSize,
                 hasIntrinsicSize: plot.hasIntrinsicSize,
-                created: plot.created,
             },
             {
                 thumbnail: this._getThumbnailForTransport(plot),
@@ -820,7 +806,6 @@ export class PlotsViewProvider extends BaseWebviewProvider {
         const changedImage = plot.data !== nextUri || plot.thumbnail !== nextUri;
 
         plot.data = nextUri;
-        plot.mimeType = mimeTypeFromDataUrl(nextUri, plot.mimeType);
         if (rendered.size) {
             plot.width = rendered.size.width;
             plot.height = rendered.size.height;
@@ -937,7 +922,7 @@ export class PlotsViewProvider extends BaseWebviewProvider {
             plotClient.onDidCompleteRender((rendered) => {
                 const plot = this._applyRenderedPlot(plotClient.id, rendered);
                 const renderVersion = plot?.renderVersion ?? 0;
-                const targetConnections = this._renderRequestConnections.get(plotClient.id);
+                const targetConnection = this._renderRequestConnection.get(plotClient.id);
                 const notifiedConnections = new Set<MessageConnection>();
                 const payload = {
                     plotId: plotClient.id,
@@ -946,14 +931,12 @@ export class PlotsViewProvider extends BaseWebviewProvider {
                     renderVersion,
                 };
 
-                for (const targetConnection of targetConnections ?? []) {
-                    if (this._isConnectionReady(targetConnection)) {
-                        targetConnection.sendNotification(
-                            PlotsProtocol.PlotRenderCompletedNotification.type,
-                            payload,
-                        );
-                        notifiedConnections.add(targetConnection);
-                    }
+                if (targetConnection && this._isConnectionReady(targetConnection)) {
+                    targetConnection.sendNotification(
+                        PlotsProtocol.PlotRenderCompletedNotification.type,
+                        payload,
+                    );
+                    notifiedConnections.add(targetConnection);
                 }
 
                 this._forEachConnectionEntry((connection, state) => {
@@ -1107,15 +1090,19 @@ export class PlotsViewProvider extends BaseWebviewProvider {
 
     private _sendSessionInfoUpdate(): void {
         if (!this._hasAnyConnections()) {
+            this._pendingSessionInfoUpdate = true;
             return;
         }
 
+        let hasBlockedConnection = false;
         this._forEachConnectionEntry((connection) => {
             if (!this._isConnectionReady(connection)) {
+                hasBlockedConnection = true;
                 return;
             }
             this._sendSessionInfoUpdateToConnection(connection);
         });
+        this._pendingSessionInfoUpdate = hasBlockedConnection;
     }
 
     protected _registerRpcHandlers(connection: MessageConnection): void {
@@ -1133,13 +1120,6 @@ export class PlotsViewProvider extends BaseWebviewProvider {
         connection.onClose(() => {
             this._releaseAllHtmlClaimsForConnection(connection);
             this._readyConnections.delete(connection);
-            for (const [plotId, connections] of this._renderRequestConnections.entries()) {
-                connections.delete(connection);
-                if (connections.size === 0) {
-                    this._renderRequestConnections.delete(plotId);
-                }
-            }
-            this._renderRequestSerials.delete(connection);
         });
 
         connection.onNotification(PlotsProtocol.PlotsReadyNotification.type, () => {
@@ -1246,13 +1226,7 @@ export class PlotsViewProvider extends BaseWebviewProvider {
         // Handle render plot request
         connection.onRequest(PlotsProtocol.RenderPlotRequest.type, async (params) => {
             this.log(`Render plot ${params.plotId} at ${params.width}x${params.height}`, vscode.LogLevel.Debug);
-            const serials = this._renderRequestSerials.get(connection) ?? new Map<string, number>();
-            const serial = (serials.get(params.plotId) ?? 0) + 1;
-            serials.set(params.plotId, serial);
-            this._renderRequestSerials.set(connection, serials);
-            const pendingConnections = this._renderRequestConnections.get(params.plotId) ?? new Set<MessageConnection>();
-            pendingConnections.add(connection);
-            this._renderRequestConnections.set(params.plotId, pendingConnections);
+            this._renderRequestConnection.set(params.plotId, connection);
             try {
                 const state = this._getStateForConnection(connection);
 
@@ -1274,29 +1248,11 @@ export class PlotsViewProvider extends BaseWebviewProvider {
                         true  // Suppress completeRenderEmitter — RPC response already carries the data URI
                     );
 
-                    // A newer request from this connection supersedes this response.
-                    if (serials.get(params.plotId) !== serial) {
-                        return {
-                            data: '',
-                            mimeType: format === PlotRenderFormat.Svg ? 'image/svg+xml' : 'image/png',
-                            renderVersion: this._plots.get(params.plotId)?.renderVersion ?? 0,
-                        };
-                    }
-
-                    // Auxiliary connections own their viewport result. Only the
-                    // primary view updates the canonical thumbnail stored by the
-                    // provider, preventing Gallery renders from leaking state.
-                    const plot = state.isPrimaryConnection
-                        ? this._applyRenderedPlot(params.plotId, rendered)
-                        : this._plots.get(params.plotId);
-                    const mimeType = mimeTypeFromDataUrl(
-                        rendered.uri,
-                        format === PlotRenderFormat.Svg ? 'image/svg+xml' : 'image/png',
-                    );
+                    const plot = this._applyRenderedPlot(params.plotId, rendered);
 
                     return {
                         data: rendered.uri,
-                        mimeType,
+                        mimeType: 'image/png',
                         renderVersion: plot?.renderVersion ?? 0,
                     };
                 }
@@ -1330,12 +1286,9 @@ export class PlotsViewProvider extends BaseWebviewProvider {
                     renderVersion: 0,
                 };
             } finally {
-                if (serials.get(params.plotId) === serial) {
-                    const claimed = this._renderRequestConnections.get(params.plotId);
-                    claimed?.delete(connection);
-                    if (claimed?.size === 0) {
-                        this._renderRequestConnections.delete(params.plotId);
-                    }
+                const claimed = this._renderRequestConnection.get(params.plotId);
+                if (claimed === connection) {
+                    this._renderRequestConnection.delete(params.plotId);
                 }
             }
         });
@@ -1347,22 +1300,9 @@ export class PlotsViewProvider extends BaseWebviewProvider {
         // Supports newest-anchor pagination for lazy-loading history:
         // - cursor: number of newest plots already loaded
         // - limit: page size to fetch
-        connection.onRequest('plots/list', async (params?: { cursor?: number; limit?: number; knownRevision?: number }) => {
+        connection.onRequest('plots/list', async (params?: { cursor?: number; limit?: number }) => {
             const ordered = Array.from(this._plots.values());
             const totalCount = ordered.length;
-            const unchanged = params?.knownRevision !== undefined &&
-                params.knownRevision === this._plotRevision;
-            if (unchanged) {
-                return {
-                    plots: [],
-                    selectedPlotId: this._getStateForConnection(connection).selectedPlotId,
-                    totalCount,
-                    nextCursor: params?.cursor ?? 0,
-                    hasMore: false,
-                    revision: this._plotRevision,
-                    unchanged: true,
-                };
-            }
 
             const rawCursor = typeof params?.cursor === 'number' && Number.isFinite(params.cursor)
                 ? params.cursor
@@ -1393,8 +1333,6 @@ export class PlotsViewProvider extends BaseWebviewProvider {
                 totalCount,
                 nextCursor: cursor + plots.length,
                 hasMore: startInclusive > 0,
-                revision: this._plotRevision,
-                unchanged: false,
             };
         });
 
@@ -1450,19 +1388,8 @@ export class PlotsViewProvider extends BaseWebviewProvider {
             }
 
             try {
-                const decoded = decodeImageDataUrl(plot.data, plot.mimeType);
-                const extension = extensionForMimeType(decoded.mimeType);
-                // Show save dialog
-                const uri = await vscode.window.showSaveDialog({
-                    defaultUri: vscode.Uri.file(`plot-${params.plotId}.${extension}`),
-                    filters: {
-                        'Image': [extension],
-                        'All Files': ['*']
-                    }
-                });
-
+                const uri = await savePlotImage(plot.data, `plot-${params.plotId}`, plot.suggestedFileName);
                 if (uri) {
-                    await vscode.workspace.fs.writeFile(uri, decoded.bytes);
                     this.log(`Saved plot ${params.plotId} to ${uri.fsPath}`, vscode.LogLevel.Debug);
                     vscode.window.showInformationMessage(`Plot saved to ${uri.fsPath}`);
                     return { success: true };
@@ -1471,6 +1398,7 @@ export class PlotsViewProvider extends BaseWebviewProvider {
                 return { success: false, error: 'Save cancelled' };
             } catch (e) {
                 this.log(`Failed to save plot: ${e}`, vscode.LogLevel.Warning);
+                void vscode.window.showErrorMessage(vscode.l10n.t('Failed to export plot: {0}', String(e)));
                 return { success: false, error: String(e) };
             }
         });
@@ -1491,7 +1419,8 @@ export class PlotsViewProvider extends BaseWebviewProvider {
             // looks successful but does not put an image on the clipboard. The
             // webview uses ClipboardItem when the host supports image MIME data;
             // otherwise report the unsupported capability honestly.
-            const error = vscode.l10n.t('Image clipboard is not available in this environment.');
+            const error = await offerPlotImageExport(() =>
+                savePlotImage(plot.data, `plot-${params.plotId}`, plot.suggestedFileName));
             this.log(`Cannot copy plot ${params.plotId}: ${error}`, vscode.LogLevel.Warning);
             return { success: false, error };
         });
@@ -1883,6 +1812,17 @@ export class PlotsViewProvider extends BaseWebviewProvider {
         });
     }
 
+    private async _moveActiveEditorToNewWindow(): Promise<void> {
+        await new Promise<void>(resolve => {
+            if (typeof queueMicrotask === 'function') {
+                queueMicrotask(resolve);
+            } else {
+                setTimeout(resolve, 0);
+            }
+        });
+        await vscode.commands.executeCommand('workbench.action.moveEditorToNewWindow');
+    }
+
     /** Debounce delay for viewport-triggered render settings (ms). */
     private static readonly RENDER_SETTINGS_DEBOUNCE_MS = 300;
 
@@ -2049,7 +1989,7 @@ export class PlotsViewProvider extends BaseWebviewProvider {
         void this._revealPlotsIfHidden(true);
         this._notifyConnections(
             PlotsProtocol.PlotAddedNotification.type,
-            { ...toPlotAddedParams(serialized), revision: this._plotRevision },
+            toPlotAddedParams(serialized),
         );
     }
 

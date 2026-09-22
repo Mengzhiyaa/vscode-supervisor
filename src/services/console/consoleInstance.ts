@@ -642,7 +642,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
     }
     selectAll(): void { this._onDidSelectAllEmitter.fire(); }
 
-    clearConsole(): boolean {
+    clearConsole(preservePendingInput = false): boolean {
         // Cannot clear console while prompt is active (Positron pattern)
         if (this._activeActivityItemPrompt) {
             void vscode.window.showInformationMessage(
@@ -650,13 +650,19 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
             );
             return false;
         }
-        this._runtimeItems = [];
+        this._runtimeItems = preservePendingInput && this._runtimeItemSubmittingInput
+            ? [this._runtimeItemSubmittingInput]
+            : [];
         this._recoveryGeneration = randomUUID();
         this._recoveryRevision = 0;
         this._runtimeItemActivities.clear();
         this._runtimeItemPendingInput = undefined;
-        this._pendingCodeQueue = [];
-        this._pendingCode = undefined;
+        if (preservePendingInput) {
+            this._syncPendingInputRuntimeItem();
+        } else {
+            this._pendingCodeQueue = [];
+            this._pendingCode = undefined;
+        }
         this._clearActiveActivityItemPrompt();
         this._executionHistoryService?.clearExecutionEntries(this.sessionId);
         this._onDidClearConsoleEmitter.fire();
@@ -837,6 +843,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
             return 'failed';
         }
 
+        const session = this._session;
         const generation = ++this._submissionGeneration;
         const submittingItem = new RuntimeItemPendingInput(
             this.generateId(),
@@ -871,10 +878,11 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
 
         try {
             const status = checkCompleteness
-                ? await this._checkCodeFragmentCompleteness(code, cancelled)
+                ? await this._checkCodeFragmentCompleteness(code, cancelled, session)
                 : RuntimeCodeFragmentStatus.Complete;
 
-            if (generation !== this._submissionGeneration || status === undefined) {
+            if (generation !== this._submissionGeneration || status === undefined ||
+                this._session !== session || this._isDisposed) {
                 removeSubmittingItem();
                 return 'cancelled';
             }
@@ -916,6 +924,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
     private async _checkCodeFragmentCompleteness(
         code: string,
         cancelled: Promise<undefined>,
+        session: RuntimeSession,
     ): Promise<RuntimeCodeFragmentStatus | undefined> {
         let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
         const timedOut = new Promise<RuntimeCodeFragmentStatus>((resolve) => {
@@ -931,7 +940,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
 
         try {
             return await Promise.race([
-                this._session!.isCodeFragmentComplete(code),
+                session.isCodeFragmentComplete(code),
                 cancelled,
                 timedOut,
             ]);
@@ -1279,12 +1288,9 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
         let text = message.text;
         if (this._runtimeMetadata.languageId === 'r') {
             const lastFormFeed = text.lastIndexOf('\f');
-            if (lastFormFeed >= 0) {
-                this._executionHistoryService?.clearExecutionOutput(
-                    this.sessionId,
-                    message.parent_id,
-                );
+            if (lastFormFeed >= 0 && this.clearConsole(true)) {
                 text = text.substring(lastFormFeed + 1);
+                if (text.length === 0) { return; }
             }
         }
         this.handleStreamOutput(message.parent_id, message.name, text);
@@ -1323,6 +1329,8 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
                 message.parent_id,
                 output,
                 message.when ? Date.parse(message.when) : Date.now(),
+                false,
+                message.output_id,
             );
         }
     }
@@ -1340,52 +1348,43 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
                 message.parent_id,
                 output,
                 message.when ? Date.parse(message.when) : Date.now(),
+                false,
+                message.output_id,
             );
         }
     }
 
     handleUpdateOutput(message: LanguageRuntimeUpdateOutputWithKind): void {
         const activityItem = this.createActivityItemOutput(message);
-        if (!activityItem) {
-            return;
-        }
-
+        if (!activityItem) { return; }
         const outputId = message.output_id;
         const output = message.data['text/plain'];
-        if (typeof output === 'string') {
-            this._executionHistoryService?.recordExecutionOutput(
-                this.sessionId,
-                message.parent_id,
-                output,
-                message.when ? Date.parse(message.when) : Date.now(),
-                true,
-            );
+        const historyUpdated = outputId
+            ? this._executionHistoryService?.updateExecutionOutput(
+                this.sessionId, outputId, typeof output === 'string' ? output : '',
+            ) ?? false
+            : false;
+        let replaced = false;
+        if (outputId) {
+            for (const [parentId, activity] of this._runtimeItemActivities) {
+                const replacement = this.createActivityItemOutput(message, parentId);
+                if (replacement && activity.replaceOutputItemByOutputId(outputId, existingId =>
+                    this.createActivityItemOutput({ ...message, id: existingId }, parentId)
+                )) {
+                    this._emitReplaceActivityOutput(parentId, outputId, replacement);
+                    replaced = true;
+                }
+            }
         }
-        if (!outputId) {
+        if (!replaced && !historyUpdated) {
             this.addOrUpdateRuntimeItemActivity(message.parent_id, activityItem);
-            return;
-        }
-
-        const preferredActivity = this._runtimeItemActivities.get(message.parent_id);
-        const preferredReplacement = this.createActivityItemOutput(message, message.parent_id);
-        if (preferredActivity && preferredReplacement && preferredActivity.replaceOutputItemByOutputId(outputId, preferredReplacement)) {
-            this._emitReplaceActivityOutput(message.parent_id, outputId, preferredReplacement);
-            return;
-        }
-
-        for (const [activityParentId, activity] of this._runtimeItemActivities.entries()) {
-            if (activityParentId === message.parent_id) {
-                continue;
-            }
-
-            const replacement = this.createActivityItemOutput(message, activityParentId);
-            if (replacement && activity.replaceOutputItemByOutputId(outputId, replacement)) {
-                this._emitReplaceActivityOutput(activityParentId, outputId, replacement);
-                return;
+            if (typeof output === 'string' || outputId) {
+                this._executionHistoryService?.recordExecutionOutput(
+                    this.sessionId, message.parent_id, typeof output === 'string' ? output : '',
+                    message.when ? Date.parse(message.when) : Date.now(), false, outputId,
+                );
             }
         }
-
-        this.addOrUpdateRuntimeItemActivity(message.parent_id, activityItem);
     }
 
     handleInput(message: LanguageRuntimeInput): void {
@@ -2189,6 +2188,12 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
     handleDisplayData(parentId: string, data: ILanguageRuntimeMessageOutputData, outputId?: string): void {
         const activityItem = this.createDisplayDataActivityItem(parentId, data, outputId);
         this.addOrUpdateRuntimeItemActivity(parentId, activityItem);
+        const text = data['text/plain'];
+        if (typeof text === 'string' || outputId) {
+            this._executionHistoryService?.recordExecutionOutput(
+                this.sessionId, parentId, typeof text === 'string' ? text : '', Date.now(), false, outputId,
+            );
+        }
     }
 
     handleUpdateDisplayData(parentId: string, data: ILanguageRuntimeMessageOutputData, outputId?: string): void {
@@ -2196,41 +2201,21 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
             this.handleDisplayData(parentId, data);
             return;
         }
-
-        const preferredActivity = this._runtimeItemActivities.get(parentId);
-        const preferredReplacement = this.createDisplayDataActivityItem(parentId, data, outputId);
-        if (
-            preferredActivity?.replaceOutputItemByOutputId(
-                outputId,
-                preferredReplacement,
-            )
-        ) {
-            this._emitReplaceActivityOutput(
-                parentId,
-                outputId,
-                preferredReplacement,
-            );
-            return;
-        }
-
-        for (const [activityParentId, activity] of this._runtimeItemActivities.entries()) {
+        const text = data['text/plain'];
+        const historyUpdated = this._executionHistoryService?.updateExecutionOutput(
+            this.sessionId, outputId, typeof text === 'string' ? text : '',
+        ) ?? false;
+        let replaced = false;
+        for (const [activityParentId, activity] of this._runtimeItemActivities) {
             const replacement = this.createDisplayDataActivityItem(activityParentId, data, outputId);
-            if (
-                activity.replaceOutputItemByOutputId(
-                    outputId,
-                    replacement,
-                )
-            ) {
-                this._emitReplaceActivityOutput(
-                    activityParentId,
-                    outputId,
-                    replacement,
-                );
-                return;
+            if (activity.replaceOutputItemByOutputId(outputId, existingId =>
+                this.createDisplayDataActivityItem(activityParentId, data, outputId, existingId)
+            )) {
+                this._emitReplaceActivityOutput(activityParentId, outputId, replacement);
+                replaced = true;
             }
         }
-
-        this.handleDisplayData(parentId, data, outputId);
+        if (!replaced && !historyUpdated) { this.handleDisplayData(parentId, data, outputId); }
     }
 
     handlePromptRequest(parentId: string, prompt: string, password: boolean): void {
@@ -2398,6 +2383,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
     }
 
     private detachRuntimeSession(): void {
+        this.cancelCodeSubmission();
         this._runtimeAttached = false;
         this._clearActiveActivityItemPrompt();
         this._clearStartupFailureFallback();

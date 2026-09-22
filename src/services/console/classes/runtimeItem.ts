@@ -186,7 +186,9 @@ export class RuntimeItemActivity extends RuntimeItem {
             | ActivityItemOutputMessage
             | ActivityItemOutputHtml
             | ActivityItemOutputPlot
+            | ((existingId: string) => ActivityItemOutputMessage | ActivityItemOutputHtml | ActivityItemOutputPlot | undefined)
     ): boolean {
+        let replaced = false;
         for (let i = this._activityItems.length - 1; i >= 0; i--) {
             const existing = this._activityItems[i];
             if (
@@ -195,11 +197,15 @@ export class RuntimeItemActivity extends RuntimeItem {
                     existing instanceof ActivityItemOutputPlot) &&
                 existing.outputId === outputId
             ) {
-                this._activityItems[i] = replacement;
-                return true;
+                const next = typeof replacement === 'function' ? replacement(existing.id) : replacement;
+                if (next) {
+                    this._activityItems[i] = next;
+                    replaced = true;
+                }
+                if (typeof replacement !== 'function') { break; }
             }
         }
-        return false;
+        return replaced;
     }
 
     /**

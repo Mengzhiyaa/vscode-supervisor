@@ -184,19 +184,24 @@ export class RuntimeItemActivity extends RuntimeItem {
      */
     public replaceOutputItemByOutputId(
         outputId: string,
-        activityItem: ActivityItemOutput
+        activityItem: ActivityItemOutput | ((existingId: string) => ActivityItemOutput | undefined)
     ): boolean {
+        const nextActivityItems = [...this._activityItems];
+        let replaced = false;
         for (let i = this._activityItems.length - 1; i >= 0; --i) {
             const existing = this._activityItems[i];
             if (isOutputActivityItem(existing) && existing.outputId === outputId) {
-                const nextActivityItems = [...this._activityItems];
-                nextActivityItems[i] = activityItem;
-                this._setActivityItems(nextActivityItems);
-                return true;
+                const next = typeof activityItem === 'function' ? activityItem(existing.id) : activityItem;
+                if (next) {
+                    nextActivityItems[i] = next;
+                    replaced = true;
+                }
+                if (typeof activityItem !== 'function') { break; }
             }
         }
 
-        return false;
+        if (replaced) { this._setActivityItems(nextActivityItems); }
+        return replaced;
     }
 
     /**

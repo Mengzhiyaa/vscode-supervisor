@@ -1422,7 +1422,12 @@
             return appendActivityItem(sessionId, parentId, item, sync);
         }
 
-        if (!activity.replaceOutputItemByOutputId(outputId, activityItem)) {
+        if (!activity.replaceOutputItemByOutputId(outputId, (existingId) => {
+            const replacement = deserializeActivityItem({ ...item, id: existingId }, sessionId);
+            return replacement instanceof ActivityItemOutputHtml ||
+                replacement instanceof ActivityItemOutputMessage ||
+                replacement instanceof ActivityItemOutputPlot ? replacement : undefined;
+        })) {
             activity.addActivityItem(activityItem);
         }
 

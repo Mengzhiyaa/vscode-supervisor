@@ -1,14 +1,11 @@
 import * as vscode from 'vscode';
 import type { SerializedConsoleState } from '../../shared/consoleState';
-import { ExecutionHistoryFileStore } from './executionHistoryFileStore';
 
 const SessionHistoryKeyPrefix = 'vscode-supervisor.inputHistory.session.';
 const LanguageHistoryKeyPrefix = 'vscode-supervisor.inputHistory.language.';
 const ExecutionHistoryKeyPrefix = 'vscode-supervisor.executionHistory.v1.';
 const DefaultHistorySize = 1000;
-const MaxExecutionIndexEntries = 200;
-const MaxExecutionIndexTextChars = 64 * 1024;
-const ExecutionTruncatedMarker = '…(earlier output omitted from execution index)\n';
+const ExecutionHistorySaveDelayMs = 10_000;
 
 export interface InputHistoryEntry {
     readonly when: number;
@@ -27,6 +24,11 @@ export interface ExecutionHistoryError {
     readonly traceback: string[];
 }
 
+export interface ExecutionHistoryOutput {
+    readonly outputId?: string;
+    text: string;
+}
+
 export interface ExecutionHistoryEntry {
     readonly id: string;
     readonly when: number;
@@ -34,6 +36,8 @@ export interface ExecutionHistoryEntry {
     input: string;
     outputType: ExecutionEntryType;
     output: string | { banner: string; version: string };
+    /** Optional in legacy records. Keeps display identity across reconnects. */
+    outputs?: ExecutionHistoryOutput[];
     error?: ExecutionHistoryError;
     durationMs: number;
 }
@@ -47,65 +51,16 @@ export class ExecutionHistoryService implements vscode.Disposable {
     private readonly _languageEntries = new Map<string, InputHistoryEntry[]>();
     private readonly _executionEntries = new Map<string, ExecutionHistoryEntry[]>();
     private readonly _knownEmptySessions = new Set<string>();
+    private readonly _initializedExecutionSessions = new Set<string>();
     private readonly _dirtyExecutionSessions = new Set<string>();
-    private readonly _pendingWrites = new Map<
-        string,
-        InputHistoryEntry[] | ExecutionHistoryEntry[] | undefined
-    >();
-    private _writeDrainPromise: Promise<void> | undefined;
+    private _executionSaveTimer: ReturnType<typeof setTimeout> | undefined;
+    private _writeQueue: Promise<void> = Promise.resolve();
     private _disposed = false;
-    private readonly _fileStore: ExecutionHistoryFileStore;
 
     constructor(
         private readonly _storage: vscode.Memento,
         private readonly _outputChannel: vscode.LogOutputChannel,
-        storageUri?: vscode.Uri,
-    ) {
-        this._fileStore = new ExecutionHistoryFileStore(storageUri, _outputChannel);
-    }
-
-    async initialize(): Promise<void> {
-        await this._fileStore.initialize();
-        if (!this._fileStore.enabled) {
-            return;
-        }
-
-        const legacyKeys = this._storage.keys().filter(key =>
-            key.startsWith(SessionHistoryKeyPrefix) ||
-            key.startsWith(LanguageHistoryKeyPrefix) ||
-            key.startsWith(ExecutionHistoryKeyPrefix),
-        );
-        for (const key of legacyKeys) {
-            const stored = this._storage.get<unknown>(key);
-            if (key.startsWith(SessionHistoryKeyPrefix)) {
-                const sessionId = key.slice(SessionHistoryKeyPrefix.length);
-                if (this._fileStore.getSessionInput(sessionId) === undefined) {
-                    await this._fileStore.writeSessionInput(
-                        sessionId,
-                        this._parseInputEntries(stored, key),
-                    );
-                }
-            } else if (key.startsWith(LanguageHistoryKeyPrefix)) {
-                const languageId = key.slice(LanguageHistoryKeyPrefix.length);
-                if (this._fileStore.getLanguageInput(languageId) === undefined) {
-                    await this._fileStore.writeLanguageInput(
-                        languageId,
-                        this._parseInputEntries(stored, key),
-                    );
-                }
-            } else {
-                const sessionId = key.slice(ExecutionHistoryKeyPrefix.length);
-                if (this._fileStore.getExecution(sessionId) === undefined) {
-                    await this._fileStore.writeExecution(
-                        sessionId,
-                        this._parseExecutionEntries(stored),
-                    );
-                }
-            }
-        }
-
-        await Promise.all(legacyKeys.map(key => this._storage.update(key, undefined)));
-    }
+    ) { }
 
     getSessionInputEntries(sessionId: string): InputHistoryEntry[] {
         return [...this._loadSessionEntries(sessionId)];
@@ -137,14 +92,20 @@ export class ExecutionHistoryService implements vscode.Disposable {
     }
 
     getExecutionEntries(sessionId: string): ExecutionHistoryEntry[] {
-        return this._loadExecutionEntries(sessionId).map(entry => ({ ...entry }));
+        return this._loadExecutionEntries(sessionId).map(entry => ({
+            ...entry,
+            output: typeof entry.output === 'string' ? entry.output : { ...entry.output },
+            outputs: entry.outputs?.map(output => ({ ...output })),
+            error: entry.error && { ...entry.error, traceback: [...entry.error.traceback] },
+        }));
     }
 
     restoreLegacyExecutionEntries(
         sessionId: string,
         state: SerializedConsoleState,
     ): ExecutionHistoryEntry[] {
-        if (this._hasStoredExecutionEntries(sessionId)) {
+        if (this._initializedExecutionSessions.has(sessionId) ||
+            this._storage.get(this._executionKey(sessionId)) !== undefined) {
             return this.getExecutionEntries(sessionId);
         }
         const entries: ExecutionHistoryEntry[] = [];
@@ -166,22 +127,27 @@ export class ExecutionHistoryService implements vscode.Disposable {
             }
             const input = item.items.find(entry => entry.type === 'input');
             const error = item.items.find(entry => entry.type === 'error');
-            const output = item.items.map(entry => {
+            const outputs = item.items.flatMap<ExecutionHistoryOutput>(entry => {
                 if (entry.type === 'stream') {
-                    return entry.text;
+                    return [{ text: entry.text }];
                 }
                 if (entry.type === 'output' || entry.type === 'outputPlot') {
-                    return entry.data['text/plain'] ?? '';
+                    const text = entry.data['text/plain'];
+                    return [{ outputId: entry.outputId, text: typeof text === 'string' ? text : '' }];
                 }
-                return '';
-            }).join('');
+                if (entry.type === 'outputHtml') {
+                    return [{ outputId: entry.outputId, text: entry.resource ?? '' }];
+                }
+                return [];
+            });
             entries.push({
                 id: item.parentId,
                 when: input?.when ?? item.items[0]?.when ?? Date.now(),
                 prompt: input?.inputPrompt ?? '',
                 input: input?.code ?? '',
                 outputType: ExecutionEntryType.Execution,
-                output,
+                output: outputs.map(output => output.text).join(''),
+                outputs,
                 error: error && error.type === 'error'
                     ? {
                         name: error.name,
@@ -193,7 +159,7 @@ export class ExecutionHistoryService implements vscode.Disposable {
             });
         }
         this._executionEntries.set(sessionId, entries);
-        this._persist(this._executionKey(sessionId), entries);
+        this._persistExecutionEntries(sessionId);
         return this.getExecutionEntries(sessionId);
     }
 
@@ -207,7 +173,7 @@ export class ExecutionHistoryService implements vscode.Disposable {
         const entry = this._getOrCreateExecution(sessionId, executionId, when);
         entry.prompt = prompt;
         entry.input = input;
-        this._dirtyExecutionSessions.add(sessionId);
+        this._persistExecutionEntries(sessionId);
     }
 
     recordExecutionOutput(
@@ -216,17 +182,52 @@ export class ExecutionHistoryService implements vscode.Disposable {
         output: string,
         when: number = Date.now(),
         replace = false,
+        outputId?: string,
     ): void {
-        if (!output) {
+        if (this._disposed || (!output && !outputId && !replace)) {
             return;
         }
         const entry = this._getOrCreateExecution(sessionId, executionId, when);
         const current = typeof entry.output === 'string' ? entry.output : '';
-        const combined = replace ? output : current + output;
-        entry.output = combined.length > MaxExecutionIndexTextChars
-            ? ExecutionTruncatedMarker + combined.slice(-MaxExecutionIndexTextChars)
-            : combined;
-        this._dirtyExecutionSessions.add(sessionId);
+        const outputs = this._getOutputParts(entry);
+        if (replace) {
+            entry.outputs = [{ outputId, text: output }];
+        } else if (!outputId && outputs.length > 0 && !outputs[outputs.length - 1].outputId) {
+            outputs[outputs.length - 1].text += output;
+        } else {
+            outputs.push({ outputId, text: output });
+        }
+        entry.output = replace ? output : current + output;
+        this._persistExecutionEntries(sessionId);
+    }
+
+    /** Updates every occurrence of a display ID, independent of the update's parent ID. */
+    updateExecutionOutput(sessionId: string, outputId: string, text: string): boolean {
+        if (this._disposed) { return false; }
+        let changed = false;
+        for (const entry of this._loadExecutionEntries(sessionId)) {
+            if (entry.outputType !== ExecutionEntryType.Execution) { continue; }
+            const outputs = this._getOutputParts(entry);
+            let entryChanged = false;
+            for (const output of outputs) {
+                if (output.outputId === outputId) {
+                    output.text = text;
+                    entryChanged = true;
+                }
+            }
+            if (entryChanged) {
+                entry.output = outputs.map(output => output.text).join('');
+                changed = true;
+            }
+        }
+        if (changed) { this._persistExecutionEntries(sessionId); }
+        return changed;
+    }
+
+    private _getOutputParts(entry: ExecutionHistoryEntry): ExecutionHistoryOutput[] {
+        return entry.outputs ??= typeof entry.output === 'string' && entry.output
+            ? [{ text: entry.output }]
+            : [];
     }
 
     clearExecutionOutput(sessionId: string, executionId: string): void {
@@ -236,7 +237,9 @@ export class ExecutionHistoryService implements vscode.Disposable {
             return;
         }
         entry.output = '';
-        this._persistExecutionEntriesNow(sessionId);
+        entry.outputs = [];
+        entry.error = undefined;
+        this._persistExecutionEntries(sessionId);
     }
 
     recordExecutionError(
@@ -247,7 +250,7 @@ export class ExecutionHistoryService implements vscode.Disposable {
     ): void {
         const entry = this._getOrCreateExecution(sessionId, executionId, when);
         entry.error = error;
-        this._persistExecutionEntriesNow(sessionId);
+        this._persistExecutionEntries(sessionId);
     }
 
     completeExecution(sessionId: string, executionId: string): void {
@@ -257,7 +260,8 @@ export class ExecutionHistoryService implements vscode.Disposable {
             return;
         }
         entry.durationMs = Math.max(0, Date.now() - entry.when);
-        this._persistExecutionEntriesNow(sessionId);
+        this._persistExecutionEntries(sessionId);
+        void this.flush();
     }
 
     recordStartup(sessionId: string, id: string, banner: string, version: string): void {
@@ -276,12 +280,13 @@ export class ExecutionHistoryService implements vscode.Disposable {
                 durationMs: 0,
             });
         }
-        this._persistExecutionEntriesNow(sessionId);
+        this._persistExecutionEntries(sessionId);
     }
 
     clearExecutionEntries(sessionId: string): void {
-        this._dirtyExecutionSessions.delete(sessionId);
         this._executionEntries.set(sessionId, []);
+        this._initializedExecutionSessions.add(sessionId);
+        this._dirtyExecutionSessions.delete(sessionId);
         this._persist(this._executionKey(sessionId), []);
     }
 
@@ -294,10 +299,12 @@ export class ExecutionHistoryService implements vscode.Disposable {
         languageId: string,
         legacyInputs: readonly string[],
     ): InputHistoryEntry[] {
-        const hasStoredEntries = this._hasStoredSessionEntries(sessionId);
+        const stored = this._storage.get<InputHistoryEntry[] | undefined>(
+            this._sessionKey(sessionId),
+        );
         const cached = this._sessionEntries.get(sessionId);
         if (
-            hasStoredEntries ||
+            stored !== undefined ||
             this._knownEmptySessions.has(sessionId) ||
             (cached !== undefined && cached.length > 0)
         ) {
@@ -335,24 +342,23 @@ export class ExecutionHistoryService implements vscode.Disposable {
     }
 
     deleteSessionHistory(sessionId: string): void {
-        this._dirtyExecutionSessions.delete(sessionId);
         this._sessionEntries.delete(sessionId);
         this._knownEmptySessions.delete(sessionId);
         this._persist(this._sessionKey(sessionId), undefined);
         this._executionEntries.delete(sessionId);
+        this._initializedExecutionSessions.add(sessionId);
+        this._dirtyExecutionSessions.delete(sessionId);
         this._persist(this._executionKey(sessionId), undefined);
     }
 
     async flush(): Promise<void> {
-        for (const sessionId of [...this._dirtyExecutionSessions]) {
-            this._persistExecutionEntriesNow(sessionId);
-        }
-        while (this._writeDrainPromise) {
-            await this._writeDrainPromise;
-        }
+        this._flushExecutionEntries();
+        await this._writeQueue;
     }
 
     dispose(): void {
+        if (this._disposed) { return; }
+        this._flushExecutionEntries();
         this._disposed = true;
     }
 
@@ -361,13 +367,9 @@ export class ExecutionHistoryService implements vscode.Disposable {
         if (cached) {
             return cached;
         }
-        const key = this._sessionKey(sessionId);
-        const stored = this._fileStore.enabled
-            ? this._fileStore.getSessionInput(sessionId)
-            : this._storage.get<unknown>(key, []);
-        const entries = this._parseInputEntries(stored ?? [], key);
+        const entries = this._read(this._sessionKey(sessionId));
         this._sessionEntries.set(sessionId, entries);
-        if (entries.length === 0 && this._hasStoredSessionEntries(sessionId)) {
+        if (entries.length === 0 && this._storage.get(this._sessionKey(sessionId)) !== undefined) {
             this._knownEmptySessions.add(sessionId);
         }
         return entries;
@@ -378,11 +380,7 @@ export class ExecutionHistoryService implements vscode.Disposable {
         if (cached) {
             return cached;
         }
-        const key = this._languageKey(languageId);
-        const stored = this._fileStore.enabled
-            ? this._fileStore.getLanguageInput(languageId)
-            : this._storage.get<unknown>(key, []);
-        const entries = this._parseInputEntries(stored ?? [], key);
+        const entries = this._read(this._languageKey(languageId));
         this._languageEntries.set(languageId, entries);
         return entries;
     }
@@ -392,10 +390,25 @@ export class ExecutionHistoryService implements vscode.Disposable {
         if (cached) {
             return cached;
         }
-        const stored = this._fileStore.enabled
-            ? this._fileStore.getExecution(sessionId)
-            : this._storage.get<unknown>(this._executionKey(sessionId), []);
-        const entries = this._parseExecutionEntries(stored ?? []);
+        const key = this._executionKey(sessionId);
+        const stored = this._storage.get<unknown>(key);
+        if (stored !== undefined) { this._initializedExecutionSessions.add(sessionId); }
+        const entries = Array.isArray(stored)
+            ? stored.filter((entry): entry is ExecutionHistoryEntry => (
+                typeof entry === 'object' &&
+                entry !== null &&
+                typeof (entry as ExecutionHistoryEntry).id === 'string' &&
+                typeof (entry as ExecutionHistoryEntry).when === 'number' &&
+                typeof (entry as ExecutionHistoryEntry).input === 'string'
+            )).map(entry => ({
+                ...entry,
+                outputs: Array.isArray(entry.outputs)
+                    ? entry.outputs.filter(output => output && typeof output.text === 'string' &&
+                        (output.outputId === undefined || typeof output.outputId === 'string'))
+                        .map(output => ({ ...output }))
+                    : undefined,
+            }))
+            : [];
         this._executionEntries.set(sessionId, entries);
         return entries;
     }
@@ -422,35 +435,30 @@ export class ExecutionHistoryService implements vscode.Disposable {
         return entry;
     }
 
-    private _persistExecutionEntriesNow(sessionId: string): void {
-        this._dirtyExecutionSessions.delete(sessionId);
-        const entries = this._loadExecutionEntries(sessionId);
-        if (entries.length > MaxExecutionIndexEntries) {
-            entries.splice(0, entries.length - MaxExecutionIndexEntries);
+    private _persistExecutionEntries(sessionId: string): void {
+        if (this._disposed) { return; }
+        this._initializedExecutionSessions.add(sessionId);
+        this._dirtyExecutionSessions.add(sessionId);
+        if (this._executionSaveTimer === undefined) {
+            // Keep a bounded save interval even while output streams continuously.
+            this._executionSaveTimer = setTimeout(() => this._flushExecutionEntries(), ExecutionHistorySaveDelayMs);
         }
-        const snapshot = entries.map(entry => ({
-            ...entry,
-            input: entry.input.slice(0, MaxExecutionIndexTextChars),
-            output: typeof entry.output === 'string'
-                ? entry.output.slice(-MaxExecutionIndexTextChars)
-                : { ...entry.output },
-            error: entry.error
-                ? {
-                    ...entry.error,
-                    message: entry.error.message.slice(0, MaxExecutionIndexTextChars),
-                    traceback: entry.error.traceback
-                        .slice(-100)
-                        .map(line => line.slice(0, 4096)),
-                }
-                : undefined,
-        }));
-        this._persist(
-            this._executionKey(sessionId),
-            snapshot,
-        );
     }
 
-    private _parseInputEntries(stored: unknown, key: string): InputHistoryEntry[] {
+    private _flushExecutionEntries(): void {
+        if (this._executionSaveTimer !== undefined) {
+            clearTimeout(this._executionSaveTimer);
+            this._executionSaveTimer = undefined;
+        }
+        for (const sessionId of this._dirtyExecutionSessions) {
+            const entries = this._executionEntries.get(sessionId);
+            if (entries) { this._persist(this._executionKey(sessionId), entries); }
+        }
+        this._dirtyExecutionSessions.clear();
+    }
+
+    private _read(key: string): InputHistoryEntry[] {
+        const stored = this._storage.get<unknown>(key, []);
         if (!Array.isArray(stored)) {
             this._outputChannel.warn(`[ExecutionHistoryService] Ignoring invalid history at ${key}`);
             return [];
@@ -463,18 +471,6 @@ export class ExecutionHistoryService implements vscode.Disposable {
                 typeof (entry as InputHistoryEntry).when === 'number'
             ))
             .slice(-this._maxHistorySize());
-    }
-
-    private _parseExecutionEntries(stored: unknown): ExecutionHistoryEntry[] {
-        return Array.isArray(stored)
-            ? stored.filter((entry): entry is ExecutionHistoryEntry => (
-                typeof entry === 'object' &&
-                entry !== null &&
-                typeof (entry as ExecutionHistoryEntry).id === 'string' &&
-                typeof (entry as ExecutionHistoryEntry).when === 'number' &&
-                typeof (entry as ExecutionHistoryEntry).input === 'string'
-            ))
-            : [];
     }
 
     private _append(
@@ -504,99 +500,17 @@ export class ExecutionHistoryService implements vscode.Disposable {
         key: string,
         value: InputHistoryEntry[] | ExecutionHistoryEntry[] | undefined,
     ): void {
-        this._pendingWrites.set(key, value);
-        void this._drainWrites();
-    }
-
-    private _drainWrites(): Promise<void> {
-        if (this._writeDrainPromise) {
-            return this._writeDrainPromise;
-        }
-
-        const drain = this._drainPendingWrites().finally(() => {
-            if (this._writeDrainPromise === drain) {
-                this._writeDrainPromise = undefined;
-            }
-        });
-        this._writeDrainPromise = drain;
-        return drain;
-    }
-
-    private async _drainPendingWrites(): Promise<void> {
-        while (this._pendingWrites.size > 0) {
-            const writes = [...this._pendingWrites.entries()];
-            this._pendingWrites.clear();
-            for (const [key, value] of writes) {
-                try {
-                    await this._write(key, value);
-                } catch (error) {
-                    this._outputChannel.warn(
-                        `[ExecutionHistoryService] Failed to persist ${key}: ${error}`,
-                    );
-                }
-            }
-        }
-    }
-
-    private async _write(
-        key: string,
-        value: InputHistoryEntry[] | ExecutionHistoryEntry[] | undefined,
-    ): Promise<void> {
-        if (!this._fileStore.enabled) {
-            if (this._storedValueEquals(key, value)) {
-                return;
-            }
-            await this._storage.update(key, value);
-            return;
-        }
-
-        if (key.startsWith(SessionHistoryKeyPrefix)) {
-            const sessionId = key.slice(SessionHistoryKeyPrefix.length);
-            if (value === undefined) {
-                await this._fileStore.deleteSessionInput(sessionId);
-            } else {
-                await this._fileStore.writeSessionInput(sessionId, value);
-            }
-            return;
-        }
-        if (key.startsWith(LanguageHistoryKeyPrefix)) {
-            const languageId = key.slice(LanguageHistoryKeyPrefix.length);
-            if (value !== undefined) {
-                await this._fileStore.writeLanguageInput(languageId, value);
-            }
-            return;
-        }
-        if (key.startsWith(ExecutionHistoryKeyPrefix)) {
-            const sessionId = key.slice(ExecutionHistoryKeyPrefix.length);
-            if (value === undefined) {
-                await this._fileStore.deleteExecution(sessionId);
-            } else {
-                await this._fileStore.writeExecution(sessionId, value);
-            }
-        }
-    }
-
-    private _hasStoredSessionEntries(sessionId: string): boolean {
-        return this._fileStore.enabled
-            ? this._fileStore.getSessionInput(sessionId) !== undefined
-            : this._storage.get(this._sessionKey(sessionId)) !== undefined;
-    }
-
-    private _hasStoredExecutionEntries(sessionId: string): boolean {
-        return this._fileStore.enabled
-            ? this._fileStore.getExecution(sessionId) !== undefined
-            : this._storage.get(this._executionKey(sessionId)) !== undefined;
-    }
-
-    private _storedValueEquals(
-        key: string,
-        value: InputHistoryEntry[] | ExecutionHistoryEntry[] | undefined,
-    ): boolean {
-        const current = this._storage.get<unknown>(key);
-        if (current === undefined || value === undefined) {
-            return current === value;
-        }
-        return JSON.stringify(current) === JSON.stringify(value);
+        if (this._disposed) { return; }
+        // Snapshot at enqueue time: later updates or clears must not mutate an
+        // in-flight save. Stream output reaches here only once per batch.
+        const snapshot = value === undefined ? undefined : JSON.parse(JSON.stringify(value));
+        this._writeQueue = this._writeQueue
+            .then(() => this._storage.update(key, snapshot))
+            .catch(error => {
+                this._outputChannel.warn(
+                    `[ExecutionHistoryService] Failed to persist ${key}: ${error}`,
+                );
+            });
     }
 
     private _sessionKey(sessionId: string): string {

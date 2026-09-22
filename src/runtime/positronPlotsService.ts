@@ -5,6 +5,7 @@
 
 
 import * as vscode from 'vscode';
+import { savePlotImage, offerPlotImageExport } from './plotImageExport';
 import { CoreCommandIds } from '../coreCommandIds';
 import type { IPlotSize, IPositronPlotSizingPolicy } from './sizingPolicy';
 import { PlotSizingPolicyAuto } from './sizingPolicyAuto';
@@ -803,14 +804,10 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
      * Removes all the plots in the service.
      */
     removeAllPlots(): void {
-        // Dispose each plot client
-        const count = this._plots.length;
-        for (let i = count - 1; i >= 0; i--) {
-            const plot = this._plots[i];
-            this.unregisterPlotClient(plot);
-        }
+        // Detach the whole list before disposal: close events may re-enter removal.
+        const plots = this._plots.splice(0);
+        for (const plot of plots) { this.unregisterPlotClient(plot); }
 
-        this._plots.length = 0;
         this._selectedPlotId = undefined;
         this._cachedPlotThumbnailDescriptors.clear();
         this._persistCachedPlotThumbnails();
@@ -924,88 +921,28 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
      * Copies the currently selected plot to the clipboard.
      */
     async copyViewPlotToClipboard(): Promise<void> {
-        if (!this._selectedPlotId) {
-            vscode.window.showWarningMessage('No plot selected to copy.');
-            return;
-        }
-
-        const client = this._plotClients.get(this._selectedPlotId);
-        if (!client) {
-            vscode.window.showWarningMessage('Plot client not found.');
-            return;
-        }
-
-        const lastRender = client.lastRender;
-        if (!lastRender?.uri) {
-            vscode.window.showWarningMessage('No rendered plot available to copy.');
-            return;
-        }
-
-        try {
-            // Extract base64 data from data URI
-            const base64Match = lastRender.uri.match(/^data:image\/\w+;base64,(.+)$/);
-            if (!base64Match) {
-                throw new Error('Invalid image data URI');
-            }
-
-            // Use VS Code's clipboard API (note: binary clipboard support varies by platform)
-            await vscode.env.clipboard.writeText(lastRender.uri);
-            vscode.window.showInformationMessage('Plot copied to clipboard as data URL.');
-        } catch (e) {
-            vscode.window.showErrorMessage(`Failed to copy plot: ${e}`);
-        }
+        await offerPlotImageExport(() => this.saveViewPlot());
     }
 
-    /**
-     * Saves the currently selected plot to a file.
-     */
     async saveViewPlot(): Promise<void> {
-        if (!this._selectedPlotId) {
-            vscode.window.showWarningMessage('No plot selected to save.');
+        const plot = this._plots.find(candidate => candidate.id === this._selectedPlotId);
+        await this._saveImagePlot(plot);
+    }
+
+    private async _saveImagePlot(plot: IPositronPlotClient | undefined): Promise<void> {
+        const data = plot instanceof StaticPlotClient ? plot.uri
+            : plot instanceof PlotClientInstance ? plot.lastRender?.uri : undefined;
+        if (!data || !plot) {
+            void vscode.window.showWarningMessage('No rendered plot available to save.');
             return;
         }
-
-        const client = this._plotClients.get(this._selectedPlotId);
-        if (!client) {
-            vscode.window.showWarningMessage('Plot client not found.');
-            return;
-        }
-
-        const lastRender = client.lastRender;
-        if (!lastRender?.uri) {
-            vscode.window.showWarningMessage('No rendered plot available to save.');
-            return;
-        }
-
         try {
-            // Show save dialog
-            const uri = await vscode.window.showSaveDialog({
-                defaultUri: vscode.Uri.file(`plot_${this._selectedPlotId}.png`),
-                filters: {
-                    'PNG Images': ['png'],
-                    'JPEG Images': ['jpg', 'jpeg'],
-                    'All Files': ['*']
-                }
-            });
-
-            if (!uri) {
-                return; // User cancelled
+            const uri = await savePlotImage(data, `plot-${plot.id}`, plot.metadata.suggested_file_name);
+            if (uri) {
+                void vscode.window.showInformationMessage(vscode.l10n.t('Plot exported to {0}', uri.fsPath));
             }
-
-            // Extract base64 data from data URI
-            const base64Match = lastRender.uri.match(/^data:image\/\w+;base64,(.+)$/);
-            if (!base64Match) {
-                throw new Error('Invalid image data URI');
-            }
-
-            const base64Data = base64Match[1];
-            const buffer = Buffer.from(base64Data, 'base64');
-
-            // Write to file
-            await vscode.workspace.fs.writeFile(uri, buffer);
-            vscode.window.showInformationMessage(`Plot saved to ${uri.fsPath}`);
-        } catch (e) {
-            vscode.window.showErrorMessage(`Failed to save plot: ${e}`);
+        } catch (error) {
+            void vscode.window.showErrorMessage(vscode.l10n.t('Failed to export plot: {0}', String(error)));
         }
     }
 
@@ -1067,49 +1004,36 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
     /**
      * Removes the plot client and if no other clients are connected to the plot comm, disposes it.
      */
-    unregisterPlotClient(plotClient: IPositronPlotClient): void {
-        this._lastSelectedTimeByPlotId.delete(plotClient.id);
-        this._htmlPlotDisposables.get(plotClient.id)?.dispose();
-        this._htmlPlotDisposables.delete(plotClient.id);
+    unregisterPlotClient(plotClient: IPositronPlotClient, location = PlotStorageLocationView): void {
+        const id = plotClient.id;
+        if (location === PlotStorageLocationEditor) {
+            if (this._editorPlotClients.get(id) === plotClient) { this._editorPlotClients.delete(id); }
+        } else if (this._plotClients.get(id) === plotClient) {
+            this._plotClients.delete(id);
+        }
+        if (!this._isShuttingDown) { this._removeStoredPlotMetadata(plotClient.metadata, location); }
+
+        // HTML models may be shared directly by the view and editor. Dynamic
+        // editor clients are distinct instances sharing only the comm proxy.
+        if (this._plots.includes(plotClient) || this._editorPlotClients.get(id) === plotClient) { return; }
+        if (!this._plots.some(plot => plot.id === id)) { this._lastSelectedTimeByPlotId.delete(id); }
+        if (plotClient instanceof HtmlPlotClient) {
+            this._htmlPlotDisposables.get(id)?.dispose();
+            this._htmlPlotDisposables.delete(id);
+        }
         if (plotClient instanceof PlotClientInstance) {
-            const plotId = plotClient.id;
-            const plotClients = this._plotClientsByComm.get(plotId);
-            if (plotClients) {
-                const indexToRemove = plotClients.indexOf(plotClient);
-                if (indexToRemove >= 0) {
-                    plotClients.splice(indexToRemove, 1);
-                }
-
-                if (plotClients.length === 0) {
-                    const commProxy = this._plotCommProxies.get(plotId);
-                    commProxy?.dispose();
-                    this._plotCommProxies.delete(plotId);
-                    this._plotClientsByComm.delete(plotId);
-                }
-            }
-
+            const clients = this._plotClientsByComm.get(id);
+            const index = clients?.indexOf(plotClient) ?? -1;
+            if (index >= 0) { clients!.splice(index, 1); }
             plotClient.dispose();
-            this._plotClients.delete(plotId);
-
-            if (!this._isShuttingDown) {
-                this._removeStoredPlotMetadata(plotClient.metadata, PlotStorageLocationView);
+            if (clients?.length === 0) {
+                const proxy = this._plotCommProxies.get(id);
+                this._plotClientsByComm.delete(id);
+                this._plotCommProxies.delete(id);
+                proxy?.dispose();
             }
-        }
-
-        if (this._editorPlotClients.has(plotClient.id)) {
-            this._editorPlotClients.delete(plotClient.id);
-            if (!this._isShuttingDown) {
-                this._removeStoredPlotMetadata(plotClient.metadata, PlotStorageLocationEditor);
-            }
-        }
-
-        if (plotClient instanceof StaticPlotClient || plotClient instanceof HtmlPlotClient) {
-            if (!this._isShuttingDown) {
-                this._removeStoredPlotMetadata(plotClient.metadata, PlotStorageLocationView);
-            }
-            if (typeof (plotClient as vscode.Disposable).dispose === 'function') {
-                (plotClient as vscode.Disposable).dispose();
-            }
+        } else if (plotClient instanceof StaticPlotClient || plotClient instanceof HtmlPlotClient) {
+            plotClient.dispose();
         }
     }
 
@@ -1134,77 +1058,12 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
      * Saves the plot from the editor tab.
      */
     async saveEditorPlot(plotId: string): Promise<void> {
-        const editorClient = this._editorPlotClients.get(plotId);
-        const dynamicClient = editorClient instanceof PlotClientInstance
-            ? editorClient
-            : this._plotClients.get(plotId);
-
-        let imageUri: string | undefined;
-        if (dynamicClient instanceof PlotClientInstance) {
-            imageUri = dynamicClient.lastRender?.uri;
-        } else if (editorClient instanceof StaticPlotClient) {
-            imageUri = editorClient.uri;
-        }
-
-        if (!imageUri) {
-            vscode.window.showWarningMessage('No rendered plot available to save.');
-            return;
-        }
-
-        try {
-            const uri = await vscode.window.showSaveDialog({
-                defaultUri: vscode.Uri.file(`plot_${plotId}.png`),
-                filters: {
-                    'PNG Images': ['png'],
-                    'JPEG Images': ['jpg', 'jpeg'],
-                    'All Files': ['*']
-                }
-            });
-
-            if (!uri) {
-                return;
-            }
-
-            const base64Match = imageUri.match(/^data:image\/\w+;base64,(.+)$/);
-            if (!base64Match) {
-                throw new Error('Invalid image data URI');
-            }
-
-            const base64Data = base64Match[1];
-            const buffer = Buffer.from(base64Data, 'base64');
-            await vscode.workspace.fs.writeFile(uri, buffer);
-            vscode.window.showInformationMessage(`Plot saved to ${uri.fsPath}`);
-        } catch (e) {
-            vscode.window.showErrorMessage(`Failed to save plot: ${e}`);
-        }
+        await this._saveImagePlot(this._editorPlotClients.get(plotId) ??
+            this._plots.find(plot => plot.id === plotId));
     }
-    /**
-     * Copies the plot from the editor tab to the clipboard.
-     */
+
     async copyEditorPlotToClipboard(plotId: string): Promise<void> {
-        const editorClient = this._editorPlotClients.get(plotId);
-        const dynamicClient = editorClient instanceof PlotClientInstance
-            ? editorClient
-            : this._plotClients.get(plotId);
-
-        let imageUri: string | undefined;
-        if (dynamicClient instanceof PlotClientInstance) {
-            imageUri = dynamicClient.lastRender?.uri;
-        } else if (editorClient instanceof StaticPlotClient) {
-            imageUri = editorClient.uri;
-        }
-
-        if (!imageUri) {
-            vscode.window.showWarningMessage('No rendered plot available to copy.');
-            return;
-        }
-
-        try {
-            await vscode.env.clipboard.writeText(imageUri);
-            vscode.window.showInformationMessage('Plot data URI copied to clipboard.');
-        } catch (e) {
-            vscode.window.showErrorMessage(`Failed to copy plot: ${e}`);
-        }
+        await offerPlotImageExport(() => this.saveEditorPlot(plotId));
     }
     /**
      * Opens the given plot in an editor.
@@ -1239,7 +1098,9 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
                 this._disposables.push(
                     plotCopy.onDidClose(() => {
                         this._removeStoredPlotMetadata(plotCopy.metadata, PlotStorageLocationEditor);
-                        this._editorPlotClients.delete(plotId);
+                        if (this._editorPlotClients.get(plotId) === plotCopy) {
+                            this._editorPlotClients.delete(plotId);
+                        }
                     }),
                     plotCopy.onDidUpdateMetadata((updatedMetadata) => {
                         this._storePlotMetadata(updatedMetadata, PlotStorageLocationEditor);
@@ -1359,9 +1220,7 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
     removeEditorPlot(id: string): void {
         const editorClient = this._editorPlotClients.get(id);
         if (editorClient) {
-            this._editorPlotClients.delete(id);
-            this._removeStoredPlotMetadata(editorClient.metadata, PlotStorageLocationEditor);
-            this._onDidRemovePlot.fire(editorClient);
+            this.unregisterPlotClient(editorClient, PlotStorageLocationEditor);
         }
     }
 
@@ -1737,9 +1596,7 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
             commProxy.onDidClose(() => {
                 const plotClients = this._plotClientsByComm.get(metadata.id);
                 if (plotClients) {
-                    plotClients.forEach(plotClient => {
-                        plotClient.dispose();
-                    });
+                    for (const plotClient of [...plotClients]) { plotClient.dispose(); }
                 }
                 this._plotClientsByComm.delete(metadata.id);
                 this._plotCommProxies.delete(metadata.id);
@@ -1763,7 +1620,7 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
         const plotClient = createPlotClient(
             client.message,
             client.sender,
-            client.closer,
+            () => undefined, // The shared comm proxy owns the kernel client.
             metadata.session_id,
             sizingPolicy,
             commProxy
@@ -1873,7 +1730,7 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
         // Remove when closed
         this._disposables.push(
             plotClient.onDidClose(() => {
-                if (this._plots.some(plot => plot.id === plotClient.id)) {
+                if (this._plots.includes(plotClient)) {
                     this.removePlot(plotClient.id);
                 }
             })
@@ -2058,10 +1915,12 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
         this._storeCustomPlotSize();
 
         // Dispose all clients
-        for (const client of [...this._plots]) {
+        for (const client of this._plots.splice(0)) {
             this.unregisterPlotClient(client);
         }
-        this._plots.length = 0;
+        for (const id of [...this._editorPlotClients.keys()]) {
+            this.removeEditorPlot(id);
+        }
         this._plotClients.clear();
 
         // Dispose all disposables
