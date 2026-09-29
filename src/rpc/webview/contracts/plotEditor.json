@@ -39,6 +39,35 @@
       ]
     },
     {
+      "kind": "request",
+      "name": "PlotEditorSelectSizingPolicyRequest",
+      "method": "plotEditor/selectSizingPolicy",
+      "paramsType": "Params",
+      "resultType": "Result",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "policyId",
+              "type": "string"
+            }
+          ]
+        },
+        {
+          "kind": "interface",
+          "name": "Result",
+          "fields": [
+            {
+              "name": "policyId",
+              "type": "string"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "kind": "notification",
       "name": "PlotEditorSaveNotification",
       "method": "plotEditor/save",
@@ -111,6 +140,16 @@
             },
             {
               "name": "title",
+              "optional": true,
+              "type": "string"
+            },
+            {
+              "name": "sizingPolicies",
+              "optional": true,
+              "type": "{ id: string; name: string }[]"
+            },
+            {
+              "name": "selectedSizingPolicyId",
               "optional": true,
               "type": "string"
             }

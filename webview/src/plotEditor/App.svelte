@@ -2,7 +2,7 @@
     /**
      * Plot Editor App component.
      * A standalone plot viewer for individual plots opened in editor tabs.
-     * Features: zoom dropdown, save, copy, debounced resize rendering.
+     * Features: sizing and zoom menus, save, copy, debounced resize rendering.
      */
 
     import { onMount } from "svelte";
@@ -15,6 +15,8 @@
     import ActionBarButton from "../shared/ActionBarButton.svelte";
     import ActionBarMenuButton from "../shared/ActionBarMenuButton.svelte";
     import { localize } from "$lib/localization";
+    import type { SizingPolicyInfo } from "@shared/plots";
+    import type { PlotEditorSetContentNotification } from "../../../src/rpc/webview/plotEditor";
 
     // JSON-RPC connection
     let connection = $state<MessageConnection | undefined>();
@@ -38,6 +40,9 @@
     let statusMessage = $state("");
     let statusError = $state(false);
     let zoom = $state<EditorZoomLevel>(ZoomLevel.Fit);
+    let sizingPolicies = $state<SizingPolicyInfo[]>([]);
+    let selectedSizingPolicyId = $state("");
+    let selectingSizingPolicy = $state(false);
     let lastRenderKey = "";
     let renderTimer: ReturnType<typeof setTimeout> | null = null;
     let containerEl: HTMLDivElement;
@@ -48,6 +53,10 @@
     const zoomLabel = $derived(
         ZOOM_LEVELS.find((l) => l.value === zoom)?.label ?? `${zoom}%`,
     );
+    const sizingLabel = $derived(
+        sizingPolicies.find(policy => policy.id === selectedSizingPolicyId)?.name ?? "",
+    );
+    const sizingTooltip = localize("plots.sizingPolicy", "Set how the plot's shape and size are determined");
 
     // Debounce delay (ms)
     const DEBOUNCE_MS = 150;
@@ -60,7 +69,8 @@
         if (width <= 0 || height <= 0) return;
 
         const pixelRatio = window.devicePixelRatio || 1;
-        const renderKey = `${width}x${height}@${pixelRatio}`;
+        if (selectingSizingPolicy) return;
+        const renderKey = `${width}x${height}@${pixelRatio}:${selectedSizingPolicyId}`;
         if (renderKey === lastRenderKey) return;
 
         lastRenderKey = renderKey;
@@ -80,6 +90,27 @@
     // --- Zoom ---
     function selectZoom(value: EditorZoomLevel) {
         zoom = value;
+    }
+
+    async function selectSizingPolicy(policyId: string) {
+        if (!connection || selectingSizingPolicy || policyId === selectedSizingPolicyId) return;
+        selectingSizingPolicy = true;
+        try {
+            const result = await connection.sendRequest<{ policyId: string }>(
+                "plotEditor/selectSizingPolicy", { policyId },
+            );
+            selectedSizingPolicyId = result.policyId;
+            sizingPolicies = sizingPolicies.filter(policy => policy.id !== "custom" || policy.id === result.policyId);
+            statusMessage = "";
+            statusError = false;
+            lastRenderKey = "";
+        } catch {
+            statusMessage = localize("plotEditor.sizingFailed", "Failed to change plot size.");
+            statusError = true;
+        } finally {
+            selectingSizingPolicy = false;
+            scheduleRender();
+        }
     }
 
     function handleSave() {
@@ -159,14 +190,13 @@
             ),
             connection.onNotification(
                 "plotEditor/setContent",
-                (params: {
-                    kind: "image" | "html";
-                    data?: string;
-                    mimeType?: string;
-                    uri?: string;
-                    title?: string;
-                }) => {
+                (params: PlotEditorSetContentNotification.Params) => {
                     contentKind = params.kind;
+                    sizingPolicies = (params.sizingPolicies ?? []).map(policy => ({
+                        ...policy,
+                        name: localize(`plots.sizing.${policy.id}`, policy.name),
+                    }));
+                    selectedSizingPolicyId = params.selectedSizingPolicyId ?? "";
                     if (params.kind === "html" && params.uri) {
                         htmlUri = params.uri;
                         htmlTitle = params.title || localize("plotEditor.interactivePlot", "Interactive plot");
@@ -215,6 +245,23 @@
 <svelte:window onkeydowncapture={handleWindowKeyDown} />
 
 <!-- Action Bar -->
+{#snippet sizingMenuSnippet()}
+    <ActionBarMenuButton
+        icon="symbol-ruler"
+        label={sizingLabel}
+        tooltip={sizingTooltip}
+        ariaLabel={sizingTooltip}
+        actions={() => sizingPolicies.map(policy => ({
+            id: policy.id,
+            label: policy.name,
+            checked: policy.id === selectedSizingPolicyId,
+            // Keep the trigger focusable when the menu closes during the RPC.
+            disabled: selectingSizingPolicy,
+            onSelected: () => { void selectSizingPolicy(policy.id); },
+        }))}
+    />
+{/snippet}
+
 {#snippet zoomMenuSnippet()}
     <ActionBarMenuButton
         icon="positron-size-to-fit"
@@ -250,6 +297,13 @@
 
 <DynamicActionBar
     leftActions={[
+        ...(contentKind === "image" && sizingPolicies.length > 0 ? [{
+            fixedWidth: 36,
+            text: sizingLabel,
+            minWidth: 80,
+            separator: false,
+            component: sizingMenuSnippet,
+        }] : []),
         ...(contentKind === "image" ? [{
             fixedWidth: 36,
             text: zoomLabel,

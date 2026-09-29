@@ -9,6 +9,13 @@ export type WebviewLocalizationMessages = Readonly<Record<string, string>>;
  */
 export function createWebviewLocalizationMessages(): WebviewLocalizationMessages {
     return {
+        'plots.sizingPolicy': vscode.l10n.t("Set how the plot's shape and size are determined"),
+        'plots.sizing.auto': vscode.l10n.t('Auto'),
+        'plots.sizing.fill': vscode.l10n.t('Fill'),
+        'plots.sizing.landscape': vscode.l10n.t('Landscape'),
+        'plots.sizing.portrait': vscode.l10n.t('Portrait'),
+        'plots.sizing.square': vscode.l10n.t('Square'),
+        'plotEditor.sizingFailed': vscode.l10n.t('Failed to change plot size.'),
         'plots.copyUnavailable': vscode.l10n.t('Image could not be copied. Use Save Plot to export it.'),
         'common.cancel': vscode.l10n.t('Cancel'),
         'common.close': vscode.l10n.t('Close'),

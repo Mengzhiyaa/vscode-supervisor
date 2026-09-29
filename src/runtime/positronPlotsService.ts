@@ -1107,6 +1107,9 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
                     }),
                     plotCopy.onDidChangeZoomLevel(() => {
                         this._storePlotMetadata(plotCopy.metadata, PlotStorageLocationEditor);
+                    }),
+                    plotCopy.onDidChangeSizingPolicy(() => {
+                        this._storePlotMetadata(plotCopy.metadata, PlotStorageLocationEditor);
                     })
                 );
                 editorPlot = plotCopy;

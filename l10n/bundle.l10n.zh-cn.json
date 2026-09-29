@@ -115,5 +115,12 @@
   "This dataset does not provide selectable worksheets.": "此数据集没有可选择的工作表。",
   "Select a worksheet": "选择工作表",
   "Data Explorer Worksheet": "数据浏览器工作表",
-  "Failed to select worksheet: {0}": "选择工作表失败：{0}"
+  "Failed to select worksheet: {0}": "选择工作表失败：{0}",
+  "Set how the plot's shape and size are determined": "设置绘图的形状和尺寸",
+  "Failed to change plot size.": "更改绘图尺寸失败。",
+  "Auto": "自动",
+  "Fill": "填充",
+  "Landscape": "横向",
+  "Portrait": "纵向",
+  "Square": "正方形"
 }

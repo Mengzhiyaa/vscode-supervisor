@@ -381,6 +381,8 @@ export const DataExplorerMethods = {
 
 export const PlotEditorMethods = {
     ready: 'plotEditor/ready',
+    setContent: 'plotEditor/setContent',
+    selectSizingPolicy: 'plotEditor/selectSizingPolicy',
     render: 'plotEditor/render',
     save: 'plotEditor/save',
     copy: 'plotEditor/copy',

@@ -9,6 +9,9 @@ import { LanguageRuntimeMessageType, RuntimeClientType } from '../../internal/ru
 import { HtmlPlotClient } from '../../runtime/htmlPlotClient';
 import { RuntimeClientInstance } from '../../runtime/RuntimeClientInstance';
 import { PositronPlotRenderQueue, RuntimeState as QueueRuntimeState } from '../../runtime/positronPlotRenderQueue';
+import { PlotEditorProvider } from '../../editor/PlotEditorProvider';
+import type { MessageConnection } from 'vscode-jsonrpc/node';
+import * as PlotEditorRpc from '../../rpc/webview/plotEditor';
 
 function fixture() {
     const close = new vscode.EventEmitter<void>();
@@ -42,6 +45,76 @@ suite('[Unit] Plot render parity', () => {
     let f: ReturnType<typeof fixture>;
     setup(() => { f = fixture(); });
     teardown(() => f.dispose());
+
+    test('editor sizing RPC changes kernel render dimensions without changing the view policy', async () => {
+        const service = new PositronPlotsService();
+        const view = f.create();
+        const editor = f.create();
+        service.addPlotClient(view);
+        Object.assign(service, { _editorPlotClients: new Map([['plot', editor]]) });
+        const log = vscode.window.createOutputChannel('Plot editor sizing tests', { log: true });
+        const provider = new PlotEditorProvider(vscode.Uri.file('/extension'), log, service);
+        const requests = new Map<string, (params: { policyId: string }) => { policyId: string }>();
+        const sent: { method: string; params: PlotEditorRpc.PlotEditorSetContentNotification.Params }[] = [];
+        const connection = {
+            onNotification: () => undefined,
+            onRequest: (type: { method: string }, handler: (params: { policyId: string }) => { policyId: string }) => requests.set(type.method, handler),
+            sendNotification: (type: { method: string }, params: PlotEditorRpc.PlotEditorSetContentNotification.Params) => sent.push({ method: type.method, params }),
+            dispose: () => undefined,
+        } as unknown as MessageConnection;
+        const access = provider as unknown as {
+            _connections: Map<string, MessageConnection>;
+            _registerRpcHandlers(id: string, panel: vscode.WebviewPanel, connection: MessageConnection): void;
+            _sendContent(id: string, content: { kind: 'image'; data: string }): void;
+            _handleRenderRequest(connection: MessageConnection, id: string, params: PlotEditorRpc.PlotEditorRenderNotification.Params): Promise<void>;
+        };
+        access._connections.set('plot', connection);
+        access._registerRpcHandlers('plot', {} as vscode.WebviewPanel, connection);
+        const select = requests.get('plotEditor/selectSizingPolicy')!;
+        try {
+            access._sendContent('plot', { kind: 'image', data: 'initial' });
+            assert.strictEqual(sent[0].params.selectedSizingPolicyId, 'auto');
+            assert.deepStrictEqual(sent[0].params.sizingPolicies?.map(policy => policy.id), ['auto', 'landscape', 'portrait', 'square', 'fill']);
+            assert.throws(() => select({ policyId: 'invalid' }));
+            assert.throws(() => select({ policyId: 'intrinsic' }));
+
+            for (const [policyId, expectedSize] of [
+                ['fill', { width: 1200, height: 600 }],
+                ['landscape', { width: 800, height: 600 }],
+                ['auto', { width: 970, height: 600 }],
+            ] as const) {
+                assert.deepStrictEqual(select({ policyId }), { policyId });
+                const pending = access._handleRenderRequest(connection, 'plot', {
+                    width: 1200, height: 600, pixelRatio: 2, format: 'png',
+                });
+                const request = f.requests.at(-1)!;
+                assert.deepStrictEqual(request.renderRequest.size, expectedSize);
+                assert.strictEqual(request.renderRequest.pixel_ratio, 2);
+                f.finish(request);
+                await pending;
+                assert.strictEqual(sent.at(-1)?.method, 'plotEditor/renderResult');
+                assert.strictEqual(view.sizingPolicy.id, 'auto');
+                assert.strictEqual(service.selectedSizingPolicy.id, 'auto');
+                assert.strictEqual(editor.metadata.sizing_policy?.id, policyId);
+            }
+
+            // Closing the editor while rendering must not resurrect its content.
+            const pending = access._handleRenderRequest(connection, 'plot', {
+                width: 600, height: 600, pixelRatio: 1, format: 'png',
+            });
+            const count = sent.length;
+            access._connections.delete('plot');
+            f.finish(f.requests.at(-1)!);
+            await pending;
+            assert.strictEqual(sent.length, count);
+
+            service.removeEditorPlot('plot');
+            assert.throws(() => select({ policyId: 'fill' }));
+            access._connections.set('plot', connection);
+            access._sendContent('plot', { kind: 'image', data: 'snapshot' });
+            assert.strictEqual(sent.at(-1)?.params.sizingPolicies, undefined);
+        } finally { provider.dispose(); service.dispose(); log.dispose(); }
+    });
 
     test('cache keys include output format and pixel ratio, including intrinsic sizing', async () => {
         const plot = f.create();

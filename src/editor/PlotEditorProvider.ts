@@ -24,6 +24,7 @@ import {
     SurfaceModelKind,
 } from '../services/surfaces/surfaceLifecycleService';
 import { EditorWindowMover, findActivePanel } from './EditorWindowMover';
+import { serializeWebviewLocalizationMessages } from '../webview/webviewLocalization';
 
 export type PlotEditorContent =
     | {
@@ -267,6 +268,36 @@ export class PlotEditorProvider implements vscode.Disposable {
         connection.onNotification(RpcProtocol.PlotEditorRenderNotification.type, (params) => {
             void this._handleRenderRequest(connection, plotId, params);
         });
+
+        connection.onRequest(RpcProtocol.PlotEditorSelectSizingPolicyRequest.type, (params) => {
+            const plot = this._plotsService?.getEditorInstance(plotId);
+            if (!(plot instanceof PlotClientInstance) ||
+                !this._getSizingState(plotId).sizingPolicies?.some(policy => policy.id === params.policyId)) {
+                throw new Error('Sizing policy is not available for this plot.');
+            }
+            if (plot.sizingPolicy.id !== params.policyId) {
+                this._plotsService!.setEditorSizingPolicy(plotId, params.policyId);
+            }
+            return { policyId: plot.sizingPolicy.id };
+        });
+    }
+
+    private _getSizingState(plotId: string): Pick<RpcProtocol.PlotEditorSetContentNotification.Params,
+        'sizingPolicies' | 'selectedSizingPolicyId'> {
+        const plot = this._plotsService?.getEditorInstance(plotId);
+        if (!(plot instanceof PlotClientInstance)) {
+            return {};
+        }
+        const policies = this._plotsService!.sizingPolicies.filter(policy =>
+            (policy.id !== 'intrinsic' || !!plot.intrinsicSize) && policy.id !== 'custom');
+        // A frozen/custom policy can belong only to this editor instance.
+        if (!policies.some(policy => policy.id === plot.sizingPolicy.id)) {
+            policies.push(plot.sizingPolicy);
+        }
+        return {
+            sizingPolicies: policies.map(policy => ({ id: policy.id, name: policy.getName(plot) })),
+            selectedSizingPolicyId: plot.sizingPolicy.id,
+        };
     }
 
     private _sendContent(plotId: string, content: PlotEditorContent): void {
@@ -280,7 +311,10 @@ export class PlotEditorProvider implements vscode.Disposable {
         if (!connection) {
             return;
         }
-        connection.sendNotification(RpcProtocol.PlotEditorSetContentNotification.type, content);
+        connection.sendNotification(RpcProtocol.PlotEditorSetContentNotification.type, {
+            ...content,
+            ...(content.kind === 'image' ? this._getSizingState(plotId) : {}),
+        });
     }
 
     private async _handleRenderRequest(
@@ -290,16 +324,16 @@ export class PlotEditorProvider implements vscode.Disposable {
     ): Promise<void> {
         const width = Math.floor(message.width ?? 0);
         const height = Math.floor(message.height ?? 0);
-        if (width <= 0 || height <= 0) {
+        if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
             return;
         }
 
-        const pixelRatio = message.pixelRatio && message.pixelRatio > 0 ? message.pixelRatio : 1;
+        const pixelRatio = Number.isFinite(message.pixelRatio) && message.pixelRatio > 0 ? message.pixelRatio : 1;
         const format = message.format === 'svg' ? PlotRenderFormat.Svg : PlotRenderFormat.Png;
 
         try {
             const rendered = await this._renderPlot(plotId, width, height, pixelRatio, format);
-            if (!rendered?.data) {
+            if (!rendered?.data || this._connections.get(plotId) !== connection) {
                 return;
             }
 
@@ -484,6 +518,7 @@ export class PlotEditorProvider implements vscode.Disposable {
 </head>
 <body>
     <div id="app"></div>
+    <script nonce="${nonce}">globalThis.__arkLocalization=${serializeWebviewLocalizationMessages()};</script>
     <script type="module" nonce="${nonce}" src="${scriptUri}"></script>
 </body>
 </html>`;

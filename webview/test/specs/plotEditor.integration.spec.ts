@@ -104,3 +104,117 @@ test('plot editor suppresses duplicate renders and re-renders after real resize 
     expect(resizedRender.width).not.toBe(initialParams.width);
     expect(resizedRender.height).not.toBe(initialParams.height);
 });
+
+const sizingTooltip = "Set how the plot's shape and size are determined";
+const dynamicContent = {
+    kind: 'image',
+    data: SMALL_PNG_DATA_URI,
+    selectedSizingPolicyId: 'landscape',
+    sizingPolicies: [
+        { id: 'auto', name: 'Auto' },
+        { id: 'fill', name: 'Fill' },
+        { id: 'landscape', name: 'Landscape' },
+    ],
+};
+
+test('plot editor inherits sizing and rerenders at the same viewport after each policy change', async ({ page }) => {
+    const backend = await openWebviewPage(page, 'plotEditor', {
+        configure: backend => backend.onRequest(PlotEditorMethods.selectSizingPolicy, request => request.params),
+    });
+    await expect.poll(() => backend.notificationCount(PlotEditorMethods.ready)).toBeGreaterThan(0);
+    await backend.notify(PlotEditorMethods.setContent, dynamicContent);
+    const menu = page.getByLabel(sizingTooltip);
+    await expect(menu).toContainText('Landscape');
+    await expect.poll(() => backend.notificationCount(PlotEditorMethods.render)).toBeGreaterThan(0);
+    await page.waitForTimeout(250);
+
+    for (const policy of dynamicContent.sizingPolicies) {
+        const before = backend.notificationCount(PlotEditorMethods.render);
+        const previous = backend.notifications(PlotEditorMethods.render).at(-1)!.params;
+        await menu.click();
+        await page.getByRole('menuitemcheckbox', { name: policy.name, exact: true }).click();
+        await expect(menu).toContainText(policy.name);
+        await expect.poll(() => backend.notificationCount(PlotEditorMethods.render)).toBe(before + 1);
+        expect(backend.requests(PlotEditorMethods.selectSizingPolicy).at(-1)!.params).toEqual({ policyId: policy.id });
+        expect(backend.notifications(PlotEditorMethods.render).at(-1)!.params).toEqual(previous);
+    }
+
+    // Keyboard access and focus restoration remain available in a narrow window.
+    await page.setViewportSize({ width: 320, height: 600 });
+    await menu.focus();
+    await page.keyboard.press('ArrowDown');
+    await expect(page.getByRole('menuitemcheckbox', { name: 'Auto', exact: true })).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(menu).toContainText('Auto');
+    await expect(menu).toBeFocused();
+});
+
+for (const outcome of ['success', 'failure'] as const) {
+    test(`plot editor retains keyboard focus during a pending sizing change (${outcome})`, async ({ page }) => {
+        let complete!: () => void;
+        const response = new Promise<{ policyId: string }>((resolve, reject) => {
+            complete = () => outcome === 'success'
+                ? resolve({ policyId: 'auto' })
+                : reject(new Error('Plot closed'));
+        });
+        const backend = await openWebviewPage(page, 'plotEditor', {
+            configure: backend => backend.onRequest(PlotEditorMethods.selectSizingPolicy, () => response),
+        });
+        await expect.poll(() => backend.notificationCount(PlotEditorMethods.ready)).toBeGreaterThan(0);
+        await backend.notify(PlotEditorMethods.setContent, dynamicContent);
+        const menu = page.getByLabel(sizingTooltip);
+        await menu.focus();
+        await page.keyboard.press('ArrowDown');
+        await expect(page.getByRole('menuitemcheckbox', { name: 'Auto', exact: true })).toBeFocused();
+        await page.keyboard.press('Enter');
+        await expect.poll(() => backend.requestCount(PlotEditorMethods.selectSizingPolicy)).toBe(1);
+
+        // Hold the RPC open so focus restoration cannot depend on response timing.
+        await expect(page.getByRole('menu')).toHaveCount(0);
+        await expect(menu).toBeFocused();
+        await page.keyboard.press('ArrowDown');
+        for (const policy of dynamicContent.sizingPolicies) {
+            await expect(page.getByRole('menuitemcheckbox', { name: policy.name, exact: true })).toBeDisabled();
+        }
+        expect(backend.requestCount(PlotEditorMethods.selectSizingPolicy)).toBe(1);
+        await page.keyboard.press('Escape');
+        await expect(menu).toBeFocused();
+
+        complete();
+        if (outcome === 'failure') {
+            await expect(page.getByRole('status')).toContainText('Failed to change plot size.');
+        }
+        await expect(menu).toContainText(outcome === 'success' ? 'Auto' : 'Landscape');
+        await expect(menu).toBeFocused();
+        await page.keyboard.press('ArrowDown');
+        await expect(page.getByRole('menuitemcheckbox', { name: 'Fill', exact: true })).toBeEnabled();
+    });
+}
+
+test('plot editor preserves its policy and reports a rejected sizing change', async ({ page }) => {
+    const backend = await openWebviewPage(page, 'plotEditor', {
+        configure: backend => backend.onRequest(PlotEditorMethods.selectSizingPolicy, () => {
+            throw new Error('Plot closed');
+        }),
+    });
+    await expect.poll(() => backend.notificationCount(PlotEditorMethods.ready)).toBeGreaterThan(0);
+    await backend.notify(PlotEditorMethods.setContent, dynamicContent);
+    await page.getByLabel(sizingTooltip).click();
+    await page.getByRole('menuitemcheckbox', { name: 'Fill', exact: true }).click();
+    await expect(page.getByRole('status')).toContainText('Failed to change plot size.');
+    await expect(page.getByLabel(sizingTooltip)).toContainText('Landscape');
+    await expect(page.getByLabel(sizingTooltip)).toBeEnabled();
+});
+
+test('plot editor hides sizing for static images and HTML content', async ({ page }) => {
+    const backend = await openWebviewPage(page, 'plotEditor');
+    await expect.poll(() => backend.notificationCount(PlotEditorMethods.ready)).toBeGreaterThan(0);
+    await backend.notify(PlotEditorMethods.setContent, { kind: 'image', data: SMALL_PNG_DATA_URI });
+    await expect(page.locator('img.plot')).toBeVisible();
+    await expect(page.getByLabel(sizingTooltip)).toHaveCount(0);
+    await expect(page.getByLabel('Set the plot zoom')).toBeVisible();
+    await backend.notify(PlotEditorMethods.setContent, { kind: 'html', uri: 'about:blank' });
+    await expect(page.locator('iframe')).toBeVisible();
+    await expect(page.getByLabel(sizingTooltip)).toHaveCount(0);
+    await expect(page.getByLabel('Set the plot zoom')).toHaveCount(0);
+});
