@@ -1121,6 +1121,24 @@ export class RuntimeSession implements vscode.Disposable {
         ]);
     }
 
+    private async _cleanupService(label: string, cleanup: () => void | PromiseLike<void>): Promise<void> {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        try {
+            await Promise.race([
+                Promise.resolve().then(cleanup),
+                new Promise<never>((_, reject) => {
+                    timer = setTimeout(() => reject(new Error('Timed out after 5000ms')), 5000);
+                }),
+            ]);
+        } catch (error) {
+            this.log(`Failed to ${label}: ${error}`, vscode.LogLevel.Warning);
+        } finally {
+            if (timer !== undefined) {
+                clearTimeout(timer);
+            }
+        }
+    }
+
     /**
      * Restarts the session
      */
@@ -1180,7 +1198,12 @@ export class RuntimeSession implements vscode.Disposable {
         if (!this._kernel) {
             return;
         }
-        await this._deactivateServices('shutting down session');
+        // Editor services are best-effort cleanup; their failure must never
+        // prevent the kernel from receiving the user's shutdown request.
+        await Promise.all([
+            this._cleanupService('stop LSP', () => this.deactivateLsp()),
+            this._cleanupService('disconnect DAP', () => this.disconnectDap()),
+        ]);
         return this._kernel.shutdown(exitReason);
     }
 
@@ -1626,15 +1649,24 @@ export class RuntimeSession implements vscode.Disposable {
             this._eventQueueTimer = undefined;
         }
 
-        await this._dapComm?.then((dap) => dap.dispose());
+        const dapComm = this._dapComm;
         this._dapComm = undefined;
-        await this._lsp.dispose();
         const disposables = this._disposables.splice(0);
-        disposables.forEach(d => d.dispose());
         const kernel = this._kernel as ({ dispose?: () => void | Promise<void> } | undefined);
         this._kernel = undefined;
         this._clientManager = undefined;
         this._extHostRuntimeSessionAdapter = undefined;
-        await kernel?.dispose?.();
+        await Promise.all([
+            this._cleanupService('dispose DAP', async () => {
+                await dapComm?.then((dap) => dap.dispose());
+            }),
+            this._cleanupService('dispose LSP', () => this._lsp.dispose()),
+            ...disposables.map(disposable =>
+                this._cleanupService('dispose session listener', () => disposable.dispose()),
+            ),
+            this._cleanupService('dispose kernel connection', async () => {
+                await kernel?.dispose?.();
+            }),
+        ]);
     }
 }

@@ -1945,10 +1945,80 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 	 * @param exitReason The reason for the shutdown
 	 */
 	async shutdown(exitReason: positron.RuntimeExitReason): Promise<void> {
+		if (this._runtimeState === positron.RuntimeState.Exited) {
+			return;
+		}
 		this._exitReason = exitReason;
 		const restarting = exitReason === positron.RuntimeExitReason.Restart;
 		const shutdownRequest = new ShutdownRequest(restarting);
-		await this.sendRequest(shutdownRequest);
+		let exitObserved = false;
+		let exitListener: vscode.Disposable | undefined;
+		const exited = new Promise<void>((resolve) => {
+			exitListener = this.onDidEndSession(() => {
+				exitObserved = true;
+				resolve();
+			});
+		});
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		try {
+			await Promise.race([
+				(async () => {
+					await this.sendRequest(shutdownRequest, 10000);
+					// A reply only acknowledges the request; wait until the process
+					// actually exits before allowing the caller to delete its tab.
+					await exited;
+				})(),
+				new Promise<never>((_, reject) => {
+					timer = setTimeout(() => reject(new Error('Kernel did not exit within 10000ms')), 10000);
+				}),
+			]);
+		} catch (error) {
+			if (exitObserved || this.runtimeState === positron.RuntimeState.Exited) {
+				return;
+			}
+			// A disconnected or unresponsive kernel cannot acknowledge the
+			// Jupyter shutdown. Ask the supervisor to terminate it before the
+			// caller removes the session from its list.
+			this.log(`Graceful shutdown failed; terminating session: ${error}`, vscode.LogLevel.Warning);
+			try {
+				await this._api.killSession(this.metadata.sessionId, { timeout: 5000 });
+			} catch (killError) {
+				// It may have exited between the deadline and the kill request,
+				// or the reply may have been lost. Confirm the backend state below.
+				this.log(`Force quit request failed: ${killError}`, vscode.LogLevel.Warning);
+			}
+			await this._confirmSessionExited(() => exitObserved);
+		} finally {
+			if (timer !== undefined) {
+				clearTimeout(timer);
+			}
+			exitListener?.dispose();
+		}
+	}
+
+	private async _confirmSessionExited(exitObserved: () => boolean): Promise<void> {
+		// The websocket may be offline, so verify termination through the
+		// supervisor as well. A failed kill must not become a UI-only deletion.
+		const deadline = Date.now() + 5000;
+		while (Date.now() < deadline) {
+			if (exitObserved() || this._runtimeState === positron.RuntimeState.Exited) {
+				return;
+			}
+			try {
+				const response = await this._api.getSession(this.metadata.sessionId, {
+					timeout: Math.max(1, Math.min(1000, deadline - Date.now())),
+				});
+				if (response.data.status === Status.Exited) {
+					return;
+				}
+			} catch (error) {
+				if (isAxiosError(error) && error.response?.status === 404) {
+					return;
+				}
+			}
+			await new Promise(resolve => setTimeout(resolve, 100));
+		}
+		throw new Error(`Could not confirm that session ${this.metadata.sessionId} exited`);
 	}
 
 	/**
@@ -2221,7 +2291,17 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 		}
 		this._lspClientRegistrations.clear();
 
-		// Clear any pending requests
+		// Settle requests before discarding them. In particular, the kernel can
+		// exit before its shutdown_reply arrives; clearing the map alone leaves
+		// the session deletion waiting forever.
+		for (const request of this._pendingRequests.values()) {
+			if (request instanceof ShutdownRequest) {
+				// Exit is also a successful completion of a shutdown request.
+				request.resolve({ status: 'ok', restart: request.commandPayload.restart });
+			} else {
+				request.reject(new Error('Kernel exited'));
+			}
+		}
 		this._pendingRequests.clear();
 		this._pendingUiCommRequests.forEach((req) => {
 			req.promise.reject(new Error('Kernel exited'));
@@ -2445,19 +2525,32 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 	 * Sends an RPC request to the kernel and waits for a response.
 	 *
 	 * @param request The request to send
+	 * @param timeoutMs Optional deadline covering connection and response
 	 * @returns The response from the kernel
 	 */
-	async sendRequest<T>(request: JupyterRequest<any, T>): Promise<T> {
-		// Ensure we're connected before sending the request; if requests are
-		// sent before the connection is established, they'll fail
-		await this._connected.wait();
+	async sendRequest<T>(request: JupyterRequest<any, T>, timeoutMs?: number): Promise<T> {
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		const timeout = timeoutMs === undefined ? undefined : new Promise<never>((_, reject) => {
+			timer = setTimeout(() => reject(new Error(
+				`Timed out waiting for ${request.commandType} after ${timeoutMs}ms`,
+			)), timeoutMs);
+		});
 
-		// Add the request to the pending requests map so we can match up the
-		// reply when it arrives
-		this._pendingRequests.set(request.msgId, request);
-
-		// Send the request over the websocket
-		return request.sendRpc(this._socket!);
+		try {
+			// One deadline covers both reconnecting and receiving the reply.
+			// Await the barrier separately so a timeout cannot send a stale
+			// shutdown request when the connection eventually comes back.
+			const connected = this._connected.wait();
+			await (timeout ? Promise.race([connected, timeout]) : connected);
+			this._pendingRequests.set(request.msgId, request);
+			const reply = request.sendRpc(this._socket!);
+			return await (timeout ? Promise.race([reply, timeout]) : reply);
+		} finally {
+			if (timer !== undefined) {
+				clearTimeout(timer);
+			}
+			this._pendingRequests.delete(request.msgId);
+		}
 	}
 
 	/**

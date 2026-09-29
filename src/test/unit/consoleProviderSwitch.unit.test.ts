@@ -66,6 +66,48 @@ class FakeConnection {
 }
 
 suite('[Unit] console provider session switching', () => {
+    test('a Console deletion restores its view if debugger cleanup hides it', async () => {
+        const deletion = createDeferred<boolean>();
+        const provider = new ConsoleViewProvider(
+            vscode.Uri.file('/tmp'), makeNoopLogChannel(),
+            {
+                getSession: () => ({ sessionId: 'session-1' }),
+                deleteSession: () => deletion.promise,
+                onDidReceiveRuntimeEvent: createEventStub(),
+                onDidUpdateSessionName: createEventStub(),
+            } as any,
+        );
+        const visibility = new vscode.EventEmitter<void>();
+        const shows: boolean[] = [];
+        const view = {
+            visible: true,
+            onDidChangeVisibility: visibility.event,
+            show: (preserveFocus: boolean) => {
+                shows.push(preserveFocus);
+                view.visible = true;
+            },
+        };
+        (provider as any)._view = view;
+        let snapshots = 0;
+        (provider as any)._sendSessionInfoUpdate = () => { snapshots += 1; };
+        const connection = new FakeConnection();
+        (provider as any)._registerRpcHandlers(connection as any);
+        const stop = connection.requests.get(SessionProtocol.StopSessionRequest.type.method)!;
+        const request = stop({ sessionId: 'session-1' });
+        view.visible = false;
+        visibility.fire();
+        assert.strictEqual(view.visible, true);
+        deletion.resolve(true);
+        await request;
+        assert.deepStrictEqual(shows, [true, false]);
+        assert.strictEqual(snapshots, 1);
+        // The visibility guard belongs only to the close gesture.
+        view.visible = false;
+        visibility.fire();
+        assert.strictEqual(view.visible, false);
+        visibility.dispose();
+    });
+
     const originalActiveTextEditor = Object.getOwnPropertyDescriptor(vscode.window, 'activeTextEditor');
     const originalShowTextDocument = vscode.window.showTextDocument.bind(vscode.window);
     const originalShowErrorMessage = vscode.window.showErrorMessage.bind(vscode.window);

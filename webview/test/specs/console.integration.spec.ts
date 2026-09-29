@@ -656,6 +656,67 @@ test('console toolbar actions stay aligned with extension-side requests', async 
     await expect.poll(async () => (await stopRequest).params).toEqual({ sessionId: 'session-1' });
 });
 
+for (const outcome of ['cancelled', 'failed'] as const) {
+    test(`console session deletion can be retried after it is ${outcome}`, async ({ page }) => {
+        // Tabs are only rendered for multiple sessions. Keep two survivors so
+        // hiding the entire tab list cannot masquerade as deleting the target.
+        const sessions = [
+            createSession({ id: 'session-1', name: 'Primary' }),
+            createSession({ id: 'session-2', name: 'Analytics' }),
+            createSession({ id: 'session-3', name: 'Modeling' }),
+        ];
+        let finishRequest!: () => void;
+        const pendingRequest = new Promise<void>((resolve) => { finishRequest = resolve; });
+        const backend = await openWebviewPage(page, 'console', {
+            configure: (mockBackend) => {
+                registerConsoleDefaults(mockBackend, {
+                    sessions,
+                    activeSessionId: 'session-1',
+                });
+                mockBackend.onRequest(SessionMethods.stop, async () => {
+                    await pendingRequest;
+                    if (outcome === 'failed') {
+                        throw new Error('Could not delete session');
+                    }
+                    // Cancellation returns normally and keeps the session list.
+                });
+            },
+        });
+        const targetTab = page.getByRole('tab', { name: 'Primary', exact: true });
+        const button = targetTab.getByTestId('trash-session');
+        try {
+            await expect(targetTab).toBeVisible();
+            // The tab's delete action is only shown on hover or focus-within.
+            await targetTab.hover();
+            await expect(button).toBeVisible();
+            await button.click();
+            await expect.poll(() => backend.requestCount(SessionMethods.stop)).toBe(1);
+            expect(backend.requests(SessionMethods.stop)[0].params).toEqual({ sessionId: 'session-1' });
+            await expect(button).toBeDisabled();
+            finishRequest();
+            await expect(button).toBeEnabled();
+
+            backend.onRequest(SessionMethods.stop, async () => {
+                sessions.splice(0, 1);
+                await backend.notify(SessionMethods.info, {
+                    sessions,
+                    activeSessionId: 'session-2',
+                });
+            });
+            await targetTab.hover();
+            await expect(button).toBeVisible();
+            await button.click();
+            await expect.poll(() => backend.requestCount(SessionMethods.stop)).toBe(2);
+            expect(backend.requests(SessionMethods.stop)[1].params).toEqual({ sessionId: 'session-1' });
+            await expect(targetTab).toHaveCount(0);
+            await expect(page.getByRole('tab', { name: 'Analytics', exact: true })).toBeVisible();
+            await expect(page.getByRole('tab', { name: 'Modeling', exact: true })).toBeVisible();
+        } finally {
+            finishRequest();
+        }
+    });
+}
+
 test('console restart repro keeps the prompt visible and defers execute until the session is ready', async ({ page }) => {
     const readySession = createSession({
         id: 'session-1',

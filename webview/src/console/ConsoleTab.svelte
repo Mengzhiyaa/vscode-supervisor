@@ -56,7 +56,7 @@
         showResourceMonitor?: boolean;
         fileIconThemeSettingsId?: string;
         onSelect: () => void;
-        onDelete: () => void;
+        onDelete: () => Promise<void>;
         onRename: (newName: string) => void;
         onSessionNameHiddenChange?: (
             sessionId: string,
@@ -253,6 +253,8 @@
             await onDelete();
         } catch (error) {
             console.error("Failed to delete session:", error);
+        } finally {
+            // Cancellation and failures leave the tab mounted and retryable.
             deleteDisabled = false;
         }
     }

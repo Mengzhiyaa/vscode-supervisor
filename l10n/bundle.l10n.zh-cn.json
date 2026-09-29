@@ -1,4 +1,5 @@
 {
+  "Failed to delete session: {0}": "删除会话失败：{0}",
   "Image could not be copied. Use Save Plot to export it.": "无法复制图片。请使用“保存绘图”导出。",
   "Image clipboard is not available in this environment.": "当前环境不支持图片剪贴板。",
   "Save Plot": "保存绘图",

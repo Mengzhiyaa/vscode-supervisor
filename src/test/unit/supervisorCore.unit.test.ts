@@ -114,6 +114,38 @@ function createDeferred<T>(): {
 }
 
 suite('[Unit] supervisor core backports', () => {
+    test('service cleanup failures do not prevent kernel shutdown or remaining disposal', async () => {
+        const session = new RuntimeSession(
+            'session-1', makeRuntimeMetadata(), makeSessionMetadata(), makeNoopLogChannel(), 'Session 1',
+        );
+        const calls: string[] = [];
+        (session as any)._kernel = {
+            shutdown: async () => { calls.push('shutdown'); },
+            dispose: () => { calls.push('kernel-dispose'); },
+        };
+        (session as any)._supportsLsp = true;
+        (session as any)._lsp = {
+            state: LanguageLspState.Running,
+            deactivate: async () => { throw new Error('LSP stop failed'); },
+            dispose: () => { throw new Error('LSP dispose failed'); },
+        };
+        (session as any)._dapComm = Promise.resolve({
+            disconnect: async () => { throw new Error('DAP stop failed'); },
+            dispose: () => { throw new Error('DAP dispose failed'); },
+        });
+        (session as any)._disposables.push(
+            { dispose: () => { throw new Error('Listener dispose failed'); } },
+            { dispose: () => { calls.push('listener-dispose'); } },
+        );
+
+        await session.shutdown();
+        assert.deepStrictEqual(calls, ['shutdown']);
+        await session.dispose();
+        assert.ok(calls.includes('listener-dispose'));
+        assert.ok(calls.includes('kernel-dispose'));
+        assert.strictEqual((session as any)._kernel, undefined);
+    });
+
     test('quotes space-containing PowerShell Start-Process arguments', () => {
         assert.strictEqual(quotePowerShellArgument('--transport'), "'--transport'");
         assert.strictEqual(

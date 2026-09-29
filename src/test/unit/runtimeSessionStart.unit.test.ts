@@ -233,6 +233,46 @@ function makeAttachableConsoleSession(
 }
 
 suite('[Unit] runtime session start semantics', () => {
+    test('deletion selects the most recently used console and survives cleanup failure', async () => {
+        const service = new RuntimeSessionService(makeContext(), makeNoopLogChannel());
+        const removed: string[] = [];
+        const shutdowns: string[] = [];
+        service.onDidDeleteSession(id => removed.push(id));
+        const sessions = ['first', 'second', 'third'].map(id => ({
+            ...makeConsoleSession(makeRuntimeMetadata(), id),
+            setForeground: () => undefined,
+            shutdown: async () => { shutdowns.push(id); },
+            dispose: async () => {
+                if (id === 'first') {
+                    throw new Error('LSP disposal failed');
+                }
+            },
+        }));
+        for (const session of sessions) {
+            (service as any)._sessions.set(session.sessionId, session);
+        }
+        try {
+            await service.focusSession('second');
+            await service.focusSession('third');
+            await service.focusSession('first');
+            assert.strictEqual(await service.deleteSession('first'), true);
+            assert.deepStrictEqual(shutdowns, ['first']);
+            assert.deepStrictEqual(removed, ['first']);
+            assert.strictEqual(service.getSession('first'), undefined);
+            assert.strictEqual(service.activeSessionId, 'third');
+
+            // Closing a background tab must not change the selected tab.
+            await service.deleteSession('second');
+            assert.strictEqual(service.activeSessionId, 'third');
+            await service.deleteSession('third');
+            assert.strictEqual(service.activeSessionId, undefined);
+            assert.deepStrictEqual(removed, ['first', 'second', 'third']);
+        } finally {
+            (service as any)._sessions.clear();
+            service.dispose();
+        }
+    });
+
     test('allows multiple console sessions for the same runtime', async () => {
         const service = new RuntimeSessionService(makeContext(), makeNoopLogChannel());
         const runtimeMetadata = makeRuntimeMetadata();

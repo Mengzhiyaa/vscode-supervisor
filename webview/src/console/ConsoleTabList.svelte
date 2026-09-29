@@ -44,7 +44,7 @@
         showResourceMonitor: boolean;
         fileIconThemeSettingsId?: string;
         onSelectSession: (sessionId: string) => void;
-        onDeleteSession: (sessionId: string) => void;
+        onDeleteSession: (sessionId: string) => Promise<void>;
         onRenameSession: (sessionId: string, newName: string) => void;
         onToggleResourceMonitor: () => void;
     } = $props();
@@ -85,7 +85,7 @@
      * Handle session deletion
      */
     function handleDeleteSession(sessionId: string) {
-        onDeleteSession(sessionId);
+        return onDeleteSession(sessionId);
     }
 
     /**

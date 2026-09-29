@@ -712,14 +712,32 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
                 this._warnMissingSession('stopSession');
                 return;
             }
-            if (!this._sessionManager.getSession(params.sessionId)) {
-                this._consoleService?.deletePositronConsoleSession(params.sessionId);
+            // Stopping an internal debugger can restore the workbench view
+            // that preceded it. A close initiated in Console must stay here.
+            const view = this.view;
+            const keepConsoleVisible = view?.visible === true;
+            const visibilityListener = view && keepConsoleVisible ? view.onDidChangeVisibility(() => {
+                if (this.view === view && !view.visible) {
+                    view.show(true);
+                }
+            }) : undefined;
+            try {
+                if (!this._sessionManager.getSession(params.sessionId)) {
+                    this._consoleService?.deletePositronConsoleSession(params.sessionId);
+                } else {
+                    await this._sessionManager.deleteSession(params.sessionId);
+                }
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                void vscode.window.showErrorMessage(vscode.l10n.t('Failed to delete session: {0}', message));
+                throw error;
+            } finally {
                 this._sendSessionInfoUpdate();
-                return;
+                visibilityListener?.dispose();
+                if (view && keepConsoleVisible && this.view === view) {
+                    view.show(false);
+                }
             }
-
-            await this._sessionManager.deleteSession(params.sessionId);
-            this._sendSessionInfoUpdate();
         });
 
         // Handle restart session request

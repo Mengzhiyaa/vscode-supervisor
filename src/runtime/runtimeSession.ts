@@ -101,10 +101,12 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
     private readonly _startingSessionsBySessionMapKey = new Map<string, Promise<string>>();
     private readonly _consoleSessionsByRuntimeId = new Map<string, RuntimeSession[]>();
     private readonly _lastActiveConsoleSessionByLanguageId = new Map<string, RuntimeSession>();
+    private readonly _recentConsoleSessionIds = new Set<string>();
     private readonly _notebookSessionsByNotebookUri = new Map<string, RuntimeSession>();
     private readonly _shuttingDownNotebookSessionsByNotebookUri = new Map<string, Promise<void>>();
     private readonly _restoredSessionIds = new Set<string>();
     private readonly _restartingSessionPromises = new Map<string, Promise<void>>();
+    private readonly _deletingSessionPromises = new Map<string, Promise<boolean>>();
     private readonly _stateWatchdogs = new Map<string, RuntimeStateWatchdog>();
     private readonly _encounteredLanguagesByLanguageId = new Set<string>();
     private readonly _deferredAutoStartDisposablesByRuntimeId = new Map<string, vscode.Disposable>();
@@ -1116,6 +1118,18 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
     }
 
     async deleteSession(sessionId: string): Promise<boolean> {
+        const pending = this._deletingSessionPromises.get(sessionId);
+        if (pending) {
+            return pending;
+        }
+        const deletion = this._deleteSession(sessionId).finally(() => {
+            this._deletingSessionPromises.delete(sessionId);
+        });
+        this._deletingSessionPromises.set(sessionId, deletion);
+        return deletion;
+    }
+
+    private async _deleteSession(sessionId: string): Promise<boolean> {
         const session = this._sessions.get(sessionId);
         if (!session) {
             throw new Error(`Session ${sessionId} not found`);
@@ -1135,6 +1149,8 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
                 await session.shutdown();
             } catch (error) {
                 this._outputChannel.warn(`[RuntimeSession] Shutdown failed for ${sessionId}: ${error}`);
+                // Keep the session retryable if its backend could not be stopped.
+                throw error;
             }
         }
 
@@ -2219,6 +2235,8 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
         if (newSession) {
             newSession.setForeground(true);
             if (newSession.sessionMetadata.sessionMode === LanguageRuntimeSessionMode.Console) {
+                this._recentConsoleSessionIds.delete(newSession.sessionId);
+                this._recentConsoleSessionIds.add(newSession.sessionId);
                 this._lastActiveConsoleSessionByLanguageId.set(
                     newSession.runtimeMetadata.languageId,
                     newSession,
@@ -2447,16 +2465,26 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
     }
 
     private async _removeSession(session: RuntimeSession): Promise<void> {
-        const detachedForegroundSession = this._detachSessionFromServiceState(session);
-        if (detachedForegroundSession) {
-            const nextSessionId = this.sessions.find((candidate) =>
-                candidate.sessionMetadata.sessionMode === LanguageRuntimeSessionMode.Console,
-            )?.sessionId;
-            await this._setForegroundSession(nextSessionId);
+        // Cleanup must not leave the runtime registry and Console disagreeing
+        // about whether a session was deleted.
+        try {
+            await session.dispose();
+        } catch (error) {
+            this._outputChannel.warn(`[RuntimeSession] Cleanup failed for ${session.sessionId}: ${error}`);
         }
-
-        await session.dispose();
-        this._onDidDeleteSession.fire(session.sessionId);
+        const detachedForegroundSession = this._detachSessionFromServiceState(session);
+        try {
+            if (detachedForegroundSession) {
+                const nextSessionId = [...this._recentConsoleSessionIds].reverse().find(id =>
+                    this._sessions.get(id)?.sessionMetadata.sessionMode === LanguageRuntimeSessionMode.Console,
+                ) ?? this.sessions.find(candidate =>
+                    candidate.sessionMetadata.sessionMode === LanguageRuntimeSessionMode.Console,
+                )?.sessionId;
+                await this._setForegroundSession(nextSessionId);
+            }
+        } finally {
+            this._onDidDeleteSession.fire(session.sessionId);
+        }
     }
 
     private _detachSessionFromServiceState(session: RuntimeSession): boolean {
@@ -2467,6 +2495,7 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
         this._disposeSessionLifecycleDisposables(sessionId);
         this.updateSessionMapsAfterExit(session);
         this._sessions.delete(sessionId);
+        this._recentConsoleSessionIds.delete(sessionId);
         this._restoredSessionIds.delete(sessionId);
         this._restartingSessionPromises.delete(sessionId);
         this._startingSessionsBySessionMapKey.delete(
