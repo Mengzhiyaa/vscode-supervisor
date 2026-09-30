@@ -18,10 +18,3 @@
 <div class="runtime-startup">
     <ConsoleOutputLines outputLines={runtimeItemStartup.outputLines} />
 </div>
-
-<style>
-    /* Positron runtimeStartup.css pattern */
-    .runtime-startup {
-        color: var(--vscode-descriptionForeground);
-    }
-</style>

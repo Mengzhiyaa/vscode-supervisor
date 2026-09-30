@@ -231,12 +231,7 @@
     }
 
     .variable-item.disabled {
-        cursor: default;
-        opacity: 0.5;
-    }
-
-    .variable-item.disabled:hover {
-        background: transparent;
+        opacity: 0.6;
     }
 
     .variable-item.selected {

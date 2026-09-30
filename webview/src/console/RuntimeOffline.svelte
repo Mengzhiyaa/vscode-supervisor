@@ -43,10 +43,6 @@
         gap: 2px;
     }
 
-    .offline-title {
-        color: var(--vscode-descriptionForeground);
-    }
-
     .offline-reconnect {
         margin-top: 8px;
         width: fit-content;

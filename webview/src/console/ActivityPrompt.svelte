@@ -488,7 +488,7 @@
         border: none;
         outline: none;
         background: transparent;
-        color: var(--vscode-editor-foreground);
+        color: inherit;
         font: inherit;
     }
 
@@ -499,6 +499,6 @@
     }
 
     .prompt-answer {
-        color: var(--vscode-editor-foreground);
+        color: inherit;
     }
 </style>

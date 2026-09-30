@@ -120,8 +120,13 @@ test('plots requests initial preferences and uses the preferred editor target fr
     await expect(page.locator('.plots-container')).toHaveClass(/history-right/);
     await expect(page.locator('.plots-container')).toHaveClass(/dark-filter-off/);
 
+    await page.getByRole('button', { name: 'Open in...', exact: true }).click();
+    const sideTarget = page.getByRole('menuitemcheckbox', { name: 'Open in editor tab to the Side', exact: true });
+    await expect(sideTarget).toBeChecked();
+    await expect(page.getByRole('menuitemcheckbox', { name: 'Open in editor tab', exact: true })).not.toBeChecked();
+
     const openInEditor = backend.waitForNextRequest(PlotsMethods.openInEditor);
-    await page.getByLabel('Open in editor tab to the Side').click();
+    await sideTarget.click();
     expect((await openInEditor).params).toEqual({
         plotId: 'plot-1',
         viewColumn: 'beside',
@@ -159,15 +164,16 @@ test('plots sends save, editor, gallery, and code action requests', async ({ pag
     await expect.poll(async () => (await saveRequest).params).toEqual({ plotId: 'plot-1' });
 
     const openInEditorRequest = backend.waitForNextRequest(PlotsMethods.openInEditor);
-    await page.getByLabel('Open in editor tab').click();
+    await page.getByRole('button', { name: 'Open in...', exact: true }).click();
+    await page.getByRole('menuitemcheckbox', { name: 'Open in editor tab', exact: true }).click();
     await expect.poll(async () => (await openInEditorRequest).params).toEqual({
         plotId: 'plot-1',
         viewColumn: 'active',
     });
 
     const openInNewWindowRequest = backend.waitForNextRequest(PlotsMethods.openInNewWindow);
-    await page.getByTitle('Select where to open plot').click();
-    await page.getByText('Open in new window').click();
+    await page.getByRole('button', { name: 'Open in...', exact: true }).click();
+    await page.getByRole('menuitemcheckbox', { name: 'Open in new window', exact: true }).click();
     await expect.poll(async () => (await openInNewWindowRequest).params).toEqual({
         plotId: 'plot-1',
     });
@@ -189,8 +195,15 @@ test('plots sends save, editor, gallery, and code action requests', async ({ pag
     });
 
     const galleryRequest = backend.waitForNextRequest(PlotsMethods.openGalleryInNewWindow);
-    await page.getByLabel('Open plots gallery in new window').click();
+    await page.getByRole('button', { name: 'Open in...', exact: true }).click();
+    await expect(page.getByRole('menuitemcheckbox', { name: 'Open in new window', exact: true })).toBeChecked();
+    await page.getByRole('menuitemcheckbox', { name: 'Open plots gallery in new window', exact: true }).click();
     await galleryRequest;
+
+    await page.getByRole('button', { name: 'Open in...', exact: true }).click();
+    await expect(page.getByRole('menuitemcheckbox', { name: 'Open plots gallery in new window', exact: true })).toBeChecked();
+    await expect(page.getByRole('menuitemcheckbox', { name: 'Open in new window', exact: true })).not.toBeChecked();
+    await page.keyboard.press('Escape');
 });
 
 test('plots releases html plot claims when switching away and applies sizing policy change notifications', async ({ page }) => {

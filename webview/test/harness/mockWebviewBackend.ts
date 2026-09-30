@@ -180,7 +180,8 @@ export class MockWebviewBackend {
         await this._dispatchToPage({
             jsonrpc: '2.0',
             id,
-            result,
+            // JSON-RPC success responses require a result, including for void handlers.
+            result: result === undefined ? null : result,
         });
     }
 

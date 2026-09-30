@@ -183,7 +183,6 @@
         align-items: flex-start;
         margin-bottom: 2px;
         padding-bottom: 4px;
-        color: var(--vscode-descriptionForeground);
         border-bottom: 1px solid #758286;
     }
 
@@ -203,7 +202,7 @@
         line-height: normal;
         background: var(
             --vscode-positronConsole-traceBackground,
-            var(--vscode-textBlockQuote-background, var(--vscode-editor-inactiveSelectionBackground))
+            var(--console-trace-background-fallback)
         );
     }
 

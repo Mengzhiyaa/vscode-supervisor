@@ -47,7 +47,6 @@
     .starting-message {
         padding: 4px 0;
         display: flex;
-        color: var(--vscode-descriptionForeground);
     }
 
     @keyframes move-stripes {

@@ -14,11 +14,8 @@
         type IPositronPlotSizingPolicy,
         type EditorTarget,
     } from "./types";
-    import SizingPolicyMenuButton from "./SizingPolicyMenuButton.svelte";
-    import ZoomPlotMenuButton from "./ZoomPlotMenuButton.svelte";
-    import DarkFilterMenuButton from "./DarkFilterMenuButton.svelte";
-    import OpenInEditorMenuButton from "./OpenInEditorMenuButton.svelte";
-    import PlotCodeMenuButton from "./PlotCodeMenuButton.svelte";
+    import ActionBarMenuButton from "../shared/ActionBarMenuButton.svelte";
+    import { zoomActions, sizingActions, darkFilterActions, darkFilterIcon, plotCodeActions, toContextMenuEntries, type PlotMenuAction } from "./plotMenuActions";
     import { localize } from "../lib/localization";
 
     type OpenInEditorTarget = "editorTab" | "editorTabSide" | "newWindow";
@@ -104,8 +101,9 @@
     const showNextPlot = localize('plots.next', 'Show next plot');
     const savePlot = localize('plots.save', 'Save plot');
     const copyPlotToClipboard = localize('plots.copyPlot', 'Copy plot to clipboard');
-    const openPlotInNewWindow = "Open plot in new window";
-    const openPlotsGalleryInNewWindow = "Open plots gallery in new window";
+    const openPlotInNewWindow = localize('plots.openPlotWindow', 'Open plot in new window');
+    const openPlotsGalleryInNewWindow = localize('plots.openGalleryWindow', 'Open plots gallery in new window');
+    const openInLabel = localize('plots.openIn', 'Open in...');
     const clearAllPlots = localize('plots.clearAll', 'Clear all plots');
     const plotIconButtonWidth = 18;
     const plotSeparatorWidth = 5;
@@ -119,12 +117,12 @@
     const enableSavingPlots = $derived(enableImagePlotActions);
     const enableCopyPlot = $derived(enableImagePlotActions);
     const enableZoomPlot = $derived(enableImagePlotActions);
-    const enableEditorPlot = $derived(hasPlots);
+    const enableEditorPlot = $derived(enableImagePlotActions);
     const enableDarkFilter = $derived(enableCopyPlot);
-    const enablePopoutPlot = $derived(false);
+    const enablePopoutPlot = $derived(hasPlots && selectedPlotKind === "html");
     const enableCodeActions = $derived(hasPlots && !!selectedPlotCode);
     const zoomLevelLabels = new Map<ZoomLevel, string>([
-        [ZoomLevel.Fit, "Fit"],
+        [ZoomLevel.Fit, localize('plots.zoomFit', 'Fit')],
         [ZoomLevel.Fifty, "50%"],
         [ZoomLevel.SeventyFive, "75%"],
         [ZoomLevel.OneHundred, "100%"],
@@ -134,12 +132,12 @@
     const selectedSizingPolicySafe = $derived(
         selectedSizingPolicy ?? {
             id: "auto",
-            getName: () => "Auto",
+            getName: () => localize('plots.sizing.auto', 'Auto'),
             getPlotSize: () => undefined,
         },
     );
     const activeZoomLabel = $derived(
-        zoomLevelLabels.get(zoomLevel) ?? "Fit",
+        zoomLevelLabels.get(zoomLevel) ?? localize('plots.zoomFit', 'Fit'),
     );
     const activeSizingPolicyLabel = $derived(
         selectedSizingPolicySafe.getName(),
@@ -188,14 +186,42 @@
 
     function handleOpenGalleryInNewWindow() { onOpenGalleryInNewWindow?.(); }
 
-    function getOpenInEditorTooltip(target: EditorTarget): string {
-        switch (target) {
-            case "sideGroup": return localize('plots.openInEditorSide', 'Open in editor tab to the Side');
-            case "newWindow": return localize('plots.openNewWindow', 'Open in new window');
-            case "activeGroup":
-            default: return localize('plots.openEditorTab', 'Open in editor tab');
+    // Remember the most recently selected destination, including the gallery.
+    let openTarget = $state<EditorTarget | "gallery">("activeGroup");
+    $effect(() => { openTarget = openInEditorDefaultTarget; });
+
+    const zoomMenu = $derived(zoomActions(zoomLevel, onZoomChange));
+    const sizingMenu = $derived(sizingActions(sizingPolicies, selectedSizingPolicySafe.id, hasIntrinsicSize, !!customSize, onSelectSizingPolicy, handleCustomSize));
+    const filterMenu = $derived(darkFilterActions(darkFilterMode, onDarkFilterChange, onOpenDarkFilterSettings));
+    const codeMenu = $derived(plotCodeActions({
+        plotCode: selectedPlotCode, executionId: selectedPlotExecutionId,
+        sessionId: selectedPlotSessionId, languageId: selectedPlotLanguageId,
+        hasOriginFile: selectedPlotHasOriginFile, oncopyCode: handleCopyPlotCode,
+        onrevealInConsole: handleRevealPlotCodeInConsole, onrunCodeAgain: handleRunPlotCodeAgain,
+        onopenSourceFile: handleOpenSourceFile,
+    }));
+    const openMenu = $derived.by((): PlotMenuAction[] => {
+        const items: PlotMenuAction[] = [];
+        if (enableEditorPlot) {
+            const targets: Array<{ target: EditorTarget; label: string }> = [
+                { target: "newWindow", label: localize('plots.openNewWindow', 'Open in new window') },
+                { target: "activeGroup", label: localize('plots.openEditorTab', 'Open in editor tab') },
+                { target: "sideGroup", label: localize('plots.openInEditorSide', 'Open in editor tab to the Side') },
+            ];
+            for (const { target, label } of targets) items.push({
+                id: target, label, checked: openTarget === target,
+                onSelected: () => { openTarget = target; handleOpenInEditor(target); },
+            });
+        } else if (enablePopoutPlot) {
+            items.push({ id: "newWindow", label: openPlotInNewWindow, checked: openTarget !== "gallery",
+                onSelected: () => { openTarget = "newWindow"; handlePopoutPlot(); } });
         }
-    }
+        if (items.length) items.push({ id: "separator", label: "", separator: true });
+        items.push({ id: "gallery", label: openPlotsGalleryInNewWindow,
+            checked: openTarget === "gallery" || (!enableEditorPlot && !enablePopoutPlot),
+            onSelected: () => { openTarget = "gallery"; handleOpenGalleryInNewWindow(); } });
+        return items;
+    });
 
     // --- Build DynamicActionBar actions ---
     const leftActions: DynamicAction[] = $derived.by(() => {
@@ -245,6 +271,7 @@
                     minWidth: 48,
                     separator: false,
                     component: zoomSnippet,
+                    overflowSubmenu: { label: localize('plots.zoom', 'Zoom'), icon: "positron-size-to-fit", entries: toContextMenuEntries(zoomMenu) },
                 });
             }
             if (enableSizingPolicy && sizingPolicies.length > 0) {
@@ -254,25 +281,13 @@
                     minWidth: 56,
                     separator: false,
                     component: sizingSnippet,
+                    overflowSubmenu: { label: localize('plots.sizingMenu', 'Sizing'), icon: "symbol-ruler", entries: toContextMenuEntries(sizingMenu) },
                 });
             }
-            if (enablePopoutPlot) {
+            if (enableDarkFilter) {
                 actions.push({
-                    fixedWidth: plotIconButtonWidth,
-                    separator: false,
-                    component: popoutSnippet,
-                    overflowMenuItem: {
-                        label: openPlotInNewWindow,
-                        icon: "positron-open-in-new-window",
-                        onSelected: handlePopoutPlot,
-                    },
-                });
-            }
-            if (enableEditorPlot) {
-                actions.push({
-                    fixedWidth: 36,
-                    separator: false,
-                    component: openInEditorSnippet,
+                    fixedWidth: 36, separator: false, component: darkFilterSnippet,
+                    overflowSubmenu: { label: localize('plots.darkFilter', 'Dark Filter'), icon: darkFilterIcon(darkFilterMode), entries: toContextMenuEntries(filterMenu) },
                 });
             }
             if (enableCodeActions) {
@@ -280,6 +295,7 @@
                     fixedWidth: 36,
                     separator: false,
                     component: codeMenuSnippet,
+                    overflowSubmenu: { label: localize('plots.codeMenu', 'Code'), icon: "code", entries: toContextMenuEntries(codeMenu) },
                 });
             }
         }
@@ -290,26 +306,10 @@
     const rightActions: DynamicAction[] = $derived.by(() => {
         const actions: DynamicAction[] = [];
 
-        if (hasPlots) {
-            if (enableDarkFilter) {
-                actions.push({
-                    fixedWidth: 36,
-                    separator: true,
-                    component: darkFilterSnippet,
-                });
-            }
-
-            actions.push({
-                fixedWidth: plotIconButtonWidth,
-                separator: true,
-                component: gallerySnippet,
-                overflowMenuItem: {
-                    label: openPlotsGalleryInNewWindow,
-                    icon: "window",
-                    onSelected: handleOpenGalleryInNewWindow,
-                },
-            });
-        }
+        actions.push({
+            fixedWidth: 36, separator: true, component: openInEditorSnippet,
+            overflowSubmenu: { label: openInLabel, icon: "positron-open-in-new-window", entries: toContextMenuEntries(openMenu) },
+        });
 
         actions.push({
             fixedWidth: plotIconButtonWidth,
@@ -317,7 +317,7 @@
             component: clearAllSnippet,
             overflowMenuItem: {
                 label: clearAllPlots,
-                icon: "clear-all",
+                icon: "trash",
                 disabled: !hasPlots,
                 onSelected: handleClearAll,
             },
@@ -371,66 +371,39 @@
 {/snippet}
 
 {#snippet zoomSnippet()}
-    <ZoomPlotMenuButton {zoomLevel} {onZoomChange} />
+    <ActionBarMenuButton icon="positron-size-to-fit" buttonClass="plot-compact-menu-button"
+        label={activeZoomLabel} tooltip={localize('plots.zoomTooltip', 'Set the plot zoom')}
+        ariaLabel={localize('plots.zoomTooltip', 'Set the plot zoom')}
+        actions={() => zoomMenu} />
 {/snippet}
 
 {#snippet sizingSnippet()}
-    <SizingPolicyMenuButton
-        selectedPolicy={selectedSizingPolicySafe} policies={sizingPolicies}
-        {hasIntrinsicSize} {customSize}
-        onSelectPolicy={onSelectSizingPolicy}
-        onSetCustomSize={handleCustomSize} />
-{/snippet}
-
-{#snippet popoutSnippet()}
-    <ActionBarButton
-        icon="positron-open-in-new-window"
-        buttonClass="plot-action-icon-button"
-        ariaLabel={openPlotInNewWindow}
-        tooltip={openPlotInNewWindow}
-        onclick={handlePopoutPlot}
-    />
+    <ActionBarMenuButton icon="symbol-ruler" buttonClass="plot-compact-menu-button"
+        label={activeSizingPolicyLabel} tooltip={localize('plots.sizingPolicy', "Set how the plot's shape and size are determined")}
+        ariaLabel={localize('plots.sizingPolicy', "Set how the plot's shape and size are determined")}
+        actions={() => sizingMenu} />
 {/snippet}
 
 {#snippet openInEditorSnippet()}
-    <OpenInEditorMenuButton
-        defaultTarget={openInEditorDefaultTarget}
-        tooltip={getOpenInEditorTooltip(openInEditorDefaultTarget)}
-        ariaLabel={getOpenInEditorTooltip(openInEditorDefaultTarget)}
-        onopenInEditor={handleOpenInEditor} />
+    <ActionBarMenuButton icon="positron-open-in-new-window" align="right"
+        tooltip={openInLabel} ariaLabel={openInLabel} actions={() => openMenu} />
 {/snippet}
 
 {#snippet codeMenuSnippet()}
-    <PlotCodeMenuButton
-        hasOriginFile={selectedPlotHasOriginFile}
-        plotCode={selectedPlotCode} executionId={selectedPlotExecutionId}
-        sessionId={selectedPlotSessionId} languageId={selectedPlotLanguageId}
-        oncopyCode={handleCopyPlotCode} onrevealInConsole={handleRevealPlotCodeInConsole}
-        onrunCodeAgain={handleRunPlotCodeAgain}
-        onopenSourceFile={handleOpenSourceFile} />
+    <ActionBarMenuButton icon="code" tooltip={selectedPlotCode || localize('plots.codeActions', 'Plot code actions')}
+        ariaLabel={localize('plots.codeActions', 'Plot code actions')} actions={() => codeMenu} />
 {/snippet}
 
 {#snippet darkFilterSnippet()}
-    <DarkFilterMenuButton
-        {darkFilterMode}
-        {onDarkFilterChange}
-        onOpenSettings={onOpenDarkFilterSettings}
-    />
-{/snippet}
-
-{#snippet gallerySnippet()}
-    <ActionBarButton
-        icon="window"
-        buttonClass="plot-action-icon-button"
-        ariaLabel={openPlotsGalleryInNewWindow}
-        tooltip={openPlotsGalleryInNewWindow}
-        onclick={handleOpenGalleryInNewWindow}
-    />
+    <ActionBarMenuButton icon={darkFilterIcon(darkFilterMode)}
+        tooltip={localize('plots.filterTooltip', 'Set whether a dark filter is applied to plots.')}
+        ariaLabel={localize('plots.filterTooltip', 'Set whether a dark filter is applied to plots.')}
+        actions={() => filterMenu} />
 {/snippet}
 
 {#snippet clearAllSnippet()}
     <ActionBarButton
-        icon="clear-all"
+        icon="trash"
         buttonClass="plot-action-icon-button"
         ariaLabel={clearAllPlots}
         tooltip={clearAllPlots}
@@ -450,6 +423,15 @@
 />
 
 <style>
+    :global(.positron-plots-container .codicon-color-mode) {
+        rotate: 0deg;
+        transition: 0.2s ease;
+    }
+
+    :global(.vscode-dark .positron-plots-container .codicon-color-mode) {
+        rotate: 180deg;
+    }
+
     :global(.action-bar-button.plot-action-icon-button) {
         width: 18px;
         height: 22px;

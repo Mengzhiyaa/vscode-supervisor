@@ -5,7 +5,11 @@
         MemoryUsageSnapshot,
     } from "../types/memory";
     import { localize } from "$lib/localization";
-    import { getMemoryMeterLayout } from "./memoryUsageLayout";
+    import {
+        formatMemoryBytes as formatBytes,
+        getMemoryMeterLabelWidth,
+        getMemoryMeterSizing,
+    } from "./memoryUsageLayout";
 
     interface Segment {
         id: string;
@@ -37,15 +41,22 @@
 
     const loading = $derived(enabled && !snapshot);
     const lowMemory = $derived(snapshot?.lowMemory);
-    const meterLayout = $derived(
-        getMemoryMeterLayout(meterWidth, !!lowMemory),
-    );
     const supervisorBytes = $derived(
         snapshot
             ? snapshot.kernelTotalBytes +
                   (snapshot.supervisorOverheadBytes ?? 0) +
                   snapshot.extensionHostOverheadBytes
             : 0,
+    );
+    const sizeLabel = $derived(
+        loading ? localize("memory.mem", "Mem") : formatBytes(supervisorBytes),
+    );
+    const meterSizing = $derived(
+        getMemoryMeterSizing(
+            meterWidth,
+            !!lowMemory,
+            getMemoryMeterLabelWidth(sizeLabel),
+        ),
     );
     const usedSystemBytes = $derived(
         snapshot
@@ -189,23 +200,6 @@
         }
 
         return session.sessionId;
-    }
-
-    function formatBytes(bytes: number): string {
-        if (!Number.isFinite(bytes) || bytes <= 0) {
-            return "0 B";
-        }
-
-        const units = ["B", "KB", "MB", "GB", "TB"];
-        let value = bytes;
-        let unitIndex = 0;
-        while (value >= 1024 && unitIndex < units.length - 1) {
-            value /= 1024;
-            unitIndex++;
-        }
-
-        const digits = value >= 10 || unitIndex === 0 ? 0 : 1;
-        return `${value.toFixed(digits)} ${units[unitIndex]}`;
     }
 
     function segmentWidth(bytes: number): number {
@@ -354,6 +348,7 @@
         class:compact
         class:low-memory={!!lowMemory}
         class="memory-bar"
+        style:width={compact && meterSizing.barWidth !== undefined ? `${meterSizing.barWidth}px` : undefined}
         role={compact ? "meter" : undefined}
         aria-label={compact ? localize('memory.memoryUsage', 'Memory usage') : undefined}
         aria-valuemin={compact ? 0 : undefined}
@@ -416,20 +411,21 @@
         onclick={() => (expanded = !expanded)}
         onkeydown={handleKeyDown}
     >
-        {#if lowMemory && (meterLayout === "barAndLabel" || meterLayout === "labelAndWarning")}
+        {#if meterSizing.showWarning}
             <span
                 class="memory-warning codicon codicon-warning"
                 title={lowMemoryLabel()}
                 aria-hidden="true"
             ></span>
         {/if}
-        {#if meterLayout === "barAndLabel"}
+        {#if meterSizing.barWidth !== undefined}
             {@render memoryBar(true)}
         {/if}
-        {#if meterLayout !== "hidden"}
-            <span class="memory-label">{loading
-                    ? localize("memory.mem", "Mem")
-                    : formatBytes(supervisorBytes)}</span>
+        {#if meterSizing.layout !== "hidden"}
+            <span
+                class="memory-label"
+                class:low-memory={!!lowMemory && !meterSizing.showWarning}
+            >{sizeLabel}</span>
             <span
                 class="memory-arrow codicon codicon-positron-drop-down-arrow"
                 aria-hidden="true"
@@ -558,10 +554,7 @@
 
     .memory-bar.compact {
         height: 10px;
-        width: 70px;
-        flex: 1 1 70px;
-        max-width: 100px;
-        min-width: 26px;
+        flex-shrink: 0;
     }
 
     .memory-bar.low-memory {
@@ -575,16 +568,16 @@
     }
 
     .memory-segment.kernel {
-        background: var(--vscode-charts-blue, var(--vscode-charts-foreground));
+        background: var(--vscode-charts-foreground);
     }
 
     .memory-segment.overhead,
     .memory-segment.supervisor {
-        background: var(--vscode-charts-green, var(--vscode-gauge-foreground));
+        background: var(--vscode-positronMemoryUsageBar-overheadForeground, var(--memory-usage-overhead-default));
     }
 
     .memory-segment.other {
-        background: var(--vscode-charts-yellow, var(--vscode-gauge-background));
+        background: var(--vscode-positronMemoryUsageBar-otherForeground, var(--memory-usage-other-default));
     }
 
     .memory-segment.free {
@@ -605,11 +598,11 @@
 
     .memory-segment.dimmed,
     .usage-bar.dimmed {
-        opacity: 0.55;
+        opacity: 0.75;
     }
 
     .memory-label {
-        min-width: 36px;
+        min-width: 35px;
         flex: 0 0 auto;
         text-align: right;
         font-size: 10px;
@@ -620,12 +613,13 @@
         user-select: none;
     }
 
-    .low-memory .memory-label {
+    .memory-label.low-memory {
         color: var(--vscode-editorWarning-foreground, var(--vscode-notificationsWarningIcon-foreground));
     }
 
     .memory-arrow {
         flex: 0 0 auto;
+        width: 14px;
         font-size: 18px;
         color: var(--vscode-positronActionBar-foreground, var(--vscode-foreground));
     }
@@ -743,16 +737,16 @@
     }
 
     .usage-bar.kernel {
-        background: var(--vscode-charts-blue, var(--vscode-charts-foreground));
+        background: var(--vscode-charts-foreground);
     }
 
     .usage-bar.overhead,
     .usage-bar.supervisor {
-        background: var(--vscode-charts-green, var(--vscode-gauge-foreground));
+        background: var(--vscode-positronMemoryUsageBar-overheadForeground, var(--memory-usage-overhead-default));
     }
 
     .usage-bar.other {
-        background: var(--vscode-charts-yellow, var(--vscode-gauge-background));
+        background: var(--vscode-positronMemoryUsageBar-otherForeground, var(--memory-usage-other-default));
     }
 
     .usage-bar.free {

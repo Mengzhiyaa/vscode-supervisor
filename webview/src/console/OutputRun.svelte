@@ -20,25 +20,25 @@
 
     /**
      * Maps ANSI color names to CSS variable names.
-     * Uses VS Code's terminal color theme variables.
+     * Uses Positron's console colors with VS Code terminal colors as defaults.
      */
     const colorToCss: Record<string, string> = {
-        ansiBlack: "var(--vscode-terminal-ansiBlack)",
-        ansiRed: "var(--vscode-terminal-ansiRed)",
-        ansiGreen: "var(--vscode-terminal-ansiGreen)",
-        ansiYellow: "var(--vscode-terminal-ansiYellow)",
-        ansiBlue: "var(--vscode-terminal-ansiBlue)",
-        ansiMagenta: "var(--vscode-terminal-ansiMagenta)",
-        ansiCyan: "var(--vscode-terminal-ansiCyan)",
-        ansiWhite: "var(--vscode-terminal-ansiWhite)",
-        ansiBrightBlack: "var(--vscode-terminal-ansiBrightBlack)",
-        ansiBrightRed: "var(--vscode-terminal-ansiBrightRed)",
-        ansiBrightGreen: "var(--vscode-terminal-ansiBrightGreen)",
-        ansiBrightYellow: "var(--vscode-terminal-ansiBrightYellow)",
-        ansiBrightBlue: "var(--vscode-terminal-ansiBrightBlue)",
-        ansiBrightMagenta: "var(--vscode-terminal-ansiBrightMagenta)",
-        ansiBrightCyan: "var(--vscode-terminal-ansiBrightCyan)",
-        ansiBrightWhite: "var(--vscode-terminal-ansiBrightWhite)",
+        ansiBlack: "var(--vscode-positronConsole-ansiBlack, var(--vscode-terminal-ansiBlack))",
+        ansiRed: "var(--vscode-positronConsole-ansiRed, var(--vscode-terminal-ansiRed))",
+        ansiGreen: "var(--vscode-positronConsole-ansiGreen, var(--vscode-terminal-ansiGreen))",
+        ansiYellow: "var(--vscode-positronConsole-ansiYellow, var(--vscode-terminal-ansiYellow))",
+        ansiBlue: "var(--vscode-positronConsole-ansiBlue, var(--vscode-terminal-ansiBlue))",
+        ansiMagenta: "var(--vscode-positronConsole-ansiMagenta, var(--vscode-terminal-ansiMagenta))",
+        ansiCyan: "var(--vscode-positronConsole-ansiCyan, var(--vscode-terminal-ansiCyan))",
+        ansiWhite: "var(--vscode-positronConsole-ansiWhite, var(--vscode-terminal-ansiWhite))",
+        ansiBrightBlack: "var(--vscode-positronConsole-ansiBrightBlack, var(--vscode-terminal-ansiBrightBlack))",
+        ansiBrightRed: "var(--vscode-positronConsole-ansiBrightRed, var(--vscode-terminal-ansiBrightRed))",
+        ansiBrightGreen: "var(--vscode-positronConsole-ansiBrightGreen, var(--vscode-terminal-ansiBrightGreen))",
+        ansiBrightYellow: "var(--vscode-positronConsole-ansiBrightYellow, var(--vscode-terminal-ansiBrightYellow))",
+        ansiBrightBlue: "var(--vscode-positronConsole-ansiBrightBlue, var(--vscode-terminal-ansiBrightBlue))",
+        ansiBrightMagenta: "var(--vscode-positronConsole-ansiBrightMagenta, var(--vscode-terminal-ansiBrightMagenta))",
+        ansiBrightCyan: "var(--vscode-positronConsole-ansiBrightCyan, var(--vscode-terminal-ansiBrightCyan))",
+        ansiBrightWhite: "var(--vscode-positronConsole-ansiBrightWhite, var(--vscode-terminal-ansiBrightWhite))",
     };
 
     /**
@@ -82,7 +82,7 @@
                         styles.push("font-weight: bold");
                         break;
                     case "ansiDim":
-                        styles.push("opacity: 0.7");
+                        styles.push("font-weight: lighter");
                         break;
                     case "ansiItalic":
                         styles.push("font-style: italic");
@@ -110,8 +110,10 @@
                         styles.push("visibility: hidden");
                         break;
                     case "ansiSlowBlink":
+                        styles.push("animation: blink 1s linear infinite");
+                        break;
                     case "ansiRapidBlink":
-                        styles.push("animation: blink 1s step-end infinite");
+                        styles.push("animation: blink 0.5s linear infinite");
                         break;
                 }
             }

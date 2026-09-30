@@ -345,7 +345,7 @@
         display: flex;
         justify-content: center;
         align-items: center;
-        background: var(--vscode-editor-background);
+        background: var(--vscode-positronPlots-background, var(--vscode-panel-background, var(--vscode-editor-background)));
     }
 
     .dynamic-plot-instance {

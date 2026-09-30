@@ -94,7 +94,7 @@
         grid-template-columns: 10px 1fr;
         background: var(
             --vscode-positronConsole-errorBackground,
-            rgba(255, 0, 0, 0.1)
+            var(--console-error-background-fallback)
         );
     }
 
@@ -144,8 +144,5 @@
     .traceback-lines {
         display: grid;
         grid-template-columns: 2ch 1fr;
-        margin-top: 4px;
-        font-size: 0.9em;
-        color: var(--vscode-descriptionForeground);
     }
 </style>

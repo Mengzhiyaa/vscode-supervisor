@@ -3,17 +3,15 @@
   Overflow context menu for DynamicActionBar.
   Anchors to a reference element and renders overflow actions.
 -->
-<script lang="ts">
-    import { onMount } from 'svelte';
-    import '../shared/actionBar.css';
-
+<script module lang="ts">
     export interface ContextMenuItem {
         id?: string;
         label: string;
         icon?: string;
         checked?: boolean;
         disabled?: boolean;
-        onSelected: () => void;
+        onSelected?: () => void;
+        submenu?: ContextMenuEntry[];
     }
 
     export interface ContextMenuSeparator {
@@ -21,6 +19,12 @@
     }
 
     export type ContextMenuEntry = ContextMenuItem | ContextMenuSeparator;
+</script>
+
+<script lang="ts">
+    import { onMount } from 'svelte';
+    import ContextMenu from './ContextMenu.svelte';
+    import '../shared/actionBar.css';
 
     function isSeparator(entry: ContextMenuEntry): entry is ContextMenuSeparator {
         return 'separator' in entry && entry.separator === true;
@@ -33,6 +37,8 @@
         onclose: (options?: { restoreFocus?: boolean }) => void;
         align?: 'left' | 'right';
         initialFocus?: 'first' | 'last';
+        nested?: boolean;
+        onselect?: () => void;
     }
 
     let {
@@ -42,13 +48,23 @@
         onclose,
         align = 'left',
         initialFocus = 'first',
+        nested = false,
+        onselect,
     }: Props = $props();
 
     let menuEl = $state<HTMLDivElement | null>(null);
     let menuStyle = $state('');
     let restoreFocus = $state(true);
+    let submenuItem = $state.raw<ContextMenuItem | null>(null);
+    let submenuAnchor = $state<HTMLButtonElement | null>(null);
     let typeahead = '';
     let typeaheadTimer: ReturnType<typeof setTimeout> | undefined;
+
+    $effect(() => {
+        if (submenuItem && !entries.includes(submenuItem)) {
+            submenuItem = null;
+        }
+    });
 
     const directPositronIcons = new Set([
         'positron-add-filter',
@@ -80,7 +96,7 @@
         }
 
         return Array.from(
-            menuEl.querySelectorAll<HTMLButtonElement>('.menu-item:not(:disabled)'),
+            menuEl.querySelectorAll<HTMLButtonElement>(':scope > .menu-item:not(:disabled)'),
         );
     }
 
@@ -132,17 +148,24 @@
         const anchorRect = anchorEl?.getBoundingClientRect();
         const menuRect = menuEl.getBoundingClientRect();
 
-        const baseLeft = anchorPoint
+        const baseLeft = nested
+            ? (anchorRect?.right ?? 0)
+            : anchorPoint
             ? anchorPoint.x
             : align === 'right'
               ? (anchorRect?.right ?? 0) - menuRect.width
               : (anchorRect?.left ?? 0);
-        const baseTop = anchorPoint
+        const baseTop = nested
+            ? (anchorRect?.top ?? 0)
+            : anchorPoint
             ? anchorPoint.y
             : (anchorRect?.bottom ?? 0) + 2;
 
         let left = baseLeft;
         let top = baseTop;
+        if (nested && left + menuRect.width > window.innerWidth - viewportPadding) {
+            left = (anchorRect?.left ?? 0) - menuRect.width;
+        }
 
         left = Math.min(
             Math.max(left, viewportPadding),
@@ -183,7 +206,19 @@
 
     // Close on Escape
     function handleKeydown(event: KeyboardEvent) {
+        event.stopPropagation();
         switch (event.key) {
+            case 'Enter':
+            case ' ':
+            case 'ArrowRight': {
+                const button = document.activeElement as HTMLButtonElement | null;
+                if (button && getMenuItems().includes(button) &&
+                    (event.key !== 'ArrowRight' || button?.getAttribute('aria-haspopup') === 'menu')) {
+                    event.preventDefault();
+                    button?.click();
+                }
+                break;
+            }
             case 'Escape':
             case 'ArrowLeft':
                 event.preventDefault();
@@ -225,7 +260,7 @@
     }
 
     onMount(() => {
-        if (menuEl && menuEl.parentElement !== document.body) {
+        if (!nested && menuEl && menuEl.parentElement !== document.body) {
             document.body.appendChild(menuEl);
         }
 
@@ -279,10 +314,21 @@
                 type="button"
                 role={checkable ? 'menuitemcheckbox' : 'menuitem'}
                 aria-checked={checkable ? entry.checked : undefined}
-                onclick={() => {
+                aria-haspopup={entry.submenu ? 'menu' : undefined}
+                aria-expanded={entry.submenu ? submenuItem === entry : undefined}
+                onfocus={() => {
+                    if (submenuItem !== entry) submenuItem = null;
+                }}
+                onclick={(event) => {
                     if (!entry.disabled) {
-                        entry.onSelected();
-                        requestClose();
+                        if (entry.submenu) {
+                            submenuAnchor = event.currentTarget;
+                            submenuItem = entry;
+                        } else {
+                            entry.onSelected?.();
+                            if (onselect) onselect();
+                            else requestClose();
+                        }
                     }
                 }}
             >
@@ -304,14 +350,36 @@
                 {/if}
 
                 <span class="menu-title">{entry.label}</span>
+                {#if entry.submenu}
+                    <span class="submenu-arrow codicon codicon-chevron-right" aria-hidden="true"></span>
+                {/if}
             </button>
         {/if}
     {/each}
+    {#if submenuItem?.submenu && submenuAnchor}
+        {#key submenuItem}
+            <ContextMenu
+                entries={submenuItem.submenu}
+                anchorEl={submenuAnchor}
+                nested={true}
+                onclose={() => { submenuItem = null; }}
+                onselect={() => {
+                    if (onselect) onselect();
+                    else requestClose();
+                }}
+            />
+        {/key}
+    {/if}
 </div>
 
 <style>
     .action-bar-context-menu {
         position: fixed;
+    }
+
+    .submenu-arrow {
+        grid-column: end;
+        margin-left: 12px;
     }
 
     @media (forced-colors: active) {

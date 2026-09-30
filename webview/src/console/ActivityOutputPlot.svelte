@@ -20,65 +20,60 @@
     }
 </script>
 
-<div class="activity-output-plot">
-    <!-- Render any text caption/output lines first -->
-    <ConsoleOutputLines outputLines={activityItemOutputPlot.outputLines} />
+<ConsoleOutputLines outputLines={activityItemOutputPlot.outputLines} />
 
-    <!-- Render the plot image -->
-    <button
-        class="plot-container"
-        onclick={handleClick}
-        title={localize("console.plot.select", "Select this plot in the Plots pane")}
-        type="button"
-    >
-        <img
-            src={activityItemOutputPlot.plotUri}
-            alt={localize("console.plot.output", "Plot output")}
-            class="plot-image"
-        />
-        <span class="inspect-icon codicon codicon-search"></span>
-    </button>
-</div>
+<button
+    class="activity-output-plot"
+    onclick={handleClick}
+    title={localize("console.plot.select", "Select this plot in the Plots pane")}
+    type="button"
+>
+    <img
+        src={activityItemOutputPlot.plotUri}
+        alt={localize("console.plot.output", "Plot output")}
+        class="plot-image"
+    />
+    <span class="inspect-icon codicon codicon-positron-search"></span>
+</button>
 
 <style>
     .activity-output-plot {
-        padding: 4px 0;
-    }
-
-    .plot-container {
         display: inline-block;
         position: relative;
         cursor: pointer;
         border: none;
         padding: 0;
         background: transparent;
-        border-radius: 4px;
         overflow: hidden;
     }
 
-    .plot-container:hover {
-        outline: 2px solid var(--vscode-focusBorder);
+    .activity-output-plot:hover img {
+        outline: 1px solid var(--vscode-tab-border);
+        outline-offset: -1px;
     }
 
-    .plot-container:hover .inspect-icon {
-        opacity: 1;
+    .activity-output-plot:hover .inspect-icon {
+        display: block;
+    }
+
+    .activity-output-plot:focus-visible {
+        outline: 1px solid var(--vscode-focusBorder);
+        outline-offset: -1px;
     }
 
     .plot-image {
         max-width: 100%;
         max-height: 300px;
         display: block;
+        padding: 5px;
+        border-radius: 4px;
     }
 
     .inspect-icon {
         position: absolute;
-        top: 8px;
-        right: 8px;
-        padding: 4px;
-        background: var(--vscode-button-background);
-        color: var(--vscode-button-foreground);
-        border-radius: 2px;
-        opacity: 0;
-        transition: opacity 0.2s;
+        top: 3px;
+        right: 3px;
+        display: none;
+        color: var(--vscode-textLink-foreground);
     }
 </style>

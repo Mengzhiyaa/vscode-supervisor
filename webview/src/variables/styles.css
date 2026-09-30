@@ -8,15 +8,31 @@
     --vscode-positronVariables-foreground: var(--vscode-editor-foreground, var(--vscode-foreground));
     --vscode-positronVariables-background: var(--vscode-panel-background, var(--vscode-editor-background));
     --vscode-positronVariables-border: var(--vscode-tree-tableColumnsBorder, var(--vscode-panel-border, rgba(128, 128, 128, 0.35)));
-    --vscode-positronVariables-rowHoverBackground: var(--vscode-list-hoverBackground);
+    /* Match Positron Color.lighten/darken by scaling HSL lightness. */
+    --vscode-positronVariables-rowHoverBackground: hsl(from var(--vscode-list-hoverBackground) h s calc(l * 1.05));
     --vscode-positronVariables-activeSelectionBackground: var(--vscode-list-activeSelectionBackground);
     --vscode-positronVariables-activeSelectionForeground: var(--vscode-list-activeSelectionForeground);
     --vscode-positronVariables-inactiveSelectionBackground: var(--vscode-list-inactiveSelectionBackground);
     --vscode-positronVariables-inactiveSelectionForeground: var(--vscode-list-inactiveSelectionForeground);
-    --vscode-positronVariables-headerBackground: var(--vscode-editorGroupHeader-tabsBackground, var(--vscode-editor-background));
+    --vscode-positronVariables-headerBackground: hsl(from var(--vscode-editor-background) h s calc(l * 1.2));
+    --memory-usage-overhead-default: var(--vscode-inputValidation-infoBorder);
+    --memory-usage-other-default: color-mix(in srgb, var(--vscode-positronMemoryUsageBar-overheadForeground, var(--memory-usage-overhead-default)) 30%, transparent);
 
     /* Action bar height - matching Positron */
     --vscode-positronActionBar-height: 28px;
+}
+
+body.vscode-light {
+    --vscode-positronVariables-rowHoverBackground: hsl(from var(--vscode-list-hoverBackground) h s calc(l * 0.95));
+    --vscode-positronVariables-headerBackground: hsl(from var(--vscode-editor-background) h s calc(l * 0.95));
+}
+
+body.vscode-high-contrast,
+body.vscode-high-contrast-light {
+    --vscode-positronVariables-rowHoverBackground: var(--vscode-list-hoverBackground);
+    --vscode-positronVariables-headerBackground: var(--vscode-editor-background);
+    --memory-usage-overhead-default: var(--vscode-contrastBorder);
+    --memory-usage-other-default: white;
 }
 
 /* Global styles */

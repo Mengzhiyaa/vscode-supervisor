@@ -21,6 +21,11 @@
         VariablesSorting,
     } from "../types/variables";
     import { localize } from "$lib/localization";
+    import {
+        formatMemoryBytes,
+        getMemoryMeterLabelWidth,
+        getMemoryMeterSizing,
+    } from "./memoryUsageLayout";
 
     // Props using Svelte 5 runes
     interface Props {
@@ -65,6 +70,25 @@
         onconfigureMemory,
     }: Props = $props();
 
+    let actionBarWidth = $state(0);
+    const memoryMeterSizing = $derived.by(() => {
+        const sizeLabel = memoryUsageSnapshot
+            ? formatMemoryBytes(
+                  memoryUsageSnapshot.kernelTotalBytes +
+                      (memoryUsageSnapshot.supervisorOverheadBytes ?? 0) +
+                      memoryUsageSnapshot.extensionHostOverheadBytes,
+              )
+            : localize("memory.mem", "Mem");
+        // Reserve grouping, sorting, refresh, clear, their separator, the
+        // overflow button and both paddings before allocating the meter.
+        const baseWidth = 36 * 2 + 24 * 2 + 7 + 24 + 8 * 2;
+        return getMemoryMeterSizing(
+            actionBarWidth - baseWidth - 7,
+            !!memoryUsageSnapshot?.lowMemory,
+            getMemoryMeterLabelWidth(sizeLabel),
+        );
+    });
+
     // Localized strings (matching Positron)
     const refreshObjectsLabel = localize("variables.refreshObjects", "Refresh Objects");
     const deleteAllObjectsLabel = localize("variables.deleteAllObjects", "Delete All Objects");
@@ -97,11 +121,10 @@
     ]);
 
     const rightActions: DynamicAction[] = $derived([
-        ...(memoryUsageEnabled
+        ...(memoryUsageEnabled && memoryMeterSizing.layout !== "hidden"
             ? [
                   {
-                      fixedWidth: 154,
-                      minWidth: 54,
+                      fixedWidth: memoryMeterSizing.width,
                       separator: true,
                       component: memoryUsageSnippet,
                   },
@@ -175,7 +198,7 @@
 {/snippet}
 
 {#if hasActiveInstance}
-    <div class="action-bars">
+    <div class="action-bars" bind:clientWidth={actionBarWidth}>
         <!-- Primary action bar (with overflow) -->
         <DynamicActionBar
             {leftActions}

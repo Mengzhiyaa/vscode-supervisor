@@ -532,6 +532,8 @@
         background-color: var(--vscode-positronActionBar-hoverBackground);
     }
 
+    :global(body.vscode-high-contrast) .row-filter-button:hover:not(:disabled),
+    :global(body.vscode-high-contrast-light) .row-filter-button:hover:not(:disabled),
     :global(.hc-black) .row-filter-button:hover:not(:disabled),
     :global(.hc-light) .row-filter-button:hover:not(:disabled) {
         border: 1px dashed var(--vscode-focusBorder) !important;
@@ -596,6 +598,8 @@
         background-color: var(--vscode-positronActionBar-hoverBackground);
     }
 
+    :global(body.vscode-high-contrast) .add-row-filter-button:hover:not(:disabled),
+    :global(body.vscode-high-contrast-light) .add-row-filter-button:hover:not(:disabled),
     :global(.hc-black) .add-row-filter-button:hover:not(:disabled),
     :global(.hc-light) .add-row-filter-button:hover:not(:disabled) {
         border: 1px dashed var(--vscode-focusBorder) !important;

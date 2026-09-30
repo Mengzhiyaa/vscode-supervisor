@@ -24,7 +24,7 @@
     .activity-error-stream {
         color: var(
             --vscode-positronConsole-errorForeground,
-            var(--vscode-terminal-ansiYellow)
+            var(--vscode-errorForeground)
         );
     }
 </style>

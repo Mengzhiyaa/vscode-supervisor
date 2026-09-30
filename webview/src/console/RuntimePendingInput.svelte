@@ -61,8 +61,8 @@
         pointer-events: none;
         background-image: repeating-linear-gradient(
             45deg,
-            var(--vscode-positronConsole-ansiBrightGreen),
-            var(--vscode-positronConsole-ansiBrightGreen) 3px,
+            var(--vscode-positronConsole-ansiBrightGreen, var(--vscode-terminal-ansiBrightGreen)),
+            var(--vscode-positronConsole-ansiBrightGreen, var(--vscode-terminal-ansiBrightGreen)) 3px,
             transparent 3px,
             transparent 6px
         );

@@ -129,6 +129,7 @@
     );
 
     const plotInfoHeaderPx = 30;
+    const showOriginFile = $derived(!!selectedOriginFile && selectedOriginFile !== selectedSessionName);
 
     function handleSessionNameClick() {
         if (!selectedPlot?.sessionId) {
@@ -182,7 +183,7 @@
                             {selectedSessionName}
                         </button>
                     {/if}
-                    {#if selectedOriginFile}
+                    {#if showOriginFile}
                         <button
                             class="plot-origin-file"
                             type="button"
@@ -196,7 +197,7 @@
                     {#if selectedPlotName}
                         <span class="plot-name">{selectedPlotName}</span>
                     {/if}
-                    {#if !selectedSessionName && !selectedPlotName && !selectedOriginFile}
+                    {#if !selectedSessionName && !selectedPlotName && !showOriginFile}
                         <span>&nbsp;</span>
                     {/if}
                 </span>
@@ -303,11 +304,18 @@
 </div>
 
 <style>
+    .dark-filter-on :global(.selected-plot img.plot),
+    .dark-filter-on :global(.plot-thumbnail img.plot),
+    :global(.vscode-dark) .dark-filter-auto :global(.selected-plot img.plot),
+    :global(.vscode-dark) .dark-filter-auto :global(.plot-thumbnail img.plot) {
+        filter: invert(1) hue-rotate(180deg);
+    }
+
     .plots-container {
         display: flex;
         flex: 1;
         overflow: hidden;
-        background: var(--vscode-editor-background);
+        background: var(--vscode-positronPlots-background, var(--vscode-panel-background, var(--vscode-editor-background)));
     }
 
     .plots-container:focus {

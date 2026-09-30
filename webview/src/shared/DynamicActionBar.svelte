@@ -42,6 +42,12 @@
             disabled?: boolean;
             onSelected: () => void;
         };
+        /** Submenu for an action whose inline control contains several choices. */
+        overflowSubmenu?: {
+            label: string;
+            icon?: string;
+            entries: ContextMenuEntry[];
+        };
     }
 
     interface Props {
@@ -217,10 +223,10 @@
             const rightLayout = layoutActions(rightActions);
             const leftLayout = layoutActions(leftActions);
             const leftOverflowActions = leftLayout.hiddenActions.filter(
-                (action) => action.overflowMenuItem,
+                (action) => action.overflowMenuItem || action.overflowSubmenu,
             );
             const rightOverflowActions = rightLayout.hiddenActions.filter(
-                (action) => action.overflowMenuItem,
+                (action) => action.overflowMenuItem || action.overflowSubmenu,
             );
 
             return {
@@ -300,7 +306,7 @@
         ) => {
             let shouldAddLeadingSeparator = addLeadingSeparator;
             actions.forEach((action, index) => {
-                if (!action.overflowMenuItem) {
+                if (!action.overflowMenuItem && !action.overflowSubmenu) {
                     return;
                 }
 
@@ -309,12 +315,15 @@
                     shouldAddLeadingSeparator = false;
                 }
 
-                entries.push({
-                    label: action.overflowMenuItem.label,
-                    icon: action.overflowMenuItem.icon,
-                    disabled: action.overflowMenuItem.disabled,
-                    onSelected: action.overflowMenuItem.onSelected,
-                } as ContextMenuItem);
+                if (action.overflowSubmenu) {
+                    entries.push({
+                        label: action.overflowSubmenu.label,
+                        icon: action.overflowSubmenu.icon,
+                        submenu: action.overflowSubmenu.entries,
+                    });
+                } else if (action.overflowMenuItem) {
+                    entries.push({ ...action.overflowMenuItem } as ContextMenuItem);
+                }
 
                 if (action.separator && index < actions.length - 1) {
                     entries.push({ separator: true });

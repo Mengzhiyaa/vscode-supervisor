@@ -38,11 +38,31 @@ body {
     width: 100%;
     height: 100%;
     overflow: hidden;
-    background: var(--vscode-editor-background);
-    color: var(--vscode-editor-foreground);
+    background: var(--vscode-positronConsole-background, var(--vscode-panel-background, var(--vscode-editor-background)));
+    color: var(--vscode-positronConsole-foreground, var(--vscode-terminal-foreground, var(--vscode-editor-foreground)));
     font-family: var(--console-ui-font-family);
     font-size: var(--console-ui-font-size);
     font-weight: var(--console-ui-font-weight);
+}
+
+/* Match Positron's message background defaults for each VS Code theme kind. */
+body {
+    --console-error-background-fallback: color-mix(in srgb, var(--vscode-terminal-ansiRed) 10%, transparent);
+    --console-trace-background-fallback: #262626;
+}
+
+body.vscode-light {
+    --console-error-background-fallback: color-mix(in srgb, var(--vscode-terminal-ansiRed) 5%, transparent);
+}
+
+body.vscode-high-contrast,
+body.vscode-high-contrast-light {
+    --console-error-background-fallback: var(--vscode-panel-background, var(--vscode-editor-background));
+}
+
+body.vscode-light,
+body.vscode-high-contrast-light {
+    --console-trace-background-fallback: #e5e5e5;
 }
 
 #app {

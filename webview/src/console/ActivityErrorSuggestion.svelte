@@ -65,28 +65,28 @@
         display: grid;
         margin-left: -10px;
         grid-template-columns: 10px minmax(0, 1fr);
-        background: var(--vscode-positronConsole-errorBackground, color-mix(in srgb, var(--vscode-editorWarning-foreground) 8%, transparent));
     }
 
     .suggestion-bar {
         width: 4px;
+        display: flex;
         opacity: 0.75;
-        background: var(--vscode-editorWarning-foreground, var(--vscode-notificationsWarningIcon-foreground));
+        background: var(--vscode-positronConsole-ansiYellow, var(--vscode-terminal-ansiYellow));
     }
 
     .suggestion-information {
         display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: 8px;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 4px;
         min-width: 0;
-        padding: 4px 0;
+        padding: 2px 0;
     }
 
     .suggestion-action {
-        display: inline-flex;
+        display: grid;
+        grid-template-columns: 2ch 1fr;
         align-items: center;
-        gap: 4px;
         border: 0;
         padding: 0;
         color: var(--vscode-textLink-foreground);
@@ -95,7 +95,15 @@
         cursor: pointer;
     }
 
-    .suggestion-action:hover:not(:disabled) .link-text {
+    .suggestion-icon {
+        width: 1ch;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--vscode-positronConsole-ansiYellow, var(--vscode-terminal-ansiYellow));
+    }
+
+    .suggestion-action .link-text {
         text-decoration: underline;
     }
 
@@ -107,6 +115,10 @@
     .suggestion-action:disabled {
         color: var(--vscode-disabledForeground, var(--vscode-descriptionForeground));
         cursor: default;
+    }
+
+    .suggestion-action:disabled .suggestion-icon {
+        color: inherit;
     }
 
     .suggestion-status,
