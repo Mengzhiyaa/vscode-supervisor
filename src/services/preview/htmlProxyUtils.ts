@@ -5,17 +5,31 @@ export const VIEWER_BRIDGE_PATH = '/.supervisor/viewer-bridge.js';
 export const VIEWER_BRIDGE_SCRIPT = String.raw`
 (() => {
     const send = (id, data = {}) => window.parent.postMessage({ id, ...data }, '*');
-    const notifyLocation = () => send('supervisor-viewer-location', {
+    const documentId = globalThis.crypto?.randomUUID?.() || (Date.now() + '-' + Math.random());
+    const navigation = window.navigation;
+    const notifyLocation = (navigationType = 'load') => send('supervisor-viewer-location', {
         url: window.location.href,
-        title: document.title
+        title: document.title,
+        navigationType,
+        documentId,
+        navigationKey: navigation?.currentEntry?.key,
     });
 
     window.addEventListener('message', event => {
+        if (event.source !== window.parent) return;
         const data = event.data || {};
         if (data.id === 'supervisor-viewer-ping') {
             send('supervisor-viewer-ready');
         } else if (data.id === 'supervisor-viewer-focus') {
             window.focus();
+        } else if (data.id === 'supervisor-viewer-traverse') {
+            if (data.documentId !== documentId || !navigation?.entries().some(entry => entry.key === data.navigationKey)) {
+                send('supervisor-viewer-traverse-failed', { navigationKey: data.navigationKey });
+                return;
+            }
+            navigation.traverseTo(data.navigationKey).finished.catch(() => {
+                send('supervisor-viewer-traverse-failed', { navigationKey: data.navigationKey });
+            });
         } else if (data.id === 'supervisor-viewer-find') {
             window.getSelection()?.removeAllRanges();
             const found = data.value
@@ -34,6 +48,7 @@ export const VIEWER_BRIDGE_SCRIPT = String.raw`
     });
 
     document.addEventListener('click', event => {
+        if (event.defaultPrevented || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
         const link = event.target instanceof Element ? event.target.closest('a[href]') : null;
         if (!link || link.hasAttribute('download') || link.target === '_blank') {
             return;
@@ -42,9 +57,14 @@ export const VIEWER_BRIDGE_SCRIPT = String.raw`
         if (!href || href.startsWith('javascript:') || href.startsWith('mailto:')) {
             return;
         }
+        const target = new URL(href);
+        const current = new URL(window.location.href);
+        // Let same-document anchors and application routers use browser history.
+        if (target.origin === current.origin && target.pathname === current.pathname &&
+            target.search === current.search && target.hash !== current.hash) return;
         event.preventDefault();
         send('supervisor-viewer-navigate', { url: href });
-    }, true);
+    });
 
     window.addEventListener('keydown', event => {
         if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 'f') {
@@ -53,16 +73,22 @@ export const VIEWER_BRIDGE_SCRIPT = String.raw`
         }
     }, true);
 
-    for (const method of ['pushState', 'replaceState']) {
-        const original = history[method];
-        history[method] = function (...args) {
-            const result = original.apply(this, args);
-            queueMicrotask(notifyLocation);
-            return result;
-        };
+    if (navigation) {
+        navigation.addEventListener('currententrychange', event => {
+            notifyLocation(event.navigationType === 'reload' ? 'load' : (event.navigationType || 'replace'));
+        });
+    } else {
+        for (const method of ['pushState', 'replaceState']) {
+            const original = history[method];
+            history[method] = function (...args) {
+                const result = original.apply(this, args);
+                notifyLocation(method === 'pushState' ? 'push' : 'replace');
+                return result;
+            };
+        }
+        window.addEventListener('popstate', () => notifyLocation('traverse'));
+        window.addEventListener('hashchange', () => notifyLocation('replace'));
     }
-    window.addEventListener('popstate', notifyLocation);
-    window.addEventListener('hashchange', notifyLocation);
     window.addEventListener('DOMContentLoaded', () => {
         send('supervisor-viewer-ready');
         notifyLocation();

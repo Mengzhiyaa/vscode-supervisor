@@ -151,6 +151,21 @@
               "name": "title",
               "optional": true,
               "type": "string"
+            },
+            {
+              "name": "navigationType",
+              "type": "'load' | 'push' | 'replace' | 'traverse'",
+              "optional": true
+            },
+            {
+              "name": "documentId",
+              "type": "string",
+              "optional": true
+            },
+            {
+              "name": "navigationKey",
+              "type": "string",
+              "optional": true
             }
           ]
         }
@@ -189,6 +204,21 @@
               "name": "kind",
               "optional": true,
               "type": "'url' | 'html'"
+            },
+            {
+              "name": "mode",
+              "type": "'load' | 'sync' | 'traverse'",
+              "optional": true
+            },
+            {
+              "name": "documentId",
+              "type": "string",
+              "optional": true
+            },
+            {
+              "name": "navigationKey",
+              "type": "string",
+              "optional": true
             }
           ]
         }

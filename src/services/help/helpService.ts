@@ -18,6 +18,7 @@ import { HelpProxyService, HelpProxyInfo } from './helpProxyService';
 export interface HelpViewProvider {
     reveal(preserveFocus: boolean): Promise<void>;
     find(): Promise<void>;
+    focus?(): Promise<void>;
     getWelcomeUrl(): string | undefined;
 }
 
@@ -189,6 +190,25 @@ export class PositronHelpService implements IPositronHelpService {
         this._proxyService.setStyles(styles);
     }
 
+    async resolveHelpEntrySource(entry: IHelpEntry): Promise<void> {
+        if (entry.targetUrl === 'help://welcome') {
+            return;
+        }
+        const targetUrl = new URL(entry.targetUrl);
+        if (!isLocalhost(targetUrl.hostname)) {
+            return;
+        }
+        try {
+            const proxyInfo = await this._proxyService.startProxyServer(targetUrl.origin);
+            const storedEntry = this._helpEntries.find(candidate => candidate === entry);
+            if (storedEntry) {
+                storedEntry.sourceUrl = this._proxyService.buildProxyUrl(targetUrl, proxyInfo);
+            }
+        } catch (error) {
+            this._outputChannel.error(`[PositronHelpService] Failed to refresh help proxy for ${targetUrl.origin}: ${error}`);
+        }
+    }
+
     async handleShowHelpEvent(session: RuntimeSession, showHelpEvent: ShowHelpEvent): Promise<void> {
         if (showHelpEvent.kind !== ShowHelpKind.Url) {
             this._outputChannel.error(`[PositronHelpService] Unsupported help event kind: ${showHelpEvent.kind}`);
@@ -228,8 +248,6 @@ export class PositronHelpService implements IPositronHelpService {
 
         const sourceUrl = this._proxyService.buildProxyUrl(targetUrl, proxyInfo);
 
-        await this._revealHelpView(!showHelpEvent.focus);
-
         const helpEntry = new HelpEntry(
             sourceUrl,
             targetUrl.toString(),
@@ -239,6 +257,11 @@ export class PositronHelpService implements IPositronHelpService {
         );
 
         this._addHelpEntry(helpEntry);
+        // Keep the requested topic even if opening the view is delayed or fails.
+        await this._revealHelpView(!showHelpEvent.focus);
+        if (showHelpEvent.focus) {
+            await this._helpViewProvider?.focus?.();
+        }
     }
 
     deleteHelpEntriesForSession(sessionId: string): void {
@@ -296,15 +319,30 @@ export class PositronHelpService implements IPositronHelpService {
             return;
         }
 
-        const currentTarget = new URL(current.targetUrl);
-        const to = new URL(toUrl);
+        let currentTarget: URL;
+        let source: URL;
+        let to: URL;
+        try {
+            currentTarget = new URL(current.targetUrl);
+            source = new URL(current.sourceUrl);
+            to = new URL(toUrl, source);
+        } catch (error) {
+            this._outputChannel.warn(`[PositronHelpService] Invalid help navigation URL: ${toUrl}`);
+            return;
+        }
 
         let targetUrl: URL;
-        if (to.origin === new URL(current.sourceUrl).origin) {
-            targetUrl = new URL(toUrl);
+        if (to.origin === source.origin) {
+            targetUrl = new URL(to);
             targetUrl.protocol = currentTarget.protocol;
             targetUrl.hostname = currentTarget.hostname;
             targetUrl.port = currentTarget.port;
+            const basePath = source.pathname.endsWith(currentTarget.pathname)
+                ? source.pathname.slice(0, source.pathname.length - currentTarget.pathname.length)
+                : '';
+            if (basePath && targetUrl.pathname.startsWith(`${basePath}/`)) {
+                targetUrl.pathname = targetUrl.pathname.slice(basePath.length);
+            }
         } else {
             targetUrl = to;
         }
@@ -345,7 +383,12 @@ export class PositronHelpService implements IPositronHelpService {
     }
 
     private _addHelpEntry(helpEntry: HelpEntry): void {
-        if (this._helpEntries[this._helpEntryIndex]?.sourceUrl === helpEntry.sourceUrl) {
+        const current = this._helpEntries[this._helpEntryIndex];
+        if (current?.targetUrl === helpEntry.targetUrl && current.sessionId === helpEntry.sessionId) {
+            current.sourceUrl = helpEntry.sourceUrl;
+            helpEntry.dispose();
+            // History deduplication must not suppress restoring the visible state.
+            this._onDidChangeCurrentHelpEntryEmitter.fire(current);
             return;
         }
 

@@ -19,6 +19,7 @@ import {
 import type { ILanguageRuntimeGlobalEvent } from '../../runtime/runtimeEvents';
 import { RuntimeState } from '../../internal/runtimeTypes';
 import { shouldOpenUrlInViewer } from './previewUrlPolicy';
+import { openPreviewInEditor } from './previewEditor';
 import {
     createSurfaceModelId,
     SurfaceKind,
@@ -55,6 +56,7 @@ export interface PreviewInterruptState {
 export type PreviewOpenTarget = 'browser' | 'editorTab' | 'newWindow';
 
 const DefaultOpenTargetStorageKey = 'positronPreview.defaultOpenTarget';
+const ViewerClearedStorageKey = 'positronPreview.viewerCleared';
 
 /**
  * PositronPreviewService class (aligned with Positron pattern).
@@ -69,6 +71,8 @@ export class PositronPreviewService implements vscode.Disposable {
     private readonly _onDidShowPreviewEmitter = new vscode.EventEmitter<PreviewItem>();
     private readonly _onDidChangePreviewInterruptStateEmitter = new vscode.EventEmitter<void>();
     private _nextPreviewId = 0;
+    private _viewerCleared: boolean;
+    private _viewerStateWrites: Promise<void> = Promise.resolve();
     readonly onDidShowPreview = this._onDidShowPreviewEmitter.event;
     readonly onDidChangePreviewInterruptState = this._onDidChangePreviewInterruptStateEmitter.event;
 
@@ -80,6 +84,7 @@ export class PositronPreviewService implements vscode.Disposable {
         private readonly _workspaceState?: vscode.Memento,
     ) {
         this._proxyService = new HtmlProxyService(_outputChannel);
+        this._viewerCleared = _workspaceState?.get<boolean>(ViewerClearedStorageKey, false) ?? false;
     }
 
     getDefaultOpenTarget(): PreviewOpenTarget {
@@ -89,6 +94,19 @@ export class PositronPreviewService implements vscode.Disposable {
 
     async setDefaultOpenTarget(target: PreviewOpenTarget): Promise<void> {
         await this._workspaceState?.update(DefaultOpenTargetStorageKey, target);
+    }
+
+    clearViewer(): void {
+        // Clearing this surface must not delete models shared with other surfaces.
+        this._setViewerCleared(true);
+    }
+
+    private _setViewerCleared(cleared: boolean): void {
+        if (this._viewerCleared === cleared) return;
+        this._viewerCleared = cleared;
+        this._viewerStateWrites = this._viewerStateWrites
+            .then(async () => { await this._workspaceState?.update(ViewerClearedStorageKey, cleared); })
+            .catch(error => this._outputChannel.warn(`[PositronPreviewService] Failed to save Viewer state: ${error}`));
     }
 
     initialize(): void {
@@ -277,9 +295,9 @@ export class PositronPreviewService implements vscode.Disposable {
             }
             case ShowHtmlFileDestination.Editor: {
                 this.keepProxyForExternalWindow(uri);
-                await vscode.commands.executeCommand('vscode.open', uri, {
-                    preview: true
-                });
+                if (!await openPreviewInEditor(uri, this._outputChannel)) {
+                    void vscode.window.showErrorMessage(vscode.l10n.t('The preview could not be opened in the selected location.'));
+                }
                 break;
             }
             default: {
@@ -478,6 +496,9 @@ export class PositronPreviewService implements vscode.Disposable {
         // restoration independent of that ordering instead of observing an
         // empty registry during extension-host startup.
         await this._surfaceLifecycle?.initialize();
+        if (this._viewerCleared) {
+            return undefined;
+        }
         const restored = this._surfaceLifecycle
             ?.getModels(SurfaceModelKind.Viewer)
             .filter(model => model.retention === 'persistent')
@@ -504,10 +525,10 @@ export class PositronPreviewService implements vscode.Disposable {
                     typeof preview.proxyRoot === 'string' ? preview.proxyRoot : undefined,
                 );
             } else if (restoreUri.scheme === 'http' || restoreUri.scheme === 'https') {
-                try {
+                if (shouldOpenUrlInViewer(restoreUri.toString(true), true)) {
+                    uri = await this._proxyService.resolvePath(restoreUri.toString(true));
+                } else {
                     uri = await vscode.env.asExternalUri(restoreUri);
-                } catch {
-                    uri = restoreUri;
                 }
             }
             this._surfaceLifecycle.setRestoreState(restored.id, 'backend', 'ready');
@@ -533,6 +554,7 @@ export class PositronPreviewService implements vscode.Disposable {
     }
 
     private _publishPreview(preview: PreviewItem): PreviewItem {
+        this._setViewerCleared(false);
         preview.proxyRoot ??= this._proxyService.fileRoot(preview.uri);
         if (!this._surfaceLifecycle) {
             this._onDidShowPreviewEmitter.fire(preview);

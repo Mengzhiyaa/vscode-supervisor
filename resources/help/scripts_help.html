@@ -240,6 +240,30 @@
 							}
 							break;
 
+						// Apply theme updates without reloading the help document.
+						case "positron-help-styles": {
+							if (message.source !== window.parent) {
+								break;
+							}
+							let style = document.getElementById("help-vars");
+							if (!style) {
+								style = document.createElement("style");
+								style.id = "help-vars";
+								document.head.appendChild(style);
+							}
+							style.textContent = "body {}";
+							if (!style.sheet) {
+								break;
+							}
+							const rule = style.sheet.cssRules[0];
+							for (const [name, value] of Object.entries(message.data.styles || {})) {
+								if (name.startsWith("vscode-") && typeof value === "string") {
+									rule.style.setProperty(`--${name}`, value);
+								}
+							}
+							break;
+						}
+
 						// positron-help-focus message. Sent to focus the help window.
 						case "positron-help-focus":
 							window.focus();
@@ -273,7 +297,10 @@
 
 						// The parent owns the find widget, including when the
 						// document iframe currently has keyboard focus.
-						if (isCtrlOrMeta && !e.altKey && e.code === "KeyF") {
+						if ((isCtrlOrMeta && !e.altKey && e.code === "KeyF") ||
+							e.code === "F3" ||
+							(e.altKey && !isCtrlOrMeta && !e.shiftKey &&
+								(e.code === "ArrowLeft" || e.code === "ArrowRight"))) {
 							e.preventDefault();
 						}
 
@@ -316,12 +343,18 @@
 
 			// Adds context menu listener.
 			const addContextMenuListener = () => {
+				window.addEventListener("pointerdown", () => {
+					window.parent.postMessage({ id: "positron-help-pointer-down" }, "*");
+				});
 				// Add the contextmenu event handler.
 				window.addEventListener("contextmenu", (e) => {
+					e.preventDefault();
 					// Post the positron-help-context-menu message.
 					window.parent.postMessage(
 						{
 							id: "positron-help-context-menu",
+							clientX: e.clientX,
+							clientY: e.clientY,
 							screenX: e.screenX,
 							screenY: e.screenY,
 							selection: window.getSelection().toString(),

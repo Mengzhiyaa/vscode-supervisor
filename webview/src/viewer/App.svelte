@@ -13,10 +13,16 @@
         height?: number;
         sessionId?: string;
         kind?: "url" | "html";
+        mode?: "load" | "sync" | "traverse";
+        documentId?: string;
+        navigationKey?: string;
     }
 
     let connection = getRpcConnection();
     let currentUrl = $state<string | null>(null);
+    let frameUrl = $state<string | null>(null);
+    let activeDocumentId: string | undefined;
+    let pendingNavigationKey: string | undefined;
     let title = $state<string>("");
     let height = $state<number | undefined>();
     let kind = $state<"url" | "html" | "basic">("basic");
@@ -32,6 +38,8 @@
     let findHasResult = $state(true);
     let bridgeAvailable = $state(false);
     let bridgeProbeTimer: ReturnType<typeof setTimeout> | undefined;
+    let reloadVersion = $state(0);
+    let pendingFocus = false;
 
     function handleKeyboardShortcut(event: KeyboardEvent) {
         if (!currentUrl) {
@@ -87,6 +95,9 @@
             url?: string;
             title?: string;
             found?: boolean;
+            navigationType?: "load" | "push" | "replace" | "traverse";
+            documentId?: string;
+            navigationKey?: string;
         };
         switch (message?.id) {
             case "supervisor-viewer-ready":
@@ -94,12 +105,26 @@
                 if (bridgeProbeTimer) clearTimeout(bridgeProbeTimer);
                 break;
             case "supervisor-viewer-location":
-            case "supervisor-viewer-navigate":
                 if (message.url) {
+                    activeDocumentId = message.documentId;
+                    pendingNavigationKey = undefined;
+                    currentUrl = message.url;
+                    title = message.title || title;
                     connection.sendNotification("viewer/didNavigate", {
                         url: message.url,
                         title: message.title,
+                        navigationType: message.navigationType,
+                        documentId: message.documentId,
+                        navigationKey: message.navigationKey,
                     });
+                }
+                break;
+            case "supervisor-viewer-navigate":
+                if (message.url) handleNavigate(message.url);
+                break;
+            case "supervisor-viewer-traverse-failed":
+                if (message.navigationKey === pendingNavigationKey && currentUrl) {
+                    loadFrame(currentUrl);
                 }
                 break;
             case "supervisor-viewer-show-find":
@@ -113,22 +138,30 @@
     }
 
     onMount(() => {
-        void connection.sendRequest("viewer/getDefaultOpenTarget", {}).then((result) => {
-            defaultOpenTarget = (result as { target: ViewerOpenTarget }).target;
-        });
+        const subscriptions = [
         connection.onNotification("viewer/show", (params: ViewerShowParams) => {
             currentUrl = params.url;
             title = params.title || "";
             height = params.height;
             kind = params.kind || "basic";
-            loadState = "loading";
+            if (params.mode === 'sync') {
+                return;
+            }
+            if (params.mode === 'traverse' && bridgeAvailable && params.documentId === activeDocumentId && params.navigationKey) {
+                pendingNavigationKey = params.navigationKey;
+                postToFrame({
+                    id: 'supervisor-viewer-traverse',
+                    documentId: params.documentId,
+                    navigationKey: params.navigationKey,
+                });
+                return;
+            }
+            loadFrame(params.url);
             // The extension resolves interrupt capability from the source
             // runtime/terminal state; URL previews are not inherently stoppable.
             interruptible = false;
             interrupting = false;
-            bridgeAvailable = false;
-            if (bridgeProbeTimer) clearTimeout(bridgeProbeTimer);
-        });
+        }),
 
         connection.onNotification("viewer/updateInterruptState", (params: {
             interruptible: boolean;
@@ -136,7 +169,7 @@
         }) => {
             interruptible = params.interruptible;
             interrupting = params.interrupting;
-        });
+        }),
 
         connection.onNotification("viewer/updateNavState", (params: {
             canNavigateBack: boolean;
@@ -144,18 +177,25 @@
         }) => {
             canNavigateBack = params.canNavigateBack;
             canNavigateForward = params.canNavigateForward;
-        });
+        }),
 
         connection.onNotification("viewer/focus", () => {
             focusPreview();
-        });
+        }),
 
         connection.onNotification("viewer/find", () => {
             showFind();
+        }),
+        ];
+
+        // This request also tells the host it can safely publish the current preview.
+        void connection.sendRequest("viewer/getDefaultOpenTarget", {}).then((result) => {
+            defaultOpenTarget = (result as { target: ViewerOpenTarget }).target;
         });
 
         return () => {
             if (bridgeProbeTimer) clearTimeout(bridgeProbeTimer);
+            subscriptions.forEach(subscription => subscription.dispose());
         };
     });
 
@@ -165,26 +205,32 @@
 
     // --- Action handlers that notify the extension ---
     function handleNavigate(url: string) {
-        loadState = "loading";
         connection.sendNotification("viewer/navigate", { url });
     }
     function handleBack() {
-        loadState = "loading";
         connection.sendNotification("viewer/navigateBack", {});
     }
     function handleForward() {
-        loadState = "loading";
         connection.sendNotification("viewer/navigateForward", {});
     }
     function handleReload() {
-        loadState = "loading";
         connection.sendNotification("viewer/reload", {});
     }
     function handleClear() {
         currentUrl = null;
+        frameUrl = null;
+        activeDocumentId = undefined;
+        pendingNavigationKey = undefined;
+        canNavigateBack = false;
+        canNavigateForward = false;
+        findVisible = false;
+        findValue = '';
+        bridgeAvailable = false;
+        if (bridgeProbeTimer) clearTimeout(bridgeProbeTimer);
         title = "";
         kind = "basic";
         loadState = "idle";
+        pendingFocus = false;
         connection.sendNotification("viewer/clear", {});
     }
     function handleOpenInBrowser() {
@@ -208,6 +254,17 @@
         bridgeProbeTimer = setTimeout(() => {
             bridgeAvailable = false;
         }, 500);
+        if (pendingFocus) focusPreview();
+    }
+
+    function loadFrame(url: string): void {
+        pendingNavigationKey = undefined;
+        activeDocumentId = undefined;
+        frameUrl = url;
+        reloadVersion++;
+        loadState = 'loading';
+        bridgeAvailable = false;
+        if (bridgeProbeTimer) clearTimeout(bridgeProbeTimer);
     }
 
     function handleFrameError() {
@@ -219,12 +276,16 @@
     }
 
     function focusPreview() {
+        pendingFocus = true;
+        if (loadState !== "ready" || !iframeEl) return;
+        pendingFocus = false;
         iframeEl?.focus();
         postToFrame({ id: "supervisor-viewer-focus" });
     }
 
     function showFind() {
         if (!currentUrl) return;
+        pendingFocus = false;
         findVisible = true;
         setTimeout(() => {
             const input = document.getElementById("viewer-find-input") as HTMLInputElement | null;
@@ -347,15 +408,17 @@
                     </button>
                 </div>
             {/if}
+            {#key reloadVersion}
             <iframe
                 class="viewer-frame"
                 bind:this={iframeEl}
-                src={currentUrl}
+                src={frameUrl ?? undefined}
                 style="height: {iframeHeight};"
                 title={title || "Viewer"}
                 onload={handleFrameLoaded}
                 onerror={handleFrameError}
             ></iframe>
+            {/key}
             {#if loadState === "loading"}
                 <div class="viewer-progress" aria-hidden="true"><span></span></div>
                 <div class="screen-reader-status" role="status" aria-live="polite">

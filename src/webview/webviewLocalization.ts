@@ -304,6 +304,8 @@ export function createWebviewLocalizationMessages(): WebviewLocalizationMessages
         'plots.sizingMenu': vscode.l10n.t('Sizing'),
         'plots.codeMenu': vscode.l10n.t('Code'),
         'plots.selectWhereToOpen': vscode.l10n.t('Select where to open plot'),
+        'help.loadFailed': vscode.l10n.t('Help content did not finish loading.'),
+        'help.retry': vscode.l10n.t('Try Again'),
         'viewer.actions': vscode.l10n.t('Viewer actions'),
         'viewer.clearContent': vscode.l10n.t('Clear the content'),
         'viewer.clearUrl': vscode.l10n.t('Clear the current URL'),

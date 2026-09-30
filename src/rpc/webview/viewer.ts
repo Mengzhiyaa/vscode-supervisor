@@ -91,6 +91,9 @@ export namespace ViewerDidNavigateNotification {
     export interface Params {
         url: string;
         title?: string;
+        navigationType?: 'load' | 'push' | 'replace' | 'traverse';
+        documentId?: string;
+        navigationKey?: string;
     }
 
     export const type = new NotificationType<Params>('viewer/didNavigate');
@@ -104,6 +107,9 @@ export namespace ViewerShowNotification {
         height?: number;
         sessionId?: string;
         kind?: 'url' | 'html';
+        mode?: 'load' | 'sync' | 'traverse';
+        documentId?: string;
+        navigationKey?: string;
     }
 
     export const type = new NotificationType<Params>('viewer/show');

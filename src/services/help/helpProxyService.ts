@@ -51,6 +51,8 @@ const getScriptElement = (script: string, id: string) =>
 
 export class HelpProxyService implements vscode.Disposable {
     private readonly _proxyServers = new Map<string, ProxyServer>();
+    private readonly _pendingProxyServers = new Map<string, Promise<HelpProxyInfo>>();
+    private _disposed = false;
     private _helpHtmlConfig: HelpHtmlConfig;
 
     constructor(
@@ -61,6 +63,8 @@ export class HelpProxyService implements vscode.Disposable {
     }
 
     dispose(): void {
+        this._disposed = true;
+        this._pendingProxyServers.clear();
         for (const proxy of this._proxyServers.values()) {
             proxy.dispose();
         }
@@ -72,6 +76,9 @@ export class HelpProxyService implements vscode.Disposable {
     }
 
     async startProxyServer(targetOrigin: string): Promise<HelpProxyInfo> {
+        if (this._disposed) {
+            throw new Error('Help proxy service is disposed');
+        }
         const existing = this._proxyServers.get(targetOrigin);
         if (existing) {
             return {
@@ -81,6 +88,25 @@ export class HelpProxyService implements vscode.Disposable {
             };
         }
 
+        const pending = this._pendingProxyServers.get(targetOrigin);
+        if (pending) {
+            return pending;
+        }
+        const startup: Promise<HelpProxyInfo> = this._startProxyServer(
+            targetOrigin,
+            () => this._pendingProxyServers.get(targetOrigin) === startup,
+        );
+        this._pendingProxyServers.set(targetOrigin, startup);
+        try {
+            return await startup;
+        } finally {
+            if (this._pendingProxyServers.get(targetOrigin) === startup) {
+                this._pendingProxyServers.delete(targetOrigin);
+            }
+        }
+    }
+
+    private async _startProxyServer(targetOrigin: string, isCurrent: () => boolean): Promise<HelpProxyInfo> {
         const server = http.createServer((req, res) => {
             void this._handleProxyRequest(targetOrigin, req, res);
         });
@@ -98,7 +124,16 @@ export class HelpProxyService implements vscode.Disposable {
         });
 
         const serverOrigin = `http://${address.address}:${address.port}`;
-        const externalUri = await vscode.env.asExternalUri(vscode.Uri.parse(serverOrigin));
+        let externalUri: vscode.Uri;
+        try {
+            externalUri = await vscode.env.asExternalUri(vscode.Uri.parse(serverOrigin));
+            if (this._disposed || !isCurrent()) {
+                throw new Error('Help proxy startup was cancelled');
+            }
+        } catch (error) {
+            server.close();
+            throw error;
+        }
         const proxyPath = externalUri.path && externalUri.path !== '' ? externalUri.path : '/';
 
         this._outputChannel.debug(`[HelpProxyService] Started help proxy ${serverOrigin} for ${targetOrigin}`);
@@ -112,6 +147,7 @@ export class HelpProxyService implements vscode.Disposable {
     }
 
     stopProxyServer(targetOrigin: string): void {
+        this._pendingProxyServers.delete(targetOrigin);
         const proxy = this._proxyServers.get(targetOrigin);
         if (proxy) {
             proxy.dispose();

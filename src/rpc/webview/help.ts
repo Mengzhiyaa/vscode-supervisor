@@ -7,6 +7,7 @@ import { NotificationType } from 'vscode-jsonrpc/node';
 export namespace HelpStateNotification {
 
     export interface HelpEntryState {
+        entryId: string;
         sourceUrl: string;
         targetUrl: string;
         title?: string;
@@ -34,6 +35,7 @@ export namespace HelpStateNotification {
 export namespace HelpNavigateNotification {
 
     export interface Params {
+        entryId?: string;
         url: string;
     }
 
@@ -77,6 +79,7 @@ export namespace HelpFocusNotification {
 export namespace HelpScrollNotification {
 
     export interface Params {
+        entryId?: string;
         scrollX: number;
         scrollY: number;
     }
@@ -87,6 +90,7 @@ export namespace HelpScrollNotification {
 export namespace HelpCompleteNotification {
 
     export interface Params {
+        entryId?: string;
         title?: string;
     }
 

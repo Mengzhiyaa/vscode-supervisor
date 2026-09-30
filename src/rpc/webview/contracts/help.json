@@ -13,6 +13,10 @@
           "name": "HelpEntryState",
           "fields": [
             {
+              "name": "entryId",
+              "type": "string"
+            },
+            {
               "name": "sourceUrl",
               "type": "string"
             },
@@ -95,6 +99,11 @@
           "name": "Params",
           "fields": [
             {
+              "name": "entryId",
+              "type": "string",
+              "optional": true
+            },
+            {
               "name": "url",
               "type": "string"
             }
@@ -161,6 +170,11 @@
           "name": "Params",
           "fields": [
             {
+              "name": "entryId",
+              "type": "string",
+              "optional": true
+            },
+            {
               "name": "scrollX",
               "type": "number"
             },
@@ -182,6 +196,11 @@
           "kind": "interface",
           "name": "Params",
           "fields": [
+            {
+              "name": "entryId",
+              "type": "string",
+              "optional": true
+            },
             {
               "name": "title",
               "optional": true,

@@ -2,12 +2,17 @@ import * as vscode from 'vscode';
 import { MessageConnection } from 'vscode-jsonrpc/node';
 import { BaseWebviewProvider } from './baseProvider';
 import * as HelpProtocol from '../rpc/webview/help';
-import { ViewCommands } from '../coreCommandIds';
+import { ViewCommands, WorkbenchViewContainerCommands } from '../coreCommandIds';
 import { PositronHelpService, IHelpEntry } from '../services/help';
 
 export class HelpViewProvider extends BaseWebviewProvider {
     private _currentEntryDisposable: vscode.Disposable | undefined;
     private readonly _disposables: vscode.Disposable[] = [];
+    private _webviewReady = false;
+    private _stateGeneration = 0;
+    private readonly _pendingActions = new Set<'find' | 'focus'>();
+    private readonly _entryIds = new WeakMap<IHelpEntry, string>();
+    private _nextEntryId = 0;
 
     constructor(
         extensionUri: vscode.Uri,
@@ -19,10 +24,17 @@ export class HelpViewProvider extends BaseWebviewProvider {
         this._helpService.setHelpViewProvider(this);
         this._bindEntry(this._helpService.currentHelpEntry);
 
-        this._helpService.onDidChangeCurrentHelpEntry(entry => {
-            this._bindEntry(entry);
-            this._sendState();
-        });
+        this._disposables.push(
+            this._helpService.onDidChangeCurrentHelpEntry(entry => {
+                this._bindEntry(entry);
+                void this._sendState();
+            }),
+            vscode.window.onDidChangeActiveColorTheme(() => {
+                if (this._webviewReady) {
+                    void this._connection?.sendNotification(HelpProtocol.HelpThemeChangedNotification.type, {});
+                }
+            }),
+        );
     }
 
     protected get _providerName(): string {
@@ -33,8 +45,6 @@ export class HelpViewProvider extends BaseWebviewProvider {
         const view = this.view;
         if (view) {
             view.show(preserveFocus);
-            // Collapse Viewer when Help is revealed
-            void vscode.commands.executeCommand(ViewCommands.viewerCollapse);
             return;
         }
 
@@ -50,12 +60,10 @@ export class HelpViewProvider extends BaseWebviewProvider {
         };
 
         try {
-            // Show Help view - this will focus the Exploration sidebar
             await vscode.commands.executeCommand(ViewCommands.helpFocus);
-            // Collapse Viewer when Help is revealed
-            void vscode.commands.executeCommand(ViewCommands.viewerCollapse);
         } catch (err) {
             this.log(`Failed to reveal help view: ${err}`, vscode.LogLevel.Warning);
+            await vscode.commands.executeCommand(WorkbenchViewContainerCommands.help);
         } finally {
             await restoreFocus();
         }
@@ -66,23 +74,24 @@ export class HelpViewProvider extends BaseWebviewProvider {
     }
 
     async find(): Promise<void> {
+        this._pendingActions.add('find');
         await this.reveal(false);
-
-        if (!this._connection) {
-            this.log('Cannot show find widget: help webview connection is unavailable', vscode.LogLevel.Debug);
-            return;
-        }
-
-        this._connection.sendNotification(HelpProtocol.HelpFindNotification.type, {});
+        await this._sendState();
     }
 
     async focus(): Promise<void> {
+        this._pendingActions.add('focus');
         await this.reveal(false);
-        this._connection?.sendNotification(HelpProtocol.HelpFocusNotification.type, {});
+        await this._sendState();
     }
 
     protected _registerRpcHandlers(connection: MessageConnection): void {
+        this._webviewReady = false;
+        this._stateGeneration++;
         connection.onNotification(HelpProtocol.HelpNavigateNotification.type, params => {
+            if (!this._isCurrentEntry(params.entryId)) {
+                return;
+            }
             if (params.url.startsWith('command:')) {
                 const command = params.url.substring('command:'.length);
                 void vscode.commands.executeCommand(command);
@@ -111,15 +120,27 @@ export class HelpViewProvider extends BaseWebviewProvider {
         });
 
         connection.onNotification(HelpProtocol.HelpScrollNotification.type, params => {
-            this._helpService.updateCurrentEntryScroll(params.scrollX, params.scrollY);
+            if (this._isCurrentEntry(params.entryId)) {
+                this._helpService.updateCurrentEntryScroll(params.scrollX, params.scrollY);
+            }
         });
 
         connection.onNotification(HelpProtocol.HelpCompleteNotification.type, params => {
-            this._helpService.updateCurrentEntryTitle(params.title);
+            if (this._isCurrentEntry(params.entryId)) {
+                this._helpService.updateCurrentEntryTitle(params.title);
+            }
         });
 
         connection.onNotification(HelpProtocol.HelpStylesNotification.type, params => {
             this._helpService.setProxyServerStyles(params.styles);
+            // The frontend sends styles only after installing all its listeners.
+            // Use that handshake to replay state, including after a webview reload.
+            this._webviewReady = true;
+            if (!this._helpService.currentHelpEntry) {
+                this._helpService.showWelcomePage();
+            } else {
+                void this._sendState();
+            }
         });
 
         connection.onNotification(HelpProtocol.HelpExecuteCommandNotification.type, params => {
@@ -132,20 +153,6 @@ export class HelpViewProvider extends BaseWebviewProvider {
             }
         });
 
-        // Send initial state once the connection is ready
-        this._sendState();
-
-        // Show welcome page if no entry yet
-        if (!this._helpService.currentHelpEntry) {
-            this._helpService.showWelcomePage();
-        }
-
-        // Listen for theme changes and notify webview to refresh styles
-        this._disposables.push(
-            vscode.window.onDidChangeActiveColorTheme(() => {
-                this._connection?.sendNotification(HelpProtocol.HelpThemeChangedNotification.type, {});
-            })
-        );
     }
 
     protected _getHtmlContent(webview: vscode.Webview): string {
@@ -176,16 +183,57 @@ export class HelpViewProvider extends BaseWebviewProvider {
 
         if (entry) {
             this._currentEntryDisposable = entry.onDidChangeTitle(() => {
-                this._sendState();
+                void this._sendState();
             });
         }
     }
 
-    private _sendState(): void {
-        if (!this._connection) {
+    private _getEntryId(entry: IHelpEntry): string {
+        let id = this._entryIds.get(entry);
+        if (!id) {
+            id = `help-${++this._nextEntryId}`;
+            this._entryIds.set(entry, id);
+        }
+        return id;
+    }
+
+    private _isCurrentEntry(entryId: string | undefined): boolean {
+        const current = this._helpService.currentHelpEntry;
+        return !!current && entryId === this._getEntryId(current);
+    }
+
+    private async _sendState(): Promise<void> {
+        const generation = ++this._stateGeneration;
+        const connection = this._connection;
+        if (!connection || !this._webviewReady) {
             return;
         }
 
+        const current = this._helpService.currentHelpEntry;
+        try {
+            if (current) {
+                await this._helpService.resolveHelpEntrySource(current);
+            }
+            if (generation !== this._stateGeneration || connection !== this._connection) {
+                return;
+            }
+            await this._publishState(connection);
+            if (generation !== this._stateGeneration || connection !== this._connection) {
+                return;
+            }
+            for (const action of this._pendingActions) {
+                void connection.sendNotification(
+                    action === 'find' ? HelpProtocol.HelpFindNotification.type : HelpProtocol.HelpFocusNotification.type,
+                    {},
+                );
+            }
+            this._pendingActions.clear();
+        } catch (error) {
+            this.log(`Failed to synchronize help view: ${error}`, vscode.LogLevel.Warning);
+        }
+    }
+
+    private _publishState(connection: MessageConnection): Promise<void> {
         const current = this._helpService.currentHelpEntry;
         const history = this._helpService.helpEntries.map(entry => ({
             sourceUrl: entry.sourceUrl,
@@ -193,8 +241,9 @@ export class HelpViewProvider extends BaseWebviewProvider {
             title: entry.title
         }));
 
-        this._connection.sendNotification(HelpProtocol.HelpStateNotification.type, {
+        return connection.sendNotification(HelpProtocol.HelpStateNotification.type, {
             entry: current ? {
+                entryId: this._getEntryId(current),
                 sourceUrl: current.sourceUrl,
                 targetUrl: current.targetUrl,
                 title: current.title,
@@ -206,5 +255,19 @@ export class HelpViewProvider extends BaseWebviewProvider {
             canNavigateBackward: this._helpService.canNavigateBackward,
             canNavigateForward: this._helpService.canNavigateForward
         });
+    }
+
+    protected override _onDidDisposeWebviewView(): void {
+        this._webviewReady = false;
+        this._stateGeneration++;
+        this._pendingActions.clear();
+    }
+
+    dispose(): void {
+        this._onDidDisposeWebviewView();
+        this._currentEntryDisposable?.dispose();
+        this._disposables.forEach(disposable => disposable.dispose());
+        this._connection?.dispose();
+        this._helpService.setHelpViewProvider(undefined);
     }
 }

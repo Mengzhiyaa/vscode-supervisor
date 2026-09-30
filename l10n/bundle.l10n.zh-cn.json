@@ -1,4 +1,6 @@
 {
+  "Help content did not finish loading.": "帮助内容未能完成加载。",
+  "Try Again": "重试",
   "Sizing": "尺寸",
   "Code": "代码",
   "Fit": "适应窗口",
@@ -142,5 +144,6 @@
   "Fill": "填充",
   "Landscape": "横向",
   "Portrait": "纵向",
-  "Square": "正方形"
+  "Square": "正方形",
+  "empty": "空"
 }

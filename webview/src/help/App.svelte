@@ -4,9 +4,11 @@
     import ActionBarButton from "../shared/ActionBarButton.svelte";
     import ActionBarSeparator from "../shared/ActionBarSeparator.svelte";
     import ActionBarMenuButton from "../shared/ActionBarMenuButton.svelte";
+    import ContextMenu from "../shared/ContextMenu.svelte";
     import { localize } from "$lib/localization";
 
     interface HelpEntryState {
+        entryId?: string;
         sourceUrl: string;
         targetUrl: string;
         title?: string;
@@ -42,6 +44,13 @@
 
     let iframeEl = $state<HTMLIFrameElement | null>(null);
     let pendingScroll = { x: 0, y: 0 };
+    let loadState = $state<"idle" | "loading" | "ready" | "error">("idle");
+    let reloadVersion = $state(0);
+    let loadTimer: ReturnType<typeof setTimeout> | undefined;
+    let pendingFocus = false;
+    let retryRequested = false;
+    let currentStyles: Record<string, string> = {};
+    let contextMenu = $state<{ x: number; y: number; selection: string } | null>(null);
 
     let findVisible = $state(false);
     let findValue = $state("");
@@ -81,7 +90,47 @@
                 }
             }
         }
+        currentStyles = styles;
         connection.sendNotification("help/styles", { styles });
+        postToIframe({ id: "positron-help-styles", styles });
+    }
+
+    function clearLoadTimer(): void {
+        if (loadTimer) {
+            clearTimeout(loadTimer);
+            loadTimer = undefined;
+        }
+    }
+
+    function beginLoading(): void {
+        clearLoadTimer();
+        loadState = "loading";
+        loadTimer = setTimeout(() => {
+            loadTimer = undefined;
+            loadState = "error";
+        }, 15000);
+    }
+
+    function retryLoad(): void {
+        retryRequested = true;
+        beginLoading();
+        // Ask the host to refresh the proxy URL before recreating the frame.
+        sendStyles();
+    }
+
+    function handleLoadError(): void {
+        clearLoadTimer();
+        loadState = "error";
+    }
+
+    function focusContent(): void {
+        pendingFocus = true;
+        if (loadState !== "ready" || !iframeEl) {
+            return;
+        }
+        pendingFocus = false;
+        postToIframe({ id: "positron-help-focus" });
+        iframeEl.focus();
     }
 
     function postToIframe(message: Record<string, unknown>): void {
@@ -93,8 +142,12 @@
     function handleIframeMessage(message: IframeMessage): void {
         switch (message.id) {
             case "positron-help-complete":
+                clearLoadTimer();
+                loadState = "ready";
+                postToIframe({ id: "positron-help-styles", styles: currentStyles });
                 if (message.title) {
                     connection.sendNotification("help/complete", {
+                        entryId: currentEntry?.entryId,
                         title: message.title,
                     });
                 }
@@ -105,16 +158,24 @@
                         scrollY: pendingScroll.y,
                     });
                 }
+                pendingScroll = { x: 0, y: 0 };
+                if (findVisible && findValue) {
+                    postToIframe({ id: "positron-help-update-find", findValue });
+                }
+                if (pendingFocus) {
+                    focusContent();
+                }
                 break;
             case "positron-help-scroll":
                 connection.sendNotification("help/scroll", {
+                    entryId: currentEntry?.entryId,
                     scrollX: message.scrollX || 0,
                     scrollY: message.scrollY || 0,
                 });
                 break;
             case "positron-help-navigate":
                 if (message.url) {
-                    connection.sendNotification("help/navigate", { url: message.url });
+                    connection.sendNotification("help/navigate", { entryId: currentEntry?.entryId, url: message.url });
                 }
                 break;
             case "positron-help-navigate-backward":
@@ -135,7 +196,30 @@
                     message.code === "KeyF"
                 ) {
                     showFind();
+                } else if (message.altKey && !message.ctrlKey && !message.metaKey && !message.shiftKey) {
+                    if (message.code === "ArrowLeft" && canNavigateBackward) navigateBackward();
+                    if (message.code === "ArrowRight" && canNavigateForward) navigateForward();
+                } else if (message.code === "Escape" && findVisible) {
+                    closeFind();
+                } else if (message.code === "F3") {
+                    if (!findVisible) showFind();
+                    else if (message.shiftKey) findPrevious();
+                    else findNext();
                 }
+                break;
+            case "positron-help-context-menu": {
+                const rect = iframeEl?.getBoundingClientRect();
+                if (rect) {
+                    contextMenu = {
+                        x: rect.left + (Number(message.clientX) || 0),
+                        y: rect.top + (Number(message.clientY) || 0),
+                        selection: typeof message.selection === "string" ? message.selection : "",
+                    };
+                }
+                break;
+            }
+            case "positron-help-pointer-down":
+                contextMenu = null;
                 break;
             case "positron-help-copy-selection":
                 if (message.selection) {
@@ -165,10 +249,36 @@
         }
     }
 
+    function handleHelpShortcut(event: KeyboardEvent): void {
+        if ((event.ctrlKey || event.metaKey) && !event.altKey && event.code === 'KeyF') {
+            event.preventDefault();
+            showFind();
+        } else if (event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
+            if (event.code === 'ArrowLeft' && canNavigateBackward) {
+                event.preventDefault();
+                navigateBackward();
+            } else if (event.code === 'ArrowRight' && canNavigateForward) {
+                event.preventDefault();
+                navigateForward();
+            }
+        } else if (event.code === 'F3') {
+            event.preventDefault();
+            if (!findVisible) showFind();
+            else if (event.shiftKey) findPrevious();
+            else findNext();
+        } else if (event.code === 'Escape' && findVisible) {
+            event.preventDefault();
+            closeFind();
+        }
+    }
+
     onMount(() => {
         const subscriptions = [
         connection.onNotification("help/state", (params: HelpStateParams) => {
+            const previousUrl = currentEntry?.sourceUrl;
+            const previousEntryId = currentEntry?.entryId;
             currentEntry = params.entry;
+            if (currentEntry?.entryId !== previousEntryId) contextMenu = null;
             history = params.history || [];
             canNavigateBackward = params.canNavigateBackward;
             canNavigateForward = params.canNavigateForward;
@@ -179,8 +289,20 @@
             };
 
             if (!currentEntry || currentEntry.isWelcome) {
+                clearLoadTimer();
+                loadState = "idle";
+                pendingFocus = false;
+                retryRequested = false;
                 findVisible = false;
                 findValue = "";
+            } else if (currentEntry.sourceUrl !== previousUrl || currentEntry.entryId !== previousEntryId) {
+                retryRequested = false;
+                beginLoading();
+            } else if (retryRequested || loadState === "error") {
+                // A repeated help request may deliberately revisit the same topic.
+                retryRequested = false;
+                beginLoading();
+                reloadVersion++;
             }
         }),
 
@@ -193,13 +315,13 @@
         }),
 
         connection.onNotification("help/focus", () => {
-            postToIframe({ id: "positron-help-focus" });
-            iframeEl?.focus();
+            focusContent();
         }),
         ];
 
         sendStyles();
         return () => {
+            clearLoadTimer();
             for (const subscription of subscriptions) {
                 subscription.dispose();
             }
@@ -225,7 +347,7 @@
     }
 
     function openExternal(url: string): void {
-        connection.sendNotification("help/navigate", { url });
+        connection.sendNotification("help/navigate", { entryId: currentEntry?.entryId, url });
     }
 
     function showFind(): void {
@@ -234,6 +356,7 @@
         }
 
         findVisible = true;
+        pendingFocus = false;
         setTimeout(() => {
             const input = document.getElementById("help-find-input") as HTMLInputElement | null;
             input?.focus();
@@ -275,7 +398,7 @@
     }
 </script>
 
-<svelte:window onmessage={handleWindowMessage} />
+<svelte:window onmessage={handleWindowMessage} onkeydown={handleHelpShortcut} />
 
 <div
     class="help-root"
@@ -395,15 +518,43 @@
                 </div>
             </div>
         {:else}
+            {#key `${currentEntry.entryId}:${currentEntry.sourceUrl}:${reloadVersion}`}
             <iframe
                 class="help-frame"
                 bind:this={iframeEl}
                 src={currentEntry.sourceUrl}
                 title={currentTitle}
+                onerror={handleLoadError}
             ></iframe>
+            {/key}
+            {#if loadState === "loading"}
+                <div class="help-load-status" role="status">
+                    {localize('common.loading', 'Loading')}
+                </div>
+            {:else if loadState === "error"}
+                <div class="help-load-status help-load-error" role="alert">
+                    <span>{localize('help.loadFailed', 'Help content did not finish loading.')}</span>
+                    <button type="button" onclick={retryLoad}>{localize('help.retry', 'Try Again')}</button>
+                </div>
+            {/if}
         {/if}
     </div>
 </div>
+
+{#if contextMenu}
+    {@const selection = contextMenu.selection}
+    <ContextMenu
+        anchorEl={iframeEl}
+        anchorPoint={contextMenu}
+        entries={[{
+            id: 'copy',
+            label: localize('common.copy', 'Copy'),
+            disabled: !selection,
+            onSelected: () => connection.sendNotification('help/copySelection', { selection }),
+        }]}
+        onclose={() => { contextMenu = null; }}
+    />
+{/if}
 
 <style>
     /* ============================================
@@ -541,6 +692,33 @@
         height: 100%;
         border: none;
         background: white;
+    }
+
+    .help-load-status {
+        position: absolute;
+        top: 8px;
+        left: 8px;
+        right: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 8px;
+        background: var(--vscode-editorWidget-background);
+        color: var(--vscode-foreground);
+        border: 1px solid var(--vscode-widget-border, transparent);
+    }
+
+    .help-load-error button {
+        background: var(--vscode-button-background);
+        color: var(--vscode-button-foreground);
+        border: 1px solid transparent;
+        padding: 4px 8px;
+        cursor: pointer;
+    }
+
+    .help-load-error button:focus-visible {
+        outline: 1px solid var(--vscode-focusBorder);
     }
 
     /* ============================================

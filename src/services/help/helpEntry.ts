@@ -16,7 +16,7 @@ export class HelpEntry implements IHelpEntry {
     private readonly _onDidChangeTitleEmitter = new vscode.EventEmitter<string>();
 
     constructor(
-        public readonly sourceUrl: string,
+        public sourceUrl: string,
         public readonly targetUrl: string,
         public readonly languageId: string,
         public readonly sessionId: string,
