@@ -145,5 +145,7 @@
   "Landscape": "横向",
   "Portrait": "纵向",
   "Square": "正方形",
-  "empty": "空"
+  "empty": "空",
+  "Ctrl/Cmd+click to open file": "按住 Ctrl/Cmd 并单击以打开文件",
+  "Could not open console file: {0}": "无法打开 Console 中的文件：{0}"
 }

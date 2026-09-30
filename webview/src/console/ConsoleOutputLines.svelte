@@ -5,7 +5,7 @@
     Mirrors: positron/.../components/consoleOutputLines.tsx
 -->
 <script lang="ts">
-    import OutputRun from "./OutputRun.svelte";
+    import ConsoleOutputLine from "./ConsoleOutputLine.svelte";
     import type { OutputLine } from "./classes";
 
     interface ConsoleOutputLinesProps {
@@ -21,9 +21,7 @@
             <br />
         {:else}
             <div class="output-line">
-                {#each line.outputRuns as run (run.id)}
-                    <OutputRun outputRun={run} />
-                {/each}
+                <ConsoleOutputLine {line} />
             </div>
         {/if}
     {/each}

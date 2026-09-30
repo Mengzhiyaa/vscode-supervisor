@@ -219,6 +219,7 @@ export const ConsoleMethods = {
     requestWorkspaceTrust: 'console/requestWorkspaceTrust',
     setWidthInChars: 'console/setWidthInChars',
     openExternal: 'console/openExternal',
+    openFile: 'console/openFile',
     ready: 'console/ready',
 } as const;
 

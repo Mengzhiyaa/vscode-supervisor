@@ -1613,7 +1613,7 @@ test('console bridges prompt replies, execution reveal, output links, width upda
                         parentId: 'activity-1',
                         when: now + 2,
                         data: {
-                            'text/plain': 'See https://example.com/docs for details',
+                            'text/plain': 'See https://example.com/docs and RPE/SI/plot_drug.R:26:1 for details',
                         },
                     },
                 ],
@@ -1672,6 +1672,18 @@ test('console bridges prompt replies, execution reveal, output links, width upda
     const openExternal = backend.waitForNextNotification(ConsoleMethods.openExternal);
     await page.locator('.output-hyperlink').click();
     expect((await openExternal).params).toEqual({ url: 'https://example.com/docs' });
+
+    await page.locator('.console-file-link').click();
+    expect(backend.notificationCount(ConsoleMethods.openFile)).toBe(0);
+
+    const openFile = backend.waitForNextNotification(ConsoleMethods.openFile);
+    await page.locator('.console-file-link').click({ modifiers: [process.platform === 'darwin' ? 'Meta' : 'Control'] });
+    expect((await openFile).params).toEqual({
+        sessionId: 'session-1',
+        path: 'RPE/SI/plot_drug.R',
+        line: 26,
+        column: 1,
+    });
 
     await backend.notify(ConsoleMethods.revealExecution, {
         sessionId: 'session-1',

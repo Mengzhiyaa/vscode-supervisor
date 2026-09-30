@@ -14,9 +14,10 @@
 
     interface Props {
         outputRun: ANSIOutputRun;
+        detectLinks?: boolean;
     }
 
-    let { outputRun }: Props = $props();
+    let { outputRun, detectLinks = true }: Props = $props();
 
     /**
      * Maps ANSI color names to CSS variable names.
@@ -124,9 +125,9 @@
 
     // Compute style and link mode.
     let inlineStyle = $derived(buildStyle(outputRun.format));
-    let hasHyperlink = $derived(!!outputRun.hyperlink);
+    let hasHyperlink = $derived(detectLinks && !!outputRun.hyperlink);
     let shouldDetectHttpLinks = $derived(
-        !hasHyperlink && outputRun.text.indexOf("http") !== -1,
+        detectLinks && !hasHyperlink && outputRun.text.indexOf("http") !== -1,
     );
 </script>
 

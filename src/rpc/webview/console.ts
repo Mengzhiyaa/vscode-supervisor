@@ -554,3 +554,15 @@ export namespace ConsoleOpenExternalNotification {
 
     export const type = new NotificationType<Params>('console/openExternal');
 }
+
+export namespace ConsoleOpenFileNotification {
+
+    export interface Params {
+        sessionId: string;
+        path: string;
+        line: number;
+        column?: number;
+    }
+
+    export const type = new NotificationType<Params>('console/openFile');
+}

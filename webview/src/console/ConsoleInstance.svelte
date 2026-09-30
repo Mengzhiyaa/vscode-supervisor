@@ -11,7 +11,7 @@
     import ConsoleSearchWidget from "./ConsoleSearchWidget.svelte";
     import SubmittingOverlay from "./SubmittingOverlay.svelte";
     import type { ConsoleInstanceModel } from "./models/consoleInstance";
-    import { getVsCodeState, setVsCodeState } from "../lib/rpc/client";
+    import { getRpcConnection, getVsCodeState, setVsCodeState } from "../lib/rpc/client";
     import {
         type SearchOptions,
         type SearchMatch,
@@ -292,6 +292,25 @@
      */
     function handleClick(event: MouseEvent) {
         closeContextMenu();
+
+        const fileLink = event.target instanceof Element
+            ? event.target.closest<HTMLElement>(".console-file-link")
+            : null;
+        if (fileLink) {
+            event.preventDefault();
+            // Do not refocus the Console after the editor has been opened.
+            event.stopPropagation();
+            if (event.ctrlKey || event.metaKey || event.detail === 0) {
+                void getRpcConnection().sendNotification("console/openFile", {
+                    sessionId: session.id,
+                    path: fileLink.dataset.consoleFilePath,
+                    line: Number(fileLink.dataset.consoleFileLine),
+                    column: fileLink.dataset.consoleFileColumn
+                        ? Number(fileLink.dataset.consoleFileColumn) : undefined,
+                });
+            }
+            return;
+        }
 
         // The search widget is an interactive control inside the console
         // instance. Do not move focus to the Monaco input when a click starts

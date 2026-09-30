@@ -24,6 +24,7 @@ import {
     ConsoleResourceUsagePublication,
 } from './consoleResourceUsageCoordinator';
 import { ConsoleSyncCoordinator } from './consoleSyncCoordinator';
+import { openConsoleFile } from './consoleFileLink';
 
 /**
  * Webview provider for the R Console panel.
@@ -828,6 +829,21 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
         connection.onNotification(ConsoleProtocol.SetConsoleWidthNotification.type, (params) => {
             this.log(`Console width change: ${params.widthInChars} chars`, vscode.LogLevel.Debug);
             this._consoleService?.setConsoleWidth(params.widthInChars);
+        });
+
+        connection.onNotification(ConsoleProtocol.ConsoleOpenFileNotification.type, async (params) => {
+            const instance = params?.sessionId
+                ? this._consoleService?.getConsoleInstance(params.sessionId)
+                : undefined;
+            if (!instance) {
+                return;
+            }
+            try {
+                await openConsoleFile(params, instance.workingDirectory);
+            } catch (error) {
+                this.log(`Failed to open console file: ${error}`, vscode.LogLevel.Warning);
+                void vscode.window.showWarningMessage(vscode.l10n.t('Could not open console file: {0}', params.path));
+            }
         });
 
         connection.onNotification(ConsoleProtocol.ConsoleOpenExternalNotification.type, (params) => {

@@ -1321,6 +1321,37 @@
           ]
         }
       ]
+    },
+    {
+      "kind": "notification",
+      "name": "ConsoleOpenFileNotification",
+      "method": "console/openFile",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "sessionId",
+              "type": "string"
+            },
+            {
+              "name": "path",
+              "type": "string"
+            },
+            {
+              "name": "line",
+              "type": "number"
+            },
+            {
+              "name": "column",
+              "optional": true,
+              "type": "number"
+            }
+          ]
+        }
+      ]
     }
   ]
 }

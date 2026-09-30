@@ -110,6 +110,7 @@ export function createWebviewLocalizationMessages(): WebviewLocalizationMessages
         'console.plot.select': vscode.l10n.t('Select this plot in the Plots pane'),
         'console.plot.output': vscode.l10n.t('Plot output'),
         'console.showTraceback': vscode.l10n.t('Show Traceback'),
+        'console.openFileLink': vscode.l10n.t('Ctrl/Cmd+click to open file'),
         'console.submitting': vscode.l10n.t('Submitting...'),
         'console.suggestionUnavailable': vscode.l10n.t('Suggestion unavailable after restore'),
         'dataExplorer.actions': vscode.l10n.t('Data Explorer actions'),
