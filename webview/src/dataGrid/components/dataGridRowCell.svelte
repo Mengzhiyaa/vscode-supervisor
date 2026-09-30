@@ -10,6 +10,7 @@
     } from "../classes/dataGridInstance";
     import { selectionType } from "../utilities/mouseUtilities";
     import { renderLeadingTrailingWhitespace } from "../../dataExplorer/components/tableDataCell";
+    import { localize } from "../../dataExplorer/nls";
     import { DataColumnAlignment } from "../interfaces";
     import {
         DataCellKind,
@@ -103,8 +104,14 @@
         value.replace(/\r/g, "\\r").replace(/\n/g, "\\n"),
     );
 
+    const isEmptyString = $derived(
+        dataCell?.kind === DataCellKind.NON_NULL && formattedValue === "",
+    );
+
     const renderedValueParts = $derived.by(() =>
-        renderLeadingTrailingWhitespace(formattedValue),
+        isEmptyString
+            ? [`<${localize("positron.dataExplorer.emptyString", "empty")}>`]
+            : renderLeadingTrailingWhitespace(formattedValue),
     );
 
     const isSpecialValue = $derived.by(() => {
@@ -113,7 +120,7 @@
         }
 
         return dataCell?.kind !== undefined
-            ? dataCell.kind !== DataCellKind.NON_NULL
+            ? dataCell.kind !== DataCellKind.NON_NULL || isEmptyString
             : false;
     });
 

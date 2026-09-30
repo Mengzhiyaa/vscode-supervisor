@@ -21,7 +21,7 @@
 
     const context = getDataExplorerContext();
     const { stores } = context;
-    const { summarySearchText, summarySortOrder, state: explorerState } = stores;
+    const { state: explorerState } = stores;
 
     let searchText = $state("");
     let debouncedSearchText = $state("");
@@ -34,13 +34,12 @@
     });
 
     $effect(() => {
-        $summarySearchText;
-        $summarySortOrder;
-
         if (!instance) {
             return;
         }
 
+        // Restore controls only when switching instances. A sort change must
+        // not overwrite text that is still waiting for the search debounce.
         searchText = instance.searchText || "";
         debouncedSearchText = instance.searchText || "";
         sortOption = instance.sortOption || "original";

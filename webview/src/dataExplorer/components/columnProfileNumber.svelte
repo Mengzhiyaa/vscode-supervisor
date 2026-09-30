@@ -16,11 +16,13 @@
 
     let { instance, columnIndex }: Props = $props();
 
+    const columnProfiles = $derived(instance.columnProfiles);
+    const profile = $derived($columnProfiles.get(columnIndex));
     const columnHistogram = $derived(
-        instance.getColumnProfileLargeHistogram(columnIndex),
+        profile?.large_histogram,
     );
     const stats = $derived(
-        instance.getColumnProfileSummaryStats(columnIndex)?.number_stats,
+        profile?.summary_stats?.number_stats,
     );
     const columnSchema = $derived(instance.getColumnSchema(columnIndex));
 

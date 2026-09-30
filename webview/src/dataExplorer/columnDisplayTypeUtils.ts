@@ -28,6 +28,11 @@ export function getEffectiveColumnDisplayType(
 }
 
 export function isNumericDisplayType(typeDisplay: string): boolean {
+    // The protocol's interval type contains "int", but is not numeric.
+    if (isIntervalDisplayType(typeDisplay)) {
+        return false;
+    }
+
     return (
         typeDisplay === COLUMN_DISPLAY_TYPE_FLOATING ||
         typeDisplay === COLUMN_DISPLAY_TYPE_INTEGER ||
@@ -63,6 +68,11 @@ export function isBooleanDisplayType(typeDisplay: string): boolean {
 }
 
 export function isStringDisplayType(typeDisplay: string): boolean {
+    // Keep the protocol's struct type out of the legacy "str" alias match.
+    if (isStructDisplayType(typeDisplay)) {
+        return false;
+    }
+
     return (
         typeDisplay === COLUMN_DISPLAY_TYPE_STRING ||
         typeDisplay.includes('string') ||
@@ -164,6 +174,7 @@ export function shouldRightAlignDisplayType(typeDisplay: string): boolean {
         isNumericDisplayType(typeDisplay) ||
         isDateDisplayType(typeDisplay) ||
         isDatetimeDisplayType(typeDisplay) ||
-        isTimeDisplayType(typeDisplay)
+        isTimeDisplayType(typeDisplay) ||
+        isIntervalDisplayType(typeDisplay)
     );
 }

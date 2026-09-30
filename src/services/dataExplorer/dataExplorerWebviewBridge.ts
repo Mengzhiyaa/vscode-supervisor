@@ -150,6 +150,10 @@ function normalizeColumnDisplayType(
 }
 
 function isNumericColumnDisplayType(typeDisplay: string): boolean {
+    if (typeDisplay === ColumnDisplayType.Interval) {
+        return false;
+    }
+
     return (
         typeDisplay === ColumnDisplayType.Floating ||
         typeDisplay === ColumnDisplayType.Integer ||
@@ -175,6 +179,10 @@ function isBooleanColumnDisplayType(typeDisplay: string): boolean {
 }
 
 function isStringColumnDisplayType(typeDisplay: string): boolean {
+    if (typeDisplay === ColumnDisplayType.Struct) {
+        return false;
+    }
+
     return (
         typeDisplay === ColumnDisplayType.String ||
         typeDisplay.includes('string') ||

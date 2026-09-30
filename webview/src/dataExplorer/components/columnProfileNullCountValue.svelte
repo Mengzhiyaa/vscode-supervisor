@@ -12,13 +12,14 @@
 
     let { instance, columnIndex }: Props = $props();
 
+    const columnProfiles = $derived(instance.columnProfiles);
     const columnProfileNullCount = $derived(
-        instance.getColumnProfileNullCount(columnIndex),
+        $columnProfiles.get(columnIndex)?.null_count,
     );
 </script>
 
 {#if columnProfileNullCount === undefined}
-    <div class="value-placeholder">\u22ef</div>
+    <div class="value-placeholder">&#x22ef;</div>
 {:else}
     <div class="value">{columnProfileNullCount}</div>
 {/if}

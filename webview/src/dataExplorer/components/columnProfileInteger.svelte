@@ -17,11 +17,13 @@
 
     let { instance, columnIndex }: Props = $props();
 
+    const columnProfiles = $derived(instance.columnProfiles);
+    const profile = $derived($columnProfiles.get(columnIndex));
     const columnHistogram = $derived(
-        instance.getColumnProfileLargeHistogram(columnIndex),
+        profile?.large_histogram,
     );
     const stats = $derived(
-        instance.getColumnProfileSummaryStats(columnIndex)?.number_stats,
+        profile?.summary_stats?.number_stats,
     );
     const columnSchema = $derived(instance.getColumnSchema(columnIndex));
 
@@ -76,14 +78,14 @@
         <div class="values">
             <ColumnProfileNullCountValue {instance} {columnIndex} />
             {#if stats === undefined}
-                <div class="value-placeholder">\u22ef</div>
+                <div class="value-placeholder">&#x22ef;</div>
             {:else}
                 <div class="value">{integerStatsValue(stats, stats?.min_value)}</div>
             {/if}
             <StatsValue {stats} value={stats?.median} />
             <StatsValue {stats} value={stats?.mean} />
             {#if stats === undefined}
-                <div class="value-placeholder">\u22ef</div>
+                <div class="value-placeholder">&#x22ef;</div>
             {:else}
                 <div class="value">{integerStatsValue(stats, stats?.max_value)}</div>
             {/if}

@@ -16,11 +16,13 @@
 
     let { instance, columnIndex }: Props = $props();
 
+    const columnProfiles = $derived(instance.columnProfiles);
+    const profile = $derived($columnProfiles.get(columnIndex));
     const columnFrequencyTable = $derived(
-        instance.getColumnProfileSmallFrequencyTable(columnIndex),
+        profile?.small_frequency_table,
     );
     const stats = $derived(
-        instance.getColumnProfileSummaryStats(columnIndex)?.boolean_stats,
+        profile?.summary_stats?.boolean_stats,
     );
 
     const missingLabel = localize("positronMissing", "Missing");

@@ -15,6 +15,7 @@ import {
 import { SimpleHoverManager } from '../dataGrid/classes/simpleHoverManager';
 import type { SchemaColumn, BackendState } from '../dataGrid/types';
 import type { DataExplorerStores } from './stores';
+import type { ColumnProfileViewResult } from './columnProfileTypes';
 import type { SearchSchemaSortOrder, WebviewMessage } from './types';
 import {
     canExpandSummaryForDisplayType,
@@ -181,6 +182,12 @@ export class TableSummaryDataGridInstance extends DataGridInstance {
 
     get sortOption(): SearchSchemaSortOrder {
         return this._sortOption;
+    }
+
+    // Expanded Svelte profiles must subscribe to cache updates, including
+    // invalidation, instead of reading non-reactive Map getters only once.
+    get columnProfiles(): Readable<Map<number, ColumnProfileViewResult>> {
+        return this._stores.columnProfiles;
     }
 
     get profileFormatOptions() {

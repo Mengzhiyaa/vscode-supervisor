@@ -172,6 +172,7 @@ export function createWebviewLocalizationMessages(): WebviewLocalizationMessages
         'positron.dataExplorer.copyColumn': vscode.l10n.t('Copy Column'),
         'positron.dataExplorer.copyRow': vscode.l10n.t('Copy Row'),
         'positron.dataExplorer.disconnected': vscode.l10n.t('Disconnected'),
+        'positron.dataExplorer.emptyString': vscode.l10n.t('empty'),
         'positron.dataExplorer.error': vscode.l10n.t('Error'),
         'positron.dataExplorer.filtering.filterLimit': vscode.l10n.t('The maximum number of filters has been reached.'),
         'positron.dataExplorer.idle': vscode.l10n.t('Idle'),

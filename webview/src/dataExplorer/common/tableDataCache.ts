@@ -330,7 +330,7 @@ export class TableDataCache {
 
         const headerWidth = this._widthCalculators.columnHeaderWidthCalculator(
             schemaColumn.column_name ?? '',
-            schemaColumn.type_display ?? schemaColumn.type_name ?? '',
+            schemaColumn.type_name ?? schemaColumn.type_display ?? '',
         );
         const valueLength = this._columnValueLengths.get(columnIndex) ?? 0;
         const valueWidth =

@@ -13,7 +13,7 @@
 
     const SEARCH_AREA_HEIGHT = 34;
     const FOCUSABLE_ELEMENT_SELECTORS =
-        'input[type="text"], .column-selector-data-grid .data-grid';
+        'input[type="text"], .column-selector-data-grid .data-grid-waffle';
 
     interface Props {
         anchorElement: HTMLElement;
@@ -111,7 +111,7 @@
             }
 
             const gridElement = gridContainer.querySelector<HTMLElement>(
-                ".data-grid",
+                ".data-grid-waffle",
             );
             selectorInstance.ensureCursorVisible();
             gridElement?.focus();
@@ -120,7 +120,7 @@
 
     $effect(() => {
         const gridElement =
-            gridContainerRef?.querySelector<HTMLElement>(".data-grid");
+            gridContainerRef?.querySelector<HTMLElement>(".data-grid-waffle");
         if (!gridElement) {
             return;
         }
@@ -129,10 +129,10 @@
             handleGridKeyDown(event);
         };
 
-        gridElement.addEventListener("keydown", listener);
+        gridElement.addEventListener("keydown", listener, true);
 
         return () => {
-            gridElement.removeEventListener("keydown", listener);
+            gridElement.removeEventListener("keydown", listener, true);
         };
     });
 
@@ -151,7 +151,7 @@
 
     function focusGrid() {
         const gridElement = gridContainerRef?.querySelector<HTMLElement>(
-            ".data-grid",
+            ".data-grid-waffle",
         );
         selectorInstance.ensureCursorVisible();
         gridElement?.focus();

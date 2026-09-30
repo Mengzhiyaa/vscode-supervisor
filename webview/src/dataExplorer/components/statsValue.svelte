@@ -16,7 +16,7 @@
 </script>
 
 {#if stats === undefined}
-    <div class="value-placeholder">\u22ef</div>
+    <div class="value-placeholder">&#x22ef;</div>
 {:else}
     <div class="value">{value ?? naLabel}</div>
 {/if}

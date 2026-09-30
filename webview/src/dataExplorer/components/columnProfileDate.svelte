@@ -15,8 +15,9 @@
 
     let { instance, columnIndex }: Props = $props();
 
+    const columnProfiles = $derived(instance.columnProfiles);
     const stats = $derived(
-        instance.getColumnProfileSummaryStats(columnIndex)?.date_stats,
+        $columnProfiles.get(columnIndex)?.summary_stats?.date_stats,
     );
 
     const missingLabel = localize("positronMissing", "Missing");

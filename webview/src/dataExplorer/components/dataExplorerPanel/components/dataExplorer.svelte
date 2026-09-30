@@ -23,7 +23,6 @@
     const context = getDataExplorerContext();
     const { notifyFocusChanged, stores } = context;
     const { state: explorerState } = stores;
-    const summaryExpansionRequests = context.instance.summaryExpansionRequests;
     const layout = $derived(
         $explorerState.layout ?? PositronDataExplorerLayout.SummaryOnLeft,
     );
@@ -42,13 +41,15 @@
     let columnNameExemplarRef: HTMLDivElement | null = null;
     let typeNameExemplarRef: HTMLDivElement | null = null;
     let sortIndexExemplarRef: HTMLDivElement | null = null;
+    let cellValueExemplarRef: HTMLDivElement | null = null;
+    let widthCalculator: WidthCalculator | undefined;
+    let measuredFonts = "";
 
     let width = $state(0);
     let columnsWidth = $state(0);
     let animateColumnsWidth = $state(false);
     const columnsCollapsed = $derived(isSummaryCollapsed);
-    let manualExpansionWidth: number | undefined;
-    let seenExpansionRequest = 0;
+    let initialSummaryLayoutApplied = false;
     const reducedMotion = new MediaQuery(
         "prefers-reduced-motion: reduce",
         false,
@@ -79,23 +80,20 @@
     });
 
     $effect(() => {
-        // clientWidth is observed by Svelte, including initially hidden editors.
-        // Apply Positron's 50% rule after sizing and restored state arrive.
+        // Positron applies the 50% rule only when opening an instance. Wait for
+        // both sizing and restored state, then preserve the user's layout
+        // while the editor is resized or the summary width is changed.
         const measuredWidth = width;
-        const expansionRequest = $summaryExpansionRequests;
         const preferredWidth = Math.max(summaryWidth || DEFAULT_SUMMARY_WIDTH, MIN_COLUMN_WIDTH);
         const collapsed = isSummaryCollapsed;
-        if (measuredWidth <= 0) {
+        if (
+            initialSummaryLayoutApplied ||
+            measuredWidth <= 0 ||
+            !$explorerState.backendState
+        ) {
             return;
         }
-        if (expansionRequest !== seenExpansionRequest) {
-            seenExpansionRequest = expansionRequest;
-            manualExpansionWidth = measuredWidth;
-        }
-        // Respect an explicit expansion until the editor becomes narrower.
-        if (manualExpansionWidth !== undefined && measuredWidth >= manualExpansionWidth) {
-            return;
-        }
+        initialSummaryLayoutApplied = true;
         if (!collapsed && preferredWidth > measuredWidth * 0.5) {
             animateColumnsWidth = false;
             context.instance.collapseSummary();
@@ -105,15 +103,36 @@
     onMount(() => {
         if (!dataExplorerRef) return;
 
-        // Initialize WidthCalculators from exemplar divs
+        // VS Code updates the webview's CSS variables when font settings change.
         initWidthCalculators();
+        const fontObserver = new MutationObserver(() => initWidthCalculators());
+        const observationOptions = {
+            attributes: true,
+            attributeFilter: ["style", "class"],
+        };
+        fontObserver.observe(document.documentElement, observationOptions);
+        fontObserver.observe(document.body, observationOptions);
+
+        const handleFontsLoaded = () => {
+            measuredFonts = "";
+            initWidthCalculators();
+        };
+        document.fonts.addEventListener("loadingdone", handleFontsLoaded);
+
+        return () => {
+            fontObserver.disconnect();
+            document.fonts.removeEventListener("loadingdone", handleFontsLoaded);
+            tableDataDataGridInstance.setWidthCalculators(undefined);
+            widthCalculator?.dispose();
+        };
     });
 
     function initWidthCalculators() {
         if (
             !columnNameExemplarRef ||
             !typeNameExemplarRef ||
-            !sortIndexExemplarRef
+            !sortIndexExemplarRef ||
+            !cellValueExemplarRef
         )
             return;
         if (!tableDataDataGridInstance)
@@ -122,23 +141,33 @@
         const columnNameFont = getComputedFont(columnNameExemplarRef);
         const typeNameFont = getComputedFont(typeNameExemplarRef);
         const sortIndexFont = getComputedFont(sortIndexExemplarRef);
+        const cellValueFont = getComputedFont(cellValueExemplarRef);
+        const nextFonts = JSON.stringify([
+            columnNameFont, typeNameFont, sortIndexFont, cellValueFont,
+        ]);
+        if (measuredFonts === nextFonts) {
+            return;
+        }
+        measuredFonts = nextFonts;
 
-        const widthCalculator = new WidthCalculator({
+        widthCalculator?.dispose();
+        const calculator = new WidthCalculator({
             columnNameFont,
             typeNameFont,
             sortIndexFont,
             horizontalCellPadding:
                 tableDataDataGridInstance.horizontalCellPadding ?? 8,
         });
+        widthCalculator = calculator;
 
-        const spaceWidth = widthCalculator.measureSpaceWidth(columnNameFont);
+        const spaceWidth = calculator.measureSpaceWidth(cellValueFont);
         const widthCalculators: WidthCalculators = {
             columnHeaderWidthCalculator: (
                 columnName: string,
                 typeName: string,
-            ) => widthCalculator.calculateColumnHeaderWidth(columnName, typeName),
+            ) => calculator.calculateColumnHeaderWidth(columnName, typeName),
             columnValueWidthCalculator: (length: number) =>
-                widthCalculator.calculateCellValueWidth(length, spaceWidth),
+                calculator.calculateCellValueWidth(length, spaceWidth),
         };
 
         tableDataDataGridInstance.setWidthCalculators(widthCalculators);
@@ -159,7 +188,6 @@
     });
 
     const resizeHandler = (newColumnsWidth: number) => {
-        manualExpansionWidth = width;
         columnsWidth = newColumnsWidth;
         context.instance.summaryWidth = newColumnsWidth;
     };
@@ -209,6 +237,7 @@
     <div class="column-name-exemplar" bind:this={columnNameExemplarRef}></div>
     <div class="type-name-exemplar" bind:this={typeNameExemplarRef}></div>
     <div class="sort-index-exemplar" bind:this={sortIndexExemplarRef}></div>
+    <div class="cell-value-exemplar" bind:this={cellValueExemplarRef}></div>
 
     <div
         class="left-column"
@@ -317,10 +346,17 @@
 
     :global(.data-explorer-panel) .data-explorer .column-name-exemplar,
     :global(.data-explorer-panel) .data-explorer .type-name-exemplar,
-    :global(.data-explorer-panel) .data-explorer .sort-index-exemplar {
+    :global(.data-explorer-panel) .data-explorer .sort-index-exemplar,
+    :global(.data-explorer-panel) .data-explorer .cell-value-exemplar {
         position: absolute;
         visibility: hidden;
         pointer-events: none;
+    }
+
+    :global(.data-explorer-panel) .data-explorer .cell-value-exemplar {
+        font-family: var(--vscode-editor-font-family, monospace);
+        font-size: var(--vscode-editor-font-size, 13px);
+        font-weight: var(--vscode-editor-font-weight, normal);
     }
 
     :global(.data-explorer-panel) .data-explorer .column-name-exemplar {

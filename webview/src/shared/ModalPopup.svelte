@@ -4,6 +4,10 @@
 -->
 <svelte:options css="injected" />
 
+<script module lang="ts">
+    const popupStack: HTMLElement[] = [];
+</script>
+
 <script lang="ts">
     import { onMount } from "svelte";
 
@@ -398,6 +402,12 @@
     }
 
     function handleKeyDown(event: KeyboardEvent) {
+        // Nested selectors share document-level capture listeners. Only the
+        // active popup may handle Escape or move focus with Tab/arrow keys.
+        if (popupStack.at(-1) !== popupContainerRef) {
+            return;
+        }
+
         const activeElement =
             document.activeElement instanceof HTMLElement
                 ? document.activeElement
@@ -490,10 +500,27 @@
     });
 
     onMount(() => {
+        const container = popupContainerRef;
+        if (!container) {
+            return;
+        }
+        // A child may mount before its parent during the same render.
+        const childIndex = popupStack.findIndex(popup => container.contains(popup));
+        if (childIndex === -1) {
+            popupStack.push(container);
+        } else {
+            popupStack.splice(childIndex, 0, container);
+        }
         requestAnimationFrame(() => {
             updatePopupLayout();
         });
 
+        return () => {
+            const index = popupStack.indexOf(container);
+            if (index !== -1) {
+                popupStack.splice(index, 1);
+            }
+        };
     });
 </script>
 

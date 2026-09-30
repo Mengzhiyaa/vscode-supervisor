@@ -73,11 +73,17 @@
     }
 
     function handleKeydown(event: KeyboardEvent) {
+        // Let the nested clear button perform its native keyboard activation.
+        if (event.target !== event.currentTarget) {
+            return;
+        }
+
         if (event.key !== "Enter" && event.key !== " ") {
             return;
         }
 
         event.preventDefault();
+        event.stopPropagation();
 
         if (widgetRef) {
             onEdit?.(widgetRef);

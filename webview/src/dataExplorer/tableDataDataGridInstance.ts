@@ -548,6 +548,7 @@ export class TableDataDataGridInstance extends DataGridInstance {
     setWidthCalculators(widthCalculators?: WidthCalculators): void {
         this._widthCalculators = widthCalculators;
         this._tableDataCache.setWidthCalculators(widthCalculators);
+        this._columnWidthsCalculatedGeneration = -1;
         this._applyAutoColumnWidths();
         this._scheduleColumnWidthCalculation();
     }
