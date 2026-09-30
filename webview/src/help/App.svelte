@@ -596,7 +596,7 @@
         box-sizing: border-box;
         background: var(
             --vscode-positronActionBar-background,
-            var(--vscode-sideBar-background)
+            var(--vscode-panel-background, var(--vscode-editor-background))
         );
     }
 

@@ -34,16 +34,16 @@
     .activity-output-html :global(th),
     .activity-output-html :global(td) {
         padding: 4px 8px;
-        border: 1px solid var(--vscode-panel-border);
+        border: 1px solid var(--vscode-tab-border, var(--vscode-panel-border));
     }
 
     .activity-output-html :global(th) {
-        background: var(--vscode-sideBarSectionHeader-background);
+        background: transparent;
         font-weight: 600;
     }
 
     .activity-output-html :global(tr:nth-child(even)) {
-        background: var(--vscode-list-hoverBackground);
+        background: transparent;
     }
 
     .activity-output-html :global(a) {

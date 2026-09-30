@@ -17,7 +17,7 @@
         justify-content: center;
         width: 100%;
         height: 100%;
-        background-color: var(--vscode-editor-background);
+        background-color: var(--vscode-input-background, var(--vscode-editor-background));
         border-radius: 4px;
     }
 

@@ -6,7 +6,10 @@
 :root {
     --positron-action-bar-height: var(--vscode-positronActionBar-height, 28px);
     --positron-action-bar-icon-size: var(--vscode-positronActionBar-iconSize, 24px);
-    --positron-action-bar-bg: var(--vscode-positronActionBar-background, var(--vscode-editor-background));
+    --positron-action-bar-bg: var(
+        --vscode-positronActionBar-background,
+        var(--vscode-panel-background, var(--vscode-editor-background))
+    );
     --positron-action-bar-border: var(--vscode-positronActionBar-border, var(--vscode-panel-border));
     --positron-action-bar-dropdown-button-width: 36px;
     --positron-action-bar-separator-width: 7px;
@@ -206,7 +209,10 @@ body.vscode-high-contrast-light .action-bar-button:hover:not(:disabled),
 
 .action-bar-menu-button.border {
     height: 22px;
-    background-color: var(--vscode-positronActionBar-background, var(--vscode-editor-background));
+    background-color: var(
+        --vscode-positronActionBar-background,
+        var(--vscode-panel-background, var(--vscode-editor-background))
+    );
     border: 1px solid var(--vscode-positronActionBar-selectBorder, var(--vscode-dropdown-border));
 }
 

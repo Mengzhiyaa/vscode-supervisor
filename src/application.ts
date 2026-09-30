@@ -1459,7 +1459,7 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
         this._disposables.push(
             vscode.commands.registerCommand(CoreCommandIds.packagesRefresh, async () => {
                 try {
-                    await this._packagesService.refreshPackages();
+                    await this._packagesService.refreshPackages(undefined, true);
                 } catch (error) {
                     this._outputChannel.warn(`[Packages] Refresh failed: ${error}`);
                     vscode.window.showErrorMessage(`Failed to refresh packages: ${error}`);

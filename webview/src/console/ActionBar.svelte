@@ -366,7 +366,7 @@
     .console-action-bar {
         --positron-action-bar-bg: var(
             --vscode-positronActionBar-background,
-            var(--vscode-editor-background)
+            var(--vscode-panel-background, var(--vscode-editor-background))
         );
         --positron-action-bar-border: var(
             --vscode-positronActionBar-border,

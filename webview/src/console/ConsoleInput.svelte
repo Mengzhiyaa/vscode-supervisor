@@ -259,8 +259,8 @@
         }
 
         const editorBg =
-            cssVar("--vscode-input-background") ||
-            cssVar("--vscode-editor-background");
+            cssVar("--vscode-editor-background") ||
+            cssVar("--vscode-input-background");
         const editorFg = cssVar("--vscode-editor-foreground");
         const widgetBg = cssVar("--vscode-editorWidget-background");
         const widgetFg = cssVar("--vscode-editorWidget-foreground");
@@ -2172,7 +2172,7 @@
         position: relative;
         width: 100%;
         padding-bottom: 10px;
-        background: var(--vscode-input-background);
+        background: transparent;
         white-space: normal;
         overflow-anchor: none;
     }
@@ -2187,12 +2187,10 @@
     }
 
     /* Override Monaco's default styles to match VS Code webview */
-    :global(.monaco-editor) {
-        background-color: var(--vscode-input-background) !important;
-    }
-
-    :global(.monaco-editor .margin) {
-        background-color: var(--vscode-input-background) !important;
+    :global(.monaco-editor),
+    :global(.monaco-editor .margin),
+    :global(.monaco-editor .monaco-editor-background) {
+        background-color: transparent !important;
     }
 
     :global(.monaco-editor .line-numbers) {

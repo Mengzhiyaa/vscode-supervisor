@@ -17,10 +17,13 @@ import { PositronPackagesInstance } from './packagesInstance';
 const ITEM_SIZE_STORAGE_KEY = 'positron.packages.itemSize';
 const TIMEOUT_REFRESH_MS = 5_000;
 
-function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string, onTimeout: () => void): Promise<T> {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timeoutPromise = new Promise<T>((_resolve, reject) => {
-        timer = setTimeout(() => reject(new Error(`${label} timed out`)), timeoutMs);
+        timer = setTimeout(() => {
+            reject(new Error(`${label} timed out`));
+            onTimeout();
+        }, timeoutMs);
     });
 
     return Promise.race([promise, timeoutPromise]).finally(() => {
@@ -76,6 +79,10 @@ export class PositronPackagesService implements IPositronPackagesService {
 
     get activePackagesInstance(): IPositronPackagesInstance | undefined {
         return this._activeInstance;
+    }
+
+    get isBusy(): boolean {
+        return this._activeInstance?.isBusy ?? false;
     }
 
     get selectedPackage(): string | undefined {
@@ -188,12 +195,24 @@ export class PositronPackagesService implements IPositronPackagesService {
         return this._instancesBySessionId.get(sessionId);
     }
 
-    async refreshPackages(token?: vscode.CancellationToken): Promise<LanguageRuntimePackage[]> {
-        return withTimeout(
-            this._getActiveInstanceOrThrow().refreshPackages(token),
-            TIMEOUT_REFRESH_MS,
-            'Package refresh',
-        );
+    async refreshPackages(token?: vscode.CancellationToken, forceMetadata = false): Promise<LanguageRuntimePackage[]> {
+        const tokenSource = new vscode.CancellationTokenSource();
+        const subscription = token?.onCancellationRequested(() => tokenSource.cancel());
+        if (token?.isCancellationRequested) {
+            tokenSource.cancel();
+        }
+        try {
+            // User actions force metadata; background callers retain warm-cache behavior.
+            return await withTimeout(
+                this._getActiveInstanceOrThrow().refreshPackages(tokenSource.token, forceMetadata),
+                TIMEOUT_REFRESH_MS,
+                'Package refresh',
+                () => tokenSource.cancel(),
+            );
+        } finally {
+            subscription?.dispose();
+            tokenSource.dispose();
+        }
     }
 
     async refreshMetadata(token?: vscode.CancellationToken): Promise<void> {
@@ -294,45 +313,30 @@ export class PositronPackagesService implements IPositronPackagesService {
         }
 
         this._activeInstance = instance;
-        let refreshLoading = false;
-        let installLoading = false;
-        let updateLoading = false;
-        let updateAllLoading = false;
-        let uninstallLoading = false;
+        this.setSelectedPackage(undefined);
 
         const updateBusy = () => {
-            const busy = refreshLoading || installLoading || updateLoading || updateAllLoading || uninstallLoading;
+            const busy = instance?.isBusy ?? false;
             this._activeBusy = busy;
             this._updateContextKeys(busy);
         };
 
         if (instance) {
             this._activeInstanceDisposables.push(
-                instance.onDidChangeRefreshState(isLoading => {
-                    refreshLoading = isLoading;
-                    updateBusy();
-                }),
-                instance.onDidChangeInstallState(isLoading => {
-                    installLoading = isLoading;
-                    updateBusy();
-                }),
-                instance.onDidChangeUpdateState(isLoading => {
-                    updateLoading = isLoading;
-                    updateBusy();
-                }),
-                instance.onDidChangeUpdateAllState(isLoading => {
-                    updateAllLoading = isLoading;
-                    updateBusy();
-                }),
-                instance.onDidChangeUninstallState(isLoading => {
-                    uninstallLoading = isLoading;
-                    updateBusy();
+                instance.onDidChangeRefreshState(updateBusy),
+                instance.onDidChangeInstallState(updateBusy),
+                instance.onDidChangeUpdateState(updateBusy),
+                instance.onDidChangeUpdateAllState(updateBusy),
+                instance.onDidChangeUninstallState(updateBusy),
+                instance.onDidRefreshPackagesInstance(packages => {
+                    if (this._selectedPackage && !packages.some(pkg => pkg.name === this._selectedPackage)) {
+                        this.setSelectedPackage(undefined);
+                    }
                 }),
             );
         }
 
-        this._activeBusy = false;
-        this._updateContextKeys(false);
+        updateBusy();
         this._onDidChangeActivePackagesInstance.fire(instance);
     }
 

@@ -1588,7 +1588,7 @@
 
 <svelte:window onkeydowncapture={handleWindowKeyDown} />
 
-<div class="positron-plots-container">
+<div class="positron-plots-container" class:galleryEditor={isGalleryEditor}>
     {#if copyError}
         <div role="alert" class="copy-error">{copyError}</div>
     {/if}
@@ -1693,7 +1693,14 @@
         display: flex;
         flex-direction: column;
         height: 100vh;
-        background: var(--vscode-sideBar-background);
-        color: var(--vscode-sideBar-foreground);
+        background: var(
+            --vscode-positronPlots-background,
+            var(--vscode-panel-background, var(--vscode-editor-background))
+        );
+        color: var(--vscode-foreground);
+    }
+
+    .positron-plots-container.galleryEditor {
+        background: var(--vscode-editor-background);
     }
 </style>

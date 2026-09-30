@@ -983,9 +983,27 @@ export class RuntimeSession implements vscode.Disposable {
     }
 
     async callMethod(method: string, ...args: unknown[]): Promise<unknown> {
-        const typed = await this._invokeTypedUiComm((uiComm) =>
+        let typed = await this._invokeTypedUiComm((uiComm) =>
             uiComm.callMethod(method, args as UiParam[])
         );
+
+        // Runtime state notifications are emitted before the asynchronous
+        // Positron client initialization kicked off by the Ready transition.
+        // Consumers such as the package service can therefore reach this
+        // method while the UI client is still being created. Join that
+        // initialization and retry instead of exposing a startup race.
+        if (
+            !typed.available &&
+            this._clientManager &&
+            (this._state === RuntimeState.Ready ||
+                this._state === RuntimeState.Idle ||
+                this._state === RuntimeState.Busy)
+        ) {
+            await this._clientManager.initializeClients();
+            typed = await this._invokeTypedUiComm((uiComm) =>
+                uiComm.callMethod(method, args as UiParam[])
+            );
+        }
 
         if (!typed.available) {
             throw new Error('UI comm is not available for this runtime session');

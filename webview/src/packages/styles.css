@@ -73,8 +73,8 @@ input {
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    color: var(--vscode-foreground);
-    background: var(--vscode-sideBar-background);
+    color: var(--vscode-positronPackages-foreground, var(--vscode-editor-foreground, var(--vscode-foreground)));
+    background: var(--vscode-positronPackages-background, var(--vscode-panel-background, var(--vscode-editor-background)));
 }
 
 .packages-toolbar,
@@ -85,7 +85,7 @@ input {
     min-height: 34px;
     padding: 4px 8px;
     box-sizing: border-box;
-    border-bottom: 1px solid var(--vscode-sideBarSectionHeader-border);
+    border-bottom: 1px solid var(--vscode-positronPackages-border, var(--vscode-panel-border));
 }
 
 .session-label {
@@ -133,7 +133,7 @@ input {
     display: grid;
     gap: 6px;
     padding: 8px;
-    border-bottom: 1px solid var(--vscode-sideBarSectionHeader-border);
+    border-bottom: 1px solid var(--vscode-positronPackages-border, var(--vscode-panel-border));
 }
 
 .input-row,
@@ -146,7 +146,7 @@ input {
 
 .filter-row {
     padding: 6px 8px;
-    border-bottom: 1px solid var(--vscode-sideBarSectionHeader-border);
+    border-bottom: 1px solid var(--vscode-positronPackages-border, var(--vscode-panel-border));
 }
 
 .filter-row .codicon {
@@ -156,7 +156,7 @@ input {
 .search-results {
     max-height: 34%;
     overflow: auto;
-    border-bottom: 1px solid var(--vscode-sideBarSectionHeader-border);
+    border-bottom: 1px solid var(--vscode-positronPackages-border, var(--vscode-panel-border));
 }
 
 .search-result {

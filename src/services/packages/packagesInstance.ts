@@ -23,12 +23,31 @@ function throwIfCancellationRequested(token?: vscode.CancellationToken): void {
     }
 }
 
+async function withCancellation<T>(promise: Promise<T>, token: vscode.CancellationToken): Promise<T> {
+    let subscription: vscode.Disposable | undefined;
+    try {
+        return await new Promise<T>((resolve, reject) => {
+            subscription = token.onCancellationRequested(() => reject(new vscode.CancellationError()));
+            if (token.isCancellationRequested) {
+                reject(new vscode.CancellationError());
+            }
+            promise.then(resolve, reject);
+        });
+    } finally {
+        subscription?.dispose();
+    }
+}
+
 export class PositronPackagesInstance implements IPositronPackagesInstance, vscode.Disposable {
     private _packages: LanguageRuntimePackage[] = [];
     private readonly _metadataCache = new Map<string, CachedPackageMetadata>();
     private _metadataTokenSource: vscode.CancellationTokenSource | undefined;
     private readonly _runtimeDisposables: vscode.Disposable[] = [];
     private readonly _disposables: vscode.Disposable[] = [];
+    private _runtimeGeneration = 0;
+    private _refreshGeneration = 0;
+    private readonly _operations = new Map<vscode.EventEmitter<boolean>, number>();
+    private readonly _operationTokens = new Set<vscode.CancellationTokenSource>();
 
     private readonly _onDidRefreshPackagesInstance = new vscode.EventEmitter<LanguageRuntimePackage[]>();
     private readonly _onDidChangeRefreshState = new vscode.EventEmitter<boolean>();
@@ -79,6 +98,10 @@ export class PositronPackagesInstance implements IPositronPackagesInstance, vsco
         return this._session;
     }
 
+    get isBusy(): boolean {
+        return this._operations.size > 0;
+    }
+
     setRuntimeSession(
         session: ILanguageRuntimeSession,
         packageManager: ILanguageRuntimePackageManager,
@@ -86,21 +109,18 @@ export class PositronPackagesInstance implements IPositronPackagesInstance, vsco
         this.detachRuntime();
         this._session = session;
         this._packageManager = packageManager;
-        this._metadataTokenSource?.cancel();
+        this._packages = [];
         this._metadataCache.clear();
         this._loadPersistedMetadata();
+        this._onDidRefreshPackagesInstance.fire(this.packages);
         this.attachRuntime();
     }
 
-    async refreshPackages(token?: vscode.CancellationToken): Promise<LanguageRuntimePackage[]> {
-        throwIfCancellationRequested(token);
-        this._onDidChangeRefreshState.fire(true);
-        try {
-            await this._refreshPackagesInternal(token);
+    async refreshPackages(token?: vscode.CancellationToken, forceMetadata = false): Promise<LanguageRuntimePackage[]> {
+        return this._runOperation(this._onDidChangeRefreshState, token, async effectiveToken => {
+            await this._refreshPackagesInternal(effectiveToken, forceMetadata);
             return this.packages;
-        } finally {
-            this._onDidChangeRefreshState.fire(false);
-        }
+        });
     }
 
     async refreshMetadata(token?: vscode.CancellationToken): Promise<void> {
@@ -109,63 +129,46 @@ export class PositronPackagesInstance implements IPositronPackagesInstance, vsco
             return;
         }
 
-        this._metadataTokenSource?.cancel();
-        this._metadataCache.clear();
+        // Keep the last known metadata if a repository is temporarily unavailable.
         await this._fetchAndMergeMetadata(token, true);
     }
 
     async installPackages(packages: PackageSpec[], token?: vscode.CancellationToken): Promise<void> {
-        throwIfCancellationRequested(token);
-        this._onDidChangeInstallState.fire(true);
-        try {
-            await this._packageManager.installPackages(packages, token);
-            throwIfCancellationRequested(token);
+        await this._runOperation(this._onDidChangeInstallState, token, async effectiveToken => {
+            await this._packageManager.installPackages(packages, effectiveToken);
+            throwIfCancellationRequested(effectiveToken);
             this._evictPackagesFromCache(packages.map(pkg => pkg.name));
-            await this._refreshPackagesInternal(token);
-        } finally {
-            this._onDidChangeInstallState.fire(false);
-        }
+            await this._refreshPackagesInternal(effectiveToken);
+        });
     }
 
     async uninstallPackages(packageNames: string[], token?: vscode.CancellationToken): Promise<void> {
-        throwIfCancellationRequested(token);
-        this._onDidChangeUninstallState.fire(true);
-        try {
-            await this._packageManager.uninstallPackages(packageNames, token);
-            throwIfCancellationRequested(token);
+        await this._runOperation(this._onDidChangeUninstallState, token, async effectiveToken => {
+            await this._packageManager.uninstallPackages(packageNames, effectiveToken);
+            throwIfCancellationRequested(effectiveToken);
             this._evictPackagesFromCache(packageNames);
-            await this._refreshPackagesInternal(token);
-        } finally {
-            this._onDidChangeUninstallState.fire(false);
-        }
+            await this._refreshPackagesInternal(effectiveToken);
+        });
     }
 
     async updatePackages(packages: PackageSpec[], token?: vscode.CancellationToken): Promise<void> {
-        throwIfCancellationRequested(token);
-        this._onDidChangeUpdateState.fire(true);
-        try {
-            await this._packageManager.updatePackages(packages, token);
-            throwIfCancellationRequested(token);
+        await this._runOperation(this._onDidChangeUpdateState, token, async effectiveToken => {
+            await this._packageManager.updatePackages(packages, effectiveToken);
+            throwIfCancellationRequested(effectiveToken);
             this._evictPackagesFromCache(packages.map(pkg => pkg.name));
-            await this._refreshPackagesInternal(token);
-        } finally {
-            this._onDidChangeUpdateState.fire(false);
-        }
+            await this._refreshPackagesInternal(effectiveToken);
+        });
     }
 
     async updateAllPackages(token?: vscode.CancellationToken): Promise<void> {
-        throwIfCancellationRequested(token);
-        this._onDidChangeUpdateAllState.fire(true);
-        try {
-            await this._packageManager.updateAllPackages(token);
-            throwIfCancellationRequested(token);
+        await this._runOperation(this._onDidChangeUpdateAllState, token, async effectiveToken => {
+            await this._packageManager.updateAllPackages(effectiveToken);
+            throwIfCancellationRequested(effectiveToken);
             this._metadataTokenSource?.cancel();
             this._metadataCache.clear();
             this._persistedMetadataCache.clear(this._runtimeId);
-            await this._refreshPackagesInternal(token);
-        } finally {
-            this._onDidChangeUpdateAllState.fire(false);
-        }
+            await this._refreshPackagesInternal(effectiveToken);
+        });
     }
 
     async searchPackages(query: string, token?: vscode.CancellationToken): Promise<LanguageRuntimePackage[]> {
@@ -209,6 +212,18 @@ export class PositronPackagesInstance implements IPositronPackagesInstance, vsco
     }
 
     detachRuntime(): void {
+        this._runtimeGeneration++;
+        this._refreshGeneration++;
+        this._metadataTokenSource?.cancel();
+        for (const tokenSource of this._operationTokens) {
+            tokenSource.cancel();
+        }
+        this._operationTokens.clear();
+        const events = [...this._operations.keys()];
+        this._operations.clear();
+        for (const event of events) {
+            event.fire(false);
+        }
         while (this._runtimeDisposables.length) {
             this._runtimeDisposables.pop()?.dispose();
         }
@@ -223,13 +238,49 @@ export class PositronPackagesInstance implements IPositronPackagesInstance, vsco
         }
     }
 
-    private async _refreshPackagesInternal(token?: vscode.CancellationToken): Promise<void> {
-        this._packages = await this._packageManager.getPackages(token);
+    private async _runOperation<T>(
+        event: vscode.EventEmitter<boolean>,
+        token: vscode.CancellationToken | undefined,
+        operation: (token: vscode.CancellationToken) => Promise<T>,
+    ): Promise<T> {
         throwIfCancellationRequested(token);
+        const generation = this._runtimeGeneration;
+        const tokenSource = new vscode.CancellationTokenSource();
+        const subscription = token?.onCancellationRequested(() => tokenSource.cancel());
+        this._operationTokens.add(tokenSource);
+        this._operations.set(event, (this._operations.get(event) ?? 0) + 1);
+        event.fire(true);
+        try {
+            return await withCancellation(operation(tokenSource.token), tokenSource.token);
+        } finally {
+            this._operationTokens.delete(tokenSource);
+            subscription?.dispose();
+            tokenSource.dispose();
+            if (generation === this._runtimeGeneration) {
+                const remaining = (this._operations.get(event) ?? 1) - 1;
+                if (remaining > 0) {
+                    this._operations.set(event, remaining);
+                } else {
+                    this._operations.delete(event);
+                }
+                event.fire(remaining > 0);
+            }
+        }
+    }
+
+    private async _refreshPackagesInternal(token?: vscode.CancellationToken, forceMetadata = false): Promise<void> {
+        const generation = ++this._refreshGeneration;
+        this._metadataTokenSource?.cancel();
+        const packages = await this._packageManager.getPackages(token);
+        throwIfCancellationRequested(token);
+        if (generation !== this._refreshGeneration) {
+            return;
+        }
+        this._packages = packages;
         this._onDidRefreshPackagesInstance.fire(this.packages);
 
         if (this._packageManager.getPackageMetadata && this._packages.length > 0) {
-            const fetchAll = !this._persistedMetadataCache.isFresh(this._runtimeId);
+            const fetchAll = forceMetadata || !this._persistedMetadataCache.isFresh(this._runtimeId);
             void this._fetchAndMergeMetadata(undefined, fetchAll).catch(error => {
                 if (!isCancellationError(error)) {
                     this._outputChannel.warn(`[Packages] Failed to fetch package metadata: ${error}`);
@@ -255,12 +306,20 @@ export class PositronPackagesInstance implements IPositronPackagesInstance, vsco
         if (externalToken?.isCancellationRequested) {
             tokenSource.cancel();
         }
-        const uncachedPackages = fetchAll
-            ? this._packages
-            : this._packages.filter(pkg => {
-                const metadata = this._metadataCache.get(pkg.name.toLowerCase());
-                return metadata?.version !== pkg.version;
-            });
+        // R resolves the first copy in library-path order. Anchor metadata to
+        // that version before awaiting the repository, never to a later list.
+        const visiblePackages = new Map<string, LanguageRuntimePackage>();
+        for (const pkg of this._packages) {
+            const key = pkg.name.toLowerCase();
+            if (!visiblePackages.has(key)) {
+                visiblePackages.set(key, pkg);
+            }
+        }
+        const uncachedPackages = [...visiblePackages.values()].filter(pkg => {
+            const metadata = this._metadataCache.get(pkg.name.toLowerCase());
+            return fetchAll || metadata === undefined || metadata.version !== pkg.version || metadata.outdated === undefined;
+        });
+        const versionByName = new Map(uncachedPackages.map(pkg => [pkg.name.toLowerCase(), pkg.version]));
 
         if (uncachedPackages.length === 0) {
             this._onDidRefreshPackagesInstance.fire(this.packages);
@@ -282,9 +341,6 @@ export class PositronPackagesInstance implements IPositronPackagesInstance, vsco
                 return;
             }
 
-            const versionByName = new Map(
-                this._packages.map(pkg => [pkg.name.toLowerCase(), pkg.version]),
-            );
             for (const [name, packageMetadata] of metadata) {
                 const key = name.toLowerCase();
                 const version = versionByName.get(key);
@@ -301,6 +357,7 @@ export class PositronPackagesInstance implements IPositronPackagesInstance, vsco
             this._persistedMetadataCache.upsert(
                 this._runtimeId,
                 this._snapshotForPersist(),
+                fetchAll ? Date.now() : this._persistedMetadataCache.get(this._runtimeId)?.lastFetched ?? Date.now(),
             );
             this._onDidRefreshPackagesInstance.fire(this.packages);
         } finally {

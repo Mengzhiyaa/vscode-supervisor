@@ -348,7 +348,10 @@
         min-height: 30px;
         max-height: 30px;
         padding: 0 4px;
-        background: var(--vscode-editor-background);
+        background: var(
+            --vscode-positronPlots-background,
+            var(--vscode-panel-background, var(--vscode-editor-background))
+        );
         overflow: hidden;
     }
 

@@ -4,7 +4,7 @@ import { createMessageConnection, MessageConnection } from 'vscode-jsonrpc';
 import { BaseWebviewProvider } from './baseProvider';
 import * as PlotsProtocol from '../rpc/webview/plots';
 import * as SessionProtocol from '../rpc/webview/session';
-import { CoreCommandIds, ViewIds, WorkbenchViewContainerCommands } from '../coreCommandIds';
+import { CoreCommandIds, ViewIds } from '../coreCommandIds';
 import { RuntimeSession } from '../runtime/session';
 import { RuntimeSessionService } from '../runtime/runtimeSession';
 import { PlotClientInstance, RenderedPlot, ZoomLevel } from '../runtime/PlotClientInstance';
@@ -915,7 +915,19 @@ export class PlotsViewProvider extends BaseWebviewProvider {
     }
 
     private _wirePlotClientEvents(plotClient: PlotClientInstance, sessionId: string): void {
+        const showPlot = (): void => {
+            if (this._plotClients.get(plotClient.id) !== plotClient) {
+                return;
+            }
+            this._plotsService.selectPlot(plotClient.id);
+            void this._revealPlotsIfHidden(true);
+        };
+
         this._disposables.push(
+            // Mirror Positron: runtime updates and explicit show requests also
+            // raise the view when the plot already exists in the history.
+            plotClient.onDidRenderUpdate(showPlot),
+            plotClient.onDidShowPlot(showPlot),
             plotClient.onDidRenderPlot((rendered: RenderedPlot) => {
                 this._applyRenderedPlot(plotClient.id, rendered);
             }),
@@ -2001,36 +2013,20 @@ export class PlotsViewProvider extends BaseWebviewProvider {
     }
 
     private async _revealPlotsIfHidden(preserveFocus: boolean): Promise<void> {
-        const view = this.view;
-        if (view) {
-            if (!view.visible) {
-                view.show(preserveFocus);
-            }
-            return;
-        }
-
-        const editorToRestore = preserveFocus ? vscode.window.activeTextEditor : undefined;
-        const restoreFocus = async (): Promise<void> => {
-            if (!editorToRestore) {
+        try {
+            const view = this.view;
+            if (view) {
+                if (!view.visible || !preserveFocus) {
+                    view.show(preserveFocus);
+                }
                 return;
             }
-            await vscode.window.showTextDocument(editorToRestore.document, {
-                viewColumn: editorToRestore.viewColumn,
-                preserveFocus: false
-            });
-        };
 
-        try {
-            await vscode.commands.executeCommand('workbench.views.action.showView', ViewIds.plots);
+            // VS Code registers a focus command for each contributed view. It
+            // opens the view's container and resolves the webview on first use.
+            await vscode.commands.executeCommand(`${ViewIds.plots}.focus`, { preserveFocus });
         } catch (err) {
             this.log(`Failed to reveal plots view: ${err}`, vscode.LogLevel.Warning);
-            try {
-                await vscode.commands.executeCommand(WorkbenchViewContainerCommands.session);
-            } catch (fallbackErr) {
-                this.log(`Failed to reveal plots container: ${fallbackErr}`, vscode.LogLevel.Warning);
-            }
-        } finally {
-            await restoreFocus();
         }
     }
 }
