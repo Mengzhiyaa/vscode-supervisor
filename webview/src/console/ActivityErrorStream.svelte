@@ -14,11 +14,14 @@
 
     let { activityItemStream }: Props = $props();
     let outputLinesStore = $derived(activityItemStream.outputLinesStore);
+    let outputLines = $derived($outputLinesStore);
 </script>
 
-<div class="activity-error-stream">
-    <ConsoleOutputLines outputLines={$outputLinesStore} />
-</div>
+{#if outputLines.some((line) => line.outputRuns.length > 0)}
+    <div class="activity-error-stream">
+        <ConsoleOutputLines {outputLines} />
+    </div>
+{/if}
 
 <style>
     .activity-error-stream {

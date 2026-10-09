@@ -48,6 +48,22 @@
         charWidth = 0,
     }: Props = $props();
 
+    let showExitingBanner = $state(false);
+    $effect(() => {
+        const state = consoleInstance.state;
+        showExitingBanner = false;
+        if (state !== "exiting") {
+            return;
+        }
+
+        const timer = setTimeout(() => {
+            if (consoleInstance.state === "exiting") {
+                showExitingBanner = true;
+            }
+        }, 500);
+        return () => clearTimeout(timer);
+    });
+
     const visibleRuntimeItems = $derived(
         consoleInstance.runtimeItems.filter((runtimeItem) => !runtimeItem.isHidden),
     );
@@ -80,6 +96,15 @@
 
 <div class="console-instance-items">
     <div class="top-spacer"></div>
+
+    {#if showExitingBanner}
+        <div class="console-item-starting exiting-banner">
+            <div class="left-bar"></div>
+            <div class="exiting-message">
+                {localize("console.sessionExiting", "{0} exiting...", consoleInstance.sessionName)}
+            </div>
+        </div>
+    {/if}
 
     {#each visibleRuntimeItems as runtimeItem (runtimeItem.id)}
         {#if runtimeItem instanceof RuntimeItemActivity}
@@ -221,6 +246,20 @@
 
     .disconnected-banner {
         margin-top: 2px;
+    }
+
+    .exiting-banner {
+        margin: 2px 0;
+    }
+
+    .exiting-message {
+        color: var(--vscode-descriptionForeground);
+    }
+
+    .left-bar {
+        width: 3px;
+        align-self: stretch;
+        background: var(--vscode-progressBar-background);
     }
 
 </style>

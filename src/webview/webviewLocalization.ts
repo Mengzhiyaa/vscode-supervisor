@@ -42,6 +42,7 @@ export function createWebviewLocalizationMessages(): WebviewLocalizationMessages
         'console.sessionStarted': vscode.l10n.t('{0} started.'),
         'console.sessionRestarted': vscode.l10n.t('{0} restarted.'),
         'console.extensionsRestarting': vscode.l10n.t('Extensions restarting...'),
+        'console.sessionExiting': vscode.l10n.t('{0} exiting...'),
         'console.runtimeItemUnknown': vscode.l10n.t('Unknown runtime item type'),
         'console.activityItemUnknown': vscode.l10n.t('Unknown activity item'),
         'console.runtimeFailedToStart': vscode.l10n.t('Runtime failed to start.'),

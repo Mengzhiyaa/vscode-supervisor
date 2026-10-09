@@ -308,11 +308,12 @@ export class KCApi implements PositronSupervisorApi {
 			this._context.subscriptions.push(configListener);
 		}
 
-		// Listen for changes to the resource usage poll interval
+		// Listen for changes to the resource monitor settings
 		this._context.subscriptions.push(vscode.workspace.onDidChangeConfiguration((event) => {
-			if (event.affectsConfiguration('kernelSupervisor.resourceUsagePollInterval')) {
+			if (event.affectsConfiguration('kernelSupervisor.resourceUsagePollInterval') ||
+				event.affectsConfiguration('kernelSupervisor.resourceUsageIncludeChildren')) {
 				if (this._started.isOpen()) {
-					this.updateResourceUsagePollInterval();
+					this.updateResourceMonitorConfig();
 				}
 			}
 		}));
@@ -545,8 +546,9 @@ export class KCApi implements PositronSupervisorApi {
 		// Get the log level from the configuration
 		const logLevel = config.get<string>('logLevel') ?? 'warn';
 
-		// Get the resource poll interval from the configuration
+		// Get the resource monitor settings from the configuration
 		const resourcePollInterval = config.get<number>('resourceUsagePollInterval', 1000);
+		const resourceIncludeChildren = config.get<boolean>('resourceUsageIncludeChildren', true);
 
 		// Add the path to Kallichore itself
 		shellArgs.push(shellPath);
@@ -556,6 +558,9 @@ export class KCApi implements PositronSupervisorApi {
 			'--handshake-socket', handshake.socketPath,
 			'--resource-sample-interval', resourcePollInterval.toString()
 		]);
+		if (!resourceIncludeChildren) {
+			shellArgs.push('--resource-include-children', 'false');
+		}
 
 		// Add transport option
 		if (this._transport === KallichoreTransport.TCP) {
@@ -1054,7 +1059,7 @@ export class KCApi implements PositronSupervisorApi {
 		}
 
 		// Update the resource usage poll interval from settings
-		this.updateResourceUsagePollInterval();
+		this.updateResourceMonitorConfig();
 
 		// Mark this a restored server
 		this._newSupervisor = false;
@@ -1096,18 +1101,21 @@ export class KCApi implements PositronSupervisorApi {
 	}
 
 	/**
-	 * Update the resource usage poll interval on the server. This is used to
-	 * set the poll interval on a server that has already started.
+	 * Update resource monitor settings on an already running server.
 	 */
-	async updateResourceUsagePollInterval() {
+	async updateResourceMonitorConfig() {
 		const config = vscode.workspace.getConfiguration('kernelSupervisor');
 		const resourcePollInterval = config.get<number>('resourceUsagePollInterval', 1000);
+		const resourceIncludeChildren = config.get<boolean>('resourceUsageIncludeChildren', true);
 		try {
 			await this._api.api.setServerConfiguration({
-				resource_sample_interval_ms: resourcePollInterval
+				resource_sample_interval_ms: resourcePollInterval,
+				resource_include_children: resourceIncludeChildren,
 			});
 		} catch (err) {
-			this.log(`Failed to update resource usage poll interval to ${resourcePollInterval}: ${summarizeError(err)}`, vscode.LogLevel.Warning);
+			this.log(`Failed to update resource monitor settings ` +
+				`(interval ${resourcePollInterval}, children ${resourceIncludeChildren}): ${summarizeError(err)}`,
+				vscode.LogLevel.Warning);
 		}
 	}
 

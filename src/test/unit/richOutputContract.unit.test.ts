@@ -12,6 +12,7 @@ import { JupyterChannel } from '../../supervisor/jupyter/JupyterChannel';
 import { JupyterMessageType } from '../../supervisor/jupyter/JupyterMessageType';
 import {
     environment,
+    EnvironmentContributionFilter,
     getPositronCompatibilityCapabilities,
     methods,
     registerEnvironmentContributions,
@@ -123,6 +124,29 @@ suite('[Unit] P0 rich output and compatibility contracts', () => {
             value: '/example/bin:',
         }]);
 
+        registration.dispose();
+    });
+
+    test('filters process-creation environment contributions for kernels', async () => {
+        const registration = registerEnvironmentContributions('example.language', [
+            {
+                action: vscode.EnvironmentVariableMutatorType.Prepend,
+                name: 'PATH',
+                value: '/process/bin:',
+                applyAtProcessCreation: true,
+            },
+            {
+                action: vscode.EnvironmentVariableMutatorType.Prepend,
+                name: 'PATH',
+                value: '/shell/bin:',
+                applyAtProcessCreation: false,
+            },
+        ]);
+
+        const contributions = await environment.getEnvironmentContributions(
+            EnvironmentContributionFilter.ProcessCreation,
+        );
+        assert.deepStrictEqual(contributions['example.language']?.map(action => action.value), ['/process/bin:']);
         registration.dispose();
     });
 

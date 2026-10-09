@@ -30,10 +30,10 @@
         "registerClientInstance": "export function registerClientInstance(clientInstanceId: string): vscode.Disposable;"
       },
       "methods": {
-        "call": "export function call(method: string, params: Record<string, any>): Thenable<any>;"
+        "call": "export function call(method: string, params: Record<string, any>, options?: { sessionId?: string; }): Thenable<any>;"
       },
       "environment": {
-        "getEnvironmentContributions": "export function getEnvironmentContributions(): Thenable<Record<string, EnvironmentVariableAction[]>>;"
+        "getEnvironmentContributions": "export function getEnvironmentContributions(filter?: EnvironmentContributionFilter): Thenable<Record<string, EnvironmentVariableAction[]>>;"
       }
     }
   },

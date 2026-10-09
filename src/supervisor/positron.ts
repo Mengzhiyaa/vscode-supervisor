@@ -11,6 +11,8 @@ import { registerRuntimeClientInstance } from '../runtime/runtimeClientRegistry'
 import {
     RuntimeMethodErrorCode,
     type LanguageRuntimeSession,
+    RuntimeCodeExecutionMode,
+    RuntimeErrorBehavior,
 } from '../internal/runtimeTypes';
 
 export * from '../api';
@@ -19,6 +21,10 @@ export * from '../internal/runtimeTypes';
 let foregroundSessionProvider:
     (() => LanguageRuntimeSession | undefined | Promise<LanguageRuntimeSession | undefined>)
     | undefined;
+let sessionProvider:
+    ((sessionId: string) => LanguageRuntimeSession | undefined | Promise<LanguageRuntimeSession | undefined>)
+    | undefined;
+let clearConsoleProvider: ((sessionId?: string) => boolean | Promise<boolean>) | undefined;
 
 let compatibilityContext: vscode.ExtensionContext | undefined;
 let consoleWidthSourceDisposable: vscode.Disposable | undefined;
@@ -70,6 +76,28 @@ export function setForegroundSessionProvider(
     return new vscode.Disposable(() => {
         if (foregroundSessionProvider === provider) {
             foregroundSessionProvider = undefined;
+        }
+    });
+}
+
+export function setRuntimeSessionProvider(
+    provider: typeof sessionProvider,
+): vscode.Disposable {
+    sessionProvider = provider;
+    return new vscode.Disposable(() => {
+        if (sessionProvider === provider) {
+            sessionProvider = undefined;
+        }
+    });
+}
+
+export function setClearConsoleProvider(
+    provider: typeof clearConsoleProvider,
+): vscode.Disposable {
+    clearConsoleProvider = provider;
+    return new vscode.Disposable(() => {
+        if (clearConsoleProvider === provider) {
+            clearConsoleProvider = undefined;
         }
     });
 }
@@ -446,14 +474,254 @@ function readStringParam(
     return value;
 }
 
+function readParams(methodName: string, params: unknown): Record<string, unknown> {
+    if (!params || typeof params !== 'object') {
+        throw new PositronCompatibilityError(
+            `Missing params for '${methodName}'`,
+            RuntimeMethodErrorCode.InvalidParams,
+        );
+    }
+    return params as Record<string, unknown>;
+}
+
+function optionalString(params: Record<string, unknown>, key: string): string | undefined {
+    const value = params[key];
+    return value === undefined || value === null ? undefined :
+        typeof value === 'string' ? value : undefined;
+}
+
+async function getSessionForCall(options?: PositronMethodsCallOptions): Promise<LanguageRuntimeSession | undefined> {
+    if (options?.sessionId && sessionProvider) {
+        return sessionProvider(options.sessionId);
+    }
+    return foregroundSessionProvider?.();
+}
+
 // ============================================================================
 // Runtime Methods
 // ============================================================================
 
+export interface PositronMethodsCallOptions {
+    readonly sessionId?: string;
+}
+
 export const methods = {
-    async call(methodName: string, params?: unknown): Promise<PositronRpcReply> {
+    async call(
+        methodName: string,
+        params?: unknown,
+        options?: PositronMethodsCallOptions,
+    ): Promise<PositronRpcReply> {
         try {
             switch (methodName) {
+                case 'clear_console':
+                    await clearConsoleProvider?.(options?.sessionId);
+                    return resultReply(null);
+
+                case 'prompt_state':
+                    // Prompt rendering is owned by the Console model. The
+                    // reverse UI call is accepted here so kernels can update
+                    // their prompt without receiving MethodNotFound.
+                    return resultReply(null);
+
+                case 'clear_webview_preloads':
+                    return resultReply(null);
+
+                case 'show_message': {
+                    const message = readStringParam(methodName, params, 'message');
+                    await vscode.window.showInformationMessage(message);
+                    return resultReply(null);
+                }
+
+                case 'show_question': {
+                    const values = readParams(methodName, params);
+                    const title = optionalString(values, 'title');
+                    const message = readStringParam(methodName, values, 'message');
+                    const ok = optionalString(values, 'ok_button_title') ?? vscode.l10n.t('OK');
+                    const cancel = optionalString(values, 'cancel_button_title') ?? vscode.l10n.t('Cancel');
+                    const selected = await vscode.window.showWarningMessage(
+                        title ? `${title}: ${message}` : message,
+                        { modal: true }, ok, cancel,
+                    );
+                    return resultReply(selected === ok);
+                }
+
+                case 'show_dialog': {
+                    const values = readParams(methodName, params);
+                    await vscode.window.showInformationMessage(
+                        optionalString(values, 'title') ?? '',
+                        { modal: true, detail: optionalString(values, 'message') ?? '' },
+                    );
+                    return resultReply(null);
+                }
+
+                case 'show_prompt':
+                case 'ask_for_password': {
+                    const values = readParams(methodName, params);
+                    const prompt = optionalString(values, methodName === 'show_prompt' ? 'message' : 'prompt') ?? '';
+                    const value = await vscode.window.showInputBox({
+                        title: optionalString(values, 'title'),
+                        prompt,
+                        value: optionalString(values, 'default'),
+                        password: methodName === 'ask_for_password',
+                    });
+                    return resultReply(value ?? null);
+                }
+
+                case 'debug_sleep': {
+                    const values = readParams(methodName, params);
+                    const ms = typeof values.ms === 'number' && values.ms >= 0 ? values.ms : 0;
+                    await new Promise(resolve => setTimeout(resolve, ms));
+                    return resultReply(null);
+                }
+
+                case 'workspace_folder':
+                    return resultReply(vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? null);
+
+                case 'open_with_system': {
+                    const file = readStringParam(methodName, params, 'path');
+                    return resultReply(await vscode.env.openExternal(vscode.Uri.file(file)));
+                }
+
+                case 'show_url': {
+                    const url = readStringParam(methodName, params, 'url');
+                    return resultReply(await vscode.env.openExternal(vscode.Uri.parse(url)));
+                }
+
+                case 'show_html_file': {
+                    const file = readStringParam(methodName, params, 'path');
+                    await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(file));
+                    return resultReply(null);
+                }
+
+                case 'open_workspace': {
+                    const values = readParams(methodName, params);
+                    const folder = readStringParam(methodName, values, 'path');
+                    await vscode.commands.executeCommand(
+                        'vscode.openFolder', vscode.Uri.file(folder), values.new_window === true,
+                    );
+                    return resultReply(null);
+                }
+
+                case 'new_document': {
+                    const values = readParams(methodName, params);
+                    const document = await vscode.workspace.openTextDocument({
+                        content: optionalString(values, 'contents') ?? '',
+                        language: optionalString(values, 'language_id'),
+                    });
+                    await vscode.window.showTextDocument(document);
+                    return resultReply(null);
+                }
+
+                case 'open_editor': {
+                    const values = readParams(methodName, params);
+                    const file = readStringParam(methodName, values, 'file');
+                    const document = await vscode.workspace.openTextDocument(vscode.Uri.file(file));
+                    const editor = await vscode.window.showTextDocument(document, { preview: values.pinned !== true });
+                    const line = typeof values.line === 'number' ? Math.max(0, values.line - 1) : 0;
+                    const column = typeof values.column === 'number' ? Math.max(0, values.column - 1) : 0;
+                    const position = new vscode.Position(line, column);
+                    editor.selection = new vscode.Selection(position, position);
+                    editor.revealRange(new vscode.Range(position, position));
+                    return resultReply(null);
+                }
+
+                case 'last_active_editor_context': {
+                    const editor = vscode.window.activeTextEditor;
+                    if (!editor) {
+                        return resultReply(null);
+                    }
+                    const selection = editor.selection;
+                    const toPosition = (position: vscode.Position) => ({
+                        line: position.line,
+                        character: position.character,
+                    });
+                    return resultReply({
+                        document: {
+                            path: editor.document.uri.toString(),
+                            eol: editor.document.eol === vscode.EndOfLine.CRLF ? '\r\n' : '\n',
+                            is_closed: false,
+                            is_dirty: editor.document.isDirty,
+                            is_untitled: editor.document.isUntitled,
+                            language_id: editor.document.languageId,
+                            line_count: editor.document.lineCount,
+                            version: editor.document.version,
+                        },
+                        contents: editor.document.getText().split(/\r?\n/),
+                        selection: {
+                            active: toPosition(selection.active),
+                            start: toPosition(selection.start),
+                            end: toPosition(selection.end),
+                            text: editor.document.getText(selection),
+                        },
+                        selections: editor.selections.map(current => ({
+                            active: toPosition(current.active),
+                            start: toPosition(current.start),
+                            end: toPosition(current.end),
+                            text: editor.document.getText(current),
+                        })),
+                    });
+                }
+
+                case 'set_editor_selections': {
+                    const editor = vscode.window.activeTextEditor;
+                    const values = readParams(methodName, params);
+                    if (editor && Array.isArray(values.selections)) {
+                        editor.selections = values.selections.map((entry: any) => {
+                            const start = new vscode.Position(entry.start.line, entry.start.character);
+                            const end = new vscode.Position(entry.end.line, entry.end.character);
+                            return new vscode.Selection(start, end);
+                        });
+                    }
+                    return resultReply(null);
+                }
+
+                case 'modify_editor_selections': {
+                    const editor = vscode.window.activeTextEditor;
+                    const values = readParams(methodName, params);
+                    if (editor && Array.isArray(values.selections) && Array.isArray(values.values)) {
+                        const ranges = values.selections as any[];
+                        const replacements = values.values as unknown[];
+                        await editor.edit(editBuilder => {
+                            ranges.forEach((entry, index) => {
+                                if (typeof replacements[index] !== 'string') {
+                                    return;
+                                }
+                                const range = new vscode.Range(
+                                    new vscode.Position(entry.start.line, entry.start.character),
+                                    new vscode.Position(entry.end.line, entry.end.character),
+                                );
+                                editBuilder.replace(range, replacements[index] as string);
+                            });
+                        });
+                    }
+                    return resultReply(null);
+                }
+
+                case 'working_directory': {
+                    const session = await getSessionForCall(options);
+                    const directory = readStringParam(methodName, params, 'directory');
+                    if (session?.setWorkingDirectory) {
+                        await session.setWorkingDirectory(directory);
+                    }
+                    return resultReply(null);
+                }
+
+                case 'execute_code': {
+                    const values = readParams(methodName, params);
+                    const code = readStringParam(methodName, values, 'code');
+                    const session = await getSessionForCall(options);
+                    if (!session) {
+                        throw new PositronCompatibilityError('No active runtime session', RuntimeMethodErrorCode.InternalError);
+                    }
+                    session.execute(
+                        code,
+                        `ui-comm-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+                        RuntimeCodeExecutionMode.Interactive,
+                        RuntimeErrorBehavior.Continue,
+                    );
+                    return resultReply(null);
+                }
+
                 case 'evaluate_when_clause': {
                     const whenClause = readStringParam(methodName, params, 'when_clause');
                     return resultReply(evaluateWhenClause(whenClause));
@@ -572,6 +840,12 @@ export interface EnvironmentVariableAction {
     action: vscode.EnvironmentVariableMutatorType;
     name: string;
     value: string;
+    /** Whether this contribution is inherited by newly spawned processes. */
+    applyAtProcessCreation?: boolean;
+}
+
+export enum EnvironmentContributionFilter {
+    ProcessCreation = 'processCreation',
 }
 
 /**
@@ -594,10 +868,15 @@ export function registerEnvironmentContributions(
 }
 
 export const environment = {
-    async getEnvironmentContributions(): Promise<Record<string, EnvironmentVariableAction[]>> {
+    async getEnvironmentContributions(
+        filter?: EnvironmentContributionFilter,
+    ): Promise<Record<string, EnvironmentVariableAction[]>> {
         const result: Record<string, EnvironmentVariableAction[]> = Object.create(null);
         for (const [extensionId, actions] of registeredEnvironmentContributions) {
-            result[extensionId] = actions.map(action => ({ ...action }));
+            result[extensionId] = actions
+                .filter(action => filter !== EnvironmentContributionFilter.ProcessCreation ||
+                    action.applyAtProcessCreation !== false)
+                .map(action => ({ ...action }));
         }
 
         const context = compatibilityContext;

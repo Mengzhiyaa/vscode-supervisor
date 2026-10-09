@@ -112,7 +112,8 @@
             width,
             hidden:
                 activeConsoleInstance.promptActive ||
-                !activeConsoleInstance.runtimeAttached,
+                !activeConsoleInstance.runtimeAttached ||
+                activeConsoleInstance.state === "exiting",
             active: true,
             scrollLocked: activeConsoleInstance.scrollLocked,
             sessionId: activeConsoleInstance.sessionId,
@@ -149,7 +150,8 @@
         mountedProps.width = width;
         mountedProps.hidden =
             activeConsoleInstance.promptActive ||
-            !activeConsoleInstance.runtimeAttached;
+            !activeConsoleInstance.runtimeAttached ||
+            activeConsoleInstance.state === "exiting";
         mountedProps.active = true;
         mountedProps.scrollLocked = activeConsoleInstance.scrollLocked;
         mountedProps.sessionId = activeConsoleInstance.sessionId;

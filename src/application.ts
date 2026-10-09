@@ -77,6 +77,8 @@ import {
     registerEnvironmentContributions as registerCompatEnvironmentContributions,
     setConsoleWidthSource,
     setForegroundSessionProvider,
+    setRuntimeSessionProvider,
+    setClearConsoleProvider,
 } from './supervisor/positron';
 import { ensureBinaries } from './binaryManager';
 import {
@@ -233,6 +235,12 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
                     LanguageRuntimeSession | undefined
             )
         );
+        this._disposables.push(
+            setRuntimeSessionProvider((sessionId) =>
+                this._sessionManager.getSession(sessionId)?.kernelSession as unknown as
+                    LanguageRuntimeSession | undefined
+            )
+        );
 
         this._surfaceLifecycle = new SurfaceLifecycleService(
             _context.workspaceState,
@@ -283,6 +291,12 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
             this._consoleService.onDidChangeConsoleWidth,
             () => this._consoleService.getConsoleWidth(),
         ));
+        this._disposables.push(setClearConsoleProvider((sessionId) => {
+            const instance = sessionId
+                ? this._consoleService.getConsoleInstance(sessionId)
+                : this._consoleService.activePositronConsoleInstance;
+            return instance?.clearConsole() ?? false;
+        }));
 
         this._variablesService = new PositronVariablesService(this._sessionManager, this._outputChannel);
         this._disposables.push(this._variablesService);

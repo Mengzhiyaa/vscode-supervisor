@@ -292,25 +292,18 @@ export class RuntimeStartupService implements vscode.Disposable {
     }
 
     getPreferredRuntime(languageId: string): LanguageRuntimeMetadata | undefined {
-        const activeSession = this._sessionManager.activeSession;
-        if (activeSession && activeSession.runtimeMetadata.languageId === languageId) {
-            return activeSession.runtimeMetadata;
-        }
-
-        const affiliatedRuntimeMetadata = this.getAffiliatedRuntimeMetadata(languageId);
-        if (affiliatedRuntimeMetadata) {
-            const runtime = this._runtimeManager.getRuntime(affiliatedRuntimeMetadata.runtimeId);
-            if (runtime) {
-                return runtime;
+        const registered = (metadata: LanguageRuntimeMetadata | undefined): LanguageRuntimeMetadata | undefined => {
+            if (!metadata || metadata.languageId !== languageId) {
+                return undefined;
             }
-        }
+            return this._runtimeManager.getRuntime(metadata.runtimeId);
+        };
 
-        const mostRecentlyStartedRuntime = this._mostRecentlyStartedRuntimesByLanguageId.get(languageId);
-        if (mostRecentlyStartedRuntime) {
-            return mostRecentlyStartedRuntime;
-        }
-
-        return this._runtimeManager.runtimes.find((runtime) => runtime.languageId === languageId);
+        const activeSession = this._sessionManager.activeSession;
+        return registered(activeSession?.runtimeMetadata)
+            ?? registered(this.getAffiliatedRuntimeMetadata(languageId))
+            ?? registered(this._mostRecentlyStartedRuntimesByLanguageId.get(languageId))
+            ?? this._runtimeManager.runtimes.find((runtime) => runtime.languageId === languageId);
     }
 
     registerNewFolderInitTask(

@@ -267,6 +267,33 @@ function makeNewFolderService(
 }
 
 suite('[Unit] runtime startup', () => {
+    test('skips stale active and recently started runtimes when selecting a preference', () => {
+        const context = makeContext();
+        const logChannel = makeNoopLogChannel();
+        const localSessionManager = makeSessionManager();
+        const stale = makeRuntimeMetadata({ runtimeId: 'stale-runtime' });
+        const registered = makeRuntimeMetadata({ runtimeId: 'registered-runtime' });
+        localSessionManager.value.activeSession = makeLiveSession('stale-session', {
+            runtimeMetadata: stale,
+        });
+        const runtimeManager = {
+            ...makeRuntimeManager(),
+            getRuntime: (runtimeId: string) => runtimeId === registered.runtimeId ? registered : undefined,
+            runtimes: [registered],
+        } as any;
+        const startupService = new RuntimeStartupService(
+            context,
+            runtimeManager,
+            localSessionManager.value,
+            makeNewFolderService(context, logChannel),
+            logChannel,
+            createMemento(),
+        );
+
+        assert.deepStrictEqual(startupService.getPreferredRuntime('r'), registered);
+        startupService.dispose();
+    });
+
     test('defaults interpreter startup to manual', () => {
         const context = makeContext();
         const logChannel = makeNoopLogChannel();

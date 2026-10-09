@@ -14,6 +14,9 @@
 
     let { activityItemStream }: Props = $props();
     let outputLinesStore = $derived(activityItemStream.outputLinesStore);
+    let outputLines = $derived($outputLinesStore);
 </script>
 
-<ConsoleOutputLines outputLines={$outputLinesStore} />
+{#if outputLines.some((line) => line.outputRuns.length > 0)}
+    <ConsoleOutputLines {outputLines} />
+{/if}

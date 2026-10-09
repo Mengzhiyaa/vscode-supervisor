@@ -1058,6 +1058,11 @@
           "maximum": 60000,
           "description": "Resource usage polling interval in milliseconds. Set to 0 to disable."
         },
+        "kernelSupervisor.resourceUsageIncludeChildren": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether resource usage includes child processes of each kernel."
+        },
         "memoryUsage.enabled": {
           "type": "boolean",
           "default": true,

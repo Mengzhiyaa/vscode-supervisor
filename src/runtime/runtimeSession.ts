@@ -1144,18 +1144,25 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
             }
         }
 
+        let shutdownError: unknown;
         if (session.state !== RuntimeState.Uninitialized && session.state !== RuntimeState.Exited) {
             try {
                 await session.shutdown();
             } catch (error) {
                 this._outputChannel.warn(`[RuntimeSession] Shutdown failed for ${sessionId}: ${error}`);
-                // Keep the session retryable if its backend could not be stopped.
-                throw error;
+                // Always unregister the session after a failed shutdown. Keeping
+                // a dead session in the registry lets later LSP/session
+                // activation target an unusable runtime. The original error is
+                // rethrown after the service state is made coherent.
+                shutdownError = error;
             }
         }
 
         await this._removeSession(session);
         this._outputChannel.debug(`[RuntimeSession] Session ${sessionId} deleted`);
+        if (shutdownError !== undefined) {
+            throw shutdownError;
+        }
         return true;
     }
 

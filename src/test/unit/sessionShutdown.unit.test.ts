@@ -39,6 +39,7 @@ function createKernel(connected = true) {
         _comms: new Map(),
         _startingComms: new Map(),
         _lspClientRegistrations: new Map(),
+        _disposables: [],
         _exit: exit,
         onDidEndSession: exit.event,
         _messages: { emitJupyter: () => undefined },
@@ -137,7 +138,7 @@ suite('[Unit] session shutdown', () => {
         assert.strictEqual(completed, true);
     });
 
-    test('does not delete a session when backend shutdown fails', async () => {
+    test('unregisters a session even when backend shutdown fails', async () => {
         let removed = false;
         const session = {
             state: RuntimeState.Idle,
@@ -148,14 +149,17 @@ suite('[Unit] session shutdown', () => {
             _deletingSessionPromises: new Map(),
             _deleteSession: (RuntimeSessionService.prototype as any)._deleteSession,
             _outputChannel: { debug: () => undefined, warn: () => undefined },
-            _removeSession: async () => { removed = true; },
+            _removeSession: async () => {
+                removed = true;
+                manager._sessions.delete('session-1');
+            },
         };
         await assert.rejects(
             RuntimeSessionService.prototype.deleteSession.call(manager as any, 'session-1'),
             /Supervisor unavailable/,
         );
-        assert.strictEqual(removed, false);
-        assert.strictEqual(manager._sessions.has('session-1'), true);
+        assert.strictEqual(removed, true);
+        assert.strictEqual(manager._sessions.has('session-1'), false);
         assert.strictEqual(manager._deletingSessionPromises.size, 0);
     });
 
@@ -192,6 +196,14 @@ suite('[Unit] session shutdown', () => {
         await Promise.resolve();
         await Promise.resolve();
         assert.deepStrictEqual(sent, []);
+        assert.strictEqual(kernel._pendingRequests.size, 0);
+    });
+
+    test('rejects a pending request when the session is disposed', async () => {
+        const { kernel } = createKernel(false);
+        const pending = kernel.sendRequest(new ShutdownRequest(false), 1000);
+        kernel.dispose();
+        await assert.rejects(pending, /disposed/);
         assert.strictEqual(kernel._pendingRequests.size, 0);
     });
 });
