@@ -371,6 +371,7 @@ suite('[Unit] Supervisor package manifest', () => {
         );
 
         const setup = readRepoFile('webview/src/lib/monaco/setup.ts');
+        const features = readRepoFile('webview/src/lib/monaco/features.ts');
         const colorizer = readRepoFile(
             'webview/src/lib/monaco/activityInputColorizer.ts',
         );
@@ -382,7 +383,14 @@ suite('[Unit] Supervisor package manifest', () => {
         );
 
         assert.match(setup, /from "monaco-editor\/editor"/);
-        assert.match(setup, /"monaco-editor\/features\/register\.all"/);
+        assert.match(setup, /import "\.\/features"/);
+        for (const feature of ['codeEditor', 'clipboard', 'hover', 'suggest', 'inlineCompletions', 'parameterHints', 'snippet', 'tokenization']) {
+            assert.ok(features.includes(`"monaco-editor/features/${feature}/register"`));
+        }
+        for (const feature of ['diffEditor', 'diffEditorBreadcrumbs', 'folding', 'stickyScroll', 'gpu', 'codelens', 'colorPicker', 'inlayHints', 'inspectTokens', 'sectionHeaders']) {
+            assert.ok(!features.includes(`"monaco-editor/features/${feature}/register"`));
+        }
+        assert.doesNotMatch(features + setup + viteConfig, /monaco-editor\/features\/register\.all/);
         assert.match(
             setup,
             /"monaco-editor\/languages\/definitions\/r\/register"/,
@@ -397,7 +405,7 @@ suite('[Unit] Supervisor package manifest', () => {
         );
         assert.match(colorizer, /monaco\.editor\.colorize/);
 
-        for (const source of [setup, consoleStyles, viteConfig]) {
+        for (const source of [setup, features, consoleStyles, viteConfig]) {
             assert.doesNotMatch(
                 source,
                 /monaco-editor\/(?:min|esm)\//,

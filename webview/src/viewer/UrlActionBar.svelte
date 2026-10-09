@@ -4,7 +4,6 @@
   Mirrors: positron/urlActionBars.tsx — URL bar + back/forward/reload/clear/open actions/interrupt
 -->
 <script lang="ts">
-    import '../shared/actionBar.css';
     import './actionBars.css';
     import ActionBarButton from '../shared/ActionBarButton.svelte';
     import ViewerOpenMenuButton, { type ViewerOpenTarget } from './ViewerOpenMenuButton.svelte';

@@ -1,6 +1,4 @@
 /* Global styles for plot editor webview */
-@import '$lib/codicons/positron-codicons.css';
-@import '../shared/actionBar.css';
 
 * {
     box-sizing: border-box;

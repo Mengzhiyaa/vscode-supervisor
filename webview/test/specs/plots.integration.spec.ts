@@ -123,6 +123,13 @@ test('plots requests initial preferences and uses the preferred editor target fr
     await page.getByRole('button', { name: 'Open in...', exact: true }).click();
     const sideTarget = page.getByRole('menuitemcheckbox', { name: 'Open in editor tab to the Side', exact: true });
     await expect(sideTarget).toBeChecked();
+    const menuStyle = await page.getByRole('menu').evaluate(element => {
+        const style = getComputedStyle(element);
+        return { position: style.position, borderStyle: style.borderStyle, padding: style.padding };
+    });
+    expect(menuStyle.position).toBe('fixed');
+    expect(menuStyle.borderStyle).toBe('solid');
+    expect(menuStyle.padding).toBe('4px');
     await expect(page.getByRole('menuitemcheckbox', { name: 'Open in editor tab', exact: true })).not.toBeChecked();
 
     const openInEditor = backend.waitForNextRequest(PlotsMethods.openInEditor);

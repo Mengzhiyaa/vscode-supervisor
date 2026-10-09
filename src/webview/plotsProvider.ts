@@ -1967,6 +1967,7 @@ export class PlotsViewProvider extends BaseWebviewProvider {
 
     protected _getHtmlContent(webview: vscode.Webview): string {
         const scriptUri = this._getWebviewUri(webview, 'webview', 'dist', 'plots', 'index.js');
+        const commonStyleUri = this._getWebviewUri(webview, 'webview', 'dist', 'common', 'index.css');
         const styleUri = this._getWebviewUri(webview, 'webview', 'dist', 'plots', 'index.css');
         const nonce = this._getNonce();
 
@@ -1976,6 +1977,7 @@ export class PlotsViewProvider extends BaseWebviewProvider {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}'; font-src ${webview.cspSource} data:; img-src ${webview.cspSource} data:; frame-src http: https: ${webview.cspSource};">
+    <link href="${commonStyleUri}" rel="stylesheet">
     <link href="${styleUri}" rel="stylesheet">
     <title>Plots</title>
 </head>

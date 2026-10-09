@@ -17,6 +17,8 @@ export default defineConfig(({ mode }) => ({
         assetsInlineLimit: 4096, // Default Vite limit; fonts are emitted as shared external assets
         rollupOptions: {
             input: {
+                // Host HTML loads shared icons and toolbar/menu styles once.
+                common: resolve(__dirname, 'src/shared/common.css'),
                 console: resolve(__dirname, 'src/console/main.ts'),
                 variables: resolve(__dirname, 'src/variables/main.ts'),
                 plots: resolve(__dirname, 'src/plots/main.ts'),
@@ -27,6 +29,14 @@ export default defineConfig(({ mode }) => ({
                 dataExplorer: resolve(__dirname, 'src/dataExplorer/main.ts'),
             },
             output: {
+                // Keep Monaco CSS at setup/index.css, which Host HTML loads explicitly.
+                // Feature pruning must not split core styles into an unlinked editor CSS.
+                codeSplitting: {
+                    groups: [{
+                        name: 'setup',
+                        test: /(?:node_modules[\\/]monaco-editor[\\/]|src[\\/]lib[\\/]monaco[\\/]setup\.ts$)/,
+                    }],
+                },
                 entryFileNames: '[name]/index.js',
                 chunkFileNames: 'shared/[name]-[hash].js',
                 assetFileNames: (assetInfo) => {
@@ -52,7 +62,6 @@ export default defineConfig(({ mode }) => ({
     optimizeDeps: {
         include: [
             'monaco-editor/editor',
-            'monaco-editor/features/register.all',
             'monaco-editor/languages/definitions/r/register',
             'monaco-editor/languages/definitions/python/register',
             'vscode-textmate',

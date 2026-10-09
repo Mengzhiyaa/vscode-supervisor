@@ -4,7 +4,6 @@
   Standard toolbar button with icon, tooltip, disabled state.
 -->
 <script lang="ts">
-    import '../shared/actionBar.css';
 
     interface Props {
         icon?: string;

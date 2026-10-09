@@ -6,7 +6,6 @@
   and overflows excess actions into a context menu.
 -->
 <script lang="ts">
-    import '../shared/actionBar.css';
     import ContextMenu, {
         type ContextMenuEntry,
         type ContextMenuItem,

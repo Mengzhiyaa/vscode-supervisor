@@ -4,7 +4,6 @@
   Corresponds to Positron's ActionBarMenuButton.
 -->
 <script lang="ts">
-    import '../shared/actionBar.css';
     import ContextMenu, {
         type ContextMenuEntry,
     } from './ContextMenu.svelte';

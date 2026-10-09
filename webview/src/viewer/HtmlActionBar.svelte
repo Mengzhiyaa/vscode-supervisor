@@ -4,7 +4,6 @@
   Mirrors: positron/htmlActionBars.tsx — title + reload/open actions/clear
 -->
 <script lang="ts">
-    import '../shared/actionBar.css';
     import './actionBars.css';
     import ActionBarButton from '../shared/ActionBarButton.svelte';
     import ViewerOpenMenuButton, { type ViewerOpenTarget } from './ViewerOpenMenuButton.svelte';

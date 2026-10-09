@@ -851,6 +851,9 @@ export class PositronDataExplorerEditorProvider implements vscode.Disposable {
         // Get URIs for Svelte-built assets
         const webviewDistPath = vscode.Uri.joinPath(this._extensionUri, 'webview', 'dist', 'dataExplorer');
         const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(webviewDistPath, 'index.js'));
+        const commonStyleUri = webview.asWebviewUri(vscode.Uri.joinPath(
+            this._extensionUri, 'webview', 'dist', 'common', 'index.css',
+        ));
         const styleUri = webview.asWebviewUri(vscode.Uri.joinPath(webviewDistPath, 'index.css'));
         const monacoStyleUri = webview.asWebviewUri(vscode.Uri.joinPath(
             this._extensionUri,
@@ -877,6 +880,7 @@ export class PositronDataExplorerEditorProvider implements vscode.Disposable {
     <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src ${webview.cspSource} 'nonce-${nonce}' 'wasm-unsafe-eval'; font-src ${webview.cspSource} data:; img-src ${webview.cspSource} data:; connect-src ${webview.cspSource}; worker-src blob:;">
     <title>Data Explorer</title>
     <link rel="stylesheet" href="${monacoStyleUri}">
+    <link rel="stylesheet" href="${commonStyleUri}">
     <link rel="stylesheet" href="${styleUri}">
 </head>
 <body>

@@ -4,7 +4,6 @@
   Mirrors: positron/positronVariables/browser/components/actionBars.tsx
 -->
 <script lang="ts">
-    import "../shared/actionBar.css";
     import ActionBarButton from "../shared/ActionBarButton.svelte";
     import ActionBarFilter from "../shared/ActionBarFilter.svelte";
     import DynamicActionBar, {

@@ -3,6 +3,8 @@
   Overflow context menu for DynamicActionBar.
   Anchors to a reference element and renders overflow actions.
 -->
+<svelte:options css="injected" />
+
 <script module lang="ts">
     export interface ContextMenuItem {
         id?: string;
@@ -24,7 +26,6 @@
 <script lang="ts">
     import { onMount } from 'svelte';
     import ContextMenu from './ContextMenu.svelte';
-    import '../shared/actionBar.css';
 
     function isSeparator(entry: ContextMenuEntry): entry is ContextMenuSeparator {
         return 'separator' in entry && entry.separator === true;

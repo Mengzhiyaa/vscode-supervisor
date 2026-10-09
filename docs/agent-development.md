@@ -23,6 +23,13 @@ CI 使用 Node 22 和 `npm ci`；README 的 `npm install` 适合本地安装/有
 `.vscode/launch.json` 的 Extension Development Host 配置只引用 `npm: watch`。
 首次运行 UI 或修改资源后，仍需相应的 Webview build / DuckDB 资源准备。
 
+各 Webview 的 Host HTML 依次加载共享图标、Toolbar 与 ContextMenu 样式 `webview/dist/common/index.css` 和页面自己的 `<入口>/index.css`；Console 与 Data Explorer 先加载 `setup/index.css` 中的 Monaco 样式。
+公共样式入口是 `webview/src/shared/common.css`，图标字体通过 CSS 相对 URL 引用 `assets/` 中的共享文件。新增入口时同步 Host HTML、浏览器测试页和开发入口，不再把 `positron-codicons.css` 或 `actionBar.css` 导入页面或组件，以免重复打包。
+
+Monaco 功能清单位于 `webview/src/lib/monaco/features.ts`，通过公开的 `features/<feature>/register` 入口注册，避免引入 `register.all`。
+Monaco 0.56 的普通补全弹窗控制器依赖 `inlineCompletions` 入口，不能只保留 `suggest`；新增裁剪需验证实际补全、Snippet、Hover 和签名提示交互。
+构建配置将 Monaco 模块放在 `setup` 共享块，保持 Host 使用的 CSS 路径稳定；公共 API 和 Worker 仍可能保留 Diff 核心代码，不能通过单个 chunk 大小判断裁剪收益。
+
 ## 测试选择
 
 ### 扩展 Host

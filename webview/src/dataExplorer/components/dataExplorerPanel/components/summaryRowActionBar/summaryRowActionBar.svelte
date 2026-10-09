@@ -3,7 +3,6 @@
   Port from Positron's summaryRowActionBar.tsx
 -->
 <script lang="ts">
-    import "../../../../../shared/actionBar.css";
     import ActionBarFilter from "../../../../../shared/ActionBarFilter.svelte";
     import { getDataExplorerContext } from "../../../../positronDataExplorerContext";
     import SummaryRowSortDropdown from "./summaryRowSortDropdown.svelte";

@@ -1,5 +1,4 @@
 <script lang="ts">
-    import '../shared/actionBar.css';
     import ContextMenu, { type ContextMenuEntry } from '../shared/ContextMenu.svelte';
     import { localize } from '../lib/localization';
 

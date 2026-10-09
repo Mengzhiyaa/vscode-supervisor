@@ -1,6 +1,4 @@
 /* Global styles for console webview */
-@import '$lib/codicons/positron-codicons.css';
-@import '../shared/actionBar.css';
 
 :root {
     --console-ui-font-family: var(--vscode-font-family, sans-serif);

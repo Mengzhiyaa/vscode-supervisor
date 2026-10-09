@@ -4,7 +4,6 @@
   Mirrors: positron/basicActionBars.tsx — title + clear
 -->
 <script lang="ts">
-    import '../shared/actionBar.css';
     import './actionBars.css';
     import ActionBarButton from '../shared/ActionBarButton.svelte';
 

@@ -1,4 +1,5 @@
 import "./console-test.js";
+import "../src/shared/common.css";
 import "../src/console/main.ts";
 
 if (typeof window !== "undefined") {
