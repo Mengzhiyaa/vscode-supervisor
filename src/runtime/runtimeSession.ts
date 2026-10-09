@@ -607,22 +607,47 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
             return undefined;
         }
 
+        return this.startConsoleSessionFromInstallation(
+            provider.languageId,
+            installation,
+            sessionName,
+            'createSessionFromPicker',
+        );
+    }
+
+    /**
+     * Creates a console session from a provider installation selected by a UI.
+     * Runtime pickers should use this shared path so metadata registration,
+     * session startup, and activation stay consistent across entry points.
+     */
+    async startConsoleSessionFromInstallation<TInstallation>(
+        languageId: string,
+        installation: TInstallation,
+        sessionName?: string,
+        source = 'startConsoleSessionFromInstallation',
+    ): Promise<RuntimeSession | undefined> {
+        this._requireLocalSupervisor();
+
+        const provider = this._requireRuntimeProvider<TInstallation>(languageId);
         const runtimeMetadata = provider.createRuntimeMetadata(
             this._context,
             installation,
-            this._getProviderLogChannel(provider.languageId),
+            this._getProviderLogChannel(languageId),
         );
-        this.registerDiscoveredRuntime(provider.languageId, installation, runtimeMetadata);
+        this.registerDiscoveredRuntime(languageId, installation, runtimeMetadata);
+
+        const resolvedSessionName = sessionName || provider.formatRuntimeName(installation);
         const sessionId = await this.startNewRuntimeSession(
             runtimeMetadata.runtimeId,
-            sessionName || provider.formatRuntimeName(installation),
+            resolvedSessionName,
             LanguageRuntimeSessionMode.Console,
             undefined,
-            'createSessionFromPicker',
+            source,
             RuntimeStartMode.Starting,
             true,
         );
-        return sessionId ? this.getSession(sessionId) : undefined;
+        const session = sessionId ? this.getSession(sessionId) : undefined;
+        return session;
     }
 
     async startConsoleSession(sessionName?: string): Promise<RuntimeSession> {
@@ -647,24 +672,15 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
         source: string,
     ): Promise<RuntimeSession> {
         const installation = await this._resolveInstallationForNewSession(provider);
-        const runtimeMetadata = provider.createRuntimeMetadata(
-            this._context,
+        const resolvedSessionName = sessionName || provider.formatRuntimeName(installation);
+        const session = await this.startConsoleSessionFromInstallation(
+            provider.languageId,
             installation,
-            this._getProviderLogChannel(provider.languageId),
-        );
-        this.registerDiscoveredRuntime(provider.languageId, installation, runtimeMetadata);
-        const sessionId = await this.startNewRuntimeSession(
-            runtimeMetadata.runtimeId,
-            sessionName || provider.formatRuntimeName(installation),
-            LanguageRuntimeSessionMode.Console,
-            undefined,
+            resolvedSessionName,
             source,
-            RuntimeStartMode.Starting,
-            true,
         );
-        const session = sessionId ? this.getSession(sessionId) : undefined;
         if (!session) {
-            throw new Error(`Failed to start ${sessionName || runtimeMetadata.runtimeName}`);
+            throw new Error(`Failed to start ${resolvedSessionName}`);
         }
 
         return session;

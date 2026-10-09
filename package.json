@@ -600,8 +600,8 @@
     "submenus": [
       {
         "id": "supervisor.console.sessionMenu",
-        "label": "Start Session",
-        "icon": "$(add)"
+        "label": "Session Options",
+        "icon": "$(chevron-down)"
       }
     ],
     "menus": {
@@ -612,9 +612,14 @@
           "group": "navigation@1"
         },
         {
-          "submenu": "supervisor.console.sessionMenu",
+          "command": "supervisor.duplicateSession",
           "when": "view == supervisor.console && supervisor.consoleSessionsExist",
           "group": "navigation@1"
+        },
+        {
+          "submenu": "supervisor.console.sessionMenu",
+          "when": "view == supervisor.console",
+          "group": "navigation@2"
         },
         {
           "command": "supervisor.packages.refresh",
@@ -672,6 +677,7 @@
       "supervisor.console.sessionMenu": [
         {
           "command": "supervisor.duplicateSession",
+          "when": "supervisor.consoleSessionsExist",
           "group": "1_session@1"
         },
         {

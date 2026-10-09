@@ -20,8 +20,6 @@ import {
     type JupyterKernelSpec,
     type LanguageRuntimeDynState,
     type LanguageRuntimeMetadata,
-    LanguageRuntimeSessionMode,
-    RuntimeStartMode,
 } from './api';
 import { WebviewManager } from './webview/manager';
 import { PositronNewFolderService } from './newFolder/positronNewFolderService';
@@ -1092,26 +1090,14 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
         this._outputChannel.info(
             `[Ark] Creating new ${provider.languageName} session (${provider.getRuntimePath(installation)})...`
         );
-
-        const runtimeMetadata = provider.createRuntimeMetadata(
-            this._context,
+        const session = await this._sessionManager.startConsoleSessionFromInstallation(
+            languageId,
             installation,
-            this._outputChannel,
-        );
-        this._sessionManager.registerDiscoveredRuntime(languageId, installation, runtimeMetadata);
-
-        const sessionId = await this._sessionManager.startNewRuntimeSession(
-            runtimeMetadata.runtimeId,
-            sessionName || runtimeMetadata.runtimeName,
-            LanguageRuntimeSessionMode.Console,
-            undefined,
+            sessionName,
             'SupervisorApplication.startSessionForInstallation',
-            RuntimeStartMode.Starting,
-            true,
         );
-        const session = this._sessionManager.getSession(sessionId);
         if (!session) {
-            throw new Error(`Session ${sessionId} was not created`);
+            throw new Error(`Session for ${sessionName} was not created`);
         }
 
         this._updateConsoleSessionsExistContext();

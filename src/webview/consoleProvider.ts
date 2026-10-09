@@ -685,11 +685,10 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
                     return {};
                 }
 
-                // Webview-initiated sessions bypass SupervisorApplication's
-                // lifecycle wiring, so subscribe here to keep follow-up startup
-                // and session-info updates flowing.
+                // The application wires lifecycle subscriptions from the
+                // session-start event. This idempotent call also publishes a
+                // fresh session snapshot after the picker flow completes.
                 this.subscribeToSession(session);
-                this._sendSessionInfoUpdate();
                 const sessions = this._sessionSnapshotBuilder.buildSessionsWithConsoleOverlay();
                 return {
                     session: sessions.find(candidate => candidate.id === session.sessionId),
