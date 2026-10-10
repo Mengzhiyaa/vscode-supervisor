@@ -26,7 +26,7 @@ import { PositronNewFolderService } from './newFolder/positronNewFolderService';
 import { RuntimeManager } from './runtime/manager';
 import { RuntimeSession } from './runtime/session';
 import { resolveStatementRangeProvider } from './runtime/statementRange';
-import { RuntimeSessionService } from './runtime/runtimeSession';
+import { RuntimeSessionService, validateNotebookController } from './runtime/runtimeSession';
 import { RuntimeFrontendEventService } from './runtime/runtimeFrontendEventService';
 import { RuntimeStartupService } from './runtime/runtimeStartup';
 import {
@@ -488,7 +488,7 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
         this._disposables.push(this._surfaceLifecycle);
 
         this._updateGlobalContexts();
-        this._outputChannel.debug('[Ark] Application initialized');
+        this._outputChannel.debug('[Supervisor] Application initialized');
     }
 
     get languages(): ILanguageCapabilityRegistry {
@@ -647,6 +647,9 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
     private _installLanguageCapabilitySnapshot(
         snapshot: ILanguageCapabilitySnapshot,
     ): readonly vscode.Disposable[] {
+        for (const capability of snapshot.notebookControllers) {
+            validateNotebookController(capability.controller, capability.languageIds);
+        }
         const disposables: vscode.Disposable[] = [];
         try {
             if (snapshot.runtimeProvider) {
@@ -656,6 +659,8 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
                         snapshot.identity,
                         snapshot.logChannel,
                     ),
+                );
+                disposables.push(
                     this._sessionManager.registerRuntimeProvider(
                         snapshot.runtimeProvider,
                         snapshot.logChannel,
@@ -682,6 +687,9 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
             }
             if (snapshot.binaryProvider) {
                 queueMicrotask(() => {
+                    if (this.languages.getSnapshot(snapshot.identity.languageId)?.generation !== snapshot.generation) {
+                        return;
+                    }
                     void ensureBinaries(this._context, this._outputChannel, [snapshot.binaryProvider!])
                         .catch(error => this._outputChannel.error(
                             `[LanguageRegistry] Failed to ensure binaries for ` +
@@ -692,7 +700,11 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
             return disposables;
         } catch (error) {
             for (const disposable of disposables.reverse()) {
-                disposable.dispose();
+                try {
+                    disposable.dispose();
+                } catch (cleanupError) {
+                    this._outputChannel.warn(`[LanguageRegistry] Failed to roll back registration: ${cleanupError}`);
+                }
             }
             throw error;
         }
@@ -701,6 +713,9 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
     private async _reconcileLanguageDiscovery(
         snapshot: ILanguageCapabilitySnapshot,
     ): Promise<void> {
+        if (this.languages.getSnapshot(snapshot.identity.languageId)?.generation !== snapshot.generation) {
+            return;
+        }
         const operationKey = {
             ownerExtensionId: snapshot.identity.ownerExtensionId,
             languageId: snapshot.identity.languageId,
@@ -1087,8 +1102,8 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
         sessionName: string
     ): Promise<RuntimeSession> {
         const provider = this._requireRuntimeProvider(languageId);
-        this._outputChannel.info(
-            `[Ark] Creating new ${provider.languageName} session (${provider.getRuntimePath(installation)})...`
+        this._outputChannel.debug(
+            `[session] Creating new ${provider.languageName} session (${provider.getRuntimePath(installation)})...`
         );
         const session = await this._sessionManager.startConsoleSessionFromInstallation(
             languageId,
@@ -1101,7 +1116,7 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
         }
 
         this._updateConsoleSessionsExistContext();
-        this._outputChannel.info('[Ark] New session created successfully');
+        this._outputChannel.debug('[session]New session created successfully');
         return session;
     }
 
@@ -1119,7 +1134,7 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
                 provider.formatRuntimeName(selected.installation)
             );
         } catch (error) {
-            this._outputChannel.error(`[Ark] Failed to create session: ${error}`);
+            this._outputChannel.error(`[Supervisor] Failed to create session: ${error}`);
             vscode.window.showErrorMessage(`Failed to create session: ${error}`);
         }
     }
@@ -1157,7 +1172,7 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
                 this._requireRuntimeProvider(this._getPreferredLanguageId()).formatRuntimeName(selected.installation)
             );
         } catch (error) {
-            this._outputChannel.error(`[Ark] Failed to quick launch session: ${error}`);
+            this._outputChannel.error(`[Supervisor] Failed to quick launch session: ${error}`);
             vscode.window.showErrorMessage(`Failed to quick launch session: ${error}`);
         }
     }
@@ -1175,7 +1190,7 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
             inst => provider?.getRuntimePath(inst) === runtimePath
         ) ?? provider?.restoreInstallationFromMetadata?.(currentSession.runtimeMetadata);
         if (!installation) {
-            this._outputChannel.warn(`[Ark] Active runtime ${runtimePath} not found in cache; opening runtime picker`);
+            this._outputChannel.warn(`[Supervisor] Active runtime ${runtimePath} not found in cache; opening runtime picker`);
             await this._startNewSessionFromDiscoveredRuntimes();
             return;
         }
@@ -1187,7 +1202,7 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
                 currentSession.dynState.sessionName || currentSession.sessionMetadata.sessionName || currentSession.runtimeMetadata.runtimeName
             );
         } catch (error) {
-            this._outputChannel.error(`[Ark] Failed to duplicate session: ${error}`);
+            this._outputChannel.error(`[Supervisor] Failed to duplicate session: ${error}`);
             vscode.window.showErrorMessage(`Failed to duplicate session: ${error}`);
         }
     }
@@ -1196,7 +1211,7 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
      * Activates the application - called from extension.ts activate()
      */
     async activate(): Promise<void> {
-        this._outputChannel.info('[Ark] Activating extension...');
+        this._outputChannel.info('[Supervisor] Activating extension...');
 
         try {
             await migrateLegacyPlotsConfiguration(this._outputChannel);
@@ -1279,7 +1294,7 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
         this._updateConsoleSessionsExistContext();
 
         this._activated = true;
-        this._outputChannel.info('[Ark] Extension activated');
+        this._outputChannel.info('[Supervisor] Extension activated');
         this._startDeferredActivationTasks();
     }
 
@@ -1814,7 +1829,7 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
     }
 
     async shutdown(): Promise<void> {
-        this._outputChannel.debug('[Ark] Disposing extension...');
+        this._outputChannel.debug('[Supervisor] Disposing extension...');
 
         await this._consoleService.flushPersistedState();
         await this._runtimeStartupService.prepareForExtensionHostShutdown();

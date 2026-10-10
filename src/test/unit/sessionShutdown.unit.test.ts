@@ -138,7 +138,7 @@ suite('[Unit] session shutdown', () => {
         assert.strictEqual(completed, true);
     });
 
-    test('unregisters a session even when backend shutdown fails', async () => {
+    test('retains a session when backend shutdown fails without confirming exit', async () => {
         let removed = false;
         const session = {
             state: RuntimeState.Idle,
@@ -158,8 +158,8 @@ suite('[Unit] session shutdown', () => {
             RuntimeSessionService.prototype.deleteSession.call(manager as any, 'session-1'),
             /Supervisor unavailable/,
         );
-        assert.strictEqual(removed, true);
-        assert.strictEqual(manager._sessions.has('session-1'), false);
+        assert.strictEqual(removed, false);
+        assert.strictEqual(manager._sessions.get('session-1'), session);
         assert.strictEqual(manager._deletingSessionPromises.size, 0);
     });
 

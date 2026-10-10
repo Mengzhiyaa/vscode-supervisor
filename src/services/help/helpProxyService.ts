@@ -9,6 +9,7 @@ import * as http from 'http';
 import * as https from 'https';
 import * as net from 'net';
 import { URL } from 'url';
+import { resolveProxyRequestUrl } from '../preview/htmlProxyUtils';
 
 export interface HelpProxyInfo {
     serverOrigin: string;
@@ -108,7 +109,15 @@ export class HelpProxyService implements vscode.Disposable {
 
     private async _startProxyServer(targetOrigin: string, isCurrent: () => boolean): Promise<HelpProxyInfo> {
         const server = http.createServer((req, res) => {
-            void this._handleProxyRequest(targetOrigin, req, res);
+            void this._handleProxyRequest(targetOrigin, req, res).catch(error => {
+                this._outputChannel.debug(`[HelpProxyService] Failed to prepare proxy request: ${error}`);
+                if (!res.headersSent) {
+                    res.writeHead(502);
+                    res.end('Proxy error');
+                } else {
+                    res.destroy();
+                }
+            });
         });
 
         const address = await new Promise<net.AddressInfo>((resolve, reject) => {
@@ -206,7 +215,14 @@ export class HelpProxyService implements vscode.Disposable {
             }
         }
 
-        const targetUrl = new URL(requestUrl, targetOrigin);
+        let targetUrl: URL;
+        try {
+            targetUrl = resolveProxyRequestUrl(targetOrigin, requestUrl);
+        } catch {
+            res.writeHead(400);
+            res.end('Invalid proxy request URL');
+            return;
+        }
         const isHttps = targetUrl.protocol === 'https:';
         const transport = isHttps ? https : http;
 

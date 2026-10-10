@@ -16,6 +16,7 @@ import {
     isHtmlContentType,
     injectViewerBridge,
     normalizeProxyPath,
+    resolveProxyRequestUrl,
     rewriteProxyLocation,
     rewriteRootRelativeUrls,
     VIEWER_BRIDGE_PATH,
@@ -495,7 +496,14 @@ export class HtmlProxyService implements vscode.Disposable {
     ): Promise<void> {
         this._retainRequest(info, res);
         try {
-            const requestUrl = new URL(req.url || '/', info.targetOrigin);
+            let requestUrl: URL;
+            try {
+                requestUrl = resolveProxyRequestUrl(info.targetOrigin, req.url || '/');
+            } catch {
+                res.writeHead(400);
+                res.end('Invalid proxy request URL');
+                return;
+            }
             if (requestUrl.pathname.endsWith(VIEWER_BRIDGE_PATH)) {
                 this._writeViewerBridge(req, res);
                 return;
@@ -625,7 +633,14 @@ export class HtmlProxyService implements vscode.Disposable {
     ): Promise<void> {
         const lease = this.retainUri(info.externalBaseUri);
         socket.once('close', () => lease.dispose());
-        const targetUrl = buildWebSocketTargetUrl(info.targetOrigin, req.url || '/');
+        let targetUrl: string;
+        try {
+            targetUrl = buildWebSocketTargetUrl(info.targetOrigin, req.url || '/');
+        } catch {
+            lease.dispose();
+            socket.end('HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n');
+            return;
+        }
         const requestedProtocols = this._parseWebSocketProtocols(req.headers['sec-websocket-protocol']);
         const headers: Record<string, string> = {};
         for (const [key, value] of Object.entries(req.headers)) {

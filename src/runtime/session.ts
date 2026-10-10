@@ -204,6 +204,7 @@ export class RuntimeSession implements vscode.Disposable {
     private readonly _kernelSpec: JupyterKernelSpec | undefined;
     private readonly _kernelExtra: JupyterKernelExtra | undefined;
     private _disposed = false;
+    private _unconfirmedShutdown = false;
 
     /** Event clock of the last processed runtime event. */
     private _eventClock = 0;
@@ -233,6 +234,7 @@ export class RuntimeSession implements vscode.Disposable {
     private _lspRequestedActive = false;
     private _lspStartingPromise: Promise<number> = Promise.resolve(0);
     private _lspClientId?: string;
+    private readonly _lspClientsByKernel = new WeakMap<JupyterLanguageRuntimeSession, Set<string>>();
     private _lspTransportKind: 'serverComm' | undefined;
     public dynState: LanguageRuntimeDynState;
 
@@ -356,6 +358,11 @@ export class RuntimeSession implements vscode.Disposable {
      */
     get state(): RuntimeState {
         return this._state;
+    }
+
+    /** Retain recovery metadata until a requested shutdown has been confirmed. */
+    get hasUnconfirmedShutdown(): boolean {
+        return this._unconfirmedShutdown && this._state !== RuntimeState.Exited;
     }
 
     get created(): number {
@@ -1175,6 +1182,7 @@ export class RuntimeSession implements vscode.Disposable {
 
         await this._deactivateServices('restarting session');
         await this._kernel.restart(workingDirectory ?? this._workingDirectory);
+        this._unconfirmedShutdown = false;
 
         // Match startup behavior so UI can show "restarted" completion feedback.
         const info = this._kernel.runtimeInfo;
@@ -1216,13 +1224,17 @@ export class RuntimeSession implements vscode.Disposable {
         if (!this._kernel) {
             return;
         }
-        // Editor services are best-effort cleanup; their failure must never
-        // prevent the kernel from receiving the user's shutdown request.
-        await Promise.all([
+        // Send shutdown immediately. Editor cleanup runs alongside process
+        // termination, and its deadlines do not delay shutdown delivery.
+        this._unconfirmedShutdown = true;
+        const shutdown = this._kernel.shutdown(exitReason);
+        void Promise.all([
             this._cleanupService('stop LSP', () => this.deactivateLsp()),
             this._cleanupService('disconnect DAP', () => this.disconnectDap()),
         ]);
-        return this._kernel.shutdown(exitReason);
+        return shutdown.then(() => {
+            this._unconfirmedShutdown = false;
+        });
     }
 
     /**
@@ -1241,15 +1253,10 @@ export class RuntimeSession implements vscode.Disposable {
      * the runtime to exit, so a later reload can reconnect to it.
      */
     async detachForExtensionHostShutdown(): Promise<void> {
-        try {
-            await this._deactivateServices('disconnecting extension host');
-        } catch (error) {
-            this.log(
-                `Failed to deactivate services before detaching extension host: ${error}`,
-                vscode.LogLevel.Warning,
-            );
-        }
-
+        await Promise.all([
+            this._cleanupService('stop LSP before detaching', () => this.deactivateLsp()),
+            this._cleanupService('disconnect DAP before detaching', () => this.disconnectDap()),
+        ]);
         await this.dispose();
     }
 
@@ -1391,11 +1398,17 @@ export class RuntimeSession implements vscode.Disposable {
         }
         this._boundLspGeneration = generation;
         const previousLsp = this._lsp;
+        const previousKernel = this._kernel;
+        const previousClientId = this._lspClientId;
         this._lspActivationPromise = undefined;
         try {
             await previousLsp.deactivate();
         } finally {
-            previousLsp.dispose();
+            try {
+                previousLsp.dispose();
+            } finally {
+                this._releaseLspClient(previousKernel, previousClientId);
+            }
         }
         if (this._disposed || this._boundLspGeneration !== generation) {
             return;
@@ -1418,9 +1431,6 @@ export class RuntimeSession implements vscode.Disposable {
             )
         ) {
             await this.activateLsp();
-            if (this._boundLspGeneration !== generation || !this._lspRequestedActive) {
-                await this._deactivateLsp();
-            }
         }
     }
 
@@ -1429,6 +1439,8 @@ export class RuntimeSession implements vscode.Disposable {
             return;
         }
         const previousLsp = this._lsp;
+        const previousKernel = this._kernel;
+        const previousClientId = this._lspClientId;
         this._lspActivationPromise = undefined;
         this._lspFactory = undefined;
         this._supportsLsp = false;
@@ -1436,7 +1448,11 @@ export class RuntimeSession implements vscode.Disposable {
         try {
             await previousLsp.deactivate();
         } finally {
-            previousLsp.dispose();
+            try {
+                previousLsp.dispose();
+            } finally {
+                this._releaseLspClient(previousKernel, previousClientId);
+            }
         }
     }
 
@@ -1530,49 +1546,78 @@ export class RuntimeSession implements vscode.Disposable {
         this.log('Starting LSP', vscode.LogLevel.Info);
 
         // Create the LSP comm, which also starts the LSP server.
-        this._lspClientId = this._kernel.createPositronLspClientId();
-        this._lspStartingPromise = this._kernel.startPositronLsp(this._lspClientId, '127.0.0.1');
-
-        let port: number;
+        const kernel = this._kernel;
+        const generation = this._boundLspGeneration;
+        const clientId = kernel.createPositronLspClientId();
+        this._lspClientId = clientId;
+        const clients = this._lspClientsByKernel.get(kernel) ?? new Set<string>();
+        clients.add(clientId);
+        this._lspClientsByKernel.set(kernel, clients);
+        const isCurrent = () => !this._disposed && this._kernel === kernel &&
+            this._lsp === lsp && this._boundLspGeneration === generation &&
+            this._lspRequestedActive && this._lspClientId === clientId;
         try {
-            port = await this._lspStartingPromise;
+            const starting = kernel.startPositronLsp(clientId, '127.0.0.1');
+            this._lspStartingPromise = starting;
+            const port = await starting;
+            if (!isCurrent()) {
+                this._releaseLspClient(kernel, clientId);
+                return;
+            }
+
+            this._lspTransportKind = 'serverComm';
+            this.log(`Starting Positron LSP client on port ${port}`, vscode.LogLevel.Info);
+            await lsp.activate(port);
+            if (!isCurrent()) {
+                try {
+                    await lsp.deactivate();
+                } finally {
+                    this._releaseLspClient(kernel, clientId);
+                }
+            }
         } catch (err) {
+            const current = isCurrent();
+            this._releaseLspClient(kernel, clientId);
+            if (!current) {
+                return;
+            }
             this.log(`Error starting Positron LSP: ${err}`, vscode.LogLevel.Error);
             throw err;
         }
+    }
 
-        this._lspTransportKind = 'serverComm';
-
-        if (this._disposed || this._lsp !== lsp || !this._lspRequestedActive) {
-            if (this._lspClientId) {
-                this._kernel?.removeClient(this._lspClientId);
-                this._lspClientId = undefined;
-            }
+    private _releaseLspClient(kernel: JupyterLanguageRuntimeSession | undefined, clientId: string | undefined): void {
+        if (!kernel || !clientId || !this._lspClientsByKernel.get(kernel)?.delete(clientId)) {
             return;
         }
-
-        this.log(`Starting Positron LSP client on port ${port}`, vscode.LogLevel.Info);
-
-        await lsp.activate(port);
-        if (this._disposed || this._lsp !== lsp || !this._lspRequestedActive) {
-            await lsp.deactivate();
+        // Cancellation and an obsolete activation can both release this comm.
+        // Claim it once, and never let cleanup replace the startup error.
+        if (this._kernel === kernel && this._lspClientId === clientId) {
+            this._lspClientId = undefined;
+            this._lspTransportKind = undefined;
+        }
+        try {
+            kernel.removeClient(clientId);
+        } catch (error) {
+            this.log(`Failed to release LSP client ${clientId}: ${error}`, vscode.LogLevel.Warning);
         }
     }
 
     private async _deactivateLsp(): Promise<void> {
-        if (!this._supportsLsp || this._lsp.state !== LanguageLspState.Running) {
-            this.log('LSP already deactivated', vscode.LogLevel.Debug);
-            return;
+        const lsp = this._lsp;
+        const kernel = this._kernel;
+        const clientId = this._lspClientId;
+        try {
+            if (!this._supportsLsp || lsp.state !== LanguageLspState.Running) {
+                this.log('LSP already deactivated', vscode.LogLevel.Debug);
+                return;
+            }
+            this.log('Stopping LSP', vscode.LogLevel.Info);
+            await lsp.deactivate();
+            this.log('LSP stopped', vscode.LogLevel.Debug);
+        } finally {
+            this._releaseLspClient(kernel, clientId);
         }
-
-        this.log('Stopping LSP', vscode.LogLevel.Info);
-        await this._lsp.deactivate();
-
-        if (this._lspClientId) {
-            this._kernel?.removeClient(this._lspClientId);
-            this._lspClientId = undefined;
-        }
-        this.log('LSP stopped', vscode.LogLevel.Debug);
     }
 
     /**

@@ -71,6 +71,31 @@ function getSessionMapKey(
     return JSON.stringify([sessionMode, runtimeId, notebookUri?.toString()]);
 }
 
+/** Validate controller ownership before installing any part of a language bundle. */
+export function validateNotebookController(
+    controller: vscode.NotebookController,
+    languageIds: readonly string[],
+): string[] {
+    if (!controller.id.trim()) {
+        throw new Error('Notebook controller ownership requires a stable controller id.');
+    }
+    if (!controller.notebookType.trim()) {
+        throw new Error(`Notebook controller '${controller.id}' must declare a notebook type.`);
+    }
+    const normalizedLanguageIds = Array.from(new Set(
+        languageIds.map(languageId => languageId.trim()).filter(Boolean),
+    ));
+    if (normalizedLanguageIds.length === 0) {
+        throw new Error(`Notebook controller '${controller.id}' must own at least one language.`);
+    }
+    const supportedLanguages = controller.supportedLanguages?.filter(Boolean) ?? [];
+    if (supportedLanguages.length > 0 &&
+        normalizedLanguageIds.some(languageId => !supportedLanguages.includes(languageId))) {
+        throw new Error(`Notebook controller '${controller.id}' does not advertise every owned language.`);
+    }
+    return normalizedLanguageIds;
+}
+
 /**
  * Positron-aligned runtime session service.
  * Owns session lifecycle, foreground session switching, and UI client wiring.
@@ -82,11 +107,11 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
     private readonly _sessionLifecycleDisposables = new Map<string, vscode.Disposable[]>();
     private readonly _runtimeProviders = new Map<string, ILanguageRuntimeProvider<any>>();
     private readonly _runtimeProviderLogChannels = new Map<string, vscode.LogOutputChannel>();
-    private readonly _runtimeProviderRegistrationTokens = new Map<string, object>();
+    private readonly _runtimeProviderRegistrationTokens = new Map<string, { disposed: boolean }>();
     private readonly _lspFactoriesByLanguageId = new Map<string, {
         readonly factory: ILanguageLspFactory;
         readonly generation: number;
-        readonly registrationToken: object;
+        readonly registrationToken: { disposed: boolean };
     }>();
     private _nextLegacyLspGeneration = 1;
     private readonly _notebookControllersByLanguageId =
@@ -205,64 +230,106 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
         provider: ILanguageRuntimeProvider<TInstallation>,
         logChannel: vscode.LogOutputChannel = this._outputChannel,
     ): vscode.Disposable {
-        const registrationToken = {};
+        const previousProvider = this._runtimeProviders.get(provider.languageId);
+        const previousLogChannel = this._getProviderLogChannel(provider.languageId);
+        const previousToken = this._runtimeProviderRegistrationTokens.get(provider.languageId);
+        const previousInstallation = this._defaultInstallationsByLanguageId.get(provider.languageId);
+        const registrationToken = { disposed: false };
+        let legacyLspRegistration: vscode.Disposable | undefined;
+        const registration = new vscode.Disposable(() => {
+            if (registrationToken.disposed) {
+                return;
+            }
+            registrationToken.disposed = true;
+            try {
+                legacyLspRegistration?.dispose();
+            } finally {
+                if (this._runtimeProviderRegistrationTokens.get(provider.languageId) === registrationToken) {
+                    if (previousProvider && previousToken && !previousToken.disposed) {
+                        this._runtimeProviders.set(provider.languageId, previousProvider);
+                        this._runtimeProviderLogChannels.set(provider.languageId, previousLogChannel);
+                        this._runtimeProviderRegistrationTokens.set(provider.languageId, previousToken);
+                        this.setDefaultInstallation(provider.languageId, previousInstallation);
+                    } else {
+                        this._runtimeProviders.delete(provider.languageId);
+                        this._runtimeProviderLogChannels.delete(provider.languageId);
+                        this._runtimeProviderRegistrationTokens.delete(provider.languageId);
+                        this._defaultInstallationsByLanguageId.delete(provider.languageId);
+                    }
+                }
+            }
+        });
         this._runtimeProviders.set(provider.languageId, provider as ILanguageRuntimeProvider<any>);
         this._runtimeProviderLogChannels.set(provider.languageId, logChannel);
         this._runtimeProviderRegistrationTokens.set(provider.languageId, registrationToken);
-        if (provider.lspFactory) {
-            this.registerLspFactory(provider.lspFactory);
+        if (previousProvider && previousProvider !== provider) {
+            this._defaultInstallationsByLanguageId.delete(provider.languageId);
         }
-        let disposed = false;
-        return new vscode.Disposable(() => {
-            if (disposed) {
-                return;
+        try {
+            if (provider.lspFactory) {
+                legacyLspRegistration = this.registerLspFactory(provider.lspFactory);
             }
-            disposed = true;
-            if (this._runtimeProviderRegistrationTokens.get(provider.languageId) === registrationToken) {
-                this._runtimeProviders.delete(provider.languageId);
-                this._runtimeProviderLogChannels.delete(provider.languageId);
-                this._runtimeProviderRegistrationTokens.delete(provider.languageId);
-                this._defaultInstallationsByLanguageId.delete(provider.languageId);
-            }
-        });
+            return registration;
+        } catch (error) {
+            registration.dispose();
+            throw error;
+        }
     }
 
     /** Backfills an LSP factory into sessions created before language activation completed. */
     registerLspFactory(factory: ILanguageLspFactory, generation?: number): vscode.Disposable {
         const effectiveGeneration = generation ?? this._nextLegacyLspGeneration++;
-        const registrationToken = {};
+        const previous = this._lspFactoriesByLanguageId.get(factory.languageId);
+        const registrationToken = { disposed: false };
         this._lspFactoriesByLanguageId.set(factory.languageId, {
             factory,
             generation: effectiveGeneration,
             registrationToken,
         });
-        for (const session of this._sessions.values()) {
-            if (session.runtimeMetadata.languageId !== factory.languageId) {
-                continue;
-            }
-            void session.bindLspFactory(factory, effectiveGeneration).catch(error => {
-                this._outputChannel.error(
-                    `[RuntimeSession] Failed to attach late LSP factory to ` +
-                    `${session.sessionId}: ${error}`,
-                );
-            });
-        }
-        let disposed = false;
-        return new vscode.Disposable(() => {
-            if (disposed) {
+        // Binding must not run before the entire synchronous registration
+        // commits; a failed bundle leaves existing sessions on their old LSP.
+        queueMicrotask(() => {
+            if (this._lspFactoriesByLanguageId.get(factory.languageId)?.registrationToken !== registrationToken) {
                 return;
             }
-            disposed = true;
+            for (const session of this._sessions.values()) {
+                if (session.runtimeMetadata.languageId !== factory.languageId) {
+                    continue;
+                }
+                void session.bindLspFactory(factory, effectiveGeneration).catch(error => {
+                    this._outputChannel.error(
+                        `[RuntimeSession] Failed to attach late LSP factory to ` +
+                        `${session.sessionId}: ${error}`,
+                    );
+                });
+            }
+        });
+        return new vscode.Disposable(() => {
+            if (registrationToken.disposed) {
+                return;
+            }
+            registrationToken.disposed = true;
             const current = this._lspFactoriesByLanguageId.get(factory.languageId);
             if (current?.registrationToken !== registrationToken) {
                 return;
             }
-            this._lspFactoriesByLanguageId.delete(factory.languageId);
-            for (const session of this._sessions.values()) {
-                if (session.runtimeMetadata.languageId === factory.languageId) {
-                    void session.removeLspFactory(effectiveGeneration);
-                }
+            if (previous && !previous.registrationToken.disposed) {
+                this._lspFactoriesByLanguageId.set(factory.languageId, previous);
+                return;
             }
+            this._lspFactoriesByLanguageId.delete(factory.languageId);
+            queueMicrotask(() => {
+                if (this._lspFactoriesByLanguageId.has(factory.languageId)) {
+                    return;
+                }
+                for (const session of this._sessions.values()) {
+                    if (session.runtimeMetadata.languageId === factory.languageId) {
+                        void session.removeLspFactory(session.boundLspGeneration).catch(error => {
+                            this._outputChannel.warn(`[RuntimeSession] Failed to remove LSP factory: ${error}`);
+                        });
+                    }
+                }
+            });
         });
     }
 
@@ -278,33 +345,7 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
         controller: vscode.NotebookController,
         languageIds: readonly string[],
     ): vscode.Disposable {
-        if (!controller.id.trim()) {
-            throw new Error('Notebook controller ownership requires a stable controller id.');
-        }
-        if (!controller.notebookType.trim()) {
-            throw new Error(
-                `Notebook controller '${controller.id}' must declare a notebook type.`,
-            );
-        }
-
-        const normalizedLanguageIds = Array.from(new Set(
-            languageIds.map(languageId => languageId.trim()).filter(Boolean),
-        ));
-        if (normalizedLanguageIds.length === 0) {
-            throw new Error(
-                `Notebook controller '${controller.id}' must own at least one language.`,
-            );
-        }
-
-        const supportedLanguages = controller.supportedLanguages?.filter(Boolean) ?? [];
-        if (
-            supportedLanguages.length > 0 &&
-            normalizedLanguageIds.some(languageId => !supportedLanguages.includes(languageId))
-        ) {
-            throw new Error(
-                `Notebook controller '${controller.id}' does not advertise every owned language.`,
-            );
-        }
+        const normalizedLanguageIds = validateNotebookController(controller, languageIds);
 
         for (const languageId of normalizedLanguageIds) {
             const controllers = this._notebookControllersByLanguageId.get(languageId) ??
@@ -356,7 +397,11 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
     }
 
     setDefaultInstallation<TInstallation>(languageId: string, installation: TInstallation): void {
-        this._defaultInstallationsByLanguageId.set(languageId, installation);
+        if (installation === undefined) {
+            this._defaultInstallationsByLanguageId.delete(languageId);
+        } else {
+            this._defaultInstallationsByLanguageId.set(languageId, installation);
+        }
     }
 
     registerSessionManager(manager: ILanguageRuntimeSessionManager): vscode.Disposable {
@@ -374,10 +419,13 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
         installation: TInstallation,
         metadata: LanguageRuntimeMetadata,
     ): void {
+        const previousInstallation = this._installationsByRuntimeId.get(metadata.runtimeId);
         this._availableRuntimeMetadataByRuntimeId.set(metadata.runtimeId, metadata);
         this._installationsByRuntimeId.set(metadata.runtimeId, installation);
 
-        if (!this._defaultInstallationsByLanguageId.has(languageId)) {
+        if (!this._defaultInstallationsByLanguageId.has(languageId) ||
+            (previousInstallation !== undefined &&
+                this._defaultInstallationsByLanguageId.get(languageId) === previousInstallation)) {
             this._defaultInstallationsByLanguageId.set(languageId, installation);
         }
     }
@@ -1160,22 +1208,30 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
             }
         }
 
+        const started = Date.now();
+        this._outputChannel.info?.(`[RuntimeSession] Closing session ${sessionId} from state '${session.state}'`);
         let shutdownError: unknown;
         if (session.state !== RuntimeState.Uninitialized && session.state !== RuntimeState.Exited) {
             try {
                 await session.shutdown();
+                this._outputChannel.info?.(
+                    `[RuntimeSession] Kernel ${sessionId} exited after ${Date.now() - started}ms`,
+                );
             } catch (error) {
                 this._outputChannel.warn(`[RuntimeSession] Shutdown failed for ${sessionId}: ${error}`);
-                // Always unregister the session after a failed shutdown. Keeping
-                // a dead session in the registry lets later LSP/session
-                // activation target an unusable runtime. The original error is
-                // rethrown after the service state is made coherent.
+                // A failed request does not prove that the process exited.
+                // Retain its connection and UI so shutdown can be retried.
+                if (this._sessions.get(sessionId)?.state !== RuntimeState.Exited) {
+                    throw error;
+                }
                 shutdownError = error;
             }
         }
 
         await this._removeSession(session);
-        this._outputChannel.debug(`[RuntimeSession] Session ${sessionId} deleted`);
+        this._outputChannel.info?.(
+            `[RuntimeSession] Session ${sessionId} cleanup completed after ${Date.now() - started}ms`,
+        );
         if (shutdownError !== undefined) {
             throw shutdownError;
         }
@@ -1388,7 +1444,7 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
 
         this._shutdownPromise = (async () => {
             const sessions = Array.from(this._sessions.values());
-            for (const session of sessions) {
+            await Promise.all(sessions.map(async session => {
                 this._detachSessionFromServiceState(session);
 
                 try {
@@ -1398,7 +1454,7 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
                         `[RuntimeSession] Error detaching session ${session.sessionId} for extension host shutdown: ${error}`,
                     );
                 }
-            }
+            }));
 
             this._foregroundSessionId = undefined;
             this._startingConsolesByRuntimeId.clear();
@@ -2488,13 +2544,11 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
     }
 
     private async _removeSession(session: RuntimeSession): Promise<void> {
-        // Cleanup must not leave the runtime registry and Console disagreeing
-        // about whether a session was deleted.
-        try {
-            await session.dispose();
-        } catch (error) {
+        // Disposal retires the session synchronously, then releases editor
+        // resources. Publish removal before waiting for that asynchronous work.
+        const cleanup = session.dispose().catch(error => {
             this._outputChannel.warn(`[RuntimeSession] Cleanup failed for ${session.sessionId}: ${error}`);
-        }
+        });
         const detachedForegroundSession = this._detachSessionFromServiceState(session);
         try {
             if (detachedForegroundSession) {
@@ -2507,6 +2561,8 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
             }
         } finally {
             this._onDidDeleteSession.fire(session.sessionId);
+            this._outputChannel.info(`[RuntimeSession] Session ${session.sessionId} removal published`);
+            await cleanup;
         }
     }
 

@@ -180,12 +180,20 @@ export function rewriteProxyLocation(
     }
 }
 
-export function buildWebSocketTargetUrl(targetOrigin: string, requestPath: string): string {
+/** Resolves a proxy request without allowing it to select another upstream. */
+export function resolveProxyRequestUrl(targetOrigin: string, requestPath: string): URL {
     const target = new URL(targetOrigin);
-    target.protocol = target.protocol === 'https:' ? 'wss:' : 'ws:';
-
     const resolved = new URL(requestPath || '/', target);
-    resolved.protocol = target.protocol;
+    if ((target.protocol !== 'http:' && target.protocol !== 'https:') ||
+        resolved.origin !== target.origin || resolved.username || resolved.password) {
+        throw new Error('Proxy request must use the configured HTTP origin');
+    }
+    return resolved;
+}
+
+export function buildWebSocketTargetUrl(targetOrigin: string, requestPath: string): string {
+    const resolved = resolveProxyRequestUrl(targetOrigin, requestPath);
+    resolved.protocol = resolved.protocol === 'https:' ? 'wss:' : 'ws:';
     return resolved.toString();
 }
 

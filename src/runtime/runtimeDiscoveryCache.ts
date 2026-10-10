@@ -109,7 +109,11 @@ export class RuntimeDiscoveryCache {
         languageId: string,
         metadata: readonly LanguageRuntimeMetadata[],
         discoveryRootSignature?: RuntimeRootSignature,
+        isCurrent: () => boolean = () => true,
     ): Promise<void> {
+        if (!isCurrent()) {
+            return;
+        }
         const previous = this._buckets.get(bucketKey(extensionId, languageId));
         const previousByPath = new Map(
             (previous?.entries ?? []).map(entry => [entry.metadata.runtimePath, entry]),
@@ -123,6 +127,9 @@ export class RuntimeDiscoveryCache {
                 continue;
             }
             const stat = await this.statRuntimePath(runtime.runtimePath);
+            if (!isCurrent()) {
+                return;
+            }
             if (!stat) {
                 continue;
             }
@@ -133,6 +140,9 @@ export class RuntimeDiscoveryCache {
                 firstSeen: previousByPath.get(runtime.runtimePath)?.firstSeen ?? now,
                 lastValidated: now,
             });
+        }
+        if (!isCurrent()) {
+            return;
         }
         this._buckets.set(bucketKey(extensionId, languageId), {
             entries,

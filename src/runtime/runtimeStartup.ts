@@ -1143,6 +1143,9 @@ export class RuntimeStartupService implements vscode.Disposable {
     }
 
     private _isSessionRestorable(session: RuntimeSession): boolean {
+        if (session.hasUnconfirmedShutdown) {
+            return true;
+        }
         return session.state !== RuntimeState.Uninitialized &&
             session.state !== RuntimeState.Initializing &&
             session.state !== RuntimeState.Exiting &&

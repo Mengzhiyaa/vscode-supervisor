@@ -371,7 +371,7 @@ export function registerConsoleActions(
                 codeLocation: createCodeLocation(editor.document, range),
             };
 
-            outputChannel.info(`[ConsoleActions] Executing code before cursor`);
+            outputChannel.debug(`[ConsoleActions] Executing code before cursor`);
 
             await executeEditorCode(
                 consoleService,
@@ -419,7 +419,7 @@ export function registerConsoleActions(
                 codeLocation: createCodeLocation(editor.document, range),
             };
 
-            outputChannel.info(`[ConsoleActions] Executing code after cursor`);
+            outputChannel.debug(`[ConsoleActions] Executing code after cursor`);
 
             await executeEditorCode(
                 consoleService,
@@ -612,7 +612,7 @@ async function executeCodeWithAdvancement(
                 : undefined,
         };
 
-        outputChannel.info(`[ConsoleActions] Executing code: ${code.substring(0, 50)}...`);
+        outputChannel.debug(`[ConsoleActions] Executing code: ${code.substring(0, 50)}...`);
 
         await executeEditorCode(
             consoleService,
