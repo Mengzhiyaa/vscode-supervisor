@@ -6,6 +6,7 @@
 
 import { ActivityItem } from './activityItem';
 import { ANSIOutput, type ANSIOutputLine } from '$lib/ansi/ansiOutput';
+import { writable, type Readable } from 'svelte/store';
 
 /**
  * ActivityItemErrorMessage class - Represents an error message with name, message, and traceback.
@@ -23,6 +24,8 @@ export class ActivityItemErrorMessage extends ActivityItem {
      * Gets the traceback output lines.
      */
     private _tracebackOutputLines: ANSIOutputLine[];
+    private readonly _messageOutputLinesStore = writable<readonly ANSIOutputLine[]>([]);
+    private readonly _tracebackOutputLinesStore = writable<readonly ANSIOutputLine[]>([]);
 
     /**
      * Gets or sets the scrollback size. This is used to truncate the output lines for display.
@@ -62,6 +65,7 @@ export class ActivityItemErrorMessage extends ActivityItem {
         this._tracebackOutputLines = !traceback.length
             ? []
             : ANSIOutput.processOutput(traceback.join('\n'));
+        this.syncOutputLinesStores();
     }
 
     //#endregion Constructor
@@ -109,7 +113,15 @@ export class ActivityItemErrorMessage extends ActivityItem {
         }
 
         // Return the truncated traceback output lines.
-        return this._tracebackOutputLines.slice(-this._scrollbackSize);
+        return this._scrollbackSize === 0 ? [] : this._tracebackOutputLines.slice(-this._scrollbackSize);
+    }
+
+    get messageOutputLinesStore(): Readable<readonly ANSIOutputLine[]> {
+        return this._messageOutputLinesStore;
+    }
+
+    get tracebackOutputLinesStore(): Readable<readonly ANSIOutputLine[]> {
+        return this._tracebackOutputLinesStore;
     }
 
     //#endregion Public Properties
@@ -141,17 +153,21 @@ export class ActivityItemErrorMessage extends ActivityItem {
         // Calculate the total number of output lines.
         const outputLines = this._messageOutputLines.length + this._tracebackOutputLines.length;
 
-        // If there are fewer output lines than the scrollback size, clear the scrollback size
-        // as all of them will be displayed, and return the remaining scrollback size.
-        if (outputLines <= scrollbackSize) {
-            this._scrollbackSize = undefined;
-            return scrollbackSize - outputLines;
+        const nextScrollbackSize = outputLines <= scrollbackSize
+            ? undefined
+            : scrollbackSize;
+        if (nextScrollbackSize !== this._scrollbackSize) {
+            this._scrollbackSize = nextScrollbackSize;
+            this.syncOutputLinesStores();
         }
 
-        // Set the scrollback size and return 0
-        this._scrollbackSize = scrollbackSize;
-        return 0;
+        return nextScrollbackSize === undefined ? scrollbackSize - outputLines : 0;
     }
 
     //#endregion Public Methods
+
+    private syncOutputLinesStores(): void {
+        this._messageOutputLinesStore.set(this.messageOutputLines);
+        this._tracebackOutputLinesStore.set(this.tracebackOutputLines);
+    }
 }

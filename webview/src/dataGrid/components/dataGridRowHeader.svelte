@@ -37,6 +37,11 @@
         (rowSelectionState & RowSelectionState.Selected) !== 0,
     );
 
+    const focused = $derived.by(() => {
+        $updateTrigger;
+        return instance.focused;
+    });
+
     const rowHeaderText = $derived.by(() => {
         $updateTrigger;
         return instance.rowHeader(rowIndex);
@@ -132,7 +137,7 @@
         {#if selected}
             <div
                 class="selection-overlay"
-                class:focused={instance.focused}
+                class:focused
                 class:selected-top={
                     (rowSelectionState & RowSelectionState.SelectedTop) !== 0
                 }

@@ -243,7 +243,9 @@ export class ActivityItemStream extends ActivityItem {
 		const outputLines = this._scrollbackSize === undefined
 			? this._ansiOutput.outputLines
 			: this._ansiOutput.truncatedOutputLines(this._scrollbackSize);
-		this._outputLinesStore.set(outputLines);
+		// ANSIOutput mutates its line array in place. Publish a new reference so
+		// Svelte derived values also propagate incremental stream updates.
+		this._outputLinesStore.set([...outputLines]);
 	}
 
 	//#endregion Private Methods

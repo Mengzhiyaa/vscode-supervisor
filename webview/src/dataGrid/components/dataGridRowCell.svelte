@@ -133,6 +133,11 @@
         (cellSelectionState & CellSelectionState.Selected) !== 0,
     );
 
+    const focused = $derived.by(() => {
+        $updateTrigger;
+        return instance.focused;
+    });
+
     const isCursorCell = $derived.by(() => {
         $updateTrigger;
 
@@ -319,7 +324,7 @@
             {#if !selected && isCursorCell}
                 <div
                     class="cursor-border"
-                    class:dimmed={!instance.focused}
+                    class:dimmed={!focused}
                     style:top="{instance.cursorOffset}px"
                     style:right="{instance.cursorOffset}px"
                     style:bottom="{instance.cursorOffset}px"
@@ -331,7 +336,7 @@
         {#if selected}
             <div
                 class="selection-overlay"
-                class:focused={instance.focused}
+                class:focused
                 class:selected-top={
                     (cellSelectionState & CellSelectionState.SelectedTop) !== 0
                 }

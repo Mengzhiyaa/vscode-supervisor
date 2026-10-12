@@ -6,6 +6,7 @@
 
 import { ActivityItem } from './activityItem';
 import { ANSIOutput, type ANSIOutputLine } from '$lib/ansi/ansiOutput';
+import { writable, type Readable } from 'svelte/store';
 import { formatOutputLinesForClipboard } from '../utils/clipboardUtils';
 import type { ILanguageRuntimeMessageOutputData } from '@shared/console';
 export type { ILanguageRuntimeMessageOutputData } from '@shared/console';
@@ -22,6 +23,7 @@ export class ActivityItemOutputMessage extends ActivityItem {
      * Gets the cached output lines.
      */
     private readonly _outputLines: readonly ANSIOutputLine[];
+    private readonly _outputLinesStore = writable<readonly ANSIOutputLine[]>([]);
 
     /**
      * Gets or sets the scrollback size. This is used to truncate the output lines for display.
@@ -56,6 +58,7 @@ export class ActivityItemOutputMessage extends ActivityItem {
         // If the output is empty, don't render any output lines; otherwise, process the output into
         // output lines.
         this._outputLines = !output ? [] : ANSIOutput.processOutput(output);
+        this._outputLinesStore.set(this._outputLines);
     }
 
     //#endregion Constructor
@@ -72,7 +75,11 @@ export class ActivityItemOutputMessage extends ActivityItem {
         }
 
         // Truncate the output lines.
-        return this._outputLines.slice(-this._scrollbackSize);
+        return this._scrollbackSize === 0 ? [] : this._outputLines.slice(-this._scrollbackSize);
+    }
+
+    get outputLinesStore(): Readable<readonly ANSIOutputLine[]> {
+        return this._outputLinesStore;
     }
 
     //#endregion Public Properties
@@ -95,16 +102,15 @@ export class ActivityItemOutputMessage extends ActivityItem {
      * @returns The remaining scrollback size.
      */
     public override optimizeScrollback(scrollbackSize: number, _clearData: boolean = true) {
-        // If there are fewer output lines than the scrollback size, clear the scrollback size
-        // as all of them will be displayed, and return the remaining scrollback size.
-        if (this._outputLines.length <= scrollbackSize) {
-            this._scrollbackSize = undefined;
-            return scrollbackSize - this._outputLines.length;
+        const nextScrollbackSize = this._outputLines.length <= scrollbackSize
+            ? undefined
+            : scrollbackSize;
+        if (nextScrollbackSize !== this._scrollbackSize) {
+            this._scrollbackSize = nextScrollbackSize;
+            this._outputLinesStore.set(this.outputLines);
         }
 
-        // Set the scrollback size and return 0
-        this._scrollbackSize = scrollbackSize;
-        return 0;
+        return nextScrollbackSize === undefined ? scrollbackSize - this._outputLines.length : 0;
     }
 
     //#endregion Public Methods

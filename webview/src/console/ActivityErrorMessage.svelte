@@ -14,6 +14,8 @@
     }
 
     let { activityItemErrorMessage }: Props = $props();
+    let messageOutputLinesStore = $derived(activityItemErrorMessage.messageOutputLinesStore);
+    let tracebackOutputLinesStore = $derived(activityItemErrorMessage.tracebackOutputLinesStore);
 
     // State hooks (Positron pattern)
     let showTraceback = $state(false);
@@ -38,9 +40,9 @@
     <div class="error-bar"></div>
     <div class="error-information">
         <!-- Error message -->
-        {#if activityItemErrorMessage.messageOutputLines.length > 0}
+        {#if $messageOutputLinesStore.length > 0}
             <ConsoleOutputLines
-                outputLines={activityItemErrorMessage.messageOutputLines}
+                outputLines={$messageOutputLinesStore}
             />
         {/if}
 
@@ -49,7 +51,7 @@
             <div class="traceback">
                 <div class="actions">
                     <!-- Traceback toggle button (Positron pattern) -->
-                    {#if activityItemErrorMessage.tracebackOutputLines.length > 0}
+                    {#if $tracebackOutputLinesStore.length > 0}
                         <button
                             class="toggle-traceback"
                             onclick={pressedTracebackHandler}
@@ -76,7 +78,7 @@
                         <div></div>
                         <div>
                             <ConsoleOutputLines
-                                outputLines={activityItemErrorMessage.tracebackOutputLines}
+                                outputLines={$tracebackOutputLinesStore}
                             />
                         </div>
                     </div>

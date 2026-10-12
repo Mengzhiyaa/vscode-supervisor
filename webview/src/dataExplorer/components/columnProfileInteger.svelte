@@ -25,7 +25,11 @@
     const stats = $derived(
         profile?.summary_stats?.number_stats,
     );
-    const columnSchema = $derived(instance.getColumnSchema(columnIndex));
+    const updateTrigger = $derived(instance.updateTrigger);
+    const displayType = $derived.by(() => {
+        $updateTrigger;
+        return instance.getColumnSchema(columnIndex)?.type_display;
+    });
 
     const missingLabel = localize("positronMissing", "Missing");
     const minLabel = localize("positronMin", "Min");
@@ -61,7 +65,7 @@
 <div class="column-profile-expanded column-profile-info">
     <ColumnProfileSparklines
         {columnHistogram}
-        displayType={columnSchema?.type_display}
+        {displayType}
         hoverManager={instance.hoverManager}
     />
 

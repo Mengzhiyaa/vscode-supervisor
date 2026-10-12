@@ -66,7 +66,17 @@ ${columnLabel}`;
 
     const columnSortKey = $derived.by(() => {
         $updateTrigger;
-        return instance.getSortKey(columnIndex);
+        const sortKey = instance.getSortKey(columnIndex);
+        // Sort descriptors are mutable class instances. Project their values
+        // so a direction or priority change reaches the column header.
+        return sortKey
+            ? { ascending: sortKey.ascending, sortIndex: sortKey.sortIndex }
+            : undefined;
+    });
+
+    const focused = $derived.by(() => {
+        $updateTrigger;
+        return instance.focused;
     });
 
     const columnSelectionState = $derived.by(() => {
@@ -216,7 +226,7 @@ ${columnLabel}`;
         {#if selected}
             <div
                 class="selection-overlay"
-                class:focused={instance.focused}
+                class:focused
                 class:selected-left={
                     (columnSelectionState & ColumnSelectionState.SelectedLeft) !==
                     0

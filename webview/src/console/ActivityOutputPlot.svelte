@@ -14,13 +14,14 @@
     }
 
     let { activityItemOutputPlot }: Props = $props();
+    let outputLinesStore = $derived(activityItemOutputPlot.outputLinesStore);
 
     function handleClick() {
         activityItemOutputPlot.onSelected();
     }
 </script>
 
-<ConsoleOutputLines outputLines={activityItemOutputPlot.outputLines} />
+<ConsoleOutputLines outputLines={$outputLinesStore} />
 
 <button
     class="activity-output-plot"

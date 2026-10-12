@@ -520,6 +520,67 @@ test('console follows the backend foreground session when a new session is added
     await expect(page.getByText('fresh session output')).toBeVisible();
 });
 
+for (const streamType of ['output', 'error'] as const) {
+    for (const initiallyEmpty of [false, true]) {
+        test(`console renders incremental ${streamType} streams from ${initiallyEmpty ? 'empty' : 'visible'} output`, async ({ page }) => {
+            const backend = await openWebviewPage(page, 'console', {
+                configure: registerConsoleDefaults,
+            });
+            await expect.poll(() => backend.notificationCount(ConsoleMethods.ready)).toBeGreaterThan(0);
+
+            const createStream = (id: string, text: string) => ({
+                type: 'stream' as const,
+                id,
+                parentId: 'activity-1',
+                when: Date.now(),
+                streamType,
+                text,
+            });
+            const initialText = initiallyEmpty ? '' : 'Attaching core tidyverse packages\n';
+            await backend.notify(ConsoleMethods.restoreState, {
+                sessionId: 'session-1',
+                syncSeq: 1,
+                state: createConsoleStateWithItems([
+                    {
+                        type: 'activity',
+                        parentId: 'activity-1',
+                        items: [createStream('stream-1', initialText)],
+                    },
+                ]),
+            });
+
+            const activity = page.locator('[data-execution-id="activity-1"]');
+            await expect(activity).toBeAttached();
+            await expect(activity.locator('.console-output-lines')).toHaveCount(initiallyEmpty ? 0 : 1);
+            if (!initiallyEmpty) {
+                await expect(activity).toContainText('Attaching core tidyverse packages');
+            }
+
+            const chunks = ['\x1b[32mAttaching Seurat', 'Object\x1b[0m\nConflicts\n'];
+            for (const [index, text] of chunks.entries()) {
+                await backend.notify('console/runtimeChanges', {
+                    sessionId: 'session-1',
+                    syncSeq: index + 2,
+                    changes: [
+                        {
+                            kind: 'appendActivityItem',
+                            parentId: 'activity-1',
+                            activityItem: createStream(`stream-${index + 2}`, text),
+                        },
+                    ],
+                });
+                await expect(activity).toContainText(index === 0 ? 'Attaching Seurat' : 'Attaching SeuratObject');
+            }
+
+            await expect(activity).toContainText('Conflicts');
+            if (!initiallyEmpty) {
+                await expect(activity).toContainText('Attaching core tidyverse packages');
+            }
+            expect(backend.requestCount(ConsoleMethods.requestFullState)).toBe(0);
+        });
+    }
+}
+
 test('console requests a full-state refresh when runtime change sync gaps appear', async ({ page }) => {
     const backend = await openWebviewPage(page, 'console', {
         configure: (mockBackend) => {

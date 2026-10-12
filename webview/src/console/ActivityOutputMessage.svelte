@@ -13,6 +13,7 @@
     }
 
     let { activityItemOutputMessage }: Props = $props();
+    let outputLinesStore = $derived(activityItemOutputMessage.outputLinesStore);
 </script>
 
-<ConsoleOutputLines outputLines={activityItemOutputMessage.outputLines} />
+<ConsoleOutputLines outputLines={$outputLinesStore} />
