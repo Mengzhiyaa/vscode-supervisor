@@ -1253,7 +1253,9 @@ export class PlotsViewProvider extends BaseWebviewProvider {
                     const pixelRatio = params.pixelRatio ?? 2;
                     const format = params.format === 'svg' ? PlotRenderFormat.Svg : PlotRenderFormat.Png;
 
-                    const rendered = await plotClient.renderWithSizingPolicy(
+                    // The connection's policy has already resolved the size. Applying
+                    // the client's policy again would override auxiliary-view sizes.
+                    const rendered = await plotClient.renderPlot(
                         plotSize,
                         pixelRatio,
                         format,

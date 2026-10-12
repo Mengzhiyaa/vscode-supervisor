@@ -627,6 +627,117 @@ test('plots sends zoom, dark filter, sizing, custom size, source navigation, del
     expect((await deleteRequest).params).toEqual({ plotId: 'plot-1' });
 });
 
+test('plots rerenders when an existing custom size changes without resizing the viewport', async ({ page }) => {
+    const backend = await openWebviewPage(page, 'plots', {
+        configure: (mockBackend) => {
+            registerPlotsDefaults(mockBackend, {
+                plots: [{
+                    id: 'plot-custom',
+                    sessionId: 'session-1',
+                    kind: 'dynamic',
+                    sizingPolicyId: 'custom',
+                    customSize: { width: 640, height: 480 },
+                    initialData: SMALL_PNG_DATA_URI,
+                    initialRenderSettings: { width: 640, height: 480, pixelRatio: 1 },
+                }],
+                selectedPlotId: 'plot-custom',
+            });
+        },
+    });
+    await expect(page.locator('img.plot')).toBeVisible();
+    const viewport = await page.locator('.selected-plot').boundingBox();
+
+    for (const size of [{ width: 1400, height: 400 }, { width: 1000, height: 500 }, { width: 640, height: 480 }]) {
+        await page.getByLabel("Set how the plot's shape and size are determined").click();
+        await page.getByText(/Custom Size/).click();
+        await page.getByLabel('Width (px)', { exact: true }).fill(String(size.width));
+        await page.getByLabel('Height (px)', { exact: true }).fill(String(size.height));
+        const changedSize = backend.waitForNextRequest(PlotsMethods.setCustomSize);
+        const render = backend.waitForNextRequest(PlotsMethods.render);
+        await page.getByLabel('Height (px)', { exact: true }).press('Enter');
+        expect((await changedSize).params).toEqual(size);
+        expect((await render).params).toMatchObject({ plotId: 'plot-custom', ...size });
+        expect(await page.locator('.selected-plot').boundingBox()).toEqual(viewport);
+    }
+
+    // Host notifications must also redraw a custom policy whose ID is unchanged.
+    const render = backend.waitForNextRequest(PlotsMethods.render);
+    await backend.notify(PlotsMethods.sizingPolicyChanged, {
+        plotId: 'plot-custom',
+        policyId: 'custom',
+        customSize: { width: 1200, height: 600 },
+    });
+    expect((await render).params).toMatchObject({ width: 1200, height: 600 });
+});
+
+test('plots converts physical custom size units and preserves size when switching units', async ({ page }) => {
+    const backend = await openWebviewPage(page, 'plots', {
+        configure: (mockBackend) => registerPlotsDefaults(mockBackend, {
+            plots: [{ id: 'plot-units', kind: 'dynamic', sizingPolicyId: 'custom', customSize: { width: 960, height: 480 } }],
+            selectedPlotId: 'plot-units',
+        }),
+    });
+    await expect(page.locator('img.plot')).toBeVisible();
+    await page.getByLabel("Set how the plot's shape and size are determined").click();
+    await page.getByText(/Custom Size/).click();
+    const dialog = page.getByRole('dialog');
+    for (const [unit, width, height] of [['in', 10, 5], ['cm', 25.4, 12.7], ['mm', 254, 127]] as const) {
+        await dialog.getByLabel('Unit', { exact: true }).selectOption(unit);
+        await expect.poll(async () => Number(await dialog.getByLabel(`Width (${unit})`, { exact: true }).inputValue())).toBeCloseTo(width, 6);
+        await expect.poll(async () => Number(await dialog.getByLabel(`Height (${unit})`, { exact: true }).inputValue())).toBeCloseTo(height, 6);
+        await expect(dialog.getByText('Render size: 960 × 480 px')).toBeVisible();
+    }
+    await dialog.getByLabel('Unit', { exact: true }).selectOption('px');
+    await expect(dialog.getByLabel('Width (px)', { exact: true })).toHaveValue('960');
+    await dialog.getByLabel('Unit', { exact: true }).selectOption('in');
+    await dialog.getByLabel('Width (in)', { exact: true }).fill('6.5');
+    await dialog.getByLabel('Height (in)', { exact: true }).fill('4.25');
+    await dialog.getByLabel('Pixels per inch (px/in)', { exact: true }).fill('100');
+    await expect(dialog.getByText('Render size: 650 × 425 px')).toBeVisible();
+    const request = backend.waitForNextRequest(PlotsMethods.setCustomSize);
+    await dialog.getByRole('button', { name: 'Apply', exact: true }).click();
+    expect((await request).params).toEqual({ width: 650, height: 425 });
+
+    await page.getByLabel("Set how the plot's shape and size are determined").click();
+    await page.getByText(/Custom Size/).click();
+    await expect(dialog.getByLabel('Unit', { exact: true })).toHaveValue('in');
+    await expect(dialog.getByLabel('Width (in)', { exact: true })).toHaveValue('6.5');
+    await dialog.getByRole('button', { name: '800 × 600', exact: true }).click();
+    await expect(dialog.getByLabel('Width (in)', { exact: true })).toHaveValue('8');
+    await expect(dialog.getByLabel('Height (in)', { exact: true })).toHaveValue('6');
+    await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+});
+
+test('plots rejects invalid custom sizes and resets cancelled edits on reopening', async ({ page }) => {
+    const backend = await openWebviewPage(page, 'plots', {
+        configure: (mockBackend) => registerPlotsDefaults(mockBackend, {
+            plots: [{ id: 'plot-validation', kind: 'dynamic', sizingPolicyId: 'custom', customSize: { width: 800, height: 600 } }],
+            selectedPlotId: 'plot-validation',
+        }),
+    });
+    await expect(page.locator('img.plot')).toBeVisible();
+    await page.getByLabel("Set how the plot's shape and size are determined").click();
+    await page.getByText(/Custom Size/).click();
+    const dialog = page.getByRole('dialog');
+    const apply = dialog.getByRole('button', { name: 'Apply', exact: true });
+    for (const width of ['', '0', '99', '4097']) {
+        await dialog.getByLabel('Width (px)', { exact: true }).fill(width);
+        await expect(apply).toBeDisabled();
+    }
+    await dialog.getByLabel('Width (px)', { exact: true }).fill('1000');
+    await expect(apply).toBeEnabled();
+    await page.keyboard.press('Escape');
+    await expect(dialog).not.toBeVisible();
+    await page.getByLabel("Set how the plot's shape and size are determined").click();
+    await page.getByText(/Custom Size/).click();
+    await expect(dialog.getByLabel('Width (px)', { exact: true })).toHaveValue('800');
+    await expect(dialog.getByLabel('Unit', { exact: true })).toBeFocused();
+    await dialog.getByLabel('Unit', { exact: true }).selectOption('in');
+    await dialog.getByLabel('Pixels per inch (px/in)', { exact: true }).fill('0');
+    await expect(apply).toBeDisabled();
+    expect(backend.requestCount(PlotsMethods.setCustomSize)).toBe(0);
+});
+
 test('plots prefers the browser clipboard when available and falls back to extension copy when unavailable', async ({ page, browserName }) => {
     void browserName;
     await installClipboardMock(page);

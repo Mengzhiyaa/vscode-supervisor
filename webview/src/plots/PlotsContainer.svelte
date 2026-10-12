@@ -41,6 +41,7 @@
         zoomLevel: ZoomLevel;
         darkFilterMode: DarkFilter;
         sizingPolicyId?: string;
+        customSize?: { width: number; height: number };
         showHistory: boolean;
         historyBottom: boolean;
         selectedSessionName?: string;
@@ -87,6 +88,7 @@
         zoomLevel,
         darkFilterMode,
         sizingPolicyId,
+        customSize,
         showHistory,
         historyBottom,
         selectedSessionName,
@@ -240,6 +242,7 @@
                         height={viewportHeight}
                         zoom={zoomLevel}
                         {sizingPolicyId}
+                        {customSize}
                         {darkFilterMode}
                         latestUri={selectedPlot.thumbnail ||
                             selectedPlot.cachedThumbnail}

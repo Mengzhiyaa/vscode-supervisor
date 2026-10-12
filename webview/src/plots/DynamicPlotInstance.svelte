@@ -35,6 +35,7 @@
         plotId: string;
         connection: MessageConnection | undefined;
         sizingPolicyId?: string;
+        customSize?: { width: number; height: number };
         darkFilterMode?: "off" | "auto" | "on";
         latestUri?: string;
         renderVersion?: number;
@@ -58,6 +59,7 @@
         plotId,
         connection,
         sizingPolicyId,
+        customSize,
         darkFilterMode = "auto",
         latestUri,
         renderVersion = 0,
@@ -79,14 +81,20 @@
     let renderRequestSerial = 0;
 
     const plotName = $derived(`Plot ${plotId}`);
+    const renderWidth = $derived(
+        sizingPolicyId === "custom" && customSize ? customSize.width : width,
+    );
+    const renderHeight = $derived(
+        sizingPolicyId === "custom" && customSize ? customSize.height : height,
+    );
 
     function hasMatchingInitialRenderSettings(): boolean {
         if (!initialRenderSettings || !initialData) {
             return false;
         }
 
-        const targetWidth = Math.floor(width);
-        const targetHeight = Math.floor(height);
+        const targetWidth = Math.floor(renderWidth);
+        const targetHeight = Math.floor(renderHeight);
         const targetPixelRatio = window.devicePixelRatio || 1;
 
         return (
@@ -97,8 +105,8 @@
     }
 
     function getRenderRequestKey(): string {
-        const targetWidth = Math.floor(width);
-        const targetHeight = Math.floor(height);
+        const targetWidth = Math.floor(renderWidth);
+        const targetHeight = Math.floor(renderHeight);
         const ratio = window.devicePixelRatio || 1;
         return `${plotId}:${targetWidth}x${targetHeight}@${ratio}:${sizingPolicyId ?? ""}`;
     }
@@ -140,8 +148,8 @@
 
             const result = (await connection.sendRequest("plots/render", {
                 plotId,
-                width,
-                height,
+                width: renderWidth,
+                height: renderHeight,
                 format: "png",
                 pixelRatio: ratio,
             })) as { data: string; mimeType: string; renderVersion: number };
@@ -225,7 +233,7 @@
         }
 
         if (width > 0 && height > 0 && connection && plotId) {
-            if (hasMatchingInitialRenderSettings()) {
+            if (lastQueuedRenderKey === undefined && hasMatchingInitialRenderSettings()) {
                 // Treat initial payload as already satisfying this viewport.
                 lastQueuedRenderKey = getRenderRequestKey();
                 sharedLastRenderKeyByPlotId.set(plotId, lastQueuedRenderKey);

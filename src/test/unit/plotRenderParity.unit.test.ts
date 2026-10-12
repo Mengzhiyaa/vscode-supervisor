@@ -10,6 +10,9 @@ import { HtmlPlotClient } from '../../runtime/htmlPlotClient';
 import { RuntimeClientInstance } from '../../runtime/RuntimeClientInstance';
 import { PositronPlotRenderQueue, RuntimeState as QueueRuntimeState } from '../../runtime/positronPlotRenderQueue';
 import { PlotEditorProvider } from '../../editor/PlotEditorProvider';
+import { PlotsViewProvider } from '../../webview/plotsProvider';
+import { PlotSizingPolicyCustom } from '../../runtime/sizingPolicyCustom';
+import * as PlotsRpc from '../../rpc/webview/plots';
 import type { MessageConnection } from 'vscode-jsonrpc/node';
 import * as PlotEditorRpc from '../../rpc/webview/plotEditor';
 
@@ -45,6 +48,53 @@ suite('[Unit] Plot render parity', () => {
     let f: ReturnType<typeof fixture>;
     setup(() => { f = fixture(); });
     teardown(() => f.dispose());
+
+    test('replacing the custom size updates the selected plot and its next render', async () => {
+        const service = new PositronPlotsService();
+        const plot = f.create();
+        service.addPlotClient(plot);
+        service.selectPlot(plot.id);
+        try {
+            for (const size of [{ width: 1400, height: 400 }, { width: 1000, height: 500 }]) {
+                service.setCustomPlotSize(size);
+                assert.deepStrictEqual(plot.metadata.sizing_policy, { id: 'custom', size });
+                assert.strictEqual(service.sizingPolicies.filter(policy => policy.id === 'custom').length, 1);
+                assert.strictEqual(service.selectedSizingPolicy.getName(plot), `${size.width}×${size.height} (custom)`);
+                const pending = plot.renderWithSizingPolicy({ width: 800, height: 600 }, 1);
+                assert.deepStrictEqual(f.requests.at(-1)!.renderRequest.size, size);
+                f.finish(f.requests.at(-1)!);
+                await pending;
+            }
+        } finally { service.dispose(); }
+    });
+
+    test('auxiliary plots render at their connection custom size without applying the primary policy again', async () => {
+        const plot = f.create();
+        plot.sizingPolicy = new PlotSizingPolicyCustom({ width: 640, height: 480 });
+        const requests = new Map<string, (params: PlotsRpc.RenderPlotRequest.Params) => Promise<unknown>>();
+        const connection = {
+            onNotification: () => undefined,
+            onRequest: (type: { method: string }, handler: (params: PlotsRpc.RenderPlotRequest.Params) => Promise<unknown>) => requests.set(type.method, handler),
+        } as unknown as MessageConnection;
+        const state = { selectedSizingPolicyId: 'custom', customSize: { width: 900, height: 600 } };
+        const provider = Object.assign(Object.create(PlotsViewProvider.prototype), {
+            _plotClients: new Map([['plot', plot]]),
+            _plots: new Map(),
+            _renderRequestConnection: new Map(),
+            _connectionStates: new Map([[connection, state]]),
+            log: () => undefined,
+        }) as { _registerRenderingHandlers(connection: MessageConnection): void };
+        provider._registerRenderingHandlers(connection);
+        for (const size of [{ width: 900, height: 600 }, { width: 1400, height: 400 }]) {
+            state.customSize = size;
+            const pending = requests.get('plots/render')!({ plotId: 'plot', width: 800, height: 600, pixelRatio: 2, format: 'png' });
+            assert.deepStrictEqual(f.requests.at(-1)!.renderRequest.size, size);
+            assert.strictEqual(f.requests.at(-1)!.renderRequest.pixel_ratio, 2);
+            f.finish(f.requests.at(-1)!);
+            await pending;
+            assert.deepStrictEqual(plot.metadata.sizing_policy?.size, { width: 640, height: 480 });
+        }
+    });
 
     test('editor sizing RPC changes kernel render dimensions without changing the view policy', async () => {
         const service = new PositronPlotsService();

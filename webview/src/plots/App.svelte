@@ -1172,6 +1172,7 @@
         height: number;
     }) {
         if (!connection) return;
+        const plotId = selectedPlotId;
         const { width, height } = size;
         try {
             await connection.sendRequest("plots/setCustomSize", {
@@ -1179,8 +1180,8 @@
                 height,
             });
 
-            if (selectedPlotId) {
-                patchPlot(selectedPlotId, {
+            if (plotId) {
+                patchPlot(plotId, {
                     sizingPolicyId: "custom",
                     customSize: { width, height },
                 });
@@ -1655,6 +1656,7 @@
         zoomLevel={selectedPlotZoomLevel}
         {darkFilterMode}
         sizingPolicyId={selectedPlotSizingPolicyId}
+        customSize={selectedPlotCustomSize}
         selectedSessionName={selectedPlotSessionName}
         selectedOriginFile={selectedOriginFile}
         {selectedPlotName}
