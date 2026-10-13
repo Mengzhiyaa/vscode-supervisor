@@ -1,5 +1,6 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
+import type { DataConnection, DataConnectionDriver } from '../../api';
 import {
     PositronConnectionInstance,
     PositronConnectionsService,
@@ -47,7 +48,211 @@ class MemorySecretStorage implements vscode.SecretStorage {
     dispose(): void { this._onDidChange.dispose(); }
 }
 
+function deferred<T>() {
+    let resolve!: (value: T) => void;
+    const promise = new Promise<T>(complete => { resolve = complete; });
+    return { promise, resolve };
+}
+
+async function createProfileHarness(connect: DataConnectionDriver['connect'], state = new MemoryMemento()) {
+    const secrets = new MemorySecretStorage();
+    const output = vscode.window.createOutputChannel('connections-lifecycle-test', { log: true });
+    const lifecycle = new SurfaceLifecycleService(new MemoryMemento(), output);
+    await lifecycle.initialize();
+    const service = new PositronConnectionsService({ sessions: [] } as any, lifecycle, output, state, secrets);
+    service.registerDriver({
+        id: 'test-driver', name: 'Test', description: '', iconSvg: '', supportedLanguageIds: ['python'],
+        mechanisms: [{ id: 'host', label: 'Host', description: '', parameters: [{
+            id: 'password', label: 'Password', type: DataConnectionParameterType.Password, secret: true,
+        }] }],
+        connect,
+    });
+    const profile = {
+        id: 'test-profile', createdAt: 1, driverId: 'test-driver', connectionName: 'Test',
+        mechanismId: 'host', parameterValues: { password: 'secret' },
+    };
+    await service.addUpdateProfile(profile, false);
+    return {
+        service, secrets, profile, state, lifecycle,
+        dispose: () => { service.dispose(); lifecycle.dispose(); secrets.dispose(); output.dispose(); },
+    };
+}
+
+function createConnection(disconnect: () => Promise<void> = async () => undefined): DataConnection {
+    return {
+        isReadOnly: async () => true, isConnected: async () => true,
+        getChildren: async () => [], disconnect,
+    };
+}
+
 suite('[Unit] Connections surface', () => {
+    test('coalesces profile connections before asynchronous secret reads', async () => {
+        let connects = 0;
+        const harness = await createProfileHarness(async () => { connects++; return createConnection(); });
+        const secret = deferred<string>();
+        const readingSecret = deferred<void>();
+        harness.secrets.get = async () => { readingSecret.resolve(); return secret.promise; };
+        try {
+            const first = harness.service.connectProfile(harness.profile.id);
+            await readingSecret.promise;
+            const second = harness.service.connectProfile(harness.profile.id);
+            secret.resolve('secret');
+            const [left, right] = await Promise.all([first, second]);
+            assert.strictEqual(left, right);
+            assert.strictEqual(connects, 1);
+            assert.strictEqual(harness.service.connections.length, 1);
+            await harness.service.removeProfile(harness.profile.id);
+        } finally {
+            secret.resolve('secret');
+            harness.dispose();
+        }
+    });
+
+    test('allows retrying a failed profile connection', async () => {
+        let attempts = 0;
+        const harness = await createProfileHarness(async () => {
+            if (++attempts === 1) {
+                throw new Error('injected connection failure');
+            }
+            return createConnection();
+        });
+        try {
+            await assert.rejects(harness.service.connectProfile(harness.profile.id), /injected connection failure/);
+            assert.strictEqual((await harness.service.connectProfile(harness.profile.id)).active, true);
+            assert.strictEqual(attempts, 2);
+            await harness.service.removeProfile(harness.profile.id);
+        } finally {
+            harness.dispose();
+        }
+    });
+
+    test('disconnects a modern connection exactly once when removing its profile', async () => {
+        let disconnects = 0;
+        const harness = await createProfileHarness(async () => createConnection(async () => { disconnects++; }));
+        try {
+            const instance = await harness.service.connectProfile(harness.profile.id);
+            assert.strictEqual(await harness.service.removeProfile(harness.profile.id), true);
+            await instance.dispose();
+            assert.strictEqual(disconnects, 1);
+            assert.strictEqual(instance.active, false);
+            assert.strictEqual(harness.service.getConnection(instance.id), undefined);
+        } finally {
+            harness.dispose();
+        }
+    });
+
+    test('retains legacy disposal after disconnecting a profile', async () => {
+        const cleanup: string[] = [];
+        const handle = {
+            ...createConnection(async () => { cleanup.push('disconnect'); }),
+            dispose: () => { cleanup.push('dispose'); },
+        };
+        const harness = await createProfileHarness(async () => handle);
+        try {
+            await harness.service.connectProfile(harness.profile.id);
+            await harness.service.removeProfile(harness.profile.id);
+            assert.deepStrictEqual(cleanup, ['disconnect', 'dispose']);
+        } finally {
+            harness.dispose();
+        }
+    });
+
+    for (const action of ['remove', 'dispose']) {
+        test(`disconnects late results after profile ${action} without restoring the connection`, async () => {
+            const connection = deferred<DataConnection>();
+            const started = deferred<void>();
+            let disconnects = 0;
+            const harness = await createProfileHarness(async () => { started.resolve(); return connection.promise; });
+            try {
+                const pending = harness.service.connectProfile(harness.profile.id);
+                const rejected = assert.rejects(pending, /cancelled/);
+                await started.promise;
+                if (action === 'remove') {
+                    await harness.service.removeProfile(harness.profile.id);
+                } else {
+                    harness.service.dispose();
+                }
+                connection.resolve(createConnection(async () => { disconnects++; }));
+                await rejected;
+                assert.strictEqual(disconnects, 1);
+                assert.strictEqual(harness.service.connections.length, 0);
+                assert.strictEqual(harness.service.profileStore.getProfile(harness.profile.id), undefined);
+                const persisted = new DataConnectionProfileStore(harness.state, harness.secrets);
+                if (action === 'remove') {
+                    assert.strictEqual(persisted.getProfile(harness.profile.id), undefined);
+                } else {
+                    assert.ok(persisted.getProfile(harness.profile.id));
+                }
+                persisted.dispose();
+            } finally {
+                harness.dispose();
+            }
+        });
+    }
+
+    test('does not let an old connection overwrite a removed and recreated profile', async () => {
+        const oldConnection = deferred<DataConnection>();
+        const oldStarted = deferred<void>();
+        let connects = 0;
+        let oldDisconnects = 0;
+        const harness = await createProfileHarness(async () => {
+            if (++connects === 1) {
+                oldStarted.resolve();
+                return oldConnection.promise;
+            }
+            return createConnection();
+        });
+        try {
+            const oldPending = harness.service.connectProfile(harness.profile.id);
+            const rejected = assert.rejects(oldPending, /cancelled/);
+            await oldStarted.promise;
+            await harness.service.removeProfile(harness.profile.id);
+            await harness.service.addUpdateProfile({ ...harness.profile, connectionName: 'Replacement' }, false);
+            const replacement = await harness.service.connectProfile(harness.profile.id);
+            oldConnection.resolve(createConnection(async () => { oldDisconnects++; }));
+            await rejected;
+            assert.strictEqual(oldDisconnects, 1);
+            assert.strictEqual(harness.service.getConnection(replacement.id), replacement);
+            assert.strictEqual(harness.service.profileStore.getProfile(harness.profile.id)?.connectionName,
+                'Replacement');
+            await harness.service.removeProfile(harness.profile.id);
+        } finally {
+            harness.dispose();
+        }
+    });
+
+    test('does not restore a profile deleted while persisting its last-used timestamp', async () => {
+        const state = new MemoryMemento();
+        const saved = deferred<void>();
+        const releaseSave = deferred<void>();
+        const update = state.update.bind(state);
+        state.update = async (key, value) => {
+            await update(key, value);
+            if (JSON.stringify(value).includes('lastUsedAt')) {
+                saved.resolve();
+                await releaseSave.promise;
+            }
+        };
+        let disconnects = 0;
+        const harness = await createProfileHarness(async () => createConnection(async () => { disconnects++; }), state);
+        try {
+            const pending = harness.service.connectProfile(harness.profile.id);
+            const rejected = assert.rejects(pending, /cancelled/);
+            await saved.promise;
+            await harness.service.removeProfile(harness.profile.id);
+            releaseSave.resolve();
+            await rejected;
+            assert.strictEqual(disconnects, 1);
+            assert.strictEqual(harness.service.connections.length, 0);
+            const restored = new DataConnectionProfileStore(state, harness.secrets);
+            assert.strictEqual(restored.getProfile(harness.profile.id), undefined);
+            restored.dispose();
+        } finally {
+            releaseSave.resolve();
+            harness.dispose();
+        }
+    });
+
     test('expands objects, lists fields for data nodes, and previews through the runtime comm', async () => {
         const updateEmitter = new vscode.EventEmitter<Record<string, never>>();
         const closeEmitter = new vscode.EventEmitter<void>();

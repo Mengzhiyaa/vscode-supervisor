@@ -204,6 +204,7 @@ export class RuntimeSession implements vscode.Disposable {
     private readonly _kernelSpec: JupyterKernelSpec | undefined;
     private readonly _kernelExtra: JupyterKernelExtra | undefined;
     private _disposed = false;
+    private _detachingForExtensionHostShutdown = false;
     private _unconfirmedShutdown = false;
 
     /** Event clock of the last processed runtime event. */
@@ -437,6 +438,9 @@ export class RuntimeSession implements vscode.Disposable {
      * Attaches the underlying Jupyter kernel session
      */
     attachKernel(kernel: JupyterLanguageRuntimeSession): void {
+        if (this._disposed) {
+            throw new vscode.CancellationError();
+        }
         this._kernel = kernel;
         this.log(`Kernel attached`, vscode.LogLevel.Info);
 
@@ -451,6 +455,9 @@ export class RuntimeSession implements vscode.Disposable {
         this._disposables.push(this._clientManager);
         this._disposables.push(this._extHostRuntimeSessionAdapter);
         this._clientManagerEmitter.fire(this._clientManager);
+        if (this._disposed) {
+            return;
+        }
 
         // Track previous state for state transition logging
         let previousState = this._state;
@@ -786,6 +793,15 @@ export class RuntimeSession implements vscode.Disposable {
                 dynState,
             );
 
+        if (this._disposed) {
+            // A user deletion retires the backend too. Extension Host reload
+            // only detaches, preserving an existing kernel for reconnection.
+            if (!this._detachingForExtensionHostShutdown) {
+                await this._cleanupService('terminate a cancelled startup', () => kernel.forceQuit());
+            }
+            await this._cleanupService('dispose a cancelled kernel connection', () => kernel.dispose());
+            throw new vscode.CancellationError();
+        }
         this.attachKernel(kernel);
 
         if (dynState.currentWorkingDirectory) {
@@ -800,8 +816,14 @@ export class RuntimeSession implements vscode.Disposable {
      * Returns LanguageRuntimeInfo containing banner, version info, etc.
      */
     async start(): Promise<LanguageRuntimeInfo> {
+        if (this._disposed) {
+            throw new vscode.CancellationError();
+        }
         if (!this._kernel) {
-            this._kernel = await this.createKernel();
+            await this.createKernel();
+        }
+        if (this._disposed || !this._kernel) {
+            throw new vscode.CancellationError();
         }
         let info: LanguageRuntimeInfo;
         try {
@@ -815,6 +837,9 @@ export class RuntimeSession implements vscode.Disposable {
             );
             this._startupFailureEmitter.fire(startupFailure);
             throw error;
+        }
+        if (this._disposed) {
+            throw new vscode.CancellationError();
         }
 
         // Update prompts in case user has customised them. Trim trailing
@@ -1253,6 +1278,7 @@ export class RuntimeSession implements vscode.Disposable {
      * the runtime to exit, so a later reload can reconnect to it.
      */
     async detachForExtensionHostShutdown(): Promise<void> {
+        this._detachingForExtensionHostShutdown = true;
         await Promise.all([
             this._cleanupService('stop LSP before detaching', () => this.deactivateLsp()),
             this._cleanupService('disconnect DAP before detaching', () => this.disconnectDap()),
@@ -1401,26 +1427,26 @@ export class RuntimeSession implements vscode.Disposable {
         const previousKernel = this._kernel;
         const previousClientId = this._lspClientId;
         this._lspActivationPromise = undefined;
-        try {
-            await previousLsp.deactivate();
-        } finally {
-            try {
-                previousLsp.dispose();
-            } finally {
-                this._releaseLspClient(previousKernel, previousClientId);
-            }
-        }
+        // Retire the old binding before awaiting cleanup. Cleanup failure must
+        // not leave a disposed LSP installed or block a replacement generation.
+        this._lspFactory = undefined;
+        this._supportsLsp = false;
+        this._lsp = new NullLanguageLsp();
+        await this._cleanupService('deactivate the previous LSP', () => previousLsp.deactivate());
+        await this._cleanupService('dispose the previous LSP', () => previousLsp.dispose());
+        this._releaseLspClient(previousKernel, previousClientId);
         if (this._disposed || this._boundLspGeneration !== generation) {
             return;
         }
-        this._lspFactory = factory;
-        this._supportsLsp = true;
-        this._lsp = factory.create(
+        const lsp = factory.create(
             this.runtimeMetadata,
             this.sessionMetadata,
             this.dynState,
             this._logChannel,
         );
+        this._lspFactory = factory;
+        this._supportsLsp = true;
+        this._lsp = lsp;
 
         if (
             this._lspRequestedActive &&

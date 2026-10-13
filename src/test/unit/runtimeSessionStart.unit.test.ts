@@ -273,6 +273,48 @@ suite('[Unit] runtime session start semantics', () => {
         }
     });
 
+    for (const mode of [LanguageRuntimeSessionMode.Console, LanguageRuntimeSessionMode.Notebook]) {
+        for (const failureStage of ['manager', 'creation']) {
+            test(`retries ${mode} startup after ${failureStage} failure`, async () => {
+                const service = new RuntimeSessionService(makeContext(), makeNoopLogChannel());
+                const controller = registerNotebookController(service);
+                const metadata = makeRuntimeMetadata();
+                const notebookUri = mode === LanguageRuntimeSessionMode.Notebook
+                    ? vscode.Uri.parse('file:///workspace/retry.ipynb') : undefined;
+                let fail = true;
+                let starts = 0;
+                (service as any)._requireRuntimeEntry = () => ({ metadata, installation: {}, provider: {} });
+                (service as any)._getManagerForRuntime = async () => {
+                    if (fail && failureStage === 'manager') {
+                        throw new Error('injected startup failure');
+                    }
+                    return {
+                        createSession: async () => {
+                            if (fail) {
+                                throw new Error('injected startup failure');
+                            }
+                            return { sessionId: 'retried-session' };
+                        },
+                    };
+                };
+                (service as any).doStartRuntimeSession = async () => { starts++; };
+                const start = () => service.startNewRuntimeSession(
+                    metadata.runtimeId, metadata.runtimeName, mode, notebookUri,
+                    'unit-test', RuntimeStartMode.Starting, false,
+                );
+                try {
+                    await assert.rejects(start(), /injected startup failure/);
+                    fail = false;
+                    assert.strictEqual(await start(), 'retried-session');
+                    assert.strictEqual(starts, 1);
+                } finally {
+                    controller.dispose();
+                    service.dispose();
+                }
+            });
+        }
+    }
+
     test('allows multiple console sessions for the same runtime', async () => {
         const service = new RuntimeSessionService(makeContext(), makeNoopLogChannel());
         const runtimeMetadata = makeRuntimeMetadata();

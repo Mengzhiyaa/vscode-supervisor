@@ -313,7 +313,11 @@ export class PositronPreviewService implements vscode.Disposable {
         sessionId: string,
         event: ShowUrlEvent,
         metadata?: Pick<PreviewItem, 'outputId' | 'source' | 'fallbackReason'>,
+        signal?: AbortSignal,
     ): Promise<void> {
+        if (signal?.aborted) {
+            return;
+        }
         let uri: vscode.Uri;
         try {
             uri = vscode.Uri.parse(event.url);
@@ -342,6 +346,9 @@ export class PositronPreviewService implements vscode.Disposable {
                         `[PositronPreviewService] Failed to resolve external URI for ${event.url}: ${error}`
                     );
                 }
+                if (signal?.aborted) {
+                    return;
+                }
                 await vscode.env.openExternal(externalUri);
                 this._outputChannel.debug(
                     `[PositronPreviewService] Opened non-local URL in the external browser: ${event.url}`
@@ -354,6 +361,9 @@ export class PositronPreviewService implements vscode.Disposable {
                 // for focus, find and host-owned navigation history.
                 uri = await this._proxyService.resolvePath(event.url);
             } catch (error) {
+                if (signal?.aborted) {
+                    return;
+                }
                 this._outputChannel.debug(
                     `[PositronPreviewService] Failed to proxy local URI for ${event.url}: ${error}`
                 );
@@ -361,6 +371,9 @@ export class PositronPreviewService implements vscode.Disposable {
             }
         }
 
+        if (signal?.aborted) {
+            return;
+        }
         this._publishPreview({
             type: 'url',
             uri,
@@ -387,8 +400,15 @@ export class PositronPreviewService implements vscode.Disposable {
             outputId?: string;
             fallbackReason?: string;
         },
+        signal?: AbortSignal,
     ): Promise<void> {
+        if (signal?.aborted) {
+            return;
+        }
         const resolvedUri = await this.resolveRuntimeOutputHtmlUri(fileUri);
+        if (signal?.aborted) {
+            return;
+        }
         const uri = resolvedUri.with({
             query: `${resolvedUri.query ? `${resolvedUri.query}&` : ''}outputVersion=${Date.now()}`,
         });
@@ -414,11 +434,15 @@ export class PositronPreviewService implements vscode.Disposable {
         sessionId: string,
         url: string,
         outputId?: string,
+        signal?: AbortSignal,
     ): Promise<void> {
         await this.handleShowUrl(sessionId, { url }, {
             outputId,
             source: 'runtime-output',
-        });
+        }, signal);
+        if (signal?.aborted) {
+            return;
+        }
         this._outputChannel.debug(
             `[PositronPreviewService] Routed runtime output ${outputId ?? '<without output id>'} to ${url}`
         );

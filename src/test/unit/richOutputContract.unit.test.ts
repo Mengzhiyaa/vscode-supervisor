@@ -1,6 +1,8 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
 import { RuntimeOutputKind } from '../../internal/runtimeTypes';
+import type { RuntimeRenderedOutput } from '../../api';
+import { PositronPreviewService } from '../../services/preview';
 import {
     RichOutputRouter,
     RuntimeOutputConsumers,
@@ -58,7 +60,193 @@ function output(kind: RuntimeOutputKind, data: Record<string, unknown>): RichOut
     };
 }
 
+function deferred<T>() {
+    let resolve!: (value: T) => void;
+    const promise = new Promise<T>(complete => { resolve = complete; });
+    return { promise, resolve };
+}
+
 suite('[Unit] P0 rich output and compatibility contracts', () => {
+    for (const stage of ['render', 'html-write']) {
+        for (const action of ['clear', 'delete-session', 'dispose']) {
+            test(`discards late ${stage} results after ${action} and releases renderer output`, async () => {
+                const entered = deferred<void>();
+                const result = deferred<RuntimeRenderedOutput>();
+                const htmlFile = deferred<vscode.Uri>();
+                const models = new Map<string, unknown>();
+                let shown = 0;
+                let disposed = 0;
+                const uri = vscode.Uri.parse('http://localhost/widget');
+                const router = new RichOutputRouter(
+                    {} as any, {} as any,
+                    { addHtmlOutputPlot: () => { shown++; } } as any,
+                    {
+                        resolveRuntimeOutputHtmlUri: async () => uri,
+                        showRuntimeOutputHtml: async () => { shown++; },
+                    } as any,
+                    makeNoopLogChannel(),
+                    {
+                        upsertModel: (model: { id: string }) => models.set(model.id, model),
+                        disposeModel: (id: string) => models.delete(id),
+                    } as any,
+                );
+                (router as any)._writeHtmlOutput = async () => { entered.resolve(); return htmlFile.promise; };
+                router.registerRenderer({
+                    id: 'slow-renderer', outputKinds: [RuntimeOutputKind.WebviewPreload],
+                    render: async () => {
+                        if (stage === 'render') {
+                            entered.resolve();
+                            return result.promise;
+                        }
+                        return { target: 'plot', html: '<div>widget</div>' };
+                    },
+                    disposeOutput: async () => { disposed++; },
+                });
+                const session = { sessionId: 'slow-session' } as any;
+                const message = output(RuntimeOutputKind.WebviewPreload, {});
+                (router as any)._enqueue(session, message);
+                const route = (router as any)._routeChains.get(`${session.sessionId}:${message.output_id}`);
+                try {
+                    await entered.promise;
+                    if (action === 'clear') {
+                        (router as any)._handleClearOutput(session, { parent_id: message.parent_id, wait: false });
+                    } else if (action === 'delete-session') {
+                        (router as any)._detachSession(session.sessionId);
+                    } else {
+                        router.dispose();
+                    }
+                    result.resolve({ target: 'plot', uri });
+                    htmlFile.resolve(vscode.Uri.file('/tmp/cancelled-widget.html'));
+                    await route;
+                    assert.strictEqual(shown, 0);
+                    assert.strictEqual(models.size, 0);
+                    assert.strictEqual(disposed, 1);
+                    assert.strictEqual((router as any)._managedOutputs.size, 0);
+                    assert.strictEqual((router as any)._routingOperations.size, 0);
+                    assert.strictEqual(router.getRouteRecords().length, 0);
+                } finally {
+                    router.dispose();
+                }
+            });
+        }
+    }
+
+    test('does not render an output cleared before its queued route starts', async () => {
+        let renders = 0;
+        const router = new RichOutputRouter({} as any, {} as any, {} as any, {} as any, makeNoopLogChannel());
+        router.registerRenderer({
+            id: 'queued-renderer', render: async () => {
+                renders++;
+                return { target: 'plot', uri: vscode.Uri.parse('http://localhost/widget') };
+            },
+        });
+        const session = { sessionId: 'queued-session' } as any;
+        const message = output(RuntimeOutputKind.WebviewPreload, {});
+        (router as any)._enqueue(session, message);
+        const route = (router as any)._routeChains.get(`${session.sessionId}:${message.output_id}`);
+        (router as any)._handleClearOutput(session, { parent_id: message.parent_id, wait: false });
+        await route;
+        assert.strictEqual(renders, 0);
+        router.dispose();
+    });
+
+    for (const target of ['html', 'url']) {
+        test(`does not publish a cleared Viewer ${target} while its proxy is being resolved`, async () => {
+            const entered = deferred<void>();
+            const proxy = deferred<vscode.Uri>();
+            const uri = vscode.Uri.parse('http://localhost/widget');
+            const fileUri = vscode.Uri.file('/tmp/viewer-cancelled-widget.html');
+            const preview = new PositronPreviewService({} as any, {} as any, makeNoopLogChannel());
+            let resolutions = 0;
+            let shown = 0;
+            let disposals = 0;
+            const resolveProxy = async () => {
+                // The Router resolves HTML once before the Viewer resolves it
+                // for publication. Exercise cancellation at the latter await.
+                if (target === 'html' && ++resolutions === 1) {
+                    return uri;
+                }
+                entered.resolve();
+                return proxy.promise;
+            };
+            if (target === 'html') {
+                preview.resolveRuntimeOutputHtmlUri = resolveProxy;
+            } else {
+                (preview as any)._proxyService.resolvePath = resolveProxy;
+            }
+            const listener = preview.onDidShowPreview(() => { shown++; });
+            const router = new RichOutputRouter({} as any, {} as any, {} as any, preview, makeNoopLogChannel());
+            (router as any)._writeHtmlOutput = async () => fileUri;
+            router.registerRenderer({
+                id: 'slow-viewer',
+                render: async () => target === 'html'
+                    ? { target: 'viewer', html: '<div>widget</div>' } : { target: 'viewer', uri },
+                disposeOutput: async () => { disposals++; },
+            });
+            const session = { sessionId: 'slow-viewer-session' } as any;
+            const message = output(RuntimeOutputKind.WebviewPreload, {});
+            (router as any)._enqueue(session, message);
+            const route = (router as any)._routeChains.get(`${session.sessionId}:${message.output_id}`);
+            try {
+                await entered.promise;
+                (router as any)._handleClearOutput(session, { parent_id: message.parent_id, wait: false });
+                proxy.resolve(uri);
+                await route;
+                assert.strictEqual(shown, 0);
+                assert.strictEqual(disposals, 1);
+                assert.strictEqual(router.getRouteRecords().length, 0);
+                if (target === 'html') {
+                    await preview.showRuntimeOutputHtml(session.sessionId, fileUri, { title: 'Current' });
+                } else {
+                    await preview.showRuntimeOutputUrl(session.sessionId, uri.toString());
+                }
+                assert.strictEqual(shown, 1);
+            } finally {
+                listener.dispose();
+                router.dispose();
+                preview.dispose();
+            }
+        });
+    }
+
+    test('waited clear cancels the old render and permits its replacement with the same display id', async () => {
+        const entered = deferred<void>();
+        const result = deferred<RuntimeRenderedOutput>();
+        const plots: string[] = [];
+        let renders = 0;
+        let disposals = 0;
+        const router = new RichOutputRouter(
+            {} as any, {} as any,
+            { addHtmlOutputPlot: (_sessionId: string, event: { uri: vscode.Uri }) => plots.push(event.uri.toString()) } as any,
+            {} as any, makeNoopLogChannel(),
+        );
+        router.registerRenderer({
+            id: 'replacing-renderer',
+            render: async () => {
+                if (++renders === 1) {
+                    entered.resolve();
+                    return result.promise;
+                }
+                return { target: 'plot', uri: vscode.Uri.parse('http://localhost/new') };
+            },
+            disposeOutput: async () => { disposals++; },
+        });
+        const session = { sessionId: 'replacing-session' } as any;
+        const message = output(RuntimeOutputKind.WebviewPreload, {});
+        const key = `${session.sessionId}:${message.output_id}`;
+        (router as any)._enqueue(session, message);
+        await entered.promise;
+        (router as any)._handleClearOutput(session, { parent_id: message.parent_id, wait: true });
+        (router as any)._enqueue(session, { ...message, id: 'new-message' });
+        const route = (router as any)._routeChains.get(key);
+        result.resolve({ target: 'plot', uri: vscode.Uri.parse('http://localhost/old') });
+        await route;
+        assert.deepStrictEqual(plots, ['http://localhost/new']);
+        assert.strictEqual(disposals, 1);
+        assert.strictEqual((router as any)._managedOutputs.get(key).message.id, 'new-message');
+        router.dispose();
+    });
+
     test('declares at least one consumer for every output kind', () => {
         assert.deepStrictEqual(
             Object.keys(RuntimeOutputConsumers).sort(),

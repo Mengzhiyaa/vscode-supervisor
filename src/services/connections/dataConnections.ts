@@ -236,6 +236,17 @@ export class DataConnectionProfileStore implements vscode.Disposable {
         return cloneProfile(sanitized);
     }
 
+    /** Update usage without rewriting credentials or recreating a deleted profile. */
+    async markProfileUsed(id: string, when: number): Promise<void> {
+        const persisted = this._profiles.get(id);
+        if (!persisted) {
+            return;
+        }
+        persisted.profile.lastUsedAt = when;
+        await this._persist();
+        this._onDidChangeProfiles.fire(this.getProfiles());
+    }
+
     async removeProfile(id: string): Promise<boolean> {
         const persisted = this._profiles.get(id);
         if (!persisted) {

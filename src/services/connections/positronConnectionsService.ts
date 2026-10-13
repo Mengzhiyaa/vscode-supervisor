@@ -160,6 +160,9 @@ class ProfileConnectionInstance implements IConnectionInstance {
     private readonly _onDidChange = new vscode.EventEmitter<void>();
     private readonly _onDidFocus = new vscode.EventEmitter<Record<string, never>>();
     private _active = true;
+    private _disposed = false;
+    private _disconnectPromise: Promise<void> | undefined;
+    private _disposePromise: Promise<void> | undefined;
 
     readonly sessionId = 'profile';
     readonly clientId: string;
@@ -171,6 +174,7 @@ class ProfileConnectionInstance implements IConnectionInstance {
         readonly profile: DataConnectionProfile,
         readonly driver: DataConnectionDriver,
         private readonly _handle: DataConnection,
+        private readonly _outputChannel: vscode.LogOutputChannel,
     ) {
         this.clientId = profile.id;
         this.metadata = {
@@ -218,18 +222,41 @@ class ProfileConnectionInstance implements IConnectionInstance {
     refresh(): void { this._onDidChange.fire(); }
 
     disconnect(): void {
-        void this._handle.disconnect().finally(() => {
-            this._active = false;
-            this._onDidChange.fire();
+        void this._disconnect().catch(error => {
+            this._outputChannel.error(`[Connections] Failed to disconnect ${this.id}: ${error}`);
         });
     }
 
-    dispose(): void {
-        this._active = false;
-        const disposable = this._handle as DataConnection & Partial<vscode.Disposable>;
-        disposable.dispose?.();
-        this._onDidChange.dispose();
-        this._onDidFocus.dispose();
+    private _disconnect(): Promise<void> {
+        if (!this._disconnectPromise) {
+            this._disconnectPromise = Promise.resolve().then(() => this._handle.disconnect()).then(() => {
+                this._active = false;
+                if (!this._disposed) {
+                    this._onDidChange.fire();
+                }
+            }).catch(error => {
+                this._disconnectPromise = undefined;
+                throw error;
+            });
+        }
+        return this._disconnectPromise;
+    }
+
+    dispose(): Promise<void> {
+        if (!this._disposePromise) {
+            this._disposed = true;
+            this._active = false;
+            this._disposePromise = this._disconnect().finally(() => {
+                try {
+                    const disposable = this._handle as DataConnection & Partial<vscode.Disposable>;
+                    disposable.dispose?.();
+                } finally {
+                    this._onDidChange.dispose();
+                    this._onDidFocus.dispose();
+                }
+            });
+        }
+        return this._disposePromise;
     }
 }
 
@@ -269,10 +296,11 @@ export class PositronConnectionsService implements vscode.Disposable {
     private readonly _disposables: vscode.Disposable[] = [];
     private readonly _onDidChangeConnections = new vscode.EventEmitter<readonly IConnectionInstance[]>();
     private readonly _onDidFocusConnection = new vscode.EventEmitter<IConnectionInstance>();
-    private readonly _pendingProfiles = new Set<string>();
+    private readonly _pendingProfiles = new Map<string, Promise<IConnectionInstance>>();
     readonly driverManager = new DataConnectionsDriverManager();
     readonly profileStore: DataConnectionProfileStore;
     private _initialized = false;
+    private _disposed = false;
 
     readonly onDidChangeConnections = this._onDidChangeConnections.event;
     readonly onDidFocusConnection = this._onDidFocusConnection.event;
@@ -340,61 +368,108 @@ export class PositronConnectionsService implements vscode.Disposable {
         return stored;
     }
 
-    async connectProfile(profileId: string): Promise<IConnectionInstance> {
+    connectProfile(profileId: string): Promise<IConnectionInstance> {
+        if (this._disposed) {
+            return Promise.reject(new Error('Connections service is disposed.'));
+        }
+        const pending = this._pendingProfiles.get(profileId);
+        if (pending) {
+            return pending;
+        }
         const instanceId = `profile:${profileId}`;
         const existing = this._instances.get(instanceId);
         if (existing?.active) {
-            return existing;
+            return Promise.resolve(existing);
         }
-        if (this._pendingProfiles.has(profileId)) {
-            throw new Error(`Data connection profile '${profileId}' is already connecting.`);
-        }
-        const profile = await this.profileStore.getProfileWithSecrets(profileId);
-        if (!profile) {
-            throw new Error(`Data connection profile '${profileId}' was not found.`);
-        }
-        const driver = this.driverManager.getDriver(profile.driverId);
-        if (!driver) {
-            throw new Error(`Data connection driver '${profile.driverId}' is not registered.`);
-        }
+        // Register before the first await, including SecretStorage reads.
+        const pendingConnection: Promise<IConnectionInstance> = Promise.resolve().then(() => this._connectProfile(
+            profileId,
+            () => !this._disposed && this._pendingProfiles.get(profileId) === pendingConnection,
+        )).finally(() => {
+            if (this._pendingProfiles.get(profileId) === pendingConnection) {
+                this._pendingProfiles.delete(profileId);
+            }
+        });
+        this._pendingProfiles.set(profileId, pendingConnection);
+        return pendingConnection;
+    }
+
+    private async _connectProfile(
+        profileId: string,
+        isCurrent: () => boolean,
+    ): Promise<IConnectionInstance> {
         const modelId = createSurfaceModelId(SurfaceModelKind.Connection, 'profile', profileId);
-        this._pendingProfiles.add(profileId);
-        this._lifecycle.setRestoreState(modelId, 'backend', 'pending');
+        const assertCurrent = () => {
+            if (!isCurrent() || !this.profileStore.getProfile(profileId)) {
+                throw new Error(`Data connection profile '${profileId}' connection was cancelled.`);
+            }
+        };
+        let instance: ProfileConnectionInstance | undefined;
+        let published = false;
         try {
+            assertCurrent();
+            const profile = await this.profileStore.getProfileWithSecrets(profileId);
+            assertCurrent();
+            if (!profile) {
+                throw new Error(`Data connection profile '${profileId}' was not found.`);
+            }
+            const driver = this.driverManager.getDriver(profile.driverId);
+            if (!driver) {
+                throw new Error(`Data connection driver '${profile.driverId}' is not registered.`);
+            }
+            this._lifecycle.setRestoreState(modelId, 'backend', 'pending');
             const handle = await driver.connect(profile.mechanismId, profile.parameterValues);
-            const instance = new ProfileConnectionInstance(profile, driver, handle);
-            existing?.dispose();
+            instance = new ProfileConnectionInstance(profile, driver, handle, this._outputChannel);
+            assertCurrent();
+            // Only update the stored timestamp; never save a stale profile or secrets.
+            await this.profileStore.markProfileUsed(profileId, Date.now());
+            assertCurrent();
+            await this._disposeConnection(this._instances.get(instance.id));
+            assertCurrent();
             this._instances.set(instance.id, instance);
+            published = true;
+            const connectedInstance = instance;
             this._disposables.push(instance.onDidChange(() => {
-                this._updateModel(instance);
+                this._updateModel(connectedInstance);
                 this._onDidChangeConnections.fire(this.connections);
             }));
             this._updateModel(instance);
             this._lifecycle.setRestoreState(modelId, 'backend', 'ready');
-            profile.lastUsedAt = Date.now();
-            await this.profileStore.addUpdateProfile(
-                profile,
-                getSecretParameterIds(driver, profile.mechanismId),
-            );
             this._onDidChangeConnections.fire(this.connections);
             return instance;
         } catch (error) {
-            this._lifecycle.setRestoreState(modelId, 'backend', 'failed', error);
+            if (!published) {
+                await this._disposeConnection(instance);
+            }
+            if (isCurrent() && this.profileStore.getProfile(profileId)) {
+                this._lifecycle.setRestoreState(modelId, 'backend', 'failed', error);
+            }
             throw error;
-        } finally {
-            this._pendingProfiles.delete(profileId);
         }
     }
 
     async removeProfile(profileId: string): Promise<boolean> {
+        this._pendingProfiles.delete(profileId);
         const instance = this._instances.get(`profile:${profileId}`);
-        instance?.dispose();
         this._instances.delete(`profile:${profileId}`);
         this._lifecycle.disposeModel(
             createSurfaceModelId(SurfaceModelKind.Connection, 'profile', profileId),
             'profile-removed',
         );
-        return this.profileStore.removeProfile(profileId);
+        // Remove the descriptor immediately, even if disconnect takes time.
+        const [removed] = await Promise.all([
+            this.profileStore.removeProfile(profileId),
+            this._disposeConnection(instance),
+        ]);
+        return removed;
+    }
+
+    private async _disposeConnection(instance: IConnectionInstance | undefined): Promise<void> {
+        try {
+            await instance?.dispose();
+        } catch (error) {
+            this._outputChannel.warn(`[Connections] Failed to dispose ${instance?.id}: ${error}`);
+        }
     }
 
     private _attachSession(session: RuntimeSession): void {
@@ -488,7 +563,7 @@ export class PositronConnectionsService implements vscode.Disposable {
         });
         const instanceId = `profile:${profile.id}`;
         if (!this._instances.get(instanceId)?.active) {
-            this._instances.get(instanceId)?.dispose();
+            void this._disposeConnection(this._instances.get(instanceId));
             this._instances.set(instanceId, new StoredProfileConnectionInstance(profile));
         }
     }
@@ -535,9 +610,14 @@ export class PositronConnectionsService implements vscode.Disposable {
     }
 
     dispose(): void {
+        if (this._disposed) {
+            return;
+        }
+        this._disposed = true;
+        this._pendingProfiles.clear();
         this._sessionDisposables.forEach(disposables => disposables.forEach(disposable => disposable.dispose()));
         this._sessionDisposables.clear();
-        this._instances.forEach(instance => instance.dispose());
+        this._instances.forEach(instance => { void this._disposeConnection(instance); });
         this._instances.clear();
         this._disposables.forEach(disposable => disposable.dispose());
     }

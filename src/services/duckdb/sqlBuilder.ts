@@ -125,13 +125,13 @@ function textSearchToSql(col: string, params: FilterTextSearch): string {
 
     switch (params.search_type) {
         case TextSearchType.Contains:
-            return `${colExpr} LIKE ${escapeValue(`%${escapeLike(termLower)}%`)}`;
+            return `${colExpr} LIKE ${escapeValue(`%${escapeLike(termLower)}%`)} ESCAPE ${escapeValue('\\')}`;
         case TextSearchType.NotContains:
-            return `${colExpr} NOT LIKE ${escapeValue(`%${escapeLike(termLower)}%`)}`;
+            return `${colExpr} NOT LIKE ${escapeValue(`%${escapeLike(termLower)}%`)} ESCAPE ${escapeValue('\\')}`;
         case TextSearchType.StartsWith:
-            return `${colExpr} LIKE ${escapeValue(`${escapeLike(termLower)}%`)}`;
+            return `${colExpr} LIKE ${escapeValue(`${escapeLike(termLower)}%`)} ESCAPE ${escapeValue('\\')}`;
         case TextSearchType.EndsWith:
-            return `${colExpr} LIKE ${escapeValue(`%${escapeLike(termLower)}`)}`;
+            return `${colExpr} LIKE ${escapeValue(`%${escapeLike(termLower)}`)} ESCAPE ${escapeValue('\\')}`;
         case TextSearchType.RegexMatch:
             return `regexp_matches(${col}, ${escapeValue(term)})`;
         default:
@@ -143,7 +143,7 @@ function textSearchToSql(col: string, params: FilterTextSearch): string {
  * Escape LIKE pattern special characters.
  */
 function escapeLike(value: string): string {
-    return value.replace(/%/g, '\\%').replace(/_/g, '\\_');
+    return value.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
 }
 
 // ============================================================================

@@ -85,4 +85,30 @@ suite('[Unit] ConsoleRecoveryFileStore', () => {
         assert.strictEqual(restored.get('session-1'), undefined);
         assert.strictEqual(restored.getActiveSessionId(), undefined);
     });
+
+    for (const nextSession of ['session-2', undefined]) {
+        test(`retries a failed active-session write to ${nextSession ?? 'no selection'}`, async () => {
+            const storageUri = vscode.Uri.file(temporaryDirectory);
+            const store = new ConsoleRecoveryFileStore(storageUri, makeNoopLogChannel());
+            await store.initialize();
+            await store.setActiveSessionId('session-1');
+            const writer = (store as any)._atomicWrite.bind(store);
+            let fail = true;
+            (store as any)._atomicWrite = async (...args: unknown[]) => {
+                if (fail) {
+                    fail = false;
+                    throw new Error('injected disk failure');
+                }
+                return writer(...args);
+            };
+
+            await assert.rejects(store.setActiveSessionId(nextSession), /injected disk failure/);
+            assert.strictEqual(store.getActiveSessionId(), 'session-1');
+            await store.setActiveSessionId(nextSession);
+
+            const restored = new ConsoleRecoveryFileStore(storageUri, makeNoopLogChannel());
+            await restored.initialize();
+            assert.strictEqual(restored.getActiveSessionId(), nextSession);
+        });
+    }
 });

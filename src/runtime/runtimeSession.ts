@@ -1717,25 +1717,25 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
         activate: boolean,
     ): Promise<string> {
         this.setStartingSessionMaps(sessionMode, runtimeMetadata, notebookUri);
-        const sessionManager = await this._getManagerForRuntime(runtimeMetadata);
-        const sessionMetadata: IRuntimeSessionMetadata = {
-            sessionId: this._generateSessionId(
-                runtimeMetadata.languageId,
-                this._toLanguageSessionMode(sessionMode),
-            ),
-            sessionName,
-            sessionMode,
-            notebookUri,
-            createdTimestamp: Date.now(),
-            startReason: source,
-        };
-
-        const session = await sessionManager.createSession(
-            runtimeMetadata,
-            sessionMetadata,
-            sessionName,
-        ) as RuntimeSession;
         try {
+            const sessionManager = await this._getManagerForRuntime(runtimeMetadata);
+            const sessionMetadata: IRuntimeSessionMetadata = {
+                sessionId: this._generateSessionId(
+                    runtimeMetadata.languageId,
+                    this._toLanguageSessionMode(sessionMode),
+                ),
+                sessionName,
+                sessionMode,
+                notebookUri,
+                createdTimestamp: Date.now(),
+                startReason: source,
+            };
+
+            const session = await sessionManager.createSession(
+                runtimeMetadata,
+                sessionMetadata,
+                sessionName,
+            ) as RuntimeSession;
             await this.doStartRuntimeSession(session, startMode, hasConsole, activate);
             return session.sessionId;
         } catch (error) {

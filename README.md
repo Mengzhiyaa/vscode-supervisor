@@ -21,6 +21,13 @@ which consumer repos copy into their own `src/types/` tree.
 Closing a session sends the kernel shutdown request immediately while LSP and
 DAP cleanup runs in parallel. The kernel must exit before its session is removed.
 Session removal is published before waiting for editor resource disposal.
+Failed session creation releases the startup reservation so the same console
+or notebook runtime can be retried. Replacing a language registration settles
+pending `whenCapabilityReady()` observers of the old generation as `disposed`.
+Extension shutdown attempts every save and cleanup step even when one fails,
+then reports the collected errors. Concurrent shutdown requests share that work.
+Active Console selection is committed to recovery storage only after a successful
+write, so failed writes can be retried.
 
 ### Notebook controller ownership
 
@@ -71,6 +78,12 @@ context.subscriptions.push(renderer);
 
 The renderer extension owns MIME interpretation and script/preload loading.
 Supervisor owns routing the resulting HTML or URI into Viewer or Plots.
+Clearing output, deleting its session, or releasing the router invalidates queued
+rendering work. Late renderer results are discarded and released through the
+renderer's `disposeOutput()` hook.
+
+Data Explorer's DuckDB text filters treat `%`, `_`, and backslashes as literal
+characters for contains, excludes, starts-with, and ends-with searches.
 
 ### Data Connections
 
@@ -78,6 +91,12 @@ New drivers should use the current flat `DataConnectionDriver` contract and
 return object nodes with local `getChildren()` and `preview()` callbacks.
 Legacy `IDataConnectionDriver` registrations using numeric node handles remain
 supported through an adapter.
+
+Concurrent requests to connect the same saved profile share one operation.
+Removing a profile cancels publication of any pending connection and disconnects
+its active connection. Connections returned after cancellation are disconnected
+without restoring the deleted profile. Releasing the service also disconnects
+profile connections; legacy handles retain their additional `dispose()` cleanup.
 
 `webview/` is also source-owned here now, so the supervisor UI can be rebuilt
 inside this repo without relying on parent-workspace artifacts.

@@ -60,7 +60,7 @@ export class ConsoleStateStore implements vscode.Disposable {
         this._fileStore = new ConsoleRecoveryFileStore(storageUri, _logChannel);
         this._autoFlushTimer = setInterval(() => {
             if (this._hasDirtySessions()) {
-                void this.flush();
+                void this._flushInBackground('Periodic');
             }
         }, AutoFlushIntervalMs);
     }
@@ -265,7 +265,7 @@ export class ConsoleStateStore implements vscode.Disposable {
             this._autoFlushTimer = undefined;
         }
         // Best-effort: not awaited, may not complete before process exit.
-        void this.flush();
+        void this._flushInBackground('Disposal');
 
         for (const disposables of this._subscriptions.values()) {
             disposables.forEach(d => d.dispose());
@@ -280,6 +280,14 @@ export class ConsoleStateStore implements vscode.Disposable {
     // -----------------------------------------------------------------------
     // Private: flush implementation
     // -----------------------------------------------------------------------
+
+    private async _flushInBackground(reason: string): Promise<void> {
+        try {
+            await this.flush();
+        } catch (error) {
+            this._logChannel.warn(`[ConsoleStateStore] ${reason} flush failed: ${error}`);
+        }
+    }
 
     private async _drainUntilStable(): Promise<void> {
         let iterations = 0;

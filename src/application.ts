@@ -168,6 +168,7 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
     private readonly _languageAssetCatalog: PassiveLanguageAssetCatalog;
     private _activated = false;
     private _runtimeStartupStarted = false;
+    private _shutdownPromise: Promise<void> | undefined;
     readonly version = '0.1.0';
     readonly apiVersion = 2 as const;
     readonly protocolVersion = Object.freeze({ major: 2 as const, minor: 0 });
@@ -1825,23 +1826,48 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
      * Disposes of all resources
      */
     dispose(): void {
-        void this.shutdown();
+        // Each failure is logged by shutdown; disposal must not create an
+        // unhandled rejection when VS Code cannot await it.
+        void this.shutdown().catch(() => undefined);
     }
 
-    async shutdown(): Promise<void> {
+    shutdown(): Promise<void> {
+        this._shutdownPromise ??= Promise.resolve().then(() => this._performShutdown());
+        return this._shutdownPromise;
+    }
+
+    private async _performShutdown(): Promise<void> {
         this._outputChannel.debug('[Supervisor] Disposing extension...');
-
-        await this._consoleService.flushPersistedState();
-        await this._runtimeStartupService.prepareForExtensionHostShutdown();
-        await this._sessionManager.detachForExtensionHostShutdown();
-        await this._surfaceLifecycle.whenPersisted();
-
-        this._languageCapabilityRegistry.dispose();
-
-        this._disposables.forEach(d => {
-            if (d !== this._sessionManager) {
-                d.dispose();
+        const errors: unknown[] = [];
+        const runStep = async (label: string, operation: () => void | PromiseLike<void>) => {
+            try {
+                await operation();
+            } catch (error) {
+                errors.push(error);
+                this._outputChannel.warn(`[Supervisor] Failed to ${label} during shutdown: ${error}`);
             }
-        });
+        };
+
+        await runStep('save Console state', () => this._consoleService.flushPersistedState());
+        await runStep('save runtime sessions', () => this._runtimeStartupService.prepareForExtensionHostShutdown());
+        await runStep('detach runtime sessions', () => this._sessionManager.detachForExtensionHostShutdown());
+        await runStep('save surface state', () => this._surfaceLifecycle.whenPersisted());
+
+        await runStep('dispose language registrations', () => this._languageCapabilityRegistry.dispose());
+
+        // Keep logging available until all other resources have been released.
+        for (const disposable of this._disposables) {
+            if (disposable !== this._sessionManager && disposable !== this._outputChannel) {
+                await runStep('dispose a resource', () => disposable.dispose());
+            }
+        }
+        try {
+            this._outputChannel.dispose();
+        } catch (error) {
+            errors.push(error);
+        }
+        if (errors.length > 0) {
+            throw new AggregateError(errors, 'Supervisor shutdown completed with errors.');
+        }
     }
 }

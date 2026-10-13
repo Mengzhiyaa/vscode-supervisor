@@ -227,11 +227,13 @@ export class LanguageCapabilityRegistry implements ILanguageCapabilityRegistry, 
             phase: 'active',
         };
         this._registrationsByLanguageId.set(draft.identity.languageId, active);
-        this._publishInitialStates(active);
 
         if (existing) {
+            // Settle observers of the old generation before its keyed states
+            // are replaced by the new generation.
             this._retire(existing, 'superseded');
         }
+        this._publishInitialStates(active);
 
         queueMicrotask(() => this._activateReadyOptionalCapabilities(active));
         return this._createLease(active);

@@ -176,8 +176,8 @@ export class ConsoleRecoveryFileStore {
         if (!this._root || this._manifest.activeSessionId === sessionId) {
             return;
         }
+        await this._writeManifest({ ...this._manifest, activeSessionId: sessionId });
         this._manifest.activeSessionId = sessionId;
-        await this._writeManifest();
     }
 
     async write(
@@ -310,11 +310,11 @@ export class ConsoleRecoveryFileStore {
         return recovered;
     }
 
-    private async _writeManifest(): Promise<void> {
+    private async _writeManifest(manifest: RecoveryManifest = this._manifest): Promise<void> {
         if (!this._root) {
             return;
         }
-        await this._atomicWrite(this._manifestPath(), JSON.stringify(this._manifest));
+        await this._atomicWrite(this._manifestPath(), JSON.stringify(manifest));
     }
 
     private async _atomicWrite(target: string, contents: string): Promise<void> {

@@ -117,6 +117,59 @@ suite('[Unit] language capability registry', () => {
         registry.dispose();
     });
 
+    test('settles an old readiness observer when an activating capability is superseded', async () => {
+        const registry = createRegistry();
+        let finishActivation!: (disposable: vscode.Disposable) => void;
+        let disposed = false;
+        const first = coreBuilder(registry, 1).addOptionalCapability({
+            id: 'commands.help',
+            kind: 'commands',
+            revision: 1,
+            activate: () => new Promise<vscode.Disposable>(resolve => { finishActivation = resolve; }),
+        }).commit();
+        await Promise.resolve();
+        const oldReady = first.whenCapabilityReady('commands.help', { timeout: 1000 });
+        const second = coreBuilder(registry, 2).addOptionalCapability({
+            id: 'commands.help',
+            kind: 'commands',
+            revision: 2,
+            activate: () => new vscode.Disposable(() => undefined),
+        }).commit();
+        try {
+            const retired = await oldReady;
+            assert.strictEqual(retired.generation, first.generation);
+            assert.strictEqual(retired.phase, 'disposed');
+            finishActivation(new vscode.Disposable(() => { disposed = true; }));
+            const ready = await second.whenCapabilityReady('commands.help', { timeout: 1000 });
+            assert.strictEqual(disposed, true);
+            assert.strictEqual(ready.generation, second.generation);
+            assert.strictEqual(ready.phase, 'ready');
+        } finally {
+            first.dispose();
+            second.dispose();
+            registry.dispose();
+        }
+    });
+
+    test('settles an old readiness observer when replacement omits the capability', async () => {
+        const registry = createRegistry();
+        const first = coreBuilder(registry, 1).addOptionalCapability({
+            id: 'commands.help', kind: 'commands', revision: 1,
+            activate: () => new vscode.Disposable(() => undefined),
+        }).commit();
+        const oldReady = first.whenCapabilityReady('commands.help', { timeout: 1000 });
+        const second = coreBuilder(registry, 2).commit();
+        try {
+            assert.strictEqual((await oldReady).phase, 'disposed');
+            assert.strictEqual(registry.getCapabilityState(capabilityKey('core.runtimeProvider'))?.generation,
+                second.generation);
+        } finally {
+            first.dispose();
+            second.dispose();
+            registry.dispose();
+        }
+    });
+
     test('isolates optional activation failure and supports explicit retry', async () => {
         const registry = createRegistry();
         let attempts = 0;
