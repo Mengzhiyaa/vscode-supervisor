@@ -34,6 +34,7 @@ function createKernel(connected = true) {
             close: () => undefined,
         },
         _pendingRequests: new Map(),
+        _pendingUnprocessedExecutions: new Map(),
         _pendingUiCommRequests: [],
         _clients: new Map(),
         _comms: new Map(),

@@ -1,4 +1,6 @@
 export const CoreCommandIds = {
+    dataExplorerImport: 'supervisor.dataExplorer.import',
+    dataExplorerImportFromView: 'supervisor.dataExplorer.importFromView',
     newSession: 'supervisor.newSession',
     duplicateSession: 'supervisor.duplicateSession',
     quickLaunchSession: 'supervisor.quickLaunchSession',
@@ -136,6 +138,7 @@ export const ContextKeys = {
     dataExplorerIsRowFiltering: 'supervisor.dataExplorerIsRowFiltering',
     dataExplorerIsPlaintext: 'supervisor.dataExplorerIsPlaintext',
     dataExplorerIsXlsx: 'supervisor.dataExplorerIsXlsx',
+    dataExplorerHasBackingFile: 'supervisor.dataExplorerHasBackingFile',
     dataExplorerSummaryCollapsed: 'supervisor.dataExplorerSummaryCollapsed',
     dataExplorerFocused: 'supervisor.dataExplorerFocused',
     dataExplorerInNewWindow: 'supervisor.dataExplorerInNewWindow',

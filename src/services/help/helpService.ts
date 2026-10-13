@@ -109,6 +109,11 @@ export class PositronHelpService implements IPositronHelpService {
         return false;
     }
 
+    /** Package editors route help to their originating session. */
+    async showSessionHelpTopic(sessionId: string, topic: string): Promise<boolean> {
+        return this._helpClients.get(sessionId)?.showHelpTopic(topic) ?? false;
+    }
+
     navigate(fromUrl: string, toUrl: string): void {
         void this._navigateAsync(fromUrl, toUrl);
     }

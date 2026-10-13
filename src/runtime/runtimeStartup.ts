@@ -180,7 +180,10 @@ export class RuntimeStartupService implements vscode.Disposable {
                     session.runtimeMetadata.languageId,
                     session.runtimeMetadata,
                 );
-                void this._saveRuntimeAffiliation(session.runtimeMetadata);
+                if (session.sessionMetadata.sessionMode !== LanguageRuntimeSessionMode.Console ||
+                    session.runtimeMetadata.startupBehavior !== LanguageRuntimeStartupBehavior.Manual) {
+                    void this._saveRuntimeAffiliation(session.runtimeMetadata);
+                }
                 void this.saveWorkspaceSessions();
             }),
             this._sessionManager.onDidDeleteRuntimeSession((sessionId) => {
@@ -971,7 +974,7 @@ export class RuntimeStartupService implements vscode.Disposable {
             try {
                 this._outputChannel.debug(`${marker}: Restoring session for ${persisted.sessionName}`);
 
-                await this._sessionManager.restoreRuntimeSession(
+                const restoredSession = await this._sessionManager.restoreRuntimeSession(
                     runtimeMetadata,
                     persisted.metadata,
                     persisted.sessionName,
@@ -979,6 +982,9 @@ export class RuntimeStartupService implements vscode.Disposable {
                     activate,
                     persisted.workingDirectory,
                 );
+                if (persisted.metadata.sessionMode === LanguageRuntimeSessionMode.Console) {
+                    restoredSession.restoreLastUsed(persisted.lastUsed);
+                }
                 this._completedRestoredSessionIds.add(persisted.metadata.sessionId);
                 this._restoringRestoredSessionIds.delete(persisted.metadata.sessionId);
             } catch (error) {
@@ -1059,7 +1065,9 @@ export class RuntimeStartupService implements vscode.Disposable {
                     sessionState: session.state,
                     workingDirectory: session.workingDirectory ?? '',
                     hasConsole: activeSession?.hasConsole ?? session.sessionMetadata.sessionMode === LanguageRuntimeSessionMode.Console,
-                    lastUsed: session.sessionId === this._sessionManager.activeSessionId ? Date.now() : session.created,
+                    lastUsed: session.sessionMetadata.sessionMode === LanguageRuntimeSessionMode.Console
+                        ? session.lastUsed
+                        : session.sessionId === this._sessionManager.activeSessionId ? Date.now() : session.created,
                     localWindowId: this._localWindowId,
                     recoveryKey: {
                         sessionId: session.sessionId,
@@ -1208,6 +1216,10 @@ export class RuntimeStartupService implements vscode.Disposable {
             hasConsole: typeof raw.hasConsole === 'boolean' ? raw.hasConsole : true,
             lastUsed: typeof raw.lastUsed === 'number' ? raw.lastUsed : 0,
             localWindowId: typeof raw.localWindowId === 'string' ? raw.localWindowId : undefined,
+            ...(metadata.sessionMode === LanguageRuntimeSessionMode.Console ? {
+                recoveryKey: raw.recoveryKey as SerializedSessionMetadata['recoveryKey'],
+                reconnectLease: raw.reconnectLease as SerializedSessionMetadata['reconnectLease'],
+            } : {}),
         };
     }
 
@@ -1228,12 +1240,11 @@ export class RuntimeStartupService implements vscode.Disposable {
             .map((languageId) => this._getAffiliatedRuntime(languageId))
             .filter((value): value is IAffiliatedRuntimeMetadata => !!value)
             .filter((affiliation) => {
-                if (affiliation.lastStarted === 0 && affiliation.lastUsed === 0) {
-                    return false;
-                }
-
                 if (languageIds.length === 1) {
                     return true;
+                }
+                if (affiliation.lastStarted === 0 && affiliation.lastUsed === 0) {
+                    return false;
                 }
 
                 return affiliation.lastStarted <= affiliation.lastUsed;

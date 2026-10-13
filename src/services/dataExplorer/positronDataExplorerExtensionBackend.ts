@@ -62,6 +62,7 @@ export interface DataExplorerRpcResponse<T> {
 
 export interface DataExplorerBackendProvider {
     readonly id: string;
+    readonly ownerExtensionId?: string;
     canHandle(uri: vscode.Uri): boolean | Promise<boolean>;
     open(uri: vscode.Uri): Promise<DataExplorerBackendTransport>;
 }
@@ -217,12 +218,16 @@ export class PositronDataExplorerExtensionBackend implements IDataExplorerComm {
 
 export class DataExplorerBackendRegistry implements vscode.Disposable {
     private readonly _providers = new Map<string, DataExplorerBackendProvider>();
+    private readonly _onDidRegisterProvider = new vscode.EventEmitter<string>();
+    private _disposed = false;
 
     registerProvider(provider: DataExplorerBackendProvider): vscode.Disposable {
+        if (this._disposed) { throw new vscode.CancellationError(); }
         if (this._providers.has(provider.id)) {
             throw new Error(`Data Explorer backend provider '${provider.id}' is already registered.`);
         }
         this._providers.set(provider.id, provider);
+        this._onDidRegisterProvider.fire(provider.id);
         return new vscode.Disposable(() => {
             if (this._providers.get(provider.id) === provider) {
                 this._providers.delete(provider.id);
@@ -230,15 +235,35 @@ export class DataExplorerBackendRegistry implements vscode.Disposable {
         });
     }
 
-    async open(uri: vscode.Uri, providerId?: string): Promise<PositronDataExplorerExtensionBackend> {
+    async findProvider(uri: vscode.Uri, providerId?: string): Promise<string | undefined> {
+        if (this._disposed) { throw new vscode.CancellationError(); }
+        await this._activateProviders(providerId);
+        if (this._disposed) { throw new vscode.CancellationError(); }
+        const candidates = providerId ? [this._providers.get(providerId)] : [...this._providers.values()];
+        for (const provider of candidates) {
+            if (provider && await provider.canHandle(uri) && this._providers.get(provider.id) === provider) {
+                return provider.id;
+            }
+        }
+        return undefined;
+    }
+
+    async open(uri: vscode.Uri, providerId?: string, clientIdentity?: string): Promise<PositronDataExplorerExtensionBackend> {
+        if (this._disposed) { throw new vscode.CancellationError(); }
+        await this._activateProviders(providerId);
+        if (this._disposed) { throw new vscode.CancellationError(); }
         const candidates = providerId
             ? [this._providers.get(providerId)].filter((provider): provider is DataExplorerBackendProvider => !!provider)
             : [...this._providers.values()];
         for (const provider of candidates) {
             if (await provider.canHandle(uri)) {
                 const transport = await provider.open(uri);
+                if (this._disposed || this._providers.get(provider.id) !== provider) {
+                    transport.dispose();
+                    throw new vscode.CancellationError();
+                }
                 const datasetId = transport.datasetId ?? uri.toString();
-                const clientId = transport.clientId ?? `${provider.id}:${datasetId}`;
+                const clientId = clientIdentity ?? transport.clientId ?? `${provider.id}:${datasetId}`;
                 return new PositronDataExplorerExtensionBackend(
                     provider.id,
                     uri.toString(),
@@ -253,5 +278,27 @@ export class DataExplorerBackendRegistry implements vscode.Disposable {
             : `No Data Explorer backend provider can open '${uri.toString()}'.`);
     }
 
-    dispose(): void { this._providers.clear(); }
+    private async _activateProviders(providerId?: string): Promise<void> {
+        const owners = vscode.extensions.all.filter(extension => {
+            const declarations = extension.packageJSON.supervisor?.dataExplorerBackends ??
+                extension.packageJSON.positron?.dataExplorerBackends;
+            const events = extension.packageJSON.activationEvents as string[] | undefined;
+            return (Array.isArray(declarations) && declarations.some((entry: { id?: string } | string) =>
+                !providerId || (typeof entry === 'string' ? entry : entry.id) === providerId)) ||
+                events?.some(event => event.startsWith('onPositronDataExplorerBackend:') &&
+                    (!providerId || event === `onPositronDataExplorerBackend:${providerId}`));
+        });
+        await Promise.all(owners.map(extension => extension.activate()));
+        if (providerId && !this._providers.has(providerId) && owners.length > 0) {
+            await new Promise<void>(resolve => {
+                const timer = setTimeout(() => { subscription.dispose(); resolve(); }, 10000);
+                const subscription = this._onDidRegisterProvider.event(id => {
+                    if (id === providerId) { clearTimeout(timer); subscription.dispose(); resolve(); }
+                });
+                if (this._providers.has(providerId)) { clearTimeout(timer); subscription.dispose(); resolve(); }
+            });
+        }
+    }
+
+    dispose(): void { this._disposed = true; this._providers.clear(); this._onDidRegisterProvider.dispose(); }
 }

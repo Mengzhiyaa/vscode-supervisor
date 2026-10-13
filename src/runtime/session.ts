@@ -165,6 +165,7 @@ export interface RuntimeSessionProvisioningOptions {
  * Wraps a JupyterLanguageRuntimeSession from positron-supervisor.
  */
 export class RuntimeSession implements vscode.Disposable {
+    private _lastUsed = 0;
     private readonly _stateEmitter = new vscode.EventEmitter<RuntimeState>();
     private readonly _exitEmitter = new vscode.EventEmitter<LanguageRuntimeExit>();
     private readonly _startupCompleteEmitter = new vscode.EventEmitter<LanguageRuntimeInfo>();
@@ -368,6 +369,14 @@ export class RuntimeSession implements vscode.Disposable {
 
     get created(): number {
         return this._created;
+    }
+
+    get lastUsed(): number {
+        return this._lastUsed;
+    }
+
+    restoreLastUsed(lastUsed: number): void {
+        this._lastUsed = Math.max(this._lastUsed, lastUsed);
     }
 
     get metadata(): IRuntimeSessionMetadata {
@@ -868,16 +877,17 @@ export class RuntimeSession implements vscode.Disposable {
         errorBehavior: RuntimeErrorBehavior = RuntimeErrorBehavior.Continue,
         attribution?: ICodeExecutionAttribution,
         executionMetadata?: Record<string, unknown>,
-    ): void {
+    ): void | Promise<void> {
         if (!this._kernel) {
             throw new Error('Kernel not attached');
         }
+        this._lastUsed = Date.now();
         const codePreview = code.length > 100 ? code.substring(0, 100) + '...' : code;
         this.log(`>>> SEND execute_request [${id}]: ${codePreview}`, vscode.LogLevel.Debug);
         const kernelExecutionMetadata = attribution?.metadata || executionMetadata
             ? { ...attribution?.metadata, ...executionMetadata }
             : undefined;
-        this._kernel.execute(
+        return this._kernel.execute(
             code,
             id,
             mode,
@@ -1007,7 +1017,7 @@ export class RuntimeSession implements vscode.Disposable {
             });
 
             try {
-                this.execute(code, id, mode, errorBehavior, options.attribution);
+                Promise.resolve(this.execute(code, id, mode, errorBehavior, options.attribution)).catch(finish);
             } catch (error) {
                 finish(error);
             }

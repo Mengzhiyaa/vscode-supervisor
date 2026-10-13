@@ -286,7 +286,7 @@ export interface LanguageRuntimeSession extends vscode.Disposable {
         errorBehavior: RuntimeErrorBehavior,
         codeLocation?: Utf8Location,
         executionMetadata?: Record<string, unknown>
-    ): void;
+    ): void | Promise<void>;
 
     isCodeFragmentComplete(code: string): Thenable<RuntimeCodeFragmentStatus>;
 

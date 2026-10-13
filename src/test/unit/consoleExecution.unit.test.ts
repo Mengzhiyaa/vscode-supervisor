@@ -1,5 +1,6 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
+import { KallichoreSession } from '../../supervisor/KallichoreSession';
 import { LanguageRuntimeSessionMode, LanguageRuntimeStartupBehavior } from '../../api';
 import {
     RuntimeCodeFragmentStatus,
@@ -77,9 +78,28 @@ function createRuntimeSession(
     executeCalls: unknown[][],
     state: RuntimeState = RuntimeState.Ready,
 ): any {
-    return {
+    // Use the supervisor's real Unprocessed protocol; only the final kernel
+    // dispatch is stubbed. A void execute stub cannot report incomplete code,
+    // completeness failures, or cancellation to the Console.
+    const kernel = Object.create(KallichoreSession.prototype) as any;
+    const pendingExecutions = new Map<string, unknown[]>();
+    Object.assign(kernel, {
+        metadata: { sessionId: 'session-1' },
+        _pendingUnprocessedExecutions: new Map(),
+        _runtimeState: state,
+        _api: { interruptSession: async () => undefined },
+        onStateChange: () => undefined,
+        execute: (_code: string, id: string) => {
+            const args = pendingExecutions.get(id);
+            assert.ok(args, `Missing execution ${id}`);
+            executeCalls.push(args);
+        },
+        isCodeFragmentComplete: (code: string) => runtimeSession.isCodeFragmentComplete(code),
+    });
+    const runtimeSession = {
         sessionId: 'session-1',
         state,
+        lsp: {},
         workingDirectory: '/tmp/session-1',
         dynState: {
             sessionName: 'Session 1',
@@ -95,9 +115,15 @@ function createRuntimeSession(
             return RuntimeCodeFragmentStatus.Complete;
         },
         execute: (...args: unknown[]) => {
+            const [code, id, mode, errorBehavior] = args as [string, string, RuntimeCodeExecutionMode, RuntimeErrorBehavior];
+            if (mode === RuntimeCodeExecutionMode.Unprocessed) {
+                pendingExecutions.set(id, args);
+                return Promise.resolve(KallichoreSession.prototype.execute.call(kernel, code, id, mode, errorBehavior))
+                    .finally(() => pendingExecutions.delete(id));
+            }
             executeCalls.push(args);
         },
-        interrupt: () => undefined,
+        interrupt: () => kernel.interrupt(),
         onDidChangeRuntimeState: createEventStub(),
         onDidReceiveRuntimeMessageStream: createEventStub(),
         onDidReceiveRuntimeMessageInput: createEventStub(),
@@ -111,6 +137,7 @@ function createRuntimeSession(
         onDidEndSession: createEventStub(),
         onDidEncounterStartupFailure: createEventStub(),
     };
+    return runtimeSession;
 }
 
 suite('[Unit] console execution alignment', () => {
@@ -281,9 +308,12 @@ suite('[Unit] console execution alignment', () => {
         const instance = createConsoleInstance();
         const runtimeSession = createRuntimeSession(executeCalls);
         let resolveCompleteness!: (status: RuntimeCodeFragmentStatus) => void;
+        let markCompletenessRequested!: () => void;
+        const completenessRequested = new Promise<void>(resolve => { markCompletenessRequested = resolve; });
         runtimeSession.isCodeFragmentComplete = () =>
             new Promise<RuntimeCodeFragmentStatus>((resolve) => {
                 resolveCompleteness = resolve;
+                markCompletenessRequested();
             });
         instance.attachRuntimeSession(runtimeSession, SessionAttachMode.Connected);
 
@@ -296,10 +326,14 @@ suite('[Unit] console execution alignment', () => {
         assert.strictEqual(placeholder.submitting, true);
         assert.strictEqual(instance.codeSubmissionInProgress, true);
 
+        await completenessRequested;
         resolveCompleteness(RuntimeCodeFragmentStatus.Complete);
         assert.strictEqual(await submission, 'executed');
         assert.strictEqual(executeCalls.length, 1);
         assert.strictEqual(executeCalls[0][0], '1 + 1');
+        assert.strictEqual(executeCalls[0][2], RuntimeCodeExecutionMode.Unprocessed);
+        assert.strictEqual(instance.codeSubmissionInProgress, true);
+        instance.markExecutionCompleted(String(executeCalls[0][1]));
         assert.strictEqual(instance.codeSubmissionInProgress, false);
         assert.ok(!instance.runtimeItems.includes(placeholder));
         assert.ok(instance.runtimeItems[placeholderIndex] instanceof RuntimeItemActivity);
@@ -351,6 +385,7 @@ suite('[Unit] console execution alignment', () => {
         );
         assert.strictEqual(executeCalls.length, 1);
         assert.strictEqual(executeCalls[0][0], accumulatedCode);
+        instance.markExecutionCompleted(String(executeCalls[0][1]));
 
         // Clearing the host mirror must be silent: the webview already cleared
         // its model, and a notification here could erase type-ahead. The next
@@ -390,10 +425,16 @@ suite('[Unit] console execution alignment', () => {
         const executeCalls: unknown[][] = [];
         const instance = createConsoleInstance();
         const runtimeSession = createRuntimeSession(executeCalls);
-        runtimeSession.isCodeFragmentComplete = () => new Promise(() => undefined);
+        let markCompletenessRequested!: () => void;
+        const completenessRequested = new Promise<void>(resolve => { markCompletenessRequested = resolve; });
+        runtimeSession.isCodeFragmentComplete = () => {
+            markCompletenessRequested();
+            return new Promise(() => undefined);
+        };
         instance.attachRuntimeSession(runtimeSession, SessionAttachMode.Connected);
 
         const submission = instance.submitCode('slow()', { source: 'console' });
+        await completenessRequested;
         instance.cancelCodeSubmission();
         assert.strictEqual(await submission, 'cancelled');
         assert.deepStrictEqual(executeCalls, []);
@@ -422,20 +463,35 @@ suite('[Unit] console execution alignment', () => {
         instance.dispose();
     });
 
-    test('host-owned submission executes when completeness check times out', async () => {
+    test('host-owned submission waits for supervisor validation beyond the host completeness timeout', async () => {
         const executeCalls: unknown[][] = [];
         const instance = createConsoleInstance();
         const runtimeSession = createRuntimeSession(executeCalls);
-        runtimeSession.isCodeFragmentComplete = () => new Promise(() => undefined);
+        let resolveCompleteness!: (status: RuntimeCodeFragmentStatus) => void;
+        let markCompletenessRequested!: () => void;
+        const completenessRequested = new Promise<void>(resolve => { markCompletenessRequested = resolve; });
+        runtimeSession.isCodeFragmentComplete = () => new Promise<RuntimeCodeFragmentStatus>(resolve => {
+            resolveCompleteness = resolve;
+            markCompletenessRequested();
+        });
         instance.attachRuntimeSession(runtimeSession, SessionAttachMode.Connected);
         (instance as any)._codeCompletenessTimeoutMs = 10;
 
-        assert.strictEqual(
-            await instance.submitCode('1 + 1', { source: 'console' }),
-            'executed',
-        );
+        const submission = instance.submitCode('1 + 1', { source: 'console' });
+        let completed = false;
+        void submission.then(() => { completed = true; });
+        await completenessRequested;
+        await new Promise<void>(resolve => setTimeout(resolve, 20));
+        assert.strictEqual(completed, false);
+        assert.deepStrictEqual(executeCalls, []);
+        assert.strictEqual(instance.codeSubmissionInProgress, true);
+
+        resolveCompleteness(RuntimeCodeFragmentStatus.Complete);
+        assert.strictEqual(await submission, 'executed');
         assert.strictEqual(executeCalls.length, 1);
         assert.strictEqual(executeCalls[0][0], '1 + 1');
+        assert.strictEqual(executeCalls[0][2], RuntimeCodeExecutionMode.Unprocessed);
+        instance.markExecutionCompleted(String(executeCalls[0][1]));
         assert.strictEqual(instance.codeSubmissionInProgress, false);
         instance.dispose();
     });

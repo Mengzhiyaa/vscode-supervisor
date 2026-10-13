@@ -5,6 +5,7 @@
 
 
 import * as vscode from 'vscode';
+import { LanguageRuntimeSessionMode } from '../api';
 import { savePlotImage, offerPlotImageExport } from './plotImageExport';
 import { CoreCommandIds } from '../coreCommandIds';
 import type { IPlotSize, IPositronPlotSizingPolicy } from './sizingPolicy';
@@ -190,6 +191,10 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
      */
     private readonly _recentExecutions = new Map<string, string>();
     private readonly _recentExecutionIds: string[] = [];
+    private readonly _surfacedPlotMessages = new Map<string, {
+        session: RuntimeSession;
+        message: LanguageRuntimeOutputWithKind | LanguageRuntimeResultWithKind | LanguageRuntimeUpdateOutputWithKind;
+    }>();
     private readonly _lastSelectedTimeByPlotId = new Map<string, number>();
     private _selectionSequence = 0;
     private readonly _htmlPlotDisposables = new Map<string, vscode.Disposable>();
@@ -700,6 +705,14 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
         const plot = this._plots.find(p => p.id === id);
         if (plot) {
             this._onDidSelectPlot.fire(id);
+            return;
+        }
+        const cached = this._surfacedPlotMessages.get(id);
+        if (cached) {
+            const recreated = this._createPlotFromOutput(cached.message, cached.session);
+            if (recreated) {
+                this.registerNewPlotClient(recreated);
+            }
         }
     }
 
@@ -1310,6 +1323,11 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
     }
 
     private _detachSession(sessionId: string): void {
+        for (const [id, cached] of this._surfacedPlotMessages) {
+            if (cached.session.sessionId === sessionId) {
+                this._surfacedPlotMessages.delete(id);
+            }
+        }
         const disposables = this._sessionDisposables.get(sessionId);
         if (disposables) {
             disposables.forEach(d => d.dispose());
@@ -1357,9 +1375,13 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
             return;
         }
 
+        this._rememberSurfacedPlot(plot.id, message, session);
+
         if (message.output_id) {
             const existingPlot = this.getPlotForOutput(session.sessionId, message.output_id);
             if (existingPlot) {
+                this._surfacedPlotMessages.delete(existingPlot.id);
+                this._rememberSurfacedPlot(plot.id, message, session);
                 this.replacePlot(existingPlot.id, plot);
                 return;
             }
@@ -1376,7 +1398,30 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
 
         const existingPlot = this.getPlotForOutput(session.sessionId, message.output_id);
         if (existingPlot) {
+            this._surfacedPlotMessages.delete(existingPlot.id);
+            this._rememberSurfacedPlot(plot.id, message, session);
             this.replacePlot(existingPlot.id, plot);
+        } else {
+            const cached = [...this._surfacedPlotMessages].find(([, entry]) =>
+                entry.session.sessionId === session.sessionId && entry.message.output_id === message.output_id);
+            if (cached) {
+                this._surfacedPlotMessages.delete(cached[0]);
+                this._rememberSurfacedPlot(plot.id, message, session);
+            }
+        }
+    }
+
+    private _rememberSurfacedPlot(
+        id: string,
+        message: LanguageRuntimeOutputWithKind | LanguageRuntimeResultWithKind | LanguageRuntimeUpdateOutputWithKind,
+        session: RuntimeSession,
+    ): void {
+        if (session.sessionMetadata.sessionMode !== LanguageRuntimeSessionMode.Console) { return; }
+        this._surfacedPlotMessages.delete(id);
+        this._surfacedPlotMessages.set(id, { message, session });
+        if (this._surfacedPlotMessages.size > 32) {
+            const oldest = this._surfacedPlotMessages.keys().next().value;
+            if (oldest !== undefined) { this._surfacedPlotMessages.delete(oldest); }
         }
     }
 
@@ -1917,6 +1962,7 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
      * Dispose the service and clean up resources.
      */
     dispose(): void {
+        this._surfacedPlotMessages.clear();
         this._flushPlotMetadataPersistence();
         this._isShuttingDown = true;
         this._flushThumbnailPersistence(true);

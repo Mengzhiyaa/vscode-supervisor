@@ -1061,17 +1061,37 @@ test('console session switch repro keeps the selected tab when another session f
         ...restartingSession,
         state: 'ready' as const,
     };
+    // Restart completion changes the session state, not the Host foreground.
+    // The switch handler has already made Primary the foreground session.
     await backend.notify(SessionMethods.info, {
         sessions: [primaryReady, restartedReady],
-        activeSessionId: restartedReady.id,
+        activeSessionId: primaryReady.id,
     });
-    await page.waitForTimeout(300);
+    await expect(
+        page.getByRole('tab', { name: 'Restarting Session' }).locator('.runtime-status-icon'),
+    ).toHaveClass(/codicon-positron-status-idle/);
 
     await expect(page.getByRole('tab', { name: 'Primary' })).toHaveAttribute(
         'aria-selected',
         'true',
     );
     await expect(page.getByText('primary output')).toBeVisible();
+
+    // A later explicit Host foreground change must still override the prior
+    // tab selection, including when it targets an existing session.
+    await backend.notify(SessionMethods.info, {
+        sessions: [primaryReady, restartedReady],
+        activeSessionId: restartedReady.id,
+    });
+    await expect(page.getByRole('tab', { name: 'Restarting Session' })).toHaveAttribute(
+        'aria-selected',
+        'true',
+    );
+    await expect(page.getByRole('tab', { name: 'Primary' })).toHaveAttribute(
+        'aria-selected',
+        'false',
+    );
+    await expect(page.getByText('restarting session output')).toBeVisible();
 });
 
 test('console ready-session repro keeps the standard input visible when no prompt item is active', async ({ page }) => {

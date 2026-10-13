@@ -1,6 +1,11 @@
 {
   "supervisor.inlineDataExplorer.displayName": "Supervisor Inline Data Explorer",
   "supervisor.dataExplorer.category": "Ark Data Explorer",
+  "supervisor.dataExplorer.import.title": "Import Data...",
+  "supervisor.dataExplorer.importFromView.title": "Import into Session...",
+  "supervisor.dataConnections.enabled.description": "Use driver-based data connections. Reload the window after changing this setting.",
+  "supervisor.packages.vulnerabilities.enabled.description": "Show known vulnerabilities for installed packages. This sends installed package names and versions to a Posit Package Manager instance selected by `#packages.vulnerabilities.source#`.",
+  "supervisor.packages.vulnerabilities.source.description": "Use the environment's Package Manager repository. In auto mode, environments using PyPI, CRAN or no configured repository may use packagemanager.posit.co. In environment mode, only the configured repository may be queried.",
   "supervisor.dataExplorer.copy.title": "Copy",
   "supervisor.dataExplorer.copyTableData.title": "Copy Table Data",
   "supervisor.dataExplorer.collapseSummary.title": "Collapse Summary",

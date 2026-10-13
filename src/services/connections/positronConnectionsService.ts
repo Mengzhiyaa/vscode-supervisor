@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import type { IDataConnectionDriver } from '../../api';
+import { LanguageRuntimeSessionMode, type IDataConnectionDriver } from '../../api';
 import { RuntimeClientState, RuntimeClientType } from '../../internal/runtimeTypes';
 import type { RuntimeClientInstance } from '../../runtime/RuntimeClientInstance';
 import type { RuntimeClientManager } from '../../runtime/runtimeClientManager';
@@ -289,6 +289,7 @@ class StoredProfileConnectionInstance implements IConnectionInstance {
 }
 
 export class PositronConnectionsService implements vscode.Disposable {
+    private readonly _dataConnectionsEnabled = vscode.workspace.getConfiguration().get<boolean>('dataConnections.enabled', true);
     private readonly _instances = new Map<string, IConnectionInstance>();
     private readonly _sessionDisposables = new Map<string, vscode.Disposable[]>();
     private readonly _attachedManagers = new WeakSet<RuntimeClientManager>();
@@ -324,7 +325,8 @@ export class PositronConnectionsService implements vscode.Disposable {
     }
 
     get connections(): readonly IConnectionInstance[] {
-        return [...this._instances.values()];
+        return [...this._instances.values()].filter(instance =>
+            this._dataConnectionsEnabled || instance instanceof PositronConnectionInstance);
     }
 
     initialize(): void {
@@ -332,8 +334,10 @@ export class PositronConnectionsService implements vscode.Disposable {
             return;
         }
         this._initialized = true;
-        for (const profile of this.profileStore.getProfiles()) {
-            this._registerProfileDescriptor(profile);
+        if (this._dataConnectionsEnabled) {
+            for (const profile of this.profileStore.getProfiles()) {
+                this._registerProfileDescriptor(profile);
+            }
         }
         this._loadProfiles();
         this._sessionManager.sessions.forEach(session => this._attachSession(session));
@@ -483,6 +487,10 @@ export class PositronConnectionsService implements vscode.Disposable {
                 return;
             }
             this._attachedManagers.add(manager);
+            if (this._dataConnectionsEnabled && session.sessionMetadata.sessionMode !== LanguageRuntimeSessionMode.Notebook) {
+                disposables.push(manager.watchClient(RuntimeClientType.Connection, client => client.dispose()));
+                return;
+            }
             disposables.push(manager.registerClientHandler({
                 clientType: RuntimeClientType.Connection,
                 callback: (client, params) => {
@@ -569,6 +577,7 @@ export class PositronConnectionsService implements vscode.Disposable {
     }
 
     private _loadProfiles(): void {
+        if (!this._dataConnectionsEnabled) { return; }
         for (const profile of this.profileStore.getProfiles()) {
             this._registerProfileDescriptor(profile);
         }

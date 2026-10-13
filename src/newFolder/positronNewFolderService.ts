@@ -42,6 +42,7 @@ export class PositronNewFolderService implements IPositronNewFolderService {
     private _nextTaskId = 1;
     private _initNewFolderPromise: Promise<void> | undefined;
     private _completeRuntimeStartupPromise: Promise<void> | undefined;
+    private _postInitializationPromise: Promise<void> | undefined;
 
     constructor(
         private readonly _context: vscode.ExtensionContext,
@@ -224,12 +225,21 @@ export class PositronNewFolderService implements IPositronNewFolderService {
         this.initTasksComplete.open();
 
         if (!this._newFolderRuntimeMetadata) {
-            await this.completeRuntimeStartup();
+            await this._completePostInitialization();
         }
     }
 
     private async _doCompleteRuntimeStartup(): Promise<void> {
         await this.initNewFolder();
+        await this._completePostInitialization();
+    }
+
+    private _completePostInitialization(): Promise<void> {
+        this._postInitializationPromise ??= this._runPostInitialization();
+        return this._postInitializationPromise;
+    }
+
+    private async _runPostInitialization(): Promise<void> {
         if (this.postInitTasksComplete.isOpen()) {
             return;
         }

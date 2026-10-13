@@ -6,6 +6,7 @@
 
 import * as vscode from 'vscode';
 import { CoreCommandIds } from '../../coreCommandIds';
+import { buildDataImportView } from './dataImportView';
 import { createMessageConnection, MessageConnection } from 'vscode-jsonrpc/node';
 import { WebviewMessageReader, WebviewMessageWriter } from '../../rpc/webview/transport';
 import {
@@ -33,6 +34,7 @@ import {
     DATA_EXPLORER_IN_NEW_WINDOW_CONTEXT,
     DATA_EXPLORER_IS_PLAINTEXT_CONTEXT,
     DATA_EXPLORER_IS_XLSX_CONTEXT,
+    DATA_EXPLORER_HAS_BACKING_FILE_CONTEXT,
     DATA_EXPLORER_LAYOUT_CONTEXT,
     DATA_EXPLORER_ROW_FILTERING_CONTEXT,
     DATA_EXPLORER_SUMMARY_COLLAPSED_CONTEXT,
@@ -161,6 +163,7 @@ export class PositronDataExplorerEditorProvider implements vscode.Disposable {
 
     private _registerCommands(): void {
         this._disposables.push(
+            vscode.commands.registerCommand(CoreCommandIds.dataExplorerImportFromView, () => this._importActiveFile()),
             vscode.commands.registerCommand(CoreCommandIds.dataExplorerOpenInline, (identifier?: string) => {
                 if (!identifier) {
                     return;
@@ -284,6 +287,19 @@ export class PositronDataExplorerEditorProvider implements vscode.Disposable {
             }
         }
         return undefined;
+    }
+
+    private async _importActiveFile(): Promise<void> {
+        const active = this._getActiveExplorerContext();
+        if (!active) { return; }
+        const uri = getDataExplorerBackingUri(active.identifier);
+        if (!uri) { return; }
+        const state = active.instance.clientInstance.cachedBackendState;
+        const view = state ? await buildDataImportView(state, indexes => active.instance.getSchema(indexes)) : undefined;
+        await vscode.commands.executeCommand(CoreCommandIds.dataExplorerImport, uri, {
+            hasHeaderRow: active.instance.fileHasHeaderRow,
+            sheetName: active.instance.fileSelectedSheet,
+        }, view);
     }
 
     private _getActiveExplorerContext(): {
@@ -471,6 +487,7 @@ export class PositronDataExplorerEditorProvider implements vscode.Disposable {
         void vscode.commands.executeCommand('setContext', DATA_EXPLORER_ROW_FILTERING_CONTEXT, false);
         void vscode.commands.executeCommand('setContext', DATA_EXPLORER_IS_PLAINTEXT_CONTEXT, false);
         void vscode.commands.executeCommand('setContext', DATA_EXPLORER_IS_XLSX_CONTEXT, false);
+        void vscode.commands.executeCommand('setContext', DATA_EXPLORER_HAS_BACKING_FILE_CONTEXT, false);
         void vscode.commands.executeCommand('setContext', DATA_EXPLORER_SUMMARY_COLLAPSED_CONTEXT, false);
         void vscode.commands.executeCommand('setContext', DATA_EXPLORER_FOCUSED_CONTEXT, false);
         void vscode.commands.executeCommand('setContext', DATA_EXPLORER_IN_NEW_WINDOW_CONTEXT, false);
@@ -484,6 +501,8 @@ export class PositronDataExplorerEditorProvider implements vscode.Disposable {
         const hasCodeSyntaxes = (backendState?.supported_features?.convert_to_code?.code_syntaxes?.length ?? 0) > 0;
 
         void vscode.commands.executeCommand('setContext', DATA_EXPLORER_EDITOR_CONTEXT, true);
+        void vscode.commands.executeCommand('setContext', DATA_EXPLORER_HAS_BACKING_FILE_CONTEXT,
+            !!getDataExplorerBackingUri(instance.identifier));
         void vscode.commands.executeCommand('setContext', DATA_EXPLORER_LAYOUT_CONTEXT, uiState.layout);
         void vscode.commands.executeCommand(
             'setContext',

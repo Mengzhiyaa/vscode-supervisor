@@ -6,8 +6,10 @@ import {
     type PackageSpec,
     type PackagesItemSize,
     type IPositronPackagesInstance,
+    type ILanguageRuntimeSession,
 } from '../api';
 import { PositronPackagesService } from '../services/packages';
+import { PackageDetailProvider } from './packageDetailProvider';
 
 interface PackagesSessionState {
     id: string;
@@ -66,12 +68,15 @@ export class PackagesViewProvider extends BaseWebviewProvider implements vscode.
     private readonly _disposables: vscode.Disposable[] = [];
     private readonly _activeInstanceDisposables: vscode.Disposable[] = [];
     private _revision = 0;
+    private readonly _detailEditors = new Map<string, { provider: PackageDetailProvider; pinned: boolean }>();
+    private readonly _searchResults = new Map<string, LanguageRuntimePackage>();
 
     constructor(
         extensionUri: vscode.Uri,
         outputChannel: vscode.LogOutputChannel,
         private readonly _packagesService: PositronPackagesService,
         getAdditionalLocalResourceRoots: () => readonly vscode.Uri[] = () => [],
+        private readonly _showPackageHelp?: (session: ILanguageRuntimeSession, name: string) => Promise<void>,
     ) {
         super(extensionUri, outputChannel, getAdditionalLocalResourceRoots);
         this._bindActiveInstance();
@@ -193,7 +198,25 @@ export class PackagesViewProvider extends BaseWebviewProvider implements vscode.
             if (!query) {
                 return [];
             }
-            return instance.searchPackages(query);
+            const session = instance.session;
+            const results = await instance.searchPackages(query);
+            if (this._packagesService.activePackagesInstance === instance && instance.session === session) {
+                for (const pkg of results) {
+                    this._searchResults.set(pkg.name.toLowerCase(), pkg);
+                }
+            }
+            return results;
+        });
+
+        connection.onRequest('packages/openPackage', (params: { name?: unknown; sessionId?: unknown; pinned?: unknown }) => {
+            const instance = this._getInstance(params?.sessionId);
+            const name = typeof params?.name === 'string' ? params.name.trim() : '';
+            if (!name) {
+                return;
+            }
+            this._packagesService.setSelectedPackage(name);
+            this._openPackage(instance, name, params?.pinned === true);
+            this._sendState();
         });
 
         connection.onRequest('packages/searchVersions', async (params: { name?: unknown; sessionId?: unknown }) => {
@@ -251,6 +274,10 @@ export class PackagesViewProvider extends BaseWebviewProvider implements vscode.
     }
 
     dispose(): void {
+        for (const editor of [...this._detailEditors.values()]) {
+            editor.provider.dispose();
+        }
+        this._detailEditors.clear();
         this._clearActiveInstanceDisposables();
         while (this._disposables.length) {
             this._disposables.pop()?.dispose();
@@ -259,6 +286,7 @@ export class PackagesViewProvider extends BaseWebviewProvider implements vscode.
 
     private _bindActiveInstance(): void {
         this._clearActiveInstanceDisposables();
+        this._searchResults.clear();
 
         const instance = this._packagesService.activePackagesInstance;
         if (!instance) {
@@ -313,6 +341,80 @@ export class PackagesViewProvider extends BaseWebviewProvider implements vscode.
             throw new Error(vscode.l10n.t('The package session changed. Please try again.'));
         }
         return instance;
+    }
+
+    private _openPackage(instance: IPositronPackagesInstance, name: string, pinned: boolean): void {
+        const session = instance.session;
+        const key = JSON.stringify([session.sessionId, name.toLowerCase()]);
+        const existing = this._detailEditors.get(key);
+        if (existing?.provider.isBoundTo(instance)) {
+            existing.pinned ||= pinned;
+            existing.provider.panel.reveal(undefined, !pinned);
+            return;
+        }
+        existing?.provider.dispose();
+
+        // WebviewPanel has no native preview option. Reuse the preview slot until
+        // a double-click keeps that editor open, matching the Packages list model.
+        for (const editor of [...this._detailEditors.values()]) {
+            if (!editor.pinned) {
+                editor.provider.dispose();
+            }
+        }
+        const pkg = instance.packages.find(item => item.name.toLowerCase() === name.toLowerCase()) ??
+            this._searchResults.get(name.toLowerCase());
+        const provider = new PackageDetailProvider(
+            this._extensionUri, this._outputChannel, this._packagesService, instance, name, pkg,
+            async (action, detail) => {
+                const assertSession = () => {
+                    if (this._getInstance(session.sessionId) !== instance || instance.session !== session) {
+                        throw new Error(vscode.l10n.t('The package session changed. Please try again.'));
+                    }
+                };
+                assertSession();
+                if (action === 'help') {
+                    await this._showPackageHelp?.(session, name);
+                    return;
+                }
+                if (action === 'uninstall') {
+                    const uninstall = vscode.l10n.t('Uninstall');
+                    const choice = await vscode.window.showWarningMessage(
+                        vscode.l10n.t('Uninstall {0}?', name), { modal: true }, uninstall,
+                    );
+                    if (choice !== uninstall) {
+                        return;
+                    }
+                    assertSession();
+                    await this._runOperation(vscode.l10n.t('Uninstalling Packages...'),
+                        token => instance.uninstallPackages([name], token));
+                    return;
+                }
+                let version = action === 'update' ? detail?.latestVersion : detail?.version;
+                if (!version) {
+                    const choice = await this._pickVersion(instance, name, action === 'install');
+                    if (!choice) {
+                        return;
+                    }
+                    version = choice.version;
+                    assertSession();
+                }
+                const specs = [{ name, version }];
+                const title = action === 'install' ? vscode.l10n.t('Installing Packages...') : vscode.l10n.t('Updating Packages...');
+                await this._runOperation(title, token => action === 'install'
+                    ? instance.installPackages(specs, token)
+                    : instance.updatePackages(specs, token));
+            },
+        );
+        this._detailEditors.set(key, { provider, pinned });
+        const disposalListener = provider.panel.onDidDispose(() => {
+            if (this._detailEditors.get(key)?.provider === provider) {
+                this._detailEditors.delete(key);
+            }
+            disposalListener.dispose();
+        });
+        if (pinned) {
+            provider.panel.reveal(undefined, false);
+        }
     }
 
     private async _pickVersion(instance: IPositronPackagesInstance, name: string, install: boolean): Promise<{ version?: string } | undefined> {

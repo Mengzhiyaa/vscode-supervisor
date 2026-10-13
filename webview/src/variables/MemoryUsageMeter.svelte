@@ -45,7 +45,7 @@
         snapshot
             ? snapshot.kernelTotalBytes +
                   (snapshot.supervisorOverheadBytes ?? 0) +
-                  snapshot.extensionHostOverheadBytes
+                  (snapshot.applicationOverheadBytes ?? snapshot.extensionHostOverheadBytes)
             : 0,
     );
     const sizeLabel = $derived(
@@ -77,7 +77,9 @@
         }
 
         return [
-            `${localize('memory.extensionHostAndKernels', 'Extension Host + kernels')}: ${formatBytes(supervisorBytes)}`,
+            `${snapshot.applicationOverheadBytes !== undefined
+                ? localize('memory.applicationAndKernels', 'Application + kernels')
+                : localize('memory.extensionHostAndKernels', 'Extension Host + kernels')}: ${formatBytes(supervisorBytes)}`,
             `${localize('memory.other', 'Other')}: ${formatBytes(snapshot.otherProcessesBytes)}`,
             `${localize('memory.free', 'Free')}: ${formatBytes(snapshot.freeSystemMemory)}`,
         ].join(" | ");
@@ -106,10 +108,11 @@
             });
         }
 
-        if (snapshot.extensionHostOverheadBytes > 0) {
+        const applicationBytes = snapshot.applicationOverheadBytes ?? snapshot.extensionHostOverheadBytes;
+        if (applicationBytes > 0) {
             nextSegments.push({
                 id: "overhead:extension-host",
-                bytes: snapshot.extensionHostOverheadBytes,
+                bytes: applicationBytes,
                 className: "overhead",
             });
         }
@@ -155,8 +158,9 @@
                       : []),
                   {
                       id: "overhead:extension-host",
-                      name: localize('memory.extensionHost', 'Extension Host'),
-                      bytes: snapshot.extensionHostOverheadBytes,
+                      name: snapshot.applicationOverheadBytes !== undefined
+                          ? localize('memory.application', 'Application') : localize('memory.extensionHost', 'Extension Host'),
+                      bytes: snapshot.applicationOverheadBytes ?? snapshot.extensionHostOverheadBytes,
                       className: "overhead",
                   },
               ]
@@ -480,7 +484,7 @@
                     {/if}
 
                     <div class="section-header">
-                        {localize('memory.overhead', 'Overhead')} ({formatBytes((snapshot.supervisorOverheadBytes ?? 0) + snapshot.extensionHostOverheadBytes)})
+                        {localize('memory.overhead', 'Overhead')} ({formatBytes((snapshot.supervisorOverheadBytes ?? 0) + (snapshot.applicationOverheadBytes ?? snapshot.extensionHostOverheadBytes))})
                     </div>
                     {#each overheadRows as row (row.id)}
                         {@render usageRow(row)}
@@ -489,7 +493,9 @@
                     <div class="section-header">{localize('memory.summary', 'Summary')}</div>
                     {@render usageRow({
                         id: "summary:supervisor",
-                        name: localize('memory.extensionHostAndKernels', 'Extension Host + kernels'),
+                        name: snapshot.applicationOverheadBytes !== undefined
+                            ? localize('memory.applicationAndKernels', 'Application + kernels')
+                            : localize('memory.extensionHostAndKernels', 'Extension Host + kernels'),
                         bytes: supervisorBytes,
                         className: "supervisor",
                     })}

@@ -5,6 +5,7 @@ import {
     LanguageRuntimeSessionLocation,
     LanguageRuntimeSessionMode,
     LanguageRuntimeStartupBehavior,
+    type IRuntimeSessionMetadata,
     type LanguageRuntimeMetadata,
 } from '../../api';
 import { RuntimeState } from '../../internal/runtimeTypes';
@@ -161,6 +162,7 @@ function makeLiveSession(
     sessionId: string,
     options?: {
         created?: number;
+        lastUsed?: number;
         runtimeMetadata?: ReturnType<typeof makeRuntimeMetadata>;
         sessionName?: string;
         state?: RuntimeState;
@@ -191,6 +193,8 @@ function makeLiveSession(
         workingDirectory,
         state: options?.state ?? RuntimeState.Ready,
         created: options?.created ?? 0,
+        lastUsed: options?.lastUsed ?? 0,
+        restoreLastUsed(lastUsed: number) { this.lastUsed = lastUsed; },
         onDidChangeRuntimeState: createEventStub(),
         onDidChangeWorkingDirectory: createEventStub(),
     };
@@ -198,10 +202,34 @@ function makeLiveSession(
 
 function makeSessionManager() {
     let persistedRestoreHandler: (() => Promise<void>) | undefined;
+    const activeSessions = new Map<string, { session: ReturnType<typeof makeLiveSession>; hasConsole: boolean }>();
     const sessionManager = {
         updateActiveLanguagesCalls: 0,
         isRestoringPersistedSessions: false,
         value: undefined as any,
+        restoreSession: (
+            runtimeMetadata: LanguageRuntimeMetadata,
+            metadata: IRuntimeSessionMetadata,
+            sessionName: string,
+            hasConsole: boolean,
+            activate: boolean,
+            workingDirectory?: string,
+        ): ReturnType<typeof makeLiveSession> => {
+            const session = makeLiveSession(metadata.sessionId, {
+                runtimeMetadata,
+                sessionName,
+                created: metadata.createdTimestamp,
+                workingDirectory: workingDirectory ?? metadata.workingDirectory,
+            });
+            session.sessionMetadata = { ...session.sessionMetadata, ...metadata, sessionName };
+            sessionManager.value.sessions.push(session);
+            activeSessions.set(session.sessionId, { session, hasConsole });
+            if (activate) {
+                sessionManager.value.activeSession = session;
+                sessionManager.value.activeSessionId = session.sessionId;
+            }
+            return session;
+        },
     };
 
     sessionManager.value = {
@@ -239,11 +267,14 @@ function makeSessionManager() {
         autoStartRuntime: async () => {
             throw new Error('autoStartRuntime should not be called in this test');
         },
-        getSession: () => undefined,
-        getActiveSession: () => undefined,
+        getSession: (sessionId: string) => sessionManager.value.sessions.find(
+            (session: { sessionId: string }) => session.sessionId === sessionId,
+        ),
+        getActiveSession: (sessionId: string) => activeSessions.get(sessionId),
         deleteSession: async () => true,
         validateRuntimeSession: async () => true,
-        restoreRuntimeSession: async () => undefined,
+        restoreRuntimeSession: async (...args: Parameters<typeof sessionManager.restoreSession>) =>
+            sessionManager.restoreSession(...args),
     } as any;
 
     return sessionManager;
@@ -509,16 +540,14 @@ suite('[Unit] runtime startup', () => {
             return sessionId !== 'session-3';
         };
         localSessionManager.value.restoreRuntimeSession = async (
-            _runtimeMetadata: unknown,
-            metadata: { sessionId: string },
-            _sessionName: string,
-            _hasConsole: boolean,
-            activate: boolean,
+            ...args: Parameters<typeof localSessionManager.restoreSession>
         ) => {
+            const [, metadata, , , activate] = args;
             restoreCalls.push({
                 sessionId: metadata.sessionId,
                 activate,
             });
+            return localSessionManager.restoreSession(...args);
         };
 
         const startupService = new RuntimeStartupService(
@@ -550,6 +579,8 @@ suite('[Unit] runtime startup', () => {
         assert.deepStrictEqual(restoreFailures, [
             { sessionId: 'session-3', message: 'Session is no longer available' },
         ]);
+        assert.strictEqual(localSessionManager.value.getSession('session-2').lastUsed, 2);
+        assert.strictEqual(localSessionManager.value.getSession('session-1').lastUsed, 1);
         assert.deepStrictEqual(
             ephemeralState.get<SerializedSessionMetadata[]>(
                 EPHEMERAL_WORKSPACE_SESSIONS,
@@ -577,9 +608,10 @@ suite('[Unit] runtime startup', () => {
         let restoreCalls = 0;
         let autoStartCalls = 0;
 
-        localSessionManager.value.restoreRuntimeSession = async () => {
+        localSessionManager.value.restoreRuntimeSession = async (...args: Parameters<typeof localSessionManager.restoreSession>) => {
             restoreCalls += 1;
             restored.resolve();
+            return localSessionManager.restoreSession(...args);
         };
         localSessionManager.value.autoStartRuntime = async () => {
             autoStartCalls += 1;
@@ -646,8 +678,9 @@ suite('[Unit] runtime startup', () => {
             order.push('validate');
             return true;
         };
-        localSessionManager.value.restoreRuntimeSession = async () => {
+        localSessionManager.value.restoreRuntimeSession = async (...args: Parameters<typeof localSessionManager.restoreSession>) => {
             order.push('restore');
+            return localSessionManager.restoreSession(...args);
         };
 
         const startupService = new RuntimeStartupService(
@@ -708,10 +741,11 @@ suite('[Unit] runtime startup', () => {
         const replacementSessionManager = makeSessionManager();
         const restoreCalls: string[] = [];
         replacementSessionManager.value.restoreRuntimeSession = async (
-            _runtimeMetadata: unknown,
-            metadata: { sessionId: string },
+            ...args: Parameters<typeof replacementSessionManager.restoreSession>
         ) => {
+            const [, metadata] = args;
             restoreCalls.push(metadata.sessionId);
+            return replacementSessionManager.restoreSession(...args);
         };
         const replacementStartupService = new RuntimeStartupService(
             replacementContext,
@@ -760,13 +794,11 @@ suite('[Unit] runtime startup', () => {
             activate: boolean;
         }> = [];
         localSessionManager.value.restoreRuntimeSession = async (
-            _runtimeMetadata: unknown,
-            metadata: { sessionId: string },
-            _sessionName: string,
-            _hasConsole: boolean,
-            activate: boolean,
+            ...args: Parameters<typeof localSessionManager.restoreSession>
         ) => {
+            const [, metadata, , , activate] = args;
             restoreCalls.push({ sessionId: metadata.sessionId, activate });
+            return localSessionManager.restoreSession(...args);
         };
 
         const startupService = new RuntimeStartupService(
@@ -1068,7 +1100,7 @@ suite('[Unit] runtime startup', () => {
         startupService.dispose();
     });
 
-    test('does not auto-start a never-used affiliation when it is the only language', async () => {
+    test('auto-starts a never-used affiliation when it is the only eligible language', async () => {
         const runtime = makeRuntimeMetadata({
             runtimeId: 'r-never-used',
             startupBehavior: LanguageRuntimeStartupBehavior.Explicit,
@@ -1101,7 +1133,7 @@ suite('[Unit] runtime startup', () => {
 
         await (startupService as any)._startAffiliatedLanguageRuntimes();
 
-        assert.strictEqual(starts, 0);
+        assert.strictEqual(starts, 1);
         startupService.dispose();
     });
 
@@ -1128,12 +1160,13 @@ suite('[Unit] runtime startup', () => {
             return true;
         };
         localSessionManager.value.restoreRuntimeSession = async (
-            _runtimeMetadata: unknown,
-            metadata: { sessionId: string },
+            ...args: Parameters<typeof localSessionManager.restoreSession>
         ) => {
+            const [, metadata] = args;
             if (metadata.sessionId === 'session-failed') {
                 throw new Error('reconnect exploded');
             }
+            return localSessionManager.restoreSession(...args);
         };
 
         const startupService = new RuntimeStartupService(
@@ -1175,7 +1208,7 @@ suite('[Unit] runtime startup', () => {
         const logChannel = makeNoopLogChannel();
         const localSessionManager = makeSessionManager();
         const runtimeProvider = makeRuntimeProvider();
-        const liveSession = makeLiveSession('session-1', { created: 10 });
+        const liveSession = makeLiveSession('session-1', { created: 10, lastUsed: 2 });
         const ephemeralState = createMemento();
 
         localSessionManager.value.sessions = [liveSession];
@@ -1296,7 +1329,7 @@ suite('[Unit] runtime startup', () => {
         const logChannel = makeNoopLogChannel();
         const localSessionManager = makeSessionManager();
         const runtimeProvider = makeRuntimeProvider();
-        const liveSession = makeLiveSession('session-local', { created: 10 });
+        const liveSession = makeLiveSession('session-local', { created: 10, lastUsed: 10 });
         const ephemeralState = createMemento();
 
         localSessionManager.value.sessions = [liveSession];

@@ -1,6 +1,11 @@
 {
   "supervisor.inlineDataExplorer.displayName": "Supervisor 内联数据浏览器",
   "supervisor.dataExplorer.category": "Ark 数据浏览器",
+  "supervisor.dataExplorer.import.title": "导入数据...",
+  "supervisor.dataExplorer.importFromView.title": "导入到会话...",
+  "supervisor.dataConnections.enabled.description": "使用由驱动管理的数据连接。更改此设置后需重新加载窗口。",
+  "supervisor.packages.vulnerabilities.enabled.description": "显示已安装包的已知漏洞。会将包名及版本发送给 `#packages.vulnerabilities.source#` 指定的 Posit Package Manager 实例。",
+  "supervisor.packages.vulnerabilities.source.description": "使用当前环境的 Package Manager 仓库。auto 模式下，使用 PyPI、CRAN 或未配置仓库的环境可查询 packagemanager.posit.co；environment 模式只查询已配置的仓库。",
   "supervisor.dataExplorer.copy.title": "复制",
   "supervisor.dataExplorer.copyTableData.title": "复制表格数据",
   "supervisor.dataExplorer.collapseSummary.title": "折叠摘要",

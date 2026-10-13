@@ -15,6 +15,10 @@ export interface CachedPackageMetadata {
     version: string;
     outdated?: boolean;
     latestVersion?: string;
+    vulnerabilities?: import('../../api').PackageVulnerability[];
+    vulnerabilitiesCheckedAt?: number;
+    vulnerabilitySource?: { readonly host: string; readonly fetchedAt: number };
+    vulnerabilityPolicy?: 'auto' | 'environment';
 }
 
 export interface CachedPackageEnvironment {

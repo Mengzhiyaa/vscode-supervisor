@@ -440,6 +440,18 @@
         "enablement": "supervisor.dataExplorerEditorActive"
       },
       {
+        "command": "supervisor.dataExplorer.import",
+        "title": "%supervisor.dataExplorer.import.title%",
+        "category": "%supervisor.dataExplorer.category%"
+      },
+      {
+        "command": "supervisor.dataExplorer.importFromView",
+        "title": "%supervisor.dataExplorer.importFromView.title%",
+        "category": "%supervisor.dataExplorer.category%",
+        "enablement": "supervisor.dataExplorerEditorActive && supervisor.dataExplorerHasBackingFile",
+        "icon": "$(insert)"
+      },
+      {
         "command": "supervisor.dataExplorer.openFile",
         "title": "%supervisor.dataExplorer.openFile.title%",
         "category": "%supervisor.dataExplorer.category%",
@@ -638,7 +650,7 @@
         },
         {
           "command": "supervisor.connections.new",
-          "when": "view == supervisor.connections",
+          "when": "view == supervisor.connections && config.dataConnections.enabled",
           "group": "navigation@0"
         },
         {
@@ -691,6 +703,11 @@
       ],
       "editor/title": [
         {
+          "command": "supervisor.dataExplorer.importFromView",
+          "when": "supervisor.dataExplorerEditorActive && supervisor.dataExplorerHasBackingFile",
+          "group": "navigation@9"
+        },
+        {
           "command": "supervisor.dataExplorer.summaryOnLeftActive",
           "when": "supervisor.dataExplorerEditorActive && supervisor.dataExplorerLayout == 'SummaryOnLeft'",
           "group": "1_data_explorer@1"
@@ -742,6 +759,10 @@
         }
       ],
       "commandPalette": [
+        {
+          "command": "supervisor.dataExplorer.importFromView",
+          "when": "supervisor.dataExplorerEditorActive && supervisor.dataExplorerHasBackingFile"
+        },
         {
           "command": "supervisor.dataExplorer.copy",
           "when": "supervisor.dataExplorerEditorActive && supervisor.dataExplorerFocused"
@@ -816,6 +837,11 @@
         }
       ],
       "explorer/context": [
+        {
+          "command": "supervisor.dataExplorer.import",
+          "when": "resourceExtname =~ /^\\.(csv|tsv|parquet|parq|xlsx)$/ || resourceFilename =~ /\\.(csv|tsv)\\.gz$/",
+          "group": "navigation@101"
+        },
         {
           "command": "supervisor.dataExplorer.openFile",
           "when": "resourceExtname =~ /^\\.(csv|tsv|parquet|parq|xlsx)$/ || resourceFilename =~ /\\.(csv|tsv)\\.gz$/",
@@ -935,12 +961,36 @@
     "viewsWelcome": [
       {
         "view": "supervisor.connections",
-        "contents": "No database connections are currently active.\n\nConnections created by a running Python or R session appear here automatically.\n\n[New Connection](command:supervisor.connections.new) · [Refresh Connections](command:supervisor.connections.refresh)"
+        "contents": "No database connections are currently active.\n\n[New Connection](command:supervisor.connections.new) · [Refresh Connections](command:supervisor.connections.refresh)",
+        "when": "config.dataConnections.enabled"
+      },
+      {
+        "view": "supervisor.connections",
+        "contents": "No database connections are currently active.\n\nConnections created by a running Python or R session appear here automatically.\n\n[Refresh Connections](command:supervisor.connections.refresh)",
+        "when": "!config.dataConnections.enabled"
       }
     ],
     "configuration": {
       "title": "Ark",
       "properties": {
+        "dataConnections.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "%supervisor.dataConnections.enabled.description%"
+        },
+        "packages.vulnerabilities.enabled": {
+          "type": "boolean",
+          "default": true,
+          "scope": "machine",
+          "markdownDescription": "%supervisor.packages.vulnerabilities.enabled.description%"
+        },
+        "packages.vulnerabilities.source": {
+          "type": "string",
+          "enum": ["auto", "environment"],
+          "default": "auto",
+          "scope": "machine",
+          "markdownDescription": "%supervisor.packages.vulnerabilities.source.description%"
+        },
         "interpreters.showSessions": {
           "type": "boolean",
           "default": false,

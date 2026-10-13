@@ -51,6 +51,7 @@ export interface MemoryUsageSnapshot {
     kernelTotalBytes: number;
     supervisorOverheadBytes?: number;
     extensionHostOverheadBytes: number;
+    applicationOverheadBytes?: number;
     otherProcessesBytes: number;
     collectionMethod: 'process-tree' | 'process-api';
     source: MemoryUsageSource;
@@ -343,6 +344,7 @@ export class MemoryUsageService implements vscode.Disposable {
                 totalSystemMemory,
                 freeSystemMemory,
                 extensionHostOverheadBytes,
+                applicationOverheadBytes,
                 supervisorOverheadBytes,
                 collectionMethod,
                 source,
@@ -352,7 +354,7 @@ export class MemoryUsageService implements vscode.Disposable {
             const usedBySystem = totalSystemMemory - freeSystemMemory;
             const otherProcessesBytes = Math.max(
                 0,
-                usedBySystem - kernelTotalBytes - extensionHostOverheadBytes - (supervisorOverheadBytes ?? 0),
+                usedBySystem - kernelTotalBytes - (applicationOverheadBytes ?? extensionHostOverheadBytes) - (supervisorOverheadBytes ?? 0),
             );
 
             const snapshot: MemoryUsageSnapshot = {
@@ -363,6 +365,7 @@ export class MemoryUsageService implements vscode.Disposable {
                 kernelTotalBytes,
                 supervisorOverheadBytes,
                 extensionHostOverheadBytes,
+                applicationOverheadBytes,
                 otherProcessesBytes,
                 collectionMethod,
                 source,

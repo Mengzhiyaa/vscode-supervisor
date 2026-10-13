@@ -5,7 +5,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
-import { DataExplorerClientInstance } from './languageRuntimeDataExplorerClient';
+import { DataExplorerClientInstance, DataExplorerClientStatus } from './languageRuntimeDataExplorerClient';
 import { RuntimeSessionService } from '../../runtime/runtimeSession';
 import { RuntimeSession } from '../../runtime/session';
 import { DataExplorerRuntime } from './dataExplorerRuntime';
@@ -226,12 +226,25 @@ export class PositronDataExplorerService implements IPositronDataExplorerService
 
         this._instances.set(instance.identifier, instance);
 
-        // A backend close disconnects the client, but does not destroy model UI
-        // state or surface attachments. A later client with the same identity
-        // rebinds to this model.
+        // Retain the model for open surfaces, but let a later Variables view
+        // request create a fresh backend instead of focusing a disconnected one.
         instance.onDidClose(() => {
             if (this._instances.get(instance.identifier) !== instance) {
                 return;
+            }
+            if (instance.inlineOnly || (options?.sessionId &&
+                this._sessionManager.getSession(options.sessionId)?.sessionMetadata.sessionMode === 'notebook')) {
+                return;
+            }
+            for (const [key, identifier] of this._variableToInstanceMap) {
+                if (identifier === instance.identifier) {
+                    this._variableToInstanceMap.delete(key);
+                }
+            }
+            for (const [key, identifier] of this._variablePathToInstanceMap) {
+                if (identifier === instance.identifier) {
+                    this._variablePathToInstanceMap.delete(key);
+                }
             }
         });
 
@@ -338,7 +351,7 @@ export class PositronDataExplorerService implements IPositronDataExplorerService
 
         // Check for existing instance
         const existing = this._instances.get(identifier);
-        if (existing) {
+        if (existing && existing.clientInstance.status !== DataExplorerClientStatus.Disconnected) {
             existing.requestFocus();
             return existing;
         }
@@ -357,6 +370,14 @@ export class PositronDataExplorerService implements IPositronDataExplorerService
     }
 
     private async _openDuckDBFile(uri: vscode.Uri): Promise<IPositronDataExplorerInstance> {
+        // Resolve extension ownership before using the embedded fallback. Keep the file identity
+        // stable across hosts and backends so editor state and import options belong to the file.
+        const providerId = await this._backendRegistry.findProvider(uri, 'positron-duckdb') ??
+            await this._backendRegistry.findProvider(uri);
+        if (providerId) {
+            const backend = await this._backendRegistry.open(uri, providerId, `duckdb:${uri.toString()}`);
+            return this.createInstance(new DataExplorerClientInstance(backend, this._logChannel), 'sql');
+        }
         this._logChannel.info(`[PositronDataExplorerService] Opening file with DuckDB: ${uri.toString()}`);
 
         const tableView = new DuckDBTableView(uri);
@@ -410,7 +431,11 @@ export class PositronDataExplorerService implements IPositronDataExplorerService
         const backend = await this._backendRegistry.open(uri, providerId);
         const existing = this._instances.get(backend.clientId);
         if (existing) {
-            backend.dispose();
+            if (existing.clientInstance.status === DataExplorerClientStatus.Disconnected) {
+                await this.createInstance(new DataExplorerClientInstance(backend, this._logChannel), 'extension');
+            } else {
+                backend.dispose();
+            }
             existing.requestFocus();
             return existing;
         }

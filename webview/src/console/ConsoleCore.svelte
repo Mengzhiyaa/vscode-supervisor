@@ -131,7 +131,6 @@
     let sessions = $state<SessionInfo[]>([]);
     let activeConsoleSessionId = $state<string | undefined>();
     let pendingForegroundSessionId = $state<string | undefined>();
-    let userSelectedForegroundSessionId = $state<string | undefined>();
     const sessionDataMap = new SvelteMap<string, SessionData>();
     const sessionSyncSeqMap = new Map<string, number>();
     const pendingConsoleStateChunks = new Map<string, {
@@ -313,8 +312,8 @@
             return requestedForegroundSessionId;
         }
 
-        // The backend foreground session is the fallback when there is no
-        // local tab selection to preserve.
+        // Preserve the displayed session only when the Host snapshot has no
+        // valid active session.
         if (
             previousForegroundSessionId &&
             nextSessions.some(
@@ -386,13 +385,6 @@
             !remainingSessionIds.has(pendingForegroundSessionId)
         ) {
             pendingForegroundSessionId = undefined;
-        }
-
-        if (
-            userSelectedForegroundSessionId &&
-            !remainingSessionIds.has(userSelectedForegroundSessionId)
-        ) {
-            userSelectedForegroundSessionId = undefined;
         }
     }
 
@@ -476,7 +468,6 @@
     function syncForegroundConsoleSession(
         nextSessions: SessionInfo[],
         requestedForegroundSessionId?: string,
-        preferRequestedForeground = false,
     ): void {
         const previousForegroundSessionId = activeConsoleSessionId;
         const hasPendingForegroundSession =
@@ -486,6 +477,8 @@
             );
 
         if (pendingForegroundSessionId && hasPendingForegroundSession) {
+            // Keep an optimistic tab selection only until the Host confirms
+            // it. Subsequent active-session changes must follow the Host.
             activeConsoleSessionId = pendingForegroundSessionId;
 
             if (
@@ -498,39 +491,6 @@
 
         if (pendingForegroundSessionId && !hasPendingForegroundSession) {
             pendingForegroundSessionId = undefined;
-        }
-
-        const hasUserSelectedForegroundSession =
-            userSelectedForegroundSessionId &&
-            nextSessions.some(
-                (session) => session.id === userSelectedForegroundSessionId,
-            );
-
-        if (
-            userSelectedForegroundSessionId &&
-            !hasUserSelectedForegroundSession
-        ) {
-            userSelectedForegroundSessionId = undefined;
-        }
-
-        if (
-            preferRequestedForeground &&
-            requestedForegroundSessionId &&
-            nextSessions.some(
-                (session) => session.id === requestedForegroundSessionId,
-            )
-        ) {
-            activeConsoleSessionId = requestedForegroundSessionId;
-            userSelectedForegroundSessionId = undefined;
-            return;
-        }
-
-        if (
-            userSelectedForegroundSessionId &&
-            hasUserSelectedForegroundSession
-        ) {
-            activeConsoleSessionId = userSelectedForegroundSessionId;
-            return;
         }
 
         activeConsoleSessionId = resolveForegroundConsoleSessionId(
@@ -1668,16 +1628,11 @@
         connection.onNotification(
             "session/info",
             (params: { sessions: SessionInfo[]; activeSessionId?: string }) => {
-                const previousSessionIds = new Set(sessions.map((session) => session.id));
-                const hasNewSession = params.sessions.some(
-                    (session) => !previousSessionIds.has(session.id),
-                );
                 const mergedSessions = applySessionSnapshot(params.sessions);
                 pruneRemovedSessions(mergedSessions);
                 syncForegroundConsoleSession(
                     mergedSessions,
                     params.activeSessionId,
-                    hasNewSession,
                 );
             },
         );
@@ -2140,11 +2095,7 @@
             })) as { session?: SessionInfo };
 
             if (result.session) {
-                // Session creation is an explicit request to foreground the
-                // new session. Clear any stale tab preference before syncing
-                // the response (the session/info notification may arrive
-                // before this response).
-                userSelectedForegroundSessionId = undefined;
+                // The session/info notification may arrive before this response.
                 const mergedSessions = upsertSession(result.session);
                 syncForegroundConsoleSession(mergedSessions, result.session.id);
             }
@@ -2230,18 +2181,23 @@
         if (!connection) return;
 
         const previousForegroundSessionId = activeConsoleSessionId;
-        const previousUserSelectedForegroundSessionId =
-            userSelectedForegroundSessionId;
         const switchNonce = ++sessionSwitchNonce;
 
         if (optimistic) {
             pendingForegroundSessionId = sessionId;
-            userSelectedForegroundSessionId = sessionId;
             activeConsoleSessionId = sessionId;
         }
 
         try {
             await connection.sendRequest("session/switch", { sessionId });
+            // A completed request also ends the optimistic override when no
+            // matching session/info notification was needed or published.
+            if (
+                sessionSwitchNonce === switchNonce &&
+                pendingForegroundSessionId === sessionId
+            ) {
+                pendingForegroundSessionId = undefined;
+            }
         } catch (e) {
             if (
                 optimistic &&
@@ -2250,8 +2206,6 @@
                 pendingForegroundSessionId === sessionId
             ) {
                 pendingForegroundSessionId = undefined;
-                userSelectedForegroundSessionId =
-                    previousUserSelectedForegroundSessionId;
                 activeConsoleSessionId = resolveForegroundConsoleSessionId(
                     sessions,
                     previousForegroundSessionId,
@@ -2263,7 +2217,6 @@
     }
 
     function handleSetForegroundSession(sessionId: string) {
-        userSelectedForegroundSessionId = sessionId;
         if (sessionId === activeConsoleSessionId) return;
         void handleChangeForegroundSession(sessionId, true);
     }

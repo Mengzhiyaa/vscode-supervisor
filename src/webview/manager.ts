@@ -1,4 +1,6 @@
 import * as vscode from 'vscode';
+import { randomUUID } from 'crypto';
+import { RuntimeCodeExecutionMode, RuntimeErrorBehavior } from '../api';
 import { ConsoleViewProvider } from './consoleProvider';
 import { VariablesViewProvider } from './variablesProvider';
 import { PlotsViewProvider } from './plotsProvider';
@@ -65,6 +67,7 @@ export class WebviewManager implements vscode.Disposable {
             this._getAdditionalLocalResourceRoots,
             this._getLanguageMonacoSupportModuleUris,
             this._getLanguageTextMateGrammarDefinitions,
+            this._plotsService,
         );
         this._consoleService.setConsoleViewProvider(this._consoleProvider);
         this._disposables.push(
@@ -164,6 +167,19 @@ export class WebviewManager implements vscode.Disposable {
             this._outputChannel,
             this._packagesService,
             this._getAdditionalLocalResourceRoots,
+            async (session, name) => {
+                if (session.runtimeMetadata.languageId === 'r') {
+                    await session.execute(
+                        `help(package = ${JSON.stringify(name)}, help_type = "html")`,
+                        randomUUID(), RuntimeCodeExecutionMode.Interactive, RuntimeErrorBehavior.Stop,
+                    );
+                    return;
+                }
+                const found = await this._helpService.showSessionHelpTopic(session.sessionId, name);
+                if (!found) {
+                    void vscode.window.showInformationMessage(vscode.l10n.t("No help found for '{0}'.", name));
+                }
+            },
         );
         this._disposables.push(
             this._packagesProvider,

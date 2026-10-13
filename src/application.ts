@@ -1,4 +1,8 @@
 import * as vscode from 'vscode';
+import { DataImporterRegistry } from './services/dataExplorer/dataImporterRegistry';
+import { buildDataImportView } from './services/dataExplorer/dataImportView';
+import type { IDataImporter, IDataImporterMetadata, IDataImportRequest, IDataImportResult,
+    IDataImportOptions, IDataImportView } from './api';
 import { registerFrameworkLogChannel } from './logging/frameworkLogger';
 import { RedactingLogOutputChannel } from './logging/logSinks';
 import {
@@ -156,6 +160,7 @@ interface TestOpenConsoleCodeInEditorParams {
  * This centralizes initialization, lifecycle management, and inter-component communication.
  */
 export class SupervisorApplication implements vscode.Disposable, ISupervisorFrameworkApi {
+    private readonly _dataImporters = new DataImporterRegistry();
     private readonly _disposables: vscode.Disposable[] = [];
     private readonly _webviewManager: WebviewManager;
     private readonly _runtimeManager: RuntimeManager;
@@ -502,6 +507,9 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
 
     getApi(): ISupervisorFrameworkApi {
         return {
+            registerDataImporter: importer => this.registerDataImporter(importer),
+            getDataImporters: extension => this.getDataImporters(extension),
+            generateDataImportCode: (id, request) => this.generateDataImportCode(id, request),
             apiVersion: this.apiVersion,
             protocolVersion: this.protocolVersion,
             capabilities: this.capabilities,
@@ -545,6 +553,18 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
         activate: boolean,
     ): Promise<string> {
         return this._sessionManager.startRuntime(metadata, source, activate);
+    }
+
+    registerDataImporter(importer: IDataImporter): vscode.Disposable {
+        return this._dataImporters.register(importer);
+    }
+
+    getDataImporters(extension: string): Promise<readonly IDataImporterMetadata[]> {
+        return this._dataImporters.getImporters(extension);
+    }
+
+    generateDataImportCode(id: string, request: IDataImportRequest): Promise<IDataImportResult | undefined> {
+        return this._dataImporters.generateCode(id, request);
     }
 
     async createSession(
@@ -1303,6 +1323,90 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
      * Registers extension commands
      */
     private _registerCommands(): void {
+        this._disposables.push(this._dataImporters,
+            vscode.commands.registerCommand(CoreCommandIds.dataExplorerImport, async (
+                uri?: vscode.Uri, options: IDataImportOptions = {}, currentView?: IDataImportView,
+            ) => {
+                if (!vscode.workspace.isTrusted) {
+                    await vscode.commands.executeCommand('workbench.trust.manage');
+                    if (!vscode.workspace.isTrusted) { return; }
+                }
+                const selected = (uri instanceof vscode.Uri ? uri : undefined) ?? (await vscode.window.showOpenDialog({ canSelectMany: false,
+                    title: vscode.l10n.t('Import Data') }))?.[0];
+                if (!selected) { return; }
+                const remoteUri = vscode.workspace.workspaceFile?.scheme === 'vscode-remote'
+                    ? vscode.workspace.workspaceFile : vscode.workspace.workspaceFolders?.find(folder =>
+                        folder.uri.scheme === 'vscode-remote')?.uri;
+                const visibleToSession = vscode.env.remoteName
+                    ? selected.scheme === 'vscode-remote' && !!remoteUri &&
+                        selected.authority.toLowerCase() === remoteUri.authority.toLowerCase()
+                    : selected.scheme === 'file';
+                if (!visibleToSession) {
+                    await vscode.window.showInformationMessage(vscode.l10n.t('Choose a file on the runtime session machine.'));
+                    return;
+                }
+                const explorer = await this._positronDataExplorerService.openWithDuckDB(selected);
+                options = { hasHeaderRow: explorer.fileHasHeaderRow, sheetName: explorer.fileSelectedSheet, ...options };
+                if (!currentView && explorer.backendState) {
+                    currentView = await buildDataImportView(explorer.backendState, indexes => explorer.getSchema(indexes))
+                        .catch(() => undefined);
+                }
+                const filename = selected.path.split('/').at(-1) ?? 'data';
+                const importers = await this.getDataImporters(filename.includes('.') ? filename.split('.').at(-1)! : '');
+                if (importers.length === 0) {
+                    await vscode.window.showInformationMessage(vscode.l10n.t('No data importer is available for this file.'));
+                    return;
+                }
+                const preferredLanguage = this._sessionManager.foregroundSession?.runtimeMetadata.languageId;
+                const orderedImporters = [...importers].sort((left, right) =>
+                    Number(right.languageId === preferredLanguage) - Number(left.languageId === preferredLanguage));
+                const chosen = await vscode.window.showQuickPick(orderedImporters.map(importer => ({
+                    label: importer.displayName, importer,
+                })), { title: vscode.l10n.t('Import Data') });
+                if (!chosen) { return; }
+                let defaultName = filename.replace(/\.[^.]+$/, '').replace(/[^\p{L}\p{N}_]/gu, '_') || 'data';
+                if (/^[\p{N}]/u.test(defaultName)) { defaultName = `data_${defaultName}`; }
+                if (chosen.importer.reservedNames?.includes(defaultName)) { defaultName += '_'; }
+                const variableName = await vscode.window.showInputBox({
+                    title: vscode.l10n.t('Variable Name'), value: defaultName,
+                    validateInput: value => value.trim() ? undefined : vscode.l10n.t('Enter a variable name.'),
+                });
+                if (variableName === undefined) { return; }
+                let view: IDataImportView | undefined;
+                if (currentView) {
+                    const include = vscode.l10n.t('Include Filters and Sorting');
+                    const all = vscode.l10n.t('Import All Rows');
+                    const choice = await vscode.window.showQuickPick([include, all], { title: vscode.l10n.t('Import Data') });
+                    if (choice === undefined) { return; }
+                    if (choice === include) { view = currentView; }
+                }
+                const generated = await this.generateDataImportCode(chosen.importer.id, {
+                    fileUri: selected, variableName, options, view,
+                });
+                if (!generated) { return; }
+                if (generated.unsupported?.length) {
+                    await vscode.window.showWarningMessage(generated.unsupported.join('\n'));
+                }
+                const document = await vscode.workspace.openTextDocument({
+                    language: chosen.importer.languageId, content: generated.code,
+                });
+                await vscode.window.showTextDocument(document);
+                const run = vscode.l10n.t('Run in Console');
+                const copy = vscode.l10n.t('Copy Import Code');
+                while (true) {
+                    const action = await vscode.window.showInformationMessage(vscode.l10n.t('Import code is ready.'), run, copy);
+                    if (action === copy) {
+                        await vscode.env.clipboard.writeText(document.getText());
+                        continue;
+                    }
+                    if (action === run && document.getText()) {
+                        await this._consoleService.executeCode(chosen.importer.languageId, undefined, document.getText(),
+                            { source: 'data-import', metadata: { completenessVerified: true } }, true, true);
+                    }
+                    break;
+                }
+            }),
+        );
         // Register console actions (execute code, clear console, etc.)
         const consoleActions = registerConsoleActions(this._consoleService, this._outputChannel);
         this._disposables.push(...consoleActions);

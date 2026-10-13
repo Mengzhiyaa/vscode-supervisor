@@ -718,11 +718,13 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
     private getFilteredItems(): VariableItem[] {
         const items = Array.from(this._variableItems.values());
         if (!this._filterText) {return items;}
-        const lowerFilter = this._filterText.toLowerCase();
-        return items.filter(item =>
-            item.displayName.toLowerCase().includes(lowerFilter) ||
-            item.displayValue.toLowerCase().includes(lowerFilter)
-        );
+        try {
+            const regex = new RegExp(this._filterText, 'i');
+            return items.filter(item => regex.test(item.displayName));
+        } catch {
+            // An unfinished regular expression must not break the Variables model.
+            return [];
+        }
     }
 
     private sortItems(items: VariableItem[]): VariableItem[] {

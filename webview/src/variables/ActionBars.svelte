@@ -75,7 +75,7 @@
             ? formatMemoryBytes(
                   memoryUsageSnapshot.kernelTotalBytes +
                       (memoryUsageSnapshot.supervisorOverheadBytes ?? 0) +
-                      memoryUsageSnapshot.extensionHostOverheadBytes,
+                      (memoryUsageSnapshot.applicationOverheadBytes ?? memoryUsageSnapshot.extensionHostOverheadBytes),
               )
             : localize("memory.mem", "Mem");
         // Reserve grouping, sorting, refresh, clear, their separator, the

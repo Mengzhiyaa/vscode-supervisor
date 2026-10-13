@@ -22,6 +22,7 @@ export interface SupervisorProcessMemoryInfo {
     totalSystemMemory: number;
     freeSystemMemory: number;
     extensionHostOverheadBytes: number;
+    applicationOverheadBytes?: number;
     supervisorOverheadBytes?: number;
     collectionMethod: 'process-tree' | 'process-api';
     source: MemoryUsageSource;
@@ -92,12 +93,23 @@ export class ExtensionHostMemoryInfoProvider implements ISupervisorMemoryInfoPro
             const supervisorOverheadBytes = supervisorProcessId
                 ? sumProcessTreeMemory(processes, supervisorProcessId, kernelProcessIds)
                 : undefined;
+            // Positron accounts for the IDE/server process tree. Prefer the
+            // application PID when exposed; otherwise only claim a recognizable
+            // VS Code parent, rather than accidentally counting a login shell.
+            const applicationPid = this.source.providerKind === MemoryInfoProviderKind.Local
+                ? Number(process.env.VSCODE_PID) : process.ppid;
+            const application = processes.find(entry => entry.pid === applicationPid);
+            const applicationOverheadBytes = application &&
+                (applicationPid !== process.ppid || /code|electron|server-main/i.test(application.command))
+                ? sumProcessTreeMemory(processes, applicationPid, excludedFromExtensionHost)
+                : undefined;
 
             return {
                 totalSystemMemory: os.totalmem(),
                 freeSystemMemory: os.freemem(),
                 extensionHostOverheadBytes: extensionHostOverheadBytes ||
                     process.memoryUsage().rss,
+                applicationOverheadBytes,
                 supervisorOverheadBytes,
                 collectionMethod: 'process-tree',
                 source: this.source,

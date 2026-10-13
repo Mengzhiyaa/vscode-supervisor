@@ -31,6 +31,7 @@ export interface ConsoleSettings {
 
 export enum RuntimeCodeExecutionMode {
     Interactive = 'interactive',
+    Unprocessed = 'unprocessed',
     NonInteractive = 'non-interactive',
     Silent = 'silent',
     Transient = 'transient',

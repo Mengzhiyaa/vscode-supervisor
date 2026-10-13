@@ -22,6 +22,7 @@ export interface MemoryUsageSnapshot {
     kernelTotalBytes: number;
     supervisorOverheadBytes?: number;
     extensionHostOverheadBytes: number;
+    applicationOverheadBytes?: number;
     otherProcessesBytes: number;
     source: {
         providerKind: "local" | "remote";

@@ -6,7 +6,14 @@ import {
     type LanguageRuntimePackage,
     type PackageSpec,
     RuntimeState,
+    LanguageRuntimeSessionMode,
+    type PackagesSnapshot,
+    type PackagesSnapshotOptions,
+    type PackagesMetadataStatus,
+    type PackagesVulnerabilityStatus,
 } from '../../api';
+import { PackageVulnerabilityLookup } from './packageVulnerabilityLookup';
+import { CancellationToken, raceCancellationError, raceTimeout } from './packageAsync';
 import {
     type CachedPackageMetadata,
     PackageMetadataCache,
@@ -42,6 +49,10 @@ export class PositronPackagesInstance implements IPositronPackagesInstance, vsco
     private _packages: LanguageRuntimePackage[] = [];
     private readonly _metadataCache = new Map<string, CachedPackageMetadata>();
     private _metadataTokenSource: vscode.CancellationTokenSource | undefined;
+    private _metadataFetch: Promise<boolean> | undefined;
+    private _metadataFetchAll = false;
+    private _vulnerabilityTokenSource: vscode.CancellationTokenSource | undefined;
+    private _vulnerabilityFetch: Promise<PackagesVulnerabilityStatus> | undefined;
     private readonly _runtimeDisposables: vscode.Disposable[] = [];
     private readonly _disposables: vscode.Disposable[] = [];
     private _runtimeGeneration = 0;
@@ -61,6 +72,7 @@ export class PositronPackagesInstance implements IPositronPackagesInstance, vsco
         private _packageManager: ILanguageRuntimePackageManager,
         private readonly _outputChannel: vscode.LogOutputChannel,
         private readonly _persistedMetadataCache: PackageMetadataCache,
+        private readonly _vulnerabilityLookup?: PackageVulnerabilityLookup,
     ) {
         this._disposables.push(
             this._onDidRefreshPackagesInstance,
@@ -87,8 +99,9 @@ export class PositronPackagesInstance implements IPositronPackagesInstance, vsco
             return metadata?.version === pkg.version
                 ? {
                     ...pkg,
-                    outdated: metadata.outdated,
-                    latestVersion: metadata.latestVersion,
+                    outdated: metadata.outdated ?? pkg.outdated,
+                    latestVersion: metadata.latestVersion ?? pkg.latestVersion,
+                    vulnerabilities: this._vulnerabilityLookup?.enabled ? metadata.vulnerabilities : undefined,
                 }
                 : pkg;
         });
@@ -185,6 +198,158 @@ export class PositronPackagesInstance implements IPositronPackagesInstance, vsco
         return versions;
     }
 
+    async getPackageDetail(name: string, token?: vscode.CancellationToken): Promise<Partial<LanguageRuntimePackage> | undefined> {
+        throwIfCancellationRequested(token);
+        const generation = this._runtimeGeneration;
+        const request = this._packageManager.getPackageDetail?.(name, token);
+        const detail = request ? await (token ? withCancellation(request, token) : request) : undefined;
+        throwIfCancellationRequested(token);
+        if (generation !== this._runtimeGeneration) { throw new vscode.CancellationError(); }
+        return detail;
+    }
+
+    async resolveLatestVersion(name: string, token?: vscode.CancellationToken): Promise<string | undefined> {
+        if (!this._packageManager.getPackageMetadata) { return undefined; }
+        if (this._packages.length === 0) {
+            this._packages = await this._packageManager.getPackages(token);
+        }
+        await this._fetchAndMergeMetadata(token, true);
+        throwIfCancellationRequested(token);
+        return this.packages.find(pkg => pkg.name.toLowerCase() === name.toLowerCase())?.latestVersion;
+    }
+
+    async getPackagesSnapshot(
+        token: vscode.CancellationToken = CancellationToken.None,
+        options: PackagesSnapshotOptions = {},
+    ): Promise<PackagesSnapshot> {
+        const generation = this._runtimeGeneration;
+        const source = new vscode.CancellationTokenSource();
+        const subscription = token.onCancellationRequested(() => source.cancel());
+        try {
+            const list = await raceTimeout(raceCancellationError(
+                this._packageManager.getPackages(source.token), token), options.listTimeoutMs ?? 5000);
+            if (!list) { source.cancel(); throw new Error('Timed out reading the installed packages.'); }
+            throwIfCancellationRequested(token);
+            if (generation !== this._runtimeGeneration) { throw new vscode.CancellationError(); }
+            this._packages = list;
+            this._onDidRefreshPackagesInstance.fire(this.packages);
+            let metadataStatus: PackagesMetadataStatus = 'unsupported';
+            if (this._packageManager.getPackageMetadata) {
+                const visible = [...new Map([...list].reverse().map(pkg => [pkg.name.toLowerCase(), pkg])).values()];
+                const cached = this._persistedMetadataCache.isFresh(this._runtimeId) && visible.every(pkg => {
+                    const metadata = this._metadataCache.get(pkg.name.toLowerCase());
+                    return metadata?.version === pkg.version && metadata.outdated !== undefined;
+                });
+                if (cached) {
+                    metadataStatus = 'cached';
+                } else {
+                    try {
+                        const fetched = await raceTimeout(raceCancellationError(
+                            this._fetchAndMergeMetadata(source.token, true), token),
+                        options.metadataTimeoutMs ?? 10000);
+                        metadataStatus = fetched === undefined ? 'timed-out' : fetched ? 'fresh' : 'fetch-failed';
+                        if (fetched === undefined) { source.cancel(); }
+                    } catch (error) {
+                        if (isCancellationError(error)) { throw error; }
+                        metadataStatus = 'fetch-failed';
+                    }
+                }
+            }
+            const vulnerabilityPolicy = this._vulnerabilityPolicy;
+            const cachedVulnerabilities = this._vulnerabilityLookup?.enabled && this._packages.every(pkg => {
+                const cached = this._metadataCache.get(pkg.name.toLowerCase());
+                return cached?.version === pkg.version && cached.vulnerabilityPolicy === vulnerabilityPolicy &&
+                    cached.vulnerabilitiesCheckedAt !== undefined && Date.now() - cached.vulnerabilitiesCheckedAt < 24 * 60 * 60 * 1000;
+            });
+            const vulnerabilityStatus = !this._vulnerabilityLookup?.enabled ? 'disabled'
+                : cachedVulnerabilities ? 'cached'
+                    : options.includeVulnerabilities === false ? 'unavailable'
+                        : await this.refreshVulnerabilities(token, options.vulnerabilityTimeoutMs ?? 15000);
+            throwIfCancellationRequested(token);
+            if (generation !== this._runtimeGeneration) { throw new vscode.CancellationError(); }
+            const vulnerabilitySource = options.includeVulnerabilities === false ? undefined
+                : this._packages.map(pkg => {
+                    const cached = this._metadataCache.get(pkg.name.toLowerCase());
+                    return cached?.version === pkg.version ? cached : undefined;
+                })
+                    .find(metadata => metadata?.vulnerabilitiesCheckedAt !== undefined)?.vulnerabilitySource;
+            return { packages: options.includeVulnerabilities === false
+                ? this.packages.map(({ vulnerabilities: _advisories, ...pkg }) => pkg) : this.packages,
+            metadataStatus, vulnerabilityStatus, vulnerabilitySource };
+        } finally { subscription.dispose(); source.dispose(); }
+    }
+
+    refreshVulnerabilities(
+        token: vscode.CancellationToken = CancellationToken.None,
+        budgetMs = 90000,
+    ): Promise<PackagesVulnerabilityStatus> {
+        if (!this._vulnerabilityLookup?.enabled) {
+            this._onDidRefreshPackagesInstance.fire(this.packages);
+            return Promise.resolve('disabled');
+        }
+        if (!this._packageManager.repositoryRequest || !this._packageManager.packageRepositoryUrl) {
+            return Promise.resolve('unavailable');
+        }
+        const current = this._vulnerabilityFetch;
+        if (current) {
+            return raceTimeout(raceCancellationError(current, token), budgetMs)
+                .then(status => status ?? 'timed-out');
+        }
+        const fetch = this._fetchVulnerabilities(token, budgetMs);
+        this._vulnerabilityFetch = fetch;
+        void fetch.finally(() => {
+            if (this._vulnerabilityFetch === fetch) { this._vulnerabilityFetch = undefined; }
+        }).catch(() => undefined);
+        return fetch;
+    }
+
+    private async _fetchVulnerabilities(token: vscode.CancellationToken, budgetMs: number): Promise<PackagesVulnerabilityStatus> {
+        const manager = this._packageManager;
+        const generation = this._runtimeGeneration;
+        const vulnerabilityPolicy = this._vulnerabilityPolicy;
+        const versions = new Map<string, LanguageRuntimePackage>();
+        for (const pkg of this._packages) {
+            if (!versions.has(pkg.name.toLowerCase())) { versions.set(pkg.name.toLowerCase(), pkg); }
+        }
+        const source = new vscode.CancellationTokenSource();
+        this._vulnerabilityTokenSource = source;
+        const subscription = token.onCancellationRequested(() => source.cancel());
+        try {
+            const outcome = await raceTimeout(raceCancellationError(this._vulnerabilityLookup!.getVulnerabilities(
+                this._session.runtimeMetadata.languageId, {
+                    resolveUrl: requestToken => manager.packageRepositoryUrl!(requestToken),
+                    request: (request, requestToken) => manager.repositoryRequest!(request, requestToken),
+                }, [...versions.values()].map(pkg => ({ name: pkg.name, version: pkg.version })),
+                source.token, budgetMs).then(result => ({ result })), token), budgetMs + Math.min(1000, budgetMs));
+            throwIfCancellationRequested(token);
+            if (generation !== this._runtimeGeneration) { throw new vscode.CancellationError(); }
+            if (!outcome) { source.cancel(); return 'timed-out'; }
+            const result = outcome.result;
+            if (!result) { return 'unavailable'; }
+            for (const [key, pkg] of versions) {
+                if (!result.queried.has(key)) { continue; }
+                const current = this._packages.find(item => item.name.toLowerCase() === key);
+                if (current?.version !== pkg.version) { continue; }
+                const previous = this._metadataCache.get(key);
+                this._metadataCache.set(key, {
+                    ...(previous?.version === pkg.version ? previous : { version: pkg.version }),
+                    vulnerabilities: result.vulnerabilities.get(key),
+                    vulnerabilitiesCheckedAt: result.source.fetchedAt,
+                    vulnerabilitySource: result.source,
+                    vulnerabilityPolicy,
+                });
+            }
+            this._persistedMetadataCache.upsert(this._runtimeId, this._snapshotForPersist(),
+                this._persistedMetadataCache.get(this._runtimeId)?.lastFetched ?? 0);
+            this._onDidRefreshPackagesInstance.fire(this.packages);
+            return result.queried.size >= [...versions.values()].filter(pkg => !!pkg.version).length
+                ? 'fresh' : 'timed-out';
+        } finally {
+            source.cancel(); subscription.dispose(); source.dispose();
+            if (this._vulnerabilityTokenSource === source) { this._vulnerabilityTokenSource = undefined; }
+        }
+    }
+
     attachRuntime(): void {
         if (this._runtimeDisposables.length > 0) {
             return;
@@ -212,6 +377,9 @@ export class PositronPackagesInstance implements IPositronPackagesInstance, vsco
     }
 
     detachRuntime(): void {
+        this._metadataFetch = undefined;
+        this._vulnerabilityTokenSource?.cancel();
+        this._vulnerabilityFetch = undefined;
         this._runtimeGeneration++;
         this._refreshGeneration++;
         this._metadataTokenSource?.cancel();
@@ -271,6 +439,7 @@ export class PositronPackagesInstance implements IPositronPackagesInstance, vsco
     private async _refreshPackagesInternal(token?: vscode.CancellationToken, forceMetadata = false): Promise<void> {
         const generation = ++this._refreshGeneration;
         this._metadataTokenSource?.cancel();
+        this._metadataFetch = undefined;
         const packages = await this._packageManager.getPackages(token);
         throwIfCancellationRequested(token);
         if (generation !== this._refreshGeneration) {
@@ -279,6 +448,11 @@ export class PositronPackagesInstance implements IPositronPackagesInstance, vsco
         this._packages = packages;
         this._onDidRefreshPackagesInstance.fire(this.packages);
 
+        if (this._session.metadata.sessionMode === LanguageRuntimeSessionMode.Console) {
+            void this.refreshVulnerabilities().catch(error => {
+                if (!isCancellationError(error)) { this._outputChannel.warn(String(error)); }
+            });
+        }
         if (this._packageManager.getPackageMetadata && this._packages.length > 0) {
             const fetchAll = forceMetadata || !this._persistedMetadataCache.isFresh(this._runtimeId);
             void this._fetchAndMergeMetadata(undefined, fetchAll).catch(error => {
@@ -289,12 +463,30 @@ export class PositronPackagesInstance implements IPositronPackagesInstance, vsco
         }
     }
 
-    private async _fetchAndMergeMetadata(
+    private _fetchAndMergeMetadata(externalToken?: vscode.CancellationToken, fetchAll = false): Promise<boolean> {
+        if (this._metadataFetch) {
+            if (fetchAll && !this._metadataFetchAll) {
+                const current = this._metadataFetch;
+                const fullFetch = current.then(() => this._fetchAndMergeMetadata(externalToken, true));
+                return externalToken ? raceCancellationError(fullFetch, externalToken) : fullFetch;
+            }
+            return externalToken ? raceCancellationError(this._metadataFetch, externalToken) : this._metadataFetch;
+        }
+        const fetch = this._doFetchAndMergeMetadata(externalToken, fetchAll);
+        this._metadataFetch = fetch;
+        this._metadataFetchAll = fetchAll;
+        void fetch.finally(() => {
+            if (this._metadataFetch === fetch) { this._metadataFetch = undefined; }
+        }).catch(() => undefined);
+        return externalToken ? raceCancellationError(fetch, externalToken) : fetch;
+    }
+
+    private async _doFetchAndMergeMetadata(
         externalToken?: vscode.CancellationToken,
         fetchAll = false,
-    ): Promise<void> {
+    ): Promise<boolean> {
         if (!this._packageManager.getPackageMetadata) {
-            return;
+            return false;
         }
 
         this._metadataTokenSource?.cancel();
@@ -328,7 +520,7 @@ export class PositronPackagesInstance implements IPositronPackagesInstance, vsco
             if (this._metadataTokenSource === tokenSource) {
                 this._metadataTokenSource = undefined;
             }
-            return;
+            return true;
         }
 
         try {
@@ -338,7 +530,7 @@ export class PositronPackagesInstance implements IPositronPackagesInstance, vsco
             );
 
             if (tokenSource.token.isCancellationRequested || !metadata || metadata.size === 0) {
-                return;
+                return false;
             }
 
             for (const [name, packageMetadata] of metadata) {
@@ -347,7 +539,10 @@ export class PositronPackagesInstance implements IPositronPackagesInstance, vsco
                 if (version === undefined) {
                     continue;
                 }
+                const current = this._packages.find(pkg => pkg.name.toLowerCase() === key);
+                if (current?.version !== version) { continue; }
                 this._metadataCache.set(key, {
+                    ...(this._metadataCache.get(key)?.version === version ? this._metadataCache.get(key) : {}),
                     version,
                     outdated: packageMetadata.outdated,
                     latestVersion: packageMetadata.latestVersion,
@@ -360,6 +555,10 @@ export class PositronPackagesInstance implements IPositronPackagesInstance, vsco
                 fetchAll ? Date.now() : this._persistedMetadataCache.get(this._runtimeId)?.lastFetched ?? Date.now(),
             );
             this._onDidRefreshPackagesInstance.fire(this.packages);
+            return uncachedPackages.every(pkg => {
+                const cached = this._metadataCache.get(pkg.name.toLowerCase());
+                return cached?.version === pkg.version && cached.outdated !== undefined;
+            });
         } finally {
             externalDisposable?.dispose();
             tokenSource.dispose();
@@ -375,10 +574,16 @@ export class PositronPackagesInstance implements IPositronPackagesInstance, vsco
         }
 
         this._metadataTokenSource?.cancel();
+        this._metadataFetch = undefined;
         for (const name of packageNames) {
             this._metadataCache.delete(name.toLowerCase());
         }
         this._persistedMetadataCache.evict(this._runtimeId, packageNames);
+    }
+
+    private get _vulnerabilityPolicy(): 'auto' | 'environment' {
+        return vscode.workspace.getConfiguration().get<string>('packages.vulnerabilities.source') === 'environment'
+            ? 'environment' : 'auto';
     }
 
     private get _runtimeId(): string {

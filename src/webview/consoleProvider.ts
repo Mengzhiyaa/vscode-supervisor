@@ -6,6 +6,10 @@ import { BaseWebviewProvider } from './baseProvider';
 import * as ConsoleProtocol from '../rpc/webview/console';
 import * as LspProtocol from '../rpc/webview/lsp';
 import * as SessionProtocol from '../rpc/webview/session';
+import * as PlotsProtocol from '../rpc/webview/plots';
+import { LanguageRuntimeSessionMode } from '../api';
+import { PositronPlotsService } from '../runtime/positronPlotsService';
+import { PlotsDisplayLocation } from '../runtime/positronPlots';
 import { RuntimeSession } from '../runtime/session';
 import { RuntimeSessionService } from '../runtime/runtimeSession';
 import { RuntimeStartupService } from '../runtime/runtimeStartup';
@@ -84,6 +88,7 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
         private readonly _getLanguageTextMateGrammarDefinitions: (
             webview: vscode.Webview,
         ) => Readonly<Record<string, { scopeName: string; grammarUrl: string }>> = () => ({}),
+        private readonly _plotsService?: PositronPlotsService,
     ) {
         super(extensionUri, outputChannel, getAdditionalLocalResourceRoots);
         this._sessionSnapshotBuilder = new SessionSnapshotBuilder(this._sessionManager, this._consoleService);
@@ -427,6 +432,16 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
         this._registerSessionHandlers(connection);
         this._registerOutputNavigationHandlers(connection);
         this._registerLanguageServiceHandlers(connection);
+        connection.onRequest(PlotsProtocol.SelectPlotRequest.type, async params => {
+            if (!this._plotsService) { return; }
+            const plot = this._plotsService.positronPlotInstances.find(candidate => candidate.id === params.plotId);
+            const session = plot && this._sessionManager?.getSession(plot.metadata.session_id);
+            if (session?.sessionMetadata.sessionMode === LanguageRuntimeSessionMode.Notebook) { return; }
+            this._plotsService.selectPlot(params.plotId);
+            if (this._plotsService.displayLocation === PlotsDisplayLocation.MainWindow) {
+                await vscode.commands.executeCommand(`${ViewIds.plots}.focus`);
+            }
+        });
     }
 
     private _registerExecutionHandlers(connection: MessageConnection): void {

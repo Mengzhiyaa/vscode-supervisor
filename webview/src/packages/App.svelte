@@ -3,24 +3,7 @@
     import type { MessageConnection } from "vscode-jsonrpc/browser";
     import { getRpcConnection } from "$lib/rpc/client";
     import { localize } from "$lib/localization";
-
-    interface PackageItem {
-        id: string;
-        name: string;
-        displayName: string;
-        version: string;
-        license?: string;
-        latestVersion?: string;
-        publishedDate?: string;
-        attached?: boolean;
-        outdated?: boolean;
-        description?: string;
-    }
-
-    interface PackageSpec {
-        name: string;
-        version?: string;
-    }
+    import type { LanguageRuntimePackage as PackageItem, PackagesItemSize, PackageSpec } from "@shared/packageTypes";
 
     interface SessionState {
         id: string;
@@ -37,7 +20,7 @@
         activeSession?: SessionState;
         busy: boolean;
         selectedPackage?: string;
-        itemSize: "card" | "row";
+        itemSize: PackagesItemSize;
     }
 
     let connection = $state<MessageConnection | undefined>();
@@ -50,7 +33,7 @@
     let searchGeneration = 0;
     let lastRevision = -1;
     let selectedPackage = $state<string | undefined>();
-    let itemSize = $state<"card" | "row">("card");
+    let itemSize = $state<PackagesItemSize>("card");
     let filterText = $state("");
     let installText = $state("");
     let searchText = $state("");
@@ -265,9 +248,17 @@
         }
     }
 
-    function selectPackage(pkg: PackageItem): void {
+    function selectPackage(pkg: PackageItem, pinned = false): void {
         selectedPackage = pkg.name;
         connection?.sendNotification("packages/setSelected", { name: pkg.name, sessionId: activeSession?.id });
+        if (connection && activeSession) {
+            const generation = sessionGeneration;
+            void connection.sendRequest("packages/openPackage", {
+                name: pkg.name, sessionId: activeSession.id, pinned,
+            }).catch(error => {
+                if (generation === sessionGeneration) operationError = formatError(error);
+            });
+        }
     }
 
     function selectPackageFromKeyboard(event: KeyboardEvent, pkg: PackageItem): void {
@@ -468,6 +459,9 @@
                         role="button"
                         tabindex="0"
                         onclick={() => selectPackage(pkg)}
+                        ondblclick={(event) => {
+                            if (!(event.target as HTMLElement).closest("button")) selectPackage(pkg, true);
+                        }}
                         onkeydown={(event) => selectPackageFromKeyboard(event, pkg)}
                     >
                         <span class="result-text">
@@ -544,6 +538,9 @@
                         role="button"
                         tabindex="0"
                         onclick={() => selectPackage(pkg)}
+                        ondblclick={(event) => {
+                            if (!(event.target as HTMLElement).closest("button")) selectPackage(pkg, true);
+                        }}
                         onkeydown={(event) => selectPackageFromKeyboard(event, pkg)}
                     >
                         <span class="package-main">

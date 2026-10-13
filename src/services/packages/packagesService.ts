@@ -8,11 +8,14 @@ import {
     LanguageRuntimeSessionMode,
     type PackageSpec,
     type PackagesItemSize,
+    type PackagesSnapshot,
+    type PackagesSnapshotOptions,
 } from '../../api';
 import { ContextKeys } from '../../coreCommandIds';
 import { RuntimeSessionService } from '../../runtime/runtimeSession';
 import { PackageMetadataCache } from './packageMetadataCache';
 import { PositronPackagesInstance } from './packagesInstance';
+import { PackageVulnerabilityLookup } from './packageVulnerabilityLookup';
 
 const ITEM_SIZE_STORAGE_KEY = 'positron.packages.itemSize';
 const TIMEOUT_REFRESH_MS = 5_000;
@@ -39,6 +42,7 @@ export class PositronPackagesService implements IPositronPackagesService {
     private readonly _disposables: vscode.Disposable[] = [];
     private readonly _activeInstanceDisposables: vscode.Disposable[] = [];
     private readonly _metadataCache: PackageMetadataCache;
+    private readonly _vulnerabilityLookup: PackageVulnerabilityLookup;
 
     private _activeInstance: PositronPackagesInstance | undefined;
     private _selectedPackage: string | undefined;
@@ -55,6 +59,18 @@ export class PositronPackagesService implements IPositronPackagesService {
         private readonly _sessionManager: RuntimeSessionService,
         private readonly _outputChannel: vscode.LogOutputChannel,
     ) {
+        this._vulnerabilityLookup = new PackageVulnerabilityLookup({
+            getValue: <T>(key: string) => vscode.workspace.getConfiguration().get<T>(key),
+        }, this._outputChannel);
+        this._disposables.push(this._vulnerabilityLookup, vscode.workspace.onDidChangeConfiguration(event => {
+            if (event.affectsConfiguration('packages.vulnerabilities')) {
+                for (const instance of this._instancesBySessionId.values()) {
+                    if (instance.session.metadata.sessionMode === LanguageRuntimeSessionMode.Console) {
+                        void instance.refreshVulnerabilities().catch(error => this._outputChannel.warn(String(error)));
+                    }
+                }
+            }
+        }));
         this._metadataCache = new PackageMetadataCache(
             this._context.workspaceState,
             this._outputChannel,
@@ -243,6 +259,21 @@ export class PositronPackagesService implements IPositronPackagesService {
         return this._getActiveInstanceOrThrow().searchPackageVersions(name, token);
     }
 
+    async resolveLatestVersion(name: string, token?: vscode.CancellationToken): Promise<string | undefined> {
+        return this._activeInstance?.resolveLatestVersion(name, token);
+    }
+
+    async getPackageDetail(name: string, token?: vscode.CancellationToken): Promise<Partial<LanguageRuntimePackage> | undefined> {
+        return this._activeInstance?.getPackageDetail(name, token);
+    }
+
+    async getPackagesSnapshot(token?: vscode.CancellationToken, options?: PackagesSnapshotOptions): Promise<PackagesSnapshot> {
+        return this._activeInstance?.getPackagesSnapshot(token, options) ?? {
+            packages: [], metadataStatus: 'unsupported',
+            vulnerabilityStatus: this._vulnerabilityLookup.enabled ? 'unavailable' : 'disabled',
+        };
+    }
+
     dispose(): void {
         while (this._activeInstanceDisposables.length) {
             this._activeInstanceDisposables.pop()?.dispose();
@@ -291,6 +322,7 @@ export class PositronPackagesService implements IPositronPackagesService {
                 packageManager,
                 this._outputChannel,
                 this._metadataCache,
+                this._vulnerabilityLookup,
             );
             this._instancesBySessionId.set(session.sessionId, instance);
         }

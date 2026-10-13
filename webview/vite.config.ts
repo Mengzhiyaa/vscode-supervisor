@@ -24,6 +24,7 @@ export default defineConfig(({ mode }) => ({
                 plots: resolve(__dirname, 'src/plots/main.ts'),
                 plotEditor: resolve(__dirname, 'src/plotEditor/main.ts'),
                 packages: resolve(__dirname, 'src/packages/main.ts'),
+                packageDetail: resolve(__dirname, 'src/packageDetail/main.ts'),
                 viewer: resolve(__dirname, 'src/viewer/main.ts'),
                 help: resolve(__dirname, 'src/help/main.ts'),
                 dataExplorer: resolve(__dirname, 'src/dataExplorer/main.ts'),

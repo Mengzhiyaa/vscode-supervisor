@@ -100,6 +100,7 @@ export interface MemoryUsageSnapshot {
     kernelTotalBytes: number;
     supervisorOverheadBytes?: number;
     extensionHostOverheadBytes: number;
+    applicationOverheadBytes?: number;
     otherProcessesBytes: number;
     collectionMethod: "process-tree" | "process-api";
     source: MemoryUsageSource;

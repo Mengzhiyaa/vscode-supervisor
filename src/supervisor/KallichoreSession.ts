@@ -141,6 +141,7 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 
 	/** A map of pending RPCs, used to pair up requests and replies */
 	private _pendingRequests: Map<string, JupyterRequest<any, any>> = new Map();
+	private readonly _pendingUnprocessedExecutions = new Map<string, () => void>();
 
 	/** An array of pending UI comm requests */
 	private _pendingUiCommRequests: UICommRequest[] = [];
@@ -845,7 +846,10 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 		mode: positron.RuntimeCodeExecutionMode,
 		errorBehavior: positron.RuntimeErrorBehavior,
 		codeLocation?: positron.Utf8Location,
-		executionMetadata?: Record<string, unknown>): void {
+		executionMetadata?: Record<string, unknown>): void | Promise<void> {
+		if (mode === positron.RuntimeCodeExecutionMode.Unprocessed) {
+			return this._executeUnprocessed(code, id, errorBehavior, codeLocation, executionMetadata);
+		}
 
 		// Translate the parameters into a Jupyter execute request
 		const request: JupyterExecuteRequest = {
@@ -885,6 +889,32 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 			// the request to Kallichore rather than a failure to execute it
 			this.log(`Failed to send execution request for '${code}': ${err}`, vscode.LogLevel.Error);
 		});
+	}
+
+	private async _executeUnprocessed(code: string, id: string,
+		errorBehavior: positron.RuntimeErrorBehavior, codeLocation?: positron.Utf8Location,
+		executionMetadata?: Record<string, unknown>): Promise<void> {
+		let cancel!: () => void;
+		const cancelled = new Promise<never>((_resolve, reject) => {
+			cancel = () => {
+				const error = new Error(`Execution ${id} was cancelled before submission`);
+				error.name = 'ExecutionCancelledError';
+				reject(error);
+			};
+		});
+		this._pendingUnprocessedExecutions.set(id, cancel);
+		try {
+			const status = await Promise.race([this.isCodeFragmentComplete(code), cancelled]);
+			if (status === positron.RuntimeCodeFragmentStatus.Incomplete) {
+				const error = new Error('Code fragment is incomplete');
+				error.name = 'CodeIncompleteError';
+				throw error;
+			}
+			this.execute(code, id, positron.RuntimeCodeExecutionMode.Interactive,
+				errorBehavior, codeLocation, executionMetadata);
+		} finally {
+			this._pendingUnprocessedExecutions.delete(id);
+		}
 	}
 
 	private _toJupyterPositronLocation(codeLocation: positron.Utf8Location): JupyterPositronLocation {
@@ -1892,6 +1922,10 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 	 * been sent. Note that the kernel may not be interrupted immediately.
 	 */
 	async interrupt(): Promise<void> {
+		const hadPendingChecks = this._pendingUnprocessedExecutions.size > 0;
+		for (const cancel of this._pendingUnprocessedExecutions.values()) { cancel(); }
+		this._pendingUnprocessedExecutions.clear();
+		if (hadPendingChecks && this._runtimeState !== positron.RuntimeState.Busy) { return; }
 		// Mark the session as interrupting
 		this.onStateChange(positron.RuntimeState.Interrupting, 'interrupting kernel');
 
@@ -2060,6 +2094,8 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 	 * Clean up the session.
 	 */
 	dispose() {
+		for (const cancel of this._pendingUnprocessedExecutions.values()) { cancel(); }
+		this._pendingUnprocessedExecutions.clear();
 		// Close the websocket if it's open
 		if (this._socket) {
 			this._socket.close();
@@ -2325,6 +2361,8 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 	}
 
 	private releaseKernelConsumers(reason: string): void {
+		for (const cancel of this._pendingUnprocessedExecutions.values()) { cancel(); }
+		this._pendingUnprocessedExecutions.clear();
 		this._clients.clear();
 		for (const [comm, tx] of this._comms.values()) {
 			comm.close();
