@@ -74,6 +74,10 @@
         $updateTrigger;
         return instance.rowHeadersWidth;
     });
+    const maximumRowHeadersWidth = $derived.by(() => {
+        $updateTrigger;
+        return instance.maximumRowHeadersWidth;
+    });
 
     let resizingHeight = $state(false);
     let heightStartY = $state(0);
@@ -156,8 +160,8 @@
                 rootClass="data-grid-vertical-splitter"
                 resizeAriaLabel="Resize row header width"
                 onBeginResize={() => ({
-                    minimumWidth: instance.minimumColumnWidth,
-                    maximumWidth: instance.maximumColumnWidth,
+                    minimumWidth: instance.minimumRowHeadersWidth,
+                    maximumWidth: maximumRowHeadersWidth,
                     startingWidth: rowHeadersWidth,
                 })}
                 onResize={(width) => { void instance.setRowHeadersWidth(width); }}

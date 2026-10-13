@@ -18,6 +18,10 @@ extensions, such as `ark.vscode-ark`, depend on the public supervisor API
 defined here. The public compile-time surface is maintained in `src/api.d.ts`,
 which consumer repos copy into their own `src/types/` tree.
 
+Closing a session sends the kernel shutdown request immediately while LSP and
+DAP cleanup runs in parallel. The kernel must exit before its session is removed.
+Session removal is published before waiting for editor resource disposal.
+
 ### Notebook controller ownership
 
 `vscode-supervisor` owns notebook-mode runtime sessions and shared notebook

@@ -1245,7 +1245,29 @@ export class PlotsViewProvider extends BaseWebviewProvider {
                 // First check if we have a PlotClientInstance (for dynamic re-rendering)
                 const plotClient = this._plotClients.get(params.plotId);
                 if (plotClient) {
-                    const policy = this._getSizingPolicyForConnection(state);
+                    const storedPlot = this._plots.get(params.plotId);
+                    let policy = state.selectedPlotId === params.plotId
+                        ? this._getSizingPolicyForConnection(state)
+                        : storedPlot?.sizingPolicyId === 'custom' && storedPlot.customSize
+                            ? new PlotSizingPolicyCustom(storedPlot.customSize)
+                            : this._plotsService.sizingPolicies.find(p => p.id === storedPlot?.sizingPolicyId)
+                                ?? plotClient.sizingPolicy;
+                    if (policy instanceof PlotSizingPolicyIntrinsic && !(await plotClient.getIntrinsicSize())) {
+                        policy = new PlotSizingPolicyAuto();
+                        // Re-check selection and policy after the async lookup.
+                        // Never apply an old plot's fallback to the foreground plot.
+                        if (state.selectedPlotId === params.plotId && state.selectedSizingPolicyId === PlotSizingPolicyIntrinsic.ID) {
+                            state.selectedSizingPolicyId = PlotSizingPolicyAuto.ID;
+                            state.customSize = undefined;
+                            state.lastRenderSettingsKey = undefined;
+                            this._storeSizingForPlotId(params.plotId, policy.id, undefined);
+                            if (this._plotsService.selectedPlotId === params.plotId && plotClient.sizingPolicy.id === PlotSizingPolicyIntrinsic.ID) {
+                                plotClient.sizingPolicy = policy;
+                            }
+                            this._notifySelectedSizingChanged(state);
+                            this._sendPlotsRenderSettings(state);
+                        }
+                    }
                     const plotSize = policy.getPlotSize({
                         height: params.height,
                         width: params.width
@@ -1449,15 +1471,9 @@ export class PlotsViewProvider extends BaseWebviewProvider {
         // Handle get sizing policies request
         connection.onRequest(PlotsProtocol.GetSizingPoliciesRequest.type, async () => {
             const state = this._getStateForConnection(connection);
-            const sourcePolicies = this._plotsService.sizingPolicies;
             const selectedPolicy = this._getSizingPolicyForConnection(state);
-            const selectedPlot = this._getSelectedPlotForConnection(state);
-            const policies = sourcePolicies.map(p => ({
-                id: p.id,
-                name: p.getName(selectedPlot as any)
-            }));
             return {
-                policies,
+                policies: this._getSizingPoliciesPayload(state),
                 selectedPolicyId: selectedPolicy.id
             };
         });
@@ -1935,7 +1951,18 @@ export class PlotsViewProvider extends BaseWebviewProvider {
     private _getSizingPoliciesPayloadForPlot(
         selectedPlot: PlotClientInstance | undefined
     ): PlotsProtocol.SizingPolicyInfo[] {
-        return this._plotsService.sizingPolicies.map(policy => ({
+        const policies = this._plotsService.sizingPolicies;
+        const selectedPolicy = selectedPlot?.sizingPolicy;
+        if (selectedPolicy) {
+            // Frozen/custom policies carry this plot's size and display name.
+            const index = policies.findIndex(policy => policy.id === selectedPolicy.id);
+            if (index >= 0) {
+                policies[index] = selectedPolicy;
+            } else {
+                policies.push(selectedPolicy);
+            }
+        }
+        return policies.map(policy => ({
             id: policy.id,
             name: policy.getName(selectedPlot as any)
         }));

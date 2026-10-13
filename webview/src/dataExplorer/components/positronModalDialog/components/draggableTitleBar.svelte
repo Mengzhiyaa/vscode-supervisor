@@ -1,4 +1,6 @@
 <script lang="ts">
+    import { onDestroy } from "svelte";
+
     interface Props {
         title: string;
         onStartDrag?: () => void;
@@ -7,6 +9,9 @@
     }
 
     let { title, onStartDrag, onDrag, onStopDrag }: Props = $props();
+    let disposeDrag: (() => void) | undefined;
+
+    onDestroy(() => disposeDrag?.());
 
     function handlePointerDown(event: PointerEvent) {
         if (event.button !== 0) {
@@ -16,30 +21,65 @@
         event.preventDefault();
         event.stopPropagation();
 
+        disposeDrag?.();
         const startX = event.clientX;
         const startY = event.clientY;
+        const pointerId = event.pointerId;
+        const target = event.currentTarget as HTMLElement;
+        let deltaX = 0;
+        let deltaY = 0;
 
         onStartDrag?.();
 
         const body = document.body;
 
         const handlePointerMove = (moveEvent: PointerEvent) => {
+            if (moveEvent.pointerId !== pointerId) {
+                return;
+            }
             moveEvent.preventDefault();
             moveEvent.stopPropagation();
-            onDrag?.(moveEvent.clientX - startX, moveEvent.clientY - startY);
+            deltaX = moveEvent.clientX - startX;
+            deltaY = moveEvent.clientY - startY;
+            onDrag?.(deltaX, deltaY);
         };
 
         const handlePointerUp = (upEvent: PointerEvent) => {
+            if (upEvent.pointerId !== pointerId) {
+                return;
+            }
             upEvent.preventDefault();
             upEvent.stopPropagation();
-
-            body.removeEventListener("pointermove", handlePointerMove, false);
-            body.removeEventListener("pointerup", handlePointerUp, false);
-            onStopDrag?.(upEvent.clientX - startX, upEvent.clientY - startY);
+            deltaX = upEvent.clientX - startX;
+            deltaY = upEvent.clientY - startY;
+            disposeDrag?.();
         };
 
+        const cancelDrag = () => disposeDrag?.();
+        const handlePointerCancel = (cancelEvent: PointerEvent) => {
+            if (cancelEvent.pointerId === pointerId) {
+                cancelDrag();
+            }
+        };
+        disposeDrag = () => {
+            disposeDrag = undefined;
+            body.removeEventListener("pointermove", handlePointerMove, false);
+            body.removeEventListener("pointerup", handlePointerUp, false);
+            body.removeEventListener("pointercancel", handlePointerCancel);
+            target.removeEventListener("lostpointercapture", handlePointerCancel);
+            window.removeEventListener("blur", cancelDrag);
+            if (target.hasPointerCapture(pointerId)) {
+                target.releasePointerCapture(pointerId);
+            }
+            onStopDrag?.(deltaX, deltaY);
+        };
+
+        target.setPointerCapture(pointerId);
         body.addEventListener("pointermove", handlePointerMove, false);
         body.addEventListener("pointerup", handlePointerUp, false);
+        body.addEventListener("pointercancel", handlePointerCancel);
+        target.addEventListener("lostpointercapture", handlePointerCancel);
+        window.addEventListener("blur", cancelDrag);
     }
 </script>
 
@@ -55,6 +95,7 @@
         height: 32px;
         display: flex;
         cursor: move;
+        touch-action: none;
         padding: 0 16px;
         align-items: center;
         color: var(--vscode-positronModalDialog-foreground);

@@ -52,6 +52,9 @@ class VscodeMessageReader implements MessageReader {
 
     constructor() {
         this._messageHandler = (event: MessageEvent) => {
+            if (!this._isHostMessageSource(event)) {
+                return;
+            }
             const message = event.data;
             // Only process JSON-RPC messages
             if (this._isJsonRpcMessage(message) && this._callback) {
@@ -59,6 +62,34 @@ class VscodeMessageReader implements MessageReader {
             }
         };
         window.addEventListener('message', this._messageHandler);
+    }
+
+    private _isHostMessageSource(event: MessageEvent): boolean {
+        // The standalone harness dispatches source-less MessageEvents.
+        if (event.source === null) {
+            return true;
+        }
+        if (event.origin !== window.origin) {
+            return false;
+        }
+        if (event.source === window || event.source === window.parent) {
+            return true;
+        }
+
+        // VS Code masks window.parent as window, while its preload still sends
+        // messages from the real parent. Identify that sender by frame ownership
+        // rather than accepting all same-origin windows (including previews).
+        try {
+            const senderFrames = (event.source as Window).frames;
+            for (let index = 0; index < senderFrames.length; index++) {
+                if (senderFrames[index] === window) {
+                    return true;
+                }
+            }
+        } catch {
+            // Non-window sources and inaccessible frames are not host senders.
+        }
+        return false;
     }
 
     private _isJsonRpcMessage(message: unknown): boolean {

@@ -18,6 +18,7 @@ const SCHEMA_REQUEST_TIMEOUT = 60_000;
  */
 export class DataExplorerSchemaClient {
     private _nextRequestId = 0;
+    private _disposed = false;
     private readonly _schemaRequests = new Map<
         number,
         PendingSchemaRequest<SchemaColumn[]>
@@ -32,7 +33,7 @@ export class DataExplorerSchemaClient {
     ) {}
 
     getSchema(columnIndices: number[]): Promise<SchemaColumn[]> {
-        if (columnIndices.length === 0) {
+        if (this._disposed || columnIndices.length === 0) {
             return Promise.resolve([]);
         }
 
@@ -57,6 +58,9 @@ export class DataExplorerSchemaClient {
         sortOption?: SearchSchemaSortOrder;
         pinnedColumns?: number[];
     }): Promise<number[]> {
+        if (this._disposed) {
+            return Promise.resolve([]);
+        }
         const requestId = ++this._nextRequestId;
         const promise = new Promise<number[]>((resolve) => {
             const timeoutHandle = setTimeout(() => {
@@ -78,17 +82,21 @@ export class DataExplorerSchemaClient {
     handleSchema(params: {
         columns: SchemaColumn[];
         requestId?: number;
-    }): void {
+    }): boolean {
+        if (this._disposed) {
+            return false;
+        }
         if (params.requestId === undefined) {
-            return;
+            return true;
         }
         const pending = this._schemaRequests.get(params.requestId);
         if (!pending) {
-            return;
+            return false;
         }
         clearTimeout(pending.timeoutHandle);
         this._schemaRequests.delete(params.requestId);
         pending.resolve(params.columns);
+        return true;
     }
 
     handleSearchSchema(params: {
@@ -107,7 +115,7 @@ export class DataExplorerSchemaClient {
         pending.resolve(params.columnIndices);
     }
 
-    dispose(): void {
+    invalidateSchema(): void {
         for (const pending of this._schemaRequests.values()) {
             clearTimeout(pending.timeoutHandle);
             pending.resolve([]);
@@ -118,5 +126,10 @@ export class DataExplorerSchemaClient {
         }
         this._schemaRequests.clear();
         this._searchRequests.clear();
+    }
+
+    dispose(): void {
+        this._disposed = true;
+        this.invalidateSchema();
     }
 }

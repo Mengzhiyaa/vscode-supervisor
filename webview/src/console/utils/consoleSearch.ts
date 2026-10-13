@@ -228,16 +228,22 @@ export function findMatchesInDOM(
  *   - 'console-search-matches': all matches (yellow background)
  *   - 'console-search-current': the current/active match (orange background)
  */
+let highlightOwner: object | undefined;
+const defaultHighlightOwner = {};
+
 export function applyHighlights(
     matches: SearchMatch[],
     currentIndex: number,
+    owner: object = defaultHighlightOwner,
 ): void {
-    // Clear existing highlights
-    clearHighlights();
-
     if (matches.length === 0) {
+        clearHighlights(owner);
         return;
     }
+    // Only the foreground console publishes highlights, and only their owner
+    // may clear them when a different session closes or is destroyed.
+    clearHighlights();
+    highlightOwner = owner;
 
     // Separate the current match from all matches
     const allRanges: Range[] = [];
@@ -269,7 +275,11 @@ export function applyHighlights(
 /**
  * Clears all search highlights.
  */
-export function clearHighlights(): void {
+export function clearHighlights(owner?: object): void {
+    if (owner !== undefined && owner !== highlightOwner) {
+        return;
+    }
+    highlightOwner = undefined;
     try {
         CSS.highlights.delete('console-search-matches');
         CSS.highlights.delete('console-search-current');

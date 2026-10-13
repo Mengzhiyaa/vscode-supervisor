@@ -711,6 +711,21 @@ export abstract class DataGridInstance {
     get rowHeaders() { return this._rowHeaders; }
     get rowHeadersWidth() { return this._rowHeadersWidth; }
     get rowHeadersResize() { return this._rowHeadersResize; }
+    get minimumRowHeadersWidth() { return 20; }
+    get maximumRowHeadersWidth() {
+        if (this._width <= 0) {
+            return Math.max(this.minimumRowHeadersWidth, this._maximumColumnWidth);
+        }
+
+        // Keep room for an unpinned column when the container is large enough.
+        const reservedWidth = this._minimumColumnWidth +
+            (this._columnPinning ? this._columnLayoutManager.pinnedLayoutEntriesSize : 0) +
+            (this._verticalScrollbar ? this._scrollbarThickness : 0);
+        return Math.max(
+            this.minimumRowHeadersWidth,
+            Math.min(this._maximumColumnWidth, this._width - reservedWidth),
+        );
+    }
     get columnResize() { return this._columnResize; }
     get minimumColumnWidth() { return this._minimumColumnWidth; }
     get maximumColumnWidth() { return this._maximumColumnWidth; }
@@ -773,7 +788,7 @@ export abstract class DataGridInstance {
         if (this._verticalScrollbar) {
             layoutWidth -= this._scrollbarThickness;
         }
-        return layoutWidth;
+        return Math.max(0, layoutWidth);
     }
 
     get layoutRight() {
@@ -791,7 +806,7 @@ export abstract class DataGridInstance {
         if (this._horizontalScrollbar) {
             layoutHeight -= this._scrollbarThickness;
         }
-        return layoutHeight;
+        return Math.max(0, layoutHeight);
     }
 
     get layoutBottom() {
@@ -972,6 +987,11 @@ export abstract class DataGridInstance {
             return;
         }
         this._columnLayoutManager.setSizeOverride(columnIndex, columnWidth);
+        this._horizontalScrollOffset = Math.max(
+            0,
+            Math.min(this._horizontalScrollOffset, this.maximumHorizontalScrollOffset),
+        );
+        this.fireOnDidUpdateEvent();
         await this.fetchData();
         this.fireOnDidUpdateEvent();
     }
@@ -1114,8 +1134,19 @@ export abstract class DataGridInstance {
     }
 
     async setRowHeadersWidth(rowHeadersWidth: number): Promise<void> {
-        if (rowHeadersWidth !== this._rowHeadersWidth) {
-            this._rowHeadersWidth = rowHeadersWidth;
+        if (!this._rowHeaders || !Number.isFinite(rowHeadersWidth)) {
+            return;
+        }
+        const nextWidth = Math.max(
+            this.minimumRowHeadersWidth,
+            Math.min(rowHeadersWidth, this.maximumRowHeadersWidth),
+        );
+        if (nextWidth !== this._rowHeadersWidth) {
+            this._rowHeadersWidth = nextWidth;
+            this._horizontalScrollOffset = Math.max(
+                0,
+                Math.min(this._horizontalScrollOffset, this.maximumHorizontalScrollOffset),
+            );
             // Redraw the sash and viewport immediately, even if fetching is slow.
             this.fireOnDidUpdateEvent();
             await this.fetchData();
@@ -1127,6 +1158,13 @@ export abstract class DataGridInstance {
         if (width !== this._width || height !== this._height) {
             this._width = width;
             this._height = height;
+
+            if (this._rowHeadersResize && width > 0) {
+                this._rowHeadersWidth = Math.max(
+                    this.minimumRowHeadersWidth,
+                    Math.min(this._rowHeadersWidth, this.maximumRowHeadersWidth),
+                );
+            }
 
             if (this._horizontalScrollOffset > this.maximumHorizontalScrollOffset) {
                 this._horizontalScrollOffset = this.maximumHorizontalScrollOffset;
@@ -1673,10 +1711,14 @@ export abstract class DataGridInstance {
         return this._columnLayoutManager.isPinnedIndex(columnIndex);
     }
 
+    protected notifyPinnedColumnsChanged(): void {
+        this._onDidChangePinnedColumnsEmitter.fire(this.getPinnedColumnIndexes());
+    }
+
     pinColumn(columnIndex: number): void {
         if (this._columnPinning && this._columnLayoutManager.pinnedIndexesCount < this._maximumPinnedColumns && this._columnLayoutManager.pinIndex(columnIndex)) {
             this.clearSelection();
-            this._onDidChangePinnedColumnsEmitter.fire(this.getPinnedColumnIndexes());
+            this.notifyPinnedColumnsChanged();
             this.fireOnDidUpdateEvent();
         }
     }
@@ -1684,7 +1726,7 @@ export abstract class DataGridInstance {
     unpinColumn(columnIndex: number): void {
         if (this._columnPinning && this._columnLayoutManager.unpinIndex(columnIndex)) {
             this.clearSelection();
-            this._onDidChangePinnedColumnsEmitter.fire(this.getPinnedColumnIndexes());
+            this.notifyPinnedColumnsChanged();
             this.fireOnDidUpdateEvent();
         }
     }

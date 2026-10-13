@@ -105,6 +105,7 @@
     let contextMenuVisible = $state(false);
     let contextMenuPosition = $state({ x: 0, y: 0 });
     let contextMenuEntry = $state<VariableEntry | null>(null);
+    let contextMenuSessionId = $state<string | undefined>();
     let showDeleteAllDialog = $state(false);
     const viewerLoadingEntryIds = new SvelteSet<string>();
     let memoryUsageEnabled = $state(true);
@@ -259,6 +260,7 @@
         }
 
         previousUiSessionId = nextSessionId;
+        closeContextMenu();
         if (!nextSessionId) {
             selectedEntryId = null;
             return;
@@ -682,6 +684,7 @@
 
     function restoreSessionUiState(sessionId: string) {
         showDeleteAllDialog = false;
+        closeContextMenu();
         const data = ensureSessionData(sessionId);
         selectedEntryId = data.selectedEntryId;
         nameColumnWidth = data.nameColumnWidth;
@@ -876,8 +879,18 @@
 
     function showContextMenu(entry: VariableEntry, x: number, y: number) {
         contextMenuEntry = entry;
+        contextMenuSessionId = activeSessionId;
         contextMenuPosition = { x, y };
         contextMenuVisible = true;
+    }
+
+    function closeContextMenu(restoreFocus = false) {
+        contextMenuVisible = false;
+        contextMenuEntry = null;
+        contextMenuSessionId = undefined;
+        if (restoreFocus) {
+            queueMicrotask(() => variablesContainer?.focus());
+        }
     }
 
     function getContextMenuItems(entry: VariableEntry) {
@@ -968,29 +981,34 @@
     }
 
     async function handleContextMenuSelect(actionId: string) {
-        if (!contextMenuEntry) return;
+        if (!contextMenuEntry || !contextMenuSessionId || contextMenuSessionId !== activeSessionId) {
+            closeContextMenu();
+            return;
+        }
+        const entry = contextMenuEntry;
+        const sessionId = contextMenuSessionId;
 
-        if (isVariableGroup(contextMenuEntry)) {
+        if (isVariableGroup(entry)) {
             if (
                 actionId === "expand-group" ||
                 actionId === "collapse-group"
             ) {
-                await toggleGroup(contextMenuEntry);
+                await toggleGroup(entry);
             }
             return;
         }
 
-        if (!isVariableItem(contextMenuEntry)) {
+        if (!isVariableItem(entry)) {
             return;
         }
 
         switch (actionId) {
             case "copy-name":
-                await navigator.clipboard.writeText(contextMenuEntry.displayName);
+                await navigator.clipboard.writeText(entry.displayName);
                 break;
             case "copy-value":
                 await navigator.clipboard.writeText(
-                    contextMenuEntry.displayValue,
+                    entry.displayValue,
                 );
                 break;
             case "copy-as-text": {
@@ -998,9 +1016,9 @@
                 const text = (await connection.sendRequest(
                     "variables/formatForClipboard",
                     {
-                        path: contextMenuEntry.path,
+                        path: entry.path,
                         format: "text/plain",
-                        sessionId: activeSessionId,
+                        sessionId,
                     },
                 )) as string;
                 await navigator.clipboard.writeText(text);
@@ -1011,9 +1029,9 @@
                 const text = (await connection.sendRequest(
                     "variables/formatForClipboard",
                     {
-                        path: contextMenuEntry.path,
+                        path: entry.path,
                         format: "text/html",
-                        sessionId: activeSessionId,
+                        sessionId,
                     },
                 )) as string;
                 await writeClipboardContent(text, "text/html");
@@ -1021,10 +1039,10 @@
             }
             case "expand-item":
             case "collapse-item":
-                await toggleItem(contextMenuEntry);
+                await toggleItem(entry);
                 break;
             case "view":
-                await viewVariable(contextMenuEntry);
+                await viewVariable(entry);
                 break;
         }
     }
@@ -1435,10 +1453,7 @@
             items={menuItems}
             position={contextMenuPosition}
             onSelect={handleContextMenuSelect}
-            onClose={() => {
-                contextMenuVisible = false;
-                queueMicrotask(() => variablesContainer?.focus());
-            }}
+            onClose={() => closeContextMenu(true)}
         />
     {/if}
 {/if}

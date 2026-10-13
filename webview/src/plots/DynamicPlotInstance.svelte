@@ -1,5 +1,8 @@
 <script module lang="ts">
-    const sharedLastRenderKeyByPlotId = new Map<string, string>();
+    const sharedCompletedRendersByPlotId = new Map<
+        string,
+        { key: string; renderVersion: number }
+    >();
 </script>
 
 <script lang="ts">
@@ -17,16 +20,7 @@
     import {
         ZoomLevel,
         PlotClientState,
-        type IntrinsicSize,
     } from "./types";
-
-    const PlotSizingPolicyAuto = {
-        ID: "auto",
-    } as const;
-
-    const PlotSizingPolicyIntrinsic = {
-        ID: "intrinsic",
-    } as const;
 
     interface Props {
         width: number;
@@ -76,9 +70,12 @@
     let hasMounted = $state(false);
     let hasSeenSizingPolicy = $state(false);
     let lastSizingPolicyId = $state<string | undefined>(undefined);
-    let lastQueuedRenderKey = $state<string | undefined>(undefined);
+    let pendingRenderKey: string | undefined;
+    let pendingRenderConnection: MessageConnection | undefined;
+    let initialRenderSettingsChecked = false;
     let latestAppliedRenderVersion = $state(0);
     let renderRequestSerial = 0;
+    let destroyed = false;
 
     const plotName = $derived(`Plot ${plotId}`);
     const renderWidth = $derived(
@@ -89,7 +86,7 @@
     );
 
     function hasMatchingInitialRenderSettings(): boolean {
-        if (!initialRenderSettings || !initialData) {
+        if (!initialRenderSettings || !initialData || uri !== initialData) {
             return false;
         }
 
@@ -111,50 +108,40 @@
         return `${plotId}:${targetWidth}x${targetHeight}@${ratio}:${sizingPolicyId ?? ""}`;
     }
 
-    async function render(policy = sizingPolicyId) {
-        if (!connection || !plotId) {
-            return;
-        }
-
-        if (height <= 0 || width <= 0) {
-            return;
-        }
-
-        const requestSerial = ++renderRequestSerial;
+    async function render(requestedKey: string, requestSerial: number) {
+        const requestedPlotId = plotId;
+        const requestedWidth = renderWidth;
+        const requestedHeight = renderHeight;
+        const requestedConnection = connection;
+        const isCurrent = () =>
+            !destroyed &&
+            requestSerial === renderRequestSerial &&
+            requestedPlotId === plotId &&
+            requestedConnection === connection &&
+            requestedKey === getRenderRequestKey();
 
         try {
+            if (!isCurrent() || !requestedConnection || !requestedPlotId || height <= 0 || width <= 0) {
+                return;
+            }
+
             plotState = PlotClientState.Rendering;
             progressBarDone = false;
 
             const startTime = Date.now();
             const ratio = window.devicePixelRatio || 1;
 
-            const intrinsicSizeResult = (await connection.sendRequest(
-                "plots/getIntrinsicSize",
-                { plotId },
-            )) as { intrinsicSize?: IntrinsicSize } | undefined;
-            const intrinsicSize = intrinsicSizeResult?.intrinsicSize;
-
-            // If using the intrinsic sizing policy, and the plot has no intrinsic size,
-            // fall back to the auto sizing policy.
-            if (
-                policy === PlotSizingPolicyIntrinsic.ID &&
-                !intrinsicSize
-            ) {
-                await connection.sendRequest("plots/selectSizingPolicy", {
-                    policyId: PlotSizingPolicyAuto.ID,
-                });
-            }
-
-            const result = (await connection.sendRequest("plots/render", {
-                plotId,
-                width: renderWidth,
-                height: renderHeight,
+            // The host resolves intrinsic fallback for this plot ID. An old
+            // component must not mutate the newly selected plot's policy.
+            const result = (await requestedConnection.sendRequest("plots/render", {
+                plotId: requestedPlotId,
+                width: requestedWidth,
+                height: requestedHeight,
                 format: "png",
                 pixelRatio: ratio,
             })) as { data: string; mimeType: string; renderVersion: number };
 
-            if (requestSerial !== renderRequestSerial) {
+            if (!isCurrent()) {
                 return;
             }
 
@@ -167,19 +154,20 @@
                 if (result.renderVersion >= latestAppliedRenderVersion) {
                     latestAppliedRenderVersion = result.renderVersion;
                     uri = renderedUri;
+                    sharedCompletedRendersByPlotId.set(requestedPlotId, {
+                        key: requestedKey,
+                        renderVersion: result.renderVersion,
+                    });
                     onrendered?.({
-                        plotId,
+                        plotId: requestedPlotId,
                         uri: renderedUri,
                         renderVersion: result.renderVersion,
                     });
                 }
                 error = "";
             }
-
-            plotState = PlotClientState.Rendered;
-            progressBarDone = true;
         } catch (e) {
-            if (requestSerial !== renderRequestSerial) {
+            if (!isCurrent()) {
                 return;
             }
             const err = e as Error;
@@ -190,19 +178,30 @@
             const message = `Error rendering plot: ${err.message}`;
             console.error(message);
             error = message;
-            plotState = PlotClientState.Rendered;
-            progressBarDone = true;
+        } finally {
+            if (requestSerial === renderRequestSerial) {
+                pendingRenderKey = undefined;
+                pendingRenderConnection = undefined;
+                if (!destroyed) {
+                    plotState = PlotClientState.Rendered;
+                    progressBarDone = true;
+                }
+            }
         }
     }
 
     let resizeTimeout: ReturnType<typeof setTimeout> | null = null;
 
-    function queueRender() {
+    function queueRender(key: string) {
         if (resizeTimeout) {
             clearTimeout(resizeTimeout);
         }
+        const requestSerial = ++renderRequestSerial;
+        pendingRenderKey = key;
+        pendingRenderConnection = connection;
         resizeTimeout = setTimeout(() => {
-            void render();
+            resizeTimeout = null;
+            void render(key, requestSerial);
         }, 250);
     }
 
@@ -212,19 +211,33 @@
         }
 
         const key = getRenderRequestKey();
-        const sharedKey = sharedLastRenderKeyByPlotId.get(plotId);
-        const hasImageForCurrentKey = Boolean(uri) || hasMatchingInitialRenderSettings();
-        if (
-            !force &&
-            (lastQueuedRenderKey === key || sharedKey === key) &&
-            hasImageForCurrentKey
-        ) {
+        const canUseInitialRender = !initialRenderSettingsChecked;
+        initialRenderSettingsChecked = true;
+        if (!force && pendingRenderKey === key && pendingRenderConnection === connection) {
             return;
         }
 
-        lastQueuedRenderKey = key;
-        sharedLastRenderKeyByPlotId.set(plotId, key);
-        queueRender();
+        const completedRender = sharedCompletedRendersByPlotId.get(plotId);
+        if (!force && !pendingRenderKey) {
+            if (
+                completedRender?.key === key &&
+                Boolean(uri) &&
+                completedRender.renderVersion === latestAppliedRenderVersion
+            ) {
+                return;
+            }
+            // The initial settings describe the startup image, not later
+            // images that may contain the same pixels at a different size.
+            if (canUseInitialRender && !completedRender && hasMatchingInitialRenderSettings()) {
+                sharedCompletedRendersByPlotId.set(plotId, {
+                    key,
+                    renderVersion: latestAppliedRenderVersion,
+                });
+                return;
+            }
+        }
+
+        queueRender(key);
     }
 
     $effect(() => {
@@ -233,13 +246,6 @@
         }
 
         if (width > 0 && height > 0 && connection && plotId) {
-            if (lastQueuedRenderKey === undefined && hasMatchingInitialRenderSettings()) {
-                // Treat initial payload as already satisfying this viewport.
-                lastQueuedRenderKey = getRenderRequestKey();
-                sharedLastRenderKeyByPlotId.set(plotId, lastQueuedRenderKey);
-                return;
-            }
-
             queueRenderIfNeeded();
         }
     });
@@ -305,9 +311,13 @@
     });
 
     onDestroy(() => {
+        destroyed = true;
+        renderRequestSerial++;
         if (resizeTimeout) {
             clearTimeout(resizeTimeout);
         }
+        pendingRenderKey = undefined;
+        pendingRenderConnection = undefined;
     });
 
     function getDarkFilterClass(): string {

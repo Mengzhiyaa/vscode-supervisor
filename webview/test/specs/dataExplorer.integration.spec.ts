@@ -530,8 +530,8 @@ test('data explorer requests visible schema for a zero-row table', async ({ page
         generation: params.generation,
     });
 
-    await expect(page.getByText('id')).toBeVisible();
-    await expect(page.getByText('species')).toBeVisible();
+    await expect(page.locator('.data-grid-column-header[data-column-index="0"]').getByText('id', { exact: true })).toBeVisible();
+    await expect(page.locator('.data-grid-column-header[data-column-index="1"]').getByText('species', { exact: true })).toBeVisible();
     await expect(page.locator('.status-bar')).toContainText('0');
 });
 

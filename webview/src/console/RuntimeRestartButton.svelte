@@ -8,29 +8,33 @@
     interface Props {
         languageName?: string;
         disabled?: boolean;
-        onrestart?: () => void;
+        onrestart?: () => void | Promise<void>;
     }
 
     let { languageName = "R", disabled = false, onrestart }: Props = $props();
 
     // svelte-ignore non_reactive_update
     let buttonRef: HTMLButtonElement;
-    // svelte-ignore state_referenced_locally
-    let isDisabled = $state(disabled);
-
-    // Sync isDisabled when disabled prop changes
-    $effect(() => {
-        isDisabled = disabled;
-    });
+    let restarting = $state(false);
+    const isDisabled = $derived(disabled || restarting);
 
     let restartLabel = $derived(
         localize("console.restartLanguage", "Restart {0}", languageName),
     );
 
-    function handleRestart() {
-        // Disable the button to prevent mashing
-        isDisabled = true;
-        onrestart?.();
+    async function handleRestart() {
+        if (isDisabled || !onrestart) {
+            return;
+        }
+
+        restarting = true;
+        try {
+            await onrestart();
+        } catch (error) {
+            console.error("Restart session failed:", error);
+        } finally {
+            restarting = false;
+        }
     }
 
     // Focus the button when console takes focus

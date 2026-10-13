@@ -3,6 +3,7 @@
   Port from Positron's dataGridRowCell.tsx
 -->
 <script lang="ts">
+    import { onDestroy } from "svelte";
     import { getPositronDataGridContext } from "../positronDataGridContext";
     import {
         CellSelectionState,
@@ -228,23 +229,30 @@
     let widthStartValue = $state(0);
 
     function beginWidthResize(event: MouseEvent) {
-        if (!instance.columnResize) {
+        if (!instance.columnResize || event.button !== 0) {
             return;
         }
 
         event.preventDefault();
         event.stopPropagation();
 
+        endWidthResize();
+        endHeightResize();
         resizingWidth = true;
         widthStartX = event.clientX;
         widthStartValue = width;
 
         window.addEventListener("mousemove", onWidthResize);
         window.addEventListener("mouseup", endWidthResize);
+        window.addEventListener("blur", endWidthResize);
     }
 
     function onWidthResize(event: MouseEvent) {
         if (!resizingWidth) {
+            return;
+        }
+        if ((event.buttons & 1) === 0) {
+            endWidthResize();
             return;
         }
 
@@ -261,6 +269,7 @@
         resizingWidth = false;
         window.removeEventListener("mousemove", onWidthResize);
         window.removeEventListener("mouseup", endWidthResize);
+        window.removeEventListener("blur", endWidthResize);
     }
 
     let resizingHeight = $state(false);
@@ -268,23 +277,30 @@
     let heightStartValue = $state(0);
 
     function beginHeightResize(event: MouseEvent) {
-        if (!instance.rowResize) {
+        if (!instance.rowResize || event.button !== 0) {
             return;
         }
 
         event.preventDefault();
         event.stopPropagation();
 
+        endWidthResize();
+        endHeightResize();
         resizingHeight = true;
         heightStartY = event.clientY;
         heightStartValue = height;
 
         window.addEventListener("mousemove", onHeightResize);
         window.addEventListener("mouseup", endHeightResize);
+        window.addEventListener("blur", endHeightResize);
     }
 
     function onHeightResize(event: MouseEvent) {
         if (!resizingHeight) {
+            return;
+        }
+        if ((event.buttons & 1) === 0) {
+            endHeightResize();
             return;
         }
 
@@ -301,7 +317,12 @@
         resizingHeight = false;
         window.removeEventListener("mousemove", onHeightResize);
         window.removeEventListener("mouseup", endHeightResize);
+        window.removeEventListener("blur", endHeightResize);
     }
+    onDestroy(() => {
+        endWidthResize();
+        endHeightResize();
+    });
 </script>
 
 <div

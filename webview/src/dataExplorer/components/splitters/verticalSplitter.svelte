@@ -327,7 +327,7 @@
 </script>
 
 <div
-    class={rootClass}
+    class="splitter-root {rootClass}"
     class:collapsible
     style={`width: ${splitterWidth}px;`}
 >
@@ -383,7 +383,7 @@
 </div>
 
 <style>
-    .vertical-splitter {
+    .splitter-root {
         height: 100%;
         position: relative;
         background-origin: border-box;

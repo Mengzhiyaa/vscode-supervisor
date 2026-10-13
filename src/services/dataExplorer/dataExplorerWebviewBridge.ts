@@ -1419,7 +1419,8 @@ export class DataExplorerWebviewBridge {
             // completed so the Webview cannot combine different viewports.
             connection.sendNotification(DataExplorerSchemaNotification.type, {
                 columns: schema.columns,
-                requestId: request.requestId,
+                // Data and explicit schema requests have independent ID sequences.
+                // This schema is a broadcast, not a response to requestSchema.
             });
             connection.sendNotification(DataExplorerDataNotification.type, {
                 columns: dataColumns,

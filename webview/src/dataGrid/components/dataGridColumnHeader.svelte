@@ -3,6 +3,7 @@
   Port from Positron's dataGridColumnHeader.tsx
 -->
 <script lang="ts">
+    import { onDestroy } from "svelte";
     import { getPositronDataGridContext } from "../positronDataGridContext";
     import { ColumnSelectionState } from "../classes/dataGridInstance";
     import { selectionType } from "../utilities/mouseUtilities";
@@ -170,23 +171,29 @@ ${columnLabel}`;
     let resizeStartWidth = $state(0);
 
     function handleResizeStart(event: MouseEvent) {
-        if (!instance.columnResize) {
+        if (!instance.columnResize || event.button !== 0) {
             return;
         }
 
         event.preventDefault();
         event.stopPropagation();
 
+        handleResizeEnd();
         isResizing = true;
         resizeStartX = event.clientX;
         resizeStartWidth = width;
 
         window.addEventListener("mousemove", handleResizeMove);
         window.addEventListener("mouseup", handleResizeEnd);
+        window.addEventListener("blur", handleResizeEnd);
     }
 
     function handleResizeMove(event: MouseEvent) {
         if (!isResizing) {
+            return;
+        }
+        if ((event.buttons & 1) === 0) {
+            handleResizeEnd();
             return;
         }
 
@@ -203,7 +210,9 @@ ${columnLabel}`;
         isResizing = false;
         window.removeEventListener("mousemove", handleResizeMove);
         window.removeEventListener("mouseup", handleResizeEnd);
+        window.removeEventListener("blur", handleResizeEnd);
     }
+    onDestroy(handleResizeEnd);
 </script>
 
 <div

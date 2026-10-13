@@ -59,6 +59,7 @@ export class MockWebviewBackend {
     private readonly _notificationLog: JsonRpcNotification[] = [];
     private readonly _requestWaiters = new Set<Waiter<JsonRpcRequest>>();
     private readonly _notificationWaiters = new Set<Waiter<JsonRpcNotification>>();
+    private _preloadFrameSelector: string | undefined;
     private readonly _bindingName = `__arkSendToMockBackend_${Math.random().toString(16).slice(2)}`;
 
     private constructor(
@@ -126,6 +127,12 @@ export class MockWebviewBackend {
 
     onNotification(method: string, handler: NotificationHandler): void {
         this._notificationHandlers.set(method, handler);
+    }
+
+    // Deliver RPC through a real parent-frame postMessage instead of a
+    // synthetic source-less event, matching VS Code's preload transport.
+    usePreloadFrame(selector: string): void {
+        this._preloadFrameSelector = selector;
     }
 
     requestCount(method: string): number {
@@ -234,9 +241,17 @@ export class MockWebviewBackend {
     }
 
     private async _dispatchToPage(message: JsonRpcMessage): Promise<void> {
-        await this._page.evaluate((nextMessage) => {
+        await this._page.evaluate(({ nextMessage, frameSelector }) => {
+            if (frameSelector) {
+                const target = document.querySelector<HTMLIFrameElement>(frameSelector)?.contentWindow;
+                if (!target) {
+                    throw new Error(`Missing preload content frame: ${frameSelector}`);
+                }
+                target.postMessage(nextMessage, window.origin);
+                return;
+            }
             window.dispatchEvent(new MessageEvent('message', { data: nextMessage }));
-        }, message);
+        }, { nextMessage: message, frameSelector: this._preloadFrameSelector });
     }
 
     private async _handleOutgoingMessage(message: unknown): Promise<void> {

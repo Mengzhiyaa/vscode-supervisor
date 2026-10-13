@@ -4,7 +4,7 @@ import { PlotClientInstance, PlotClientState } from '../../runtime/PlotClientIns
 import { PositronPlotsService } from '../../runtime/positronPlotsService';
 import { DeferredRender, type IRenderedPlot } from '../../runtime/positronPlotRenderQueue';
 import { PositronPlotCommProxy, type UpdateEvent } from '../../runtime/comms/positronPlotCommProxy';
-import { PlotRenderFormat, type IntrinsicSize } from '../../runtime/comms/positronPlotComm';
+import { PlotRenderFormat, PlotUnit, type IntrinsicSize } from '../../runtime/comms/positronPlotComm';
 import { LanguageRuntimeMessageType, RuntimeClientType } from '../../internal/runtimeTypes';
 import { HtmlPlotClient } from '../../runtime/htmlPlotClient';
 import { RuntimeClientInstance } from '../../runtime/RuntimeClientInstance';
@@ -12,6 +12,7 @@ import { PositronPlotRenderQueue, RuntimeState as QueueRuntimeState } from '../.
 import { PlotEditorProvider } from '../../editor/PlotEditorProvider';
 import { PlotsViewProvider } from '../../webview/plotsProvider';
 import { PlotSizingPolicyCustom } from '../../runtime/sizingPolicyCustom';
+import { PlotSizingPolicyIntrinsic } from '../../runtime/sizingPolicyIntrinsic';
 import * as PlotsRpc from '../../rpc/webview/plots';
 import type { MessageConnection } from 'vscode-jsonrpc/node';
 import * as PlotEditorRpc from '../../rpc/webview/plotEditor';
@@ -76,7 +77,11 @@ suite('[Unit] Plot render parity', () => {
             onNotification: () => undefined,
             onRequest: (type: { method: string }, handler: (params: PlotsRpc.RenderPlotRequest.Params) => Promise<unknown>) => requests.set(type.method, handler),
         } as unknown as MessageConnection;
-        const state = { selectedSizingPolicyId: 'custom', customSize: { width: 900, height: 600 } };
+        const state = {
+            selectedPlotId: plot.id,
+            selectedSizingPolicyId: 'custom',
+            customSize: { width: 900, height: 600 },
+        };
         const provider = Object.assign(Object.create(PlotsViewProvider.prototype), {
             _plotClients: new Map([['plot', plot]]),
             _plots: new Map(),
@@ -95,6 +100,74 @@ suite('[Unit] Plot render parity', () => {
             assert.deepStrictEqual(plot.metadata.sizing_policy?.size, { width: 640, height: 480 });
         }
     });
+
+    for (const outcome of ['available', 'unavailable', 'failed'] as const) {
+        test(`host plot rendering resolves intrinsic sizing: ${outcome}`, async () => {
+            const service = new PositronPlotsService();
+            const plot = f.create();
+            plot.sizingPolicy = new PlotSizingPolicyIntrinsic();
+            service.addPlotClient(plot);
+            service.selectPlot(plot.id);
+            let intrinsicRequests = 0;
+            f.proxy.getIntrinsicSize = async () => {
+                intrinsicRequests++;
+                if (outcome === 'failed') {
+                    throw new Error('intrinsic size failed');
+                }
+                return outcome === 'available'
+                    ? { width: 6, height: 4, unit: PlotUnit.Inches, source: 'Matplotlib' }
+                    : undefined;
+            };
+            const nextRender = new Promise<DeferredRender>(resolve => {
+                f.proxy.render = request => {
+                    f.requests.push(request);
+                    resolve(request);
+                };
+            });
+            const handlers = new Map<string, (params: PlotsRpc.RenderPlotRequest.Params) => Promise<unknown>>();
+            const connection = {
+                onNotification: () => undefined,
+                onRequest: (type: { method: string }, handler: (params: PlotsRpc.RenderPlotRequest.Params) => Promise<unknown>) => handlers.set(type.method, handler),
+            } as unknown as MessageConnection;
+            const state = { selectedPlotId: plot.id, selectedSizingPolicyId: 'intrinsic' };
+            const notifiedPolicies: string[] = [];
+            const renderConnections = new Map<string, MessageConnection>();
+            const provider = Object.assign(Object.create(PlotsViewProvider.prototype), {
+                _plotsService: service,
+                _plotClients: new Map([[plot.id, plot]]),
+                _plots: new Map(),
+                _renderRequestConnection: renderConnections,
+                _connectionStates: new Map([[connection, state]]),
+                _notifySelectedSizingChanged: () => notifiedPolicies.push(state.selectedSizingPolicyId),
+                _sendPlotsRenderSettings: () => undefined,
+                log: () => undefined,
+            }) as { _registerRenderingHandlers(connection: MessageConnection): void };
+            provider._registerRenderingHandlers(connection);
+            try {
+                const pending = handlers.get('plots/render')!({
+                    plotId: plot.id, width: 800, height: 600, pixelRatio: 2, format: 'png',
+                });
+                if (outcome === 'failed') {
+                    await assert.rejects(pending, /intrinsic size failed/);
+                    assert.strictEqual(f.requests.length, 0);
+                } else {
+                    const request = await nextRender;
+                    assert.deepStrictEqual(request.renderRequest.size,
+                        outcome === 'available' ? undefined : { width: 800, height: 600 });
+                    assert.strictEqual(request.renderRequest.pixel_ratio, 2);
+                    f.finish(request);
+                    await pending;
+                }
+                const expectedPolicy = outcome === 'unavailable' ? 'auto' : 'intrinsic';
+                assert.strictEqual(state.selectedSizingPolicyId, expectedPolicy);
+                assert.strictEqual(plot.sizingPolicy.id, expectedPolicy);
+                assert.strictEqual(service.selectedSizingPolicy.id, expectedPolicy);
+                assert.deepStrictEqual(notifiedPolicies, outcome === 'unavailable' ? ['auto'] : []);
+                assert.strictEqual(intrinsicRequests, 1);
+                assert.strictEqual(renderConnections.size, 0);
+            } finally { service.dispose(); }
+        });
+    }
 
     test('editor sizing RPC changes kernel render dimensions without changing the view policy', async () => {
         const service = new PositronPlotsService();

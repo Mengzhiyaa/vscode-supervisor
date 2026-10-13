@@ -1042,19 +1042,22 @@
         }
     }
 
-    async function resolvePlotDataUri(): Promise<string | null> {
-        if (selectedPlot?.kind === "html") {
+    async function resolvePlotDataUri(
+        plotId: string,
+        copyConnection: MessageConnection | undefined,
+    ): Promise<string | null> {
+        if (selectedPlotId === plotId && selectedPlot?.kind === "html") {
             return null;
         }
-        const imageElement = plotViewportElement?.querySelector(
-            "img.plot",
-        ) as HTMLImageElement | null;
+        const imageElement = selectedPlotId === plotId
+            ? plotViewportElement?.querySelector("img.plot") as HTMLImageElement | null
+            : null;
         const src = imageElement?.getAttribute("src");
         if (src && src.startsWith("data:")) {
             return src;
         }
 
-        if (!connection || !selectedPlotId) {
+        if (!copyConnection) {
             return null;
         }
 
@@ -1062,8 +1065,8 @@
             const width = plotViewportElement?.clientWidth || 400;
             const height = plotViewportElement?.clientHeight || 400;
             const pixelRatio = window.devicePixelRatio || 1;
-            const result = (await connection.sendRequest("plots/render", {
-                plotId: selectedPlotId,
+            const result = (await copyConnection.sendRequest("plots/render", {
+                plotId,
                 width,
                 height,
                 format: "png",
@@ -1093,20 +1096,24 @@
             console.warn("Copy not supported for HTML plots");
             return;
         }
+        const plotId = selectedPlotId;
+        const copyConnection = connection;
         copyError = "";
-        const dataUri = await resolvePlotDataUri();
+        const dataUri = await resolvePlotDataUri(plotId, copyConnection);
         try {
             if (!dataUri) throw new Error("No image available");
             await copyImageToClipboard(dataUri);
             return;
         } catch {
-            copyError = localize("plots.copyUnavailable", "Image could not be copied. Use Save Plot to export it.");
+            if (selectedPlotId === plotId) {
+                copyError = localize("plots.copyUnavailable", "Image could not be copied. Use Save Plot to export it.");
+            }
         }
 
         try {
-            if (connection) {
-                const result = await connection.sendRequest("plots/copy", {
-                    plotId: selectedPlotId,
+            if (copyConnection) {
+                const result = await copyConnection.sendRequest("plots/copy", {
+                    plotId,
                 }) as { success: boolean; error?: string };
                 if (!result.success) {
                     throw new Error(result.error ?? "Image clipboard is unavailable");

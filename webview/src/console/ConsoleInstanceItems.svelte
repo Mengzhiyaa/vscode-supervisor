@@ -36,7 +36,7 @@
         consoleInstance: ConsoleInstanceModel;
         languageAssetsVersion?: number;
         onReconnect?: () => void;
-        onRestart?: () => void;
+        onRestart?: () => void | Promise<void>;
         charWidth?: number;
     }
 

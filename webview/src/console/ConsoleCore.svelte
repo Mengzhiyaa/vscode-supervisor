@@ -735,6 +735,7 @@
             return;
         }
 
+        const sashSizeChanged = consoleSettings.sashSize !== sashSize;
         consoleSettings = {
             scrollbackSize: normalizedScrollbackSize,
             fontFamily: normalizedFontFamily,
@@ -748,6 +749,9 @@
             promptWhenIncomplete,
             sashSize,
         };
+        if (sashSizeChanged) {
+            updateLayout();
+        }
     }
 
     function optimizeScrollbackForSession(sessionId: string): void {
@@ -1691,11 +1695,14 @@
             }) => {
                 let batch = pendingConsoleStateChunks.get(params.batchId);
                 if (!batch) {
+                    if (!Number.isSafeInteger(params.total) || params.total <= 0) {
+                        return;
+                    }
                     batch = {
                         sessionId: params.sessionId,
                         syncSeq: params.syncSeq,
                         total: params.total,
-                        chunks: new Array(params.total),
+                        chunks: new Array<string | undefined>(params.total).fill(undefined),
                     };
                     pendingConsoleStateChunks.set(params.batchId, batch);
                 }
@@ -1703,6 +1710,8 @@
                     batch.sessionId !== params.sessionId ||
                     batch.syncSeq !== params.syncSeq ||
                     batch.total !== params.total ||
+                    !Number.isSafeInteger(params.index) ||
+                    typeof params.data !== "string" ||
                     params.index < 0 ||
                     params.index >= batch.total
                 ) {
@@ -2007,6 +2016,28 @@
         };
     });
 
+    function getConsolePaneBounds(width: number) {
+        const sashWidth = Math.max(1, Math.min(20, consoleSettings.sashSize));
+        const maximumTabWidth = Math.max(
+            0,
+            Math.min(
+                Math.trunc(width / 5),
+                width - sashWidth - MINIMUM_CONSOLE_PANE_WIDTH,
+            ),
+        );
+        if (maximumTabWidth === 0) {
+            return { minimumWidth: width, maximumWidth: width, availableWidth: width };
+        }
+
+        const minimumTabWidth = Math.min(MINIMUM_CONSOLE_TAB_LIST_WIDTH, maximumTabWidth);
+        const availableWidth = width - sashWidth;
+        return {
+            minimumWidth: availableWidth - maximumTabWidth,
+            maximumWidth: availableWidth - minimumTabWidth,
+            availableWidth,
+        };
+    }
+
     /**
      * Update layout based on container size
      */
@@ -2018,12 +2049,9 @@
 
         // Skip layout update when container is hidden (switching panels)
         // This prevents corrupted layout when the webview is not visible
-        if (newWidth < MINIMUM_CONSOLE_PANE_WIDTH) {
+        if (newWidth <= 0) {
             return;
         }
-
-        // Positron allows the session list to use up to one fifth of the view.
-        const maxTabWidth = Math.trunc(newWidth / 5);
 
         // Only show tab list when there are multiple sessions
         const shouldShowTabList =
@@ -2033,30 +2061,16 @@
             // Single session or collapsed: use full width
             consolePaneWidth = newWidth;
             consoleTabListWidth = 0;
-        } else if (consolePaneWidth === 0 || consoleTabListWidth === 0) {
-            // Initial layout OR transition from single to multi-session
-            // Need to allocate space for the tab list
-            consoleTabListWidth = Math.min(
-                DEFAULT_CONSOLE_TAB_LIST_WIDTH,
-                maxTabWidth,
-            );
-            consolePaneWidth = newWidth - consoleTabListWidth;
         } else {
-            // Resize handling (maintaining existing proportions)
-            const delta = newWidth - containerWidth;
-            if (delta >= 0) {
-                consolePaneWidth = newWidth - consoleTabListWidth;
-            } else {
-                const newPaneWidth = newWidth - consoleTabListWidth;
-                if (newPaneWidth >= MINIMUM_CONSOLE_PANE_WIDTH) {
-                    consolePaneWidth = newPaneWidth;
-                } else {
-                    consoleTabListWidth = Math.max(
-                        newWidth - consolePaneWidth,
-                        MINIMUM_CONSOLE_TAB_LIST_WIDTH,
-                    );
-                }
-            }
+            const bounds = getConsolePaneBounds(newWidth);
+            const requestedTabWidth = consoleTabListWidth > 0
+                ? consoleTabListWidth
+                : DEFAULT_CONSOLE_TAB_LIST_WIDTH;
+            consolePaneWidth = Math.max(
+                bounds.minimumWidth,
+                Math.min(bounds.maximumWidth, bounds.availableWidth - requestedTabWidth),
+            );
+            consoleTabListWidth = bounds.availableWidth - consolePaneWidth;
         }
 
         containerWidth = newWidth;
@@ -2070,19 +2084,18 @@
      * Handle splitter resize
      */
     function handleBeginResize() {
+        const bounds = getConsolePaneBounds(containerWidth);
         return {
-            minimumWidth: Math.max(
-                MINIMUM_CONSOLE_PANE_WIDTH,
-                containerWidth - Math.trunc(containerWidth / 5),
-            ),
-            maximumWidth: containerWidth - MINIMUM_CONSOLE_TAB_LIST_WIDTH,
+            minimumWidth: bounds.minimumWidth,
+            maximumWidth: bounds.maximumWidth,
             startingWidth: consolePaneWidth,
         };
     }
 
     function handleResize(newWidth: number) {
-        consolePaneWidth = newWidth;
-        consoleTabListWidth = containerWidth - newWidth;
+        const bounds = getConsolePaneBounds(containerWidth);
+        consolePaneWidth = Math.max(bounds.minimumWidth, Math.min(bounds.maximumWidth, newWidth));
+        consoleTabListWidth = bounds.availableWidth - consolePaneWidth;
     }
 
     async function loadConsoleSettings() {
@@ -2367,7 +2380,7 @@
         })),
     );
     const showSessionTabs = $derived(
-        !consoleSessionListCollapsed && sessions.length > 1,
+        !consoleSessionListCollapsed && sessions.length > 1 && consoleTabListWidth > 0,
     );
     const visibleConsolePaneWidth = $derived(
         showSessionTabs ? consolePaneWidth : containerWidth,

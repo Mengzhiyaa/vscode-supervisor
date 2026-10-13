@@ -224,7 +224,7 @@ export class RuntimeItemRestartButton extends RuntimeItem {
     constructor(
         id: string,
         public readonly sessionId: string,
-        public readonly onRestart: () => void
+        public readonly onRestart: () => void | Promise<void>
     ) {
         super(id);
     }

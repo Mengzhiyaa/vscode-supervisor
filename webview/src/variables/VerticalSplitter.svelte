@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { onMount } from "svelte";
+    import { onDestroy, onMount } from "svelte";
 
     interface VerticalSplitterResizeParams {
         minimumWidth: number;
@@ -25,6 +25,9 @@
     let hovering = $state(false);
     let resizing = $state(false);
     let sashWidth = $state(4);
+    let disposeResize: (() => void) | undefined;
+
+    onDestroy(() => disposeResize?.());
 
     const isMacintosh =
         typeof navigator !== "undefined" &&
@@ -99,13 +102,18 @@
         event.preventDefault();
         event.stopPropagation();
 
+        disposeResize?.();
         const resizeParams = onBeginResize();
         const startX = event.clientX;
+        const pointerId = event.pointerId;
         const target = document.body;
         const styleElement = document.createElement("style");
         target.appendChild(styleElement);
 
         const pointerMoveHandler = (moveEvent: PointerEvent) => {
+            if (moveEvent.pointerId !== pointerId) {
+                return;
+            }
             moveEvent.preventDefault();
             moveEvent.stopPropagation();
 
@@ -128,24 +136,43 @@
             onResize(width);
         };
 
-        const lostPointerCaptureHandler = (upEvent: PointerEvent) => {
+        const pointerUpHandler = (upEvent: PointerEvent) => {
+            if (upEvent.pointerId !== pointerId) {
+                return;
+            }
             pointerMoveHandler(upEvent);
-
-            target.removeEventListener("pointermove", pointerMoveHandler);
-            target.removeEventListener(
-                "lostpointercapture",
-                lostPointerCaptureHandler,
-            );
-            target.removeChild(styleElement);
-
-            resizing = false;
+            disposeResize?.();
             hovering = isPointInsideSash(upEvent.clientX, upEvent.clientY);
+        };
+
+        const cancelResize = () => disposeResize?.();
+        const pointerCancelHandler = (cancelEvent: PointerEvent) => {
+            if (cancelEvent.pointerId === pointerId) {
+                cancelResize();
+            }
+        };
+        disposeResize = () => {
+            disposeResize = undefined;
+            target.removeEventListener("pointermove", pointerMoveHandler);
+            target.removeEventListener("pointerup", pointerUpHandler);
+            target.removeEventListener("pointercancel", pointerCancelHandler);
+            target.removeEventListener("lostpointercapture", pointerCancelHandler);
+            window.removeEventListener("blur", cancelResize);
+            styleElement.remove();
+            resizing = false;
+            hovering = false;
+            if (target.hasPointerCapture(pointerId)) {
+                target.releasePointerCapture(pointerId);
+            }
         };
 
         resizing = true;
         target.setPointerCapture(event.pointerId);
         target.addEventListener("pointermove", pointerMoveHandler);
-        target.addEventListener("lostpointercapture", lostPointerCaptureHandler);
+        target.addEventListener("pointerup", pointerUpHandler);
+        target.addEventListener("pointercancel", pointerCancelHandler);
+        target.addEventListener("lostpointercapture", pointerCancelHandler);
+        window.addEventListener("blur", cancelResize);
     }
 </script>
 
@@ -188,6 +215,7 @@
     .sash {
         border: none;
         padding: 0;
+        touch-action: none;
         appearance: none;
         background: transparent;
         position: absolute;

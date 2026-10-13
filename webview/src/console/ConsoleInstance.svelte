@@ -3,7 +3,7 @@
      * ConsoleInstance.svelte - Per-session console view
      * Based on Positron's ConsoleInstance in consoleInstance.tsx
      */
-    import { onMount, onDestroy } from "svelte";
+    import { onMount, onDestroy, untrack } from "svelte";
     import ContextMenu, {
         type ContextMenuEntry,
     } from "../shared/ContextMenu.svelte";
@@ -77,7 +77,7 @@
         onFocusInput: () => void;
         onInsertText: (text: string) => void;
         onPasteText: (text: string) => void;
-        onRestart?: () => void;
+        onRestart?: () => void | Promise<void>;
         onInputAnchorReady?: (
             sessionId: string,
             anchor: HTMLDivElement | null,
@@ -376,6 +376,7 @@
      * Handle keyboard shortcuts
      */
     // --- Search methods ---
+    const searchHighlightOwner = {};
 
     function getSearchContainer(): HTMLElement | null {
         return (
@@ -387,14 +388,14 @@
     function clearSearchResults() {
         searchMatches = [];
         currentMatchIndex = 0;
-        clearHighlights();
+        clearHighlights(searchHighlightOwner);
     }
 
     function scheduleSearchRefresh(
         preserveCurrentIndex = true,
         immediate = false,
     ) {
-        if (!searchVisible || !searchQuery || !consoleInstanceRef) {
+        if (!active || !searchVisible || !searchQuery || !consoleInstanceRef) {
             return;
         }
 
@@ -420,7 +421,7 @@
         }
 
         searchContentObserver = new MutationObserver((mutations) => {
-            if (!searchVisible || !searchQuery) {
+            if (!active || !searchVisible || !searchQuery) {
                 return;
             }
 
@@ -480,6 +481,10 @@
         if (searchInputDebounceTimer) {
             clearTimeout(searchInputDebounceTimer);
         }
+        if (!active || !searchVisible) {
+            searchInputDebounceTimer = undefined;
+            return;
+        }
         const navigationRevision = searchNavigationRevision;
         searchInputDebounceTimer = setTimeout(() => {
             searchInputDebounceTimer = undefined;
@@ -496,6 +501,9 @@
         options: SearchOptions,
         preserveCurrentIndex = false,
     ) {
+        if (!active || !searchVisible) {
+            return;
+        }
         if (!query || !consoleInstanceRef) {
             clearSearchResults();
             return;
@@ -523,27 +531,27 @@
                   ? Math.min(Math.max(currentMatchIndex, 0), matches.length - 1)
                   : 0;
 
-        applyHighlights(searchMatches, currentMatchIndex);
+        applyHighlights(searchMatches, currentMatchIndex, searchHighlightOwner);
         if (matches.length > 0) {
             scrollCurrentMatchIntoView(searchMatches, currentMatchIndex);
         }
     }
 
     function navigateNextMatch() {
-        if (searchMatches.length === 0) return;
+        if (!active || !searchVisible || searchMatches.length === 0) return;
         searchNavigationRevision += 1;
         currentMatchIndex = (currentMatchIndex + 1) % searchMatches.length;
-        applyHighlights(searchMatches, currentMatchIndex);
+        applyHighlights(searchMatches, currentMatchIndex, searchHighlightOwner);
         scrollCurrentMatchIntoView(searchMatches, currentMatchIndex);
     }
 
     function navigatePreviousMatch() {
-        if (searchMatches.length === 0) return;
+        if (!active || !searchVisible || searchMatches.length === 0) return;
         searchNavigationRevision += 1;
         currentMatchIndex =
             (currentMatchIndex - 1 + searchMatches.length) %
             searchMatches.length;
-        applyHighlights(searchMatches, currentMatchIndex);
+        applyHighlights(searchMatches, currentMatchIndex, searchHighlightOwner);
         scrollCurrentMatchIntoView(searchMatches, currentMatchIndex);
     }
 
@@ -811,7 +819,7 @@
             onFindVisibilityChanged?.(false);
         }
         onInputAnchorReady?.(session.id, null);
-        clearHighlights();
+        clearHighlights(searchHighlightOwner);
         if (searchInputDebounceTimer) {
             clearTimeout(searchInputDebounceTimer);
         }
@@ -828,6 +836,19 @@
     $effect(() => {
         if (active) {
             onFindVisibilityChanged?.(searchVisible);
+            if (searchVisible) {
+                untrack(() => scheduleSearchRefresh(true, true));
+            }
+        } else {
+            clearHighlights(searchHighlightOwner);
+            if (searchInputDebounceTimer) {
+                clearTimeout(searchInputDebounceTimer);
+                searchInputDebounceTimer = undefined;
+            }
+            if (searchContentRefreshTimer) {
+                clearTimeout(searchContentRefreshTimer);
+                searchContentRefreshTimer = undefined;
+            }
         }
     });
 

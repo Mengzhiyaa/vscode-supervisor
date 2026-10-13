@@ -373,7 +373,7 @@ test('plots keeps notification-driven state in sync for selection, history, rend
     await expect(page.locator('.plot-thumbnail')).toHaveCount(0);
 });
 
-test('plots falls back to auto before rendering when intrinsic size is unavailable', async ({ page }) => {
+test('plots applies the host auto fallback when intrinsic size is unavailable', async ({ page }) => {
     const backend = await openWebviewPage(page, 'plots', {
         configure: (mockBackend) => {
             registerPlotsDefaults(mockBackend, {
@@ -389,13 +389,22 @@ test('plots falls back to auto before rendering when intrinsic size is unavailab
                 ],
                 selectedPlotId: 'plot-intrinsic',
             });
-            mockBackend.onRequest(PlotsMethods.getIntrinsicSize, () => ({
-                intrinsicSize: undefined,
-            }));
+            // Intrinsic lookup and fallback now happen inside the host render
+            // handler; the webview receives the resulting policy notification.
+            mockBackend.onRequest(PlotsMethods.render, async (request) => {
+                const { plotId } = request.params as { plotId: string };
+                await mockBackend.notify(PlotsMethods.sizingPolicyChanged, {
+                    plotId,
+                    policyId: 'auto',
+                });
+                return { data: SMALL_PNG_DATA_URI, mimeType: 'image/png', renderVersion: 1 };
+            });
         },
     });
 
     await expect.poll(() => backend.requestCount(PlotsMethods.render)).toBeGreaterThan(0);
+    await expect(page.getByLabel("Set how the plot's shape and size are determined")).toContainText('Auto');
+    await expect(page.locator('.selected-plot img.plot')).toBeVisible();
 
     const renderFlow = backend.requests()
         .filter(request => [
@@ -405,23 +414,17 @@ test('plots falls back to auto before rendering when intrinsic size is unavailab
         ].includes(request.method))
         .map(request => ({ method: request.method, params: request.params }));
 
-    expect(renderFlow.slice(0, 3)).toEqual([
-        {
-            method: PlotsMethods.getIntrinsicSize,
-            params: { plotId: 'plot-intrinsic' },
-        },
-        {
-            method: PlotsMethods.selectSizingPolicy,
-            params: { policyId: 'auto' },
-        },
+    expect(renderFlow.slice(0, 1)).toEqual([
         {
             method: PlotsMethods.render,
             params: expect.objectContaining({ plotId: 'plot-intrinsic' }),
         },
     ]);
+    expect(backend.requestCount(PlotsMethods.getIntrinsicSize)).toBe(0);
+    expect(backend.requestCount(PlotsMethods.selectSizingPolicy)).toBe(0);
 });
 
-test('plots keeps intrinsic sizing when the backend reports an intrinsic size', async ({ page }) => {
+test('plots keeps host-provided intrinsic sizing while rendering', async ({ page }) => {
     const backend = await openWebviewPage(page, 'plots', {
         configure: (mockBackend) => {
             registerPlotsDefaults(mockBackend, {
@@ -433,22 +436,17 @@ test('plots keeps intrinsic sizing when the backend reports an intrinsic size', 
                         thumbnail: SMALL_PNG_DATA_URI,
                         name: 'Intrinsic Plot',
                         sizingPolicyId: 'intrinsic',
+                        hasIntrinsicSize: true,
                     },
                 ],
                 selectedPlotId: 'plot-intrinsic',
             });
-            mockBackend.onRequest(PlotsMethods.getIntrinsicSize, () => ({
-                intrinsicSize: {
-                    width: 6,
-                    height: 4,
-                    unit: 'inches',
-                    source: 'matplotlib',
-                },
-            }));
         },
     });
 
     await expect.poll(() => backend.requestCount(PlotsMethods.render)).toBeGreaterThan(0);
+    await expect(page.getByLabel("Set how the plot's shape and size are determined")).toContainText('Intrinsic');
+    await expect(page.locator('.selected-plot img.plot')).toBeVisible();
 
     const renderFlow = backend.requests()
         .filter(request => [
@@ -458,14 +456,14 @@ test('plots keeps intrinsic sizing when the backend reports an intrinsic size', 
         ].includes(request.method))
         .map(request => request.method);
 
-    expect(renderFlow.slice(0, 2)).toEqual([
-        PlotsMethods.getIntrinsicSize,
+    expect(renderFlow.slice(0, 1)).toEqual([
         PlotsMethods.render,
     ]);
+    expect(backend.requestCount(PlotsMethods.getIntrinsicSize)).toBe(0);
     expect(backend.requestCount(PlotsMethods.selectSizingPolicy)).toBe(0);
 });
 
-test('plots stops rendering when the intrinsic size request fails', async ({ page }) => {
+test('plots surfaces intrinsic size failures returned by host rendering', async ({ page }) => {
     const backend = await openWebviewPage(page, 'plots', {
         configure: (mockBackend) => {
             registerPlotsDefaults(mockBackend, {
@@ -480,7 +478,7 @@ test('plots stops rendering when the intrinsic size request fails', async ({ pag
                 ],
                 selectedPlotId: 'plot-intrinsic',
             });
-            mockBackend.onRequest(PlotsMethods.getIntrinsicSize, () => {
+            mockBackend.onRequest(PlotsMethods.render, () => {
                 throw new Error('intrinsic size failed');
             });
         },
@@ -488,7 +486,8 @@ test('plots stops rendering when the intrinsic size request fails', async ({ pag
 
     await expect(page.getByText('Error rendering plot: intrinsic size failed')).toBeVisible();
     expect(backend.requestCount(PlotsMethods.selectSizingPolicy)).toBe(0);
-    expect(backend.requestCount(PlotsMethods.render)).toBe(0);
+    expect(backend.requestCount(PlotsMethods.getIntrinsicSize)).toBe(0);
+    expect(backend.requestCount(PlotsMethods.render)).toBeGreaterThan(0);
 });
 
 test('plots surfaces dynamic render failures instead of using cached data', async ({ page }) => {

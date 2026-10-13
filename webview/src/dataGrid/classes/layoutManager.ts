@@ -173,15 +173,20 @@ export class LayoutManager {
         }
 
         for (const pinnedIndex of this._pinnedIndexes) {
-            const pinnedIndexPosition = this.mapIndexToPosition(pinnedIndex);
-            if (pinnedIndexPosition && (pinnedIndexPosition < 0 || pinnedIndexPosition >= this._entryCount)) {
+            if (!this.validateIndex(pinnedIndex)) {
                 this._pinnedIndexes.delete(pinnedIndex);
+            }
+        }
+        for (const index of this._customEntrySizes.keys()) {
+            if (!this.validateIndex(index)) {
+                this._customEntrySizes.delete(index);
             }
         }
     }
 
     setPinnedIndexes(pinnedIndexes: number[]) {
         this._pinnedIndexes.clear();
+        this.invalidateCachedCalculations();
         for (const index of pinnedIndexes) {
             this.pinIndex(index);
         }

@@ -35,6 +35,10 @@
         $updateTrigger;
         return instance.rowHeadersWidth;
     });
+    const maximumRowHeadersWidth = $derived.by(() => {
+        $updateTrigger;
+        return instance.maximumRowHeadersWidth;
+    });
 </script>
 
 <div
@@ -62,8 +66,8 @@
                 rootClass="data-grid-vertical-splitter"
                 resizeAriaLabel="Resize row header width"
                 onBeginResize={() => ({
-                    minimumWidth: 20,
-                    maximumWidth: instance.maximumColumnWidth,
+                    minimumWidth: instance.minimumRowHeadersWidth,
+                    maximumWidth: maximumRowHeadersWidth,
                     startingWidth: rowHeadersWidth,
                 })}
                 onResize={(width) => { void instance.setRowHeadersWidth(width); }}

@@ -1708,7 +1708,14 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
 
         this._disposables.push(
             plotClient.onDidChangeSizingPolicy((policy) => {
-                this.selectSizingPolicy(policy.id);
+                // A background plot can freeze when its first render finishes.
+                // Keep its policy local and project the actual policy object
+                // only when this plot is selected (custom sizes are per plot).
+                if (this._selectedPlotId === plotClient.id && this._selectedSizingPolicy !== policy) {
+                    this._selectedSizingPolicy = policy;
+                    this._onDidChangeSizingPolicy.fire(policy);
+                    this._storeSelectedSizingPolicy();
+                }
                 this._storePlotMetadata(plotClient.metadata, PlotStorageLocationView);
             }),
             plotClient.onDidCompleteRender((rendered) => {

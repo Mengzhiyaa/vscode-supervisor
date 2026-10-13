@@ -24,6 +24,7 @@ export interface LanguageTextMateGrammarDefinition {
 type TokenizerCacheEntry = {
     grammarUrl: string;
     scopeName: string;
+    requestId: symbol;
     promise: Promise<void>;
 };
 
@@ -226,6 +227,7 @@ export async function ensureLanguageTextMateTokenizerReady(
 
     const definition = getLanguageTextMateGrammarDefinition(normalizedLanguageId);
     if (!definition) {
+        tokenizerCache.delete(normalizedLanguageId);
         return;
     }
 
@@ -238,8 +240,21 @@ export async function ensureLanguageTextMateTokenizerReady(
         return existingEntry.promise;
     }
 
-    const initPromise = (async () => {
+    const requestId = Symbol(normalizedLanguageId);
+    const initPromise: Promise<void> = (async () => {
         const grammar = await loadGrammarInstance(definition);
+        const currentEntry = tokenizerCache.get(normalizedLanguageId);
+        const currentDefinition = getLanguageTextMateGrammarDefinition(normalizedLanguageId);
+        if (currentEntry?.requestId !== requestId) {
+            return;
+        }
+        if (
+            currentDefinition?.grammarUrl !== definition.grammarUrl ||
+            currentDefinition?.scopeName !== definition.scopeName
+        ) {
+            tokenizerCache.delete(normalizedLanguageId);
+            return;
+        }
         if (!grammar) {
             console.warn(
                 `[TextMate] Failed to load grammar '${definition.scopeName}' for '${normalizedLanguageId}'`,
@@ -255,7 +270,7 @@ export async function ensureLanguageTextMateTokenizerReady(
         );
     })().catch((error) => {
         const currentEntry = tokenizerCache.get(normalizedLanguageId);
-        if (currentEntry?.promise === initPromise) {
+        if (currentEntry?.requestId === requestId) {
             tokenizerCache.delete(normalizedLanguageId);
         }
         throw error;
@@ -264,6 +279,7 @@ export async function ensureLanguageTextMateTokenizerReady(
     tokenizerCache.set(normalizedLanguageId, {
         grammarUrl: definition.grammarUrl,
         scopeName: definition.scopeName,
+        requestId,
         promise: initPromise,
     });
 

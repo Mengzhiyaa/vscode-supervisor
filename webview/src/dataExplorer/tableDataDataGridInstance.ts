@@ -337,6 +337,7 @@ export class TableDataDataGridInstance extends DataGridInstance {
     setDimensions(columns: number, rows: number, hasRowLabels = false): void {
         const previousColumns = this.columns;
         const previousRows = this.rows;
+        const previousPinnedColumns = this.getPinnedColumnIndexes();
         const dimensionsChanged = this._tableDataCache.setDimensions(
             columns,
             rows,
@@ -350,6 +351,15 @@ export class TableDataDataGridInstance extends DataGridInstance {
         this.rowsStore.set(rows);
         this._columnLayoutManager.setEntries(columns);
         this._rowLayoutManager.setEntries(rows);
+        this._horizontalScrollOffset = Math.max(0, Math.min(
+            this._horizontalScrollOffset, this.maximumHorizontalScrollOffset,
+        ));
+        this._verticalScrollOffset = Math.max(0, Math.min(
+            this._verticalScrollOffset, this.maximumVerticalScrollOffset,
+        ));
+        if (previousPinnedColumns.length !== this.getPinnedColumnIndexes().length) {
+            this.notifyPinnedColumnsChanged();
+        }
 
         if (previousColumns !== columns) {
             this._columnWidthsCalculatedGeneration = -1;
@@ -382,14 +392,14 @@ export class TableDataDataGridInstance extends DataGridInstance {
         schema?: SchemaColumn[];
         requestId: number;
         generation: number;
-    }): void {
+    }): boolean {
         const activeRequest = this._activeRequest;
         if (
             params.generation !== this._dataGeneration ||
             activeRequest?.requestId !== params.requestId ||
             activeRequest.generation !== params.generation
         ) {
-            return;
+            return false;
         }
 
         if (params.schema && params.schema.length > 0) {
@@ -412,7 +422,7 @@ export class TableDataDataGridInstance extends DataGridInstance {
             this._columnWidthCalculationColumnIndex +=
                 params.columnIndices?.length ?? 0;
             if (this._requestNextColumnWidthPage()) {
-                return;
+                return true;
             }
             this._columnWidthCalculationPending = false;
             this._columnWidthCalculationColumnIndex = 0;
@@ -421,7 +431,7 @@ export class TableDataDataGridInstance extends DataGridInstance {
             this._columnWidthCalculationPending &&
             this._requestNextColumnWidthPage()
         ) {
-            return;
+            return true;
         }
 
         const nextUpdateDescriptor =
@@ -431,6 +441,7 @@ export class TableDataDataGridInstance extends DataGridInstance {
                 : activeRequest.updateDescriptor);
         this._pendingUpdateDescriptor = undefined;
         this._updateCache(nextUpdateDescriptor);
+        return true;
     }
 
     handleDataInvalidated(generation: number, schemaChanged: boolean): void {

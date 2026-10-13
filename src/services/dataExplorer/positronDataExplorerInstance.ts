@@ -55,6 +55,7 @@ export class PositronDataExplorerInstance implements IPositronDataExplorerInstan
     private _backendTaskLoading = false;
     private _loading = false;
     private _dataGeneration = 0;
+    private _schemaGeneration = 0;
     private _lastDataRequest: PositronDataExplorerDataRequest | undefined;
     private _selection: PositronDataExplorerSelection | undefined;
     private _dataMutationQueue: Promise<void> = Promise.resolve();
@@ -183,6 +184,7 @@ export class PositronDataExplorerInstance implements IPositronDataExplorerInstan
         this._tableDataCache.invalidate(generation);
         this._tableSummaryCache.invalidate(generation);
         if (schemaChanged) {
+            this._schemaGeneration++;
             this._schemaCache.clear();
             this._clearSchemaCacheTrimTimeout();
         }
@@ -234,11 +236,16 @@ export class PositronDataExplorerInstance implements IPositronDataExplorerInstan
     }
 
     async getSchema(columnIndices: number[]): Promise<TableSchema> {
-        if (columnIndices.length === 0) { return { columns: [] }; }
+        if (this._disposed || columnIndices.length === 0) { return { columns: [] }; }
+        const generation = this._schemaGeneration;
+        const client = this._clientInstance;
         const uniqueColumnIndices = [...new Set(columnIndices)];
         const missing = uniqueColumnIndices.filter(index => !this._schemaCache.has(index));
         if (missing.length > 0) {
-            const schema = await this._clientInstance.getSchema(missing);
+            const schema = await client.getSchema(missing);
+            if (this._disposed || generation !== this._schemaGeneration || client !== this._clientInstance) {
+                return { columns: [] };
+            }
             schema.columns.forEach(column => this._schemaCache.set(column.column_index, column));
         }
         this._scheduleSchemaCacheTrim(uniqueColumnIndices);

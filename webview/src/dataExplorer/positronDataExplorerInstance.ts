@@ -46,6 +46,7 @@ function mergeSchemaColumns(
  * PositronDataExplorerInstance class.
  */
 export class PositronDataExplorerInstance {
+    private _lastInvalidationGeneration = -1;
     readonly stores: DataExplorerStores;
     readonly tableDataCache: TableDataCache;
     readonly schemaClient: DataExplorerSchemaClient;
@@ -173,6 +174,9 @@ export class PositronDataExplorerInstance {
         numColumns: number;
         hasRowLabels?: boolean;
     }): void {
+        if (this._currentBackendState()?.table_shape.num_columns !== params.numColumns) {
+            this.schemaClient.invalidateSchema();
+        }
         this.stores.state.update((state) => ({
             ...state,
             schema:
@@ -202,7 +206,9 @@ export class PositronDataExplorerInstance {
         columns: SchemaColumn[];
         requestId?: number;
     }): void {
-        this.schemaClient.handleSchema(params);
+        if (!this.schemaClient.handleSchema(params)) {
+            return;
+        }
         this.tableDataDataGridInstance.handleSchemaUpdate(params.columns);
         this.tableSchemaDataGridInstance.handleSchema(params.columns);
         this.stores.state.update((state) => ({
@@ -256,8 +262,11 @@ export class PositronDataExplorerInstance {
         requestId: number;
         generation: number;
     }): void {
-        this.tableDataDataGridInstance.handleDataUpdate(params);
+        if (!this.tableDataDataGridInstance.handleDataUpdate(params)) {
+            return;
+        }
         if (params.schema && params.schema.length > 0) {
+            this.tableSchemaDataGridInstance.handleSchema(params.schema);
             this.stores.state.update((state) => ({
                 ...state,
                 schema: mergeSchemaColumns(state.schema, params.schema ?? []),
@@ -269,6 +278,14 @@ export class PositronDataExplorerInstance {
         generation: number;
         schemaChanged: boolean;
     }): void {
+        if (params.generation <= this._lastInvalidationGeneration) {
+            return;
+        }
+        this._lastInvalidationGeneration = params.generation;
+        if (params.schemaChanged) {
+            this.schemaClient.invalidateSchema();
+            this.stores.state.update(state => ({ ...state, schema: [] }));
+        }
         this.tableDataDataGridInstance.handleDataInvalidated(
             params.generation,
             params.schemaChanged,
@@ -331,6 +348,9 @@ export class PositronDataExplorerInstance {
                 (entry) => entry.code_syntax_name,
             ) ?? [];
 
+        if (schemaInvalidated) {
+            this.schemaClient.invalidateSchema();
+        }
         this.stores.state.update((state) => ({
             ...state,
             backendState,

@@ -23,6 +23,7 @@ export class ColumnSchemaCache {
     private readonly _columnSchemaCache = new Map<number, SchemaColumn>();
     private readonly _listeners = new Set<UpdateListener>();
     private _disposed = false;
+    private _version = 0;
 
     constructor(private readonly _schemaClient: DataExplorerSchemaClient) {}
 
@@ -38,6 +39,9 @@ export class ColumnSchemaCache {
     async update(
         cacheUpdateDescriptor: ColumnSchemaCacheUpdateDescriptor,
     ): Promise<void> {
+        if (this._disposed) {
+            return;
+        }
         this._clearTrimCacheTimeout();
         if (
             cacheUpdateDescriptor.columnIndices.length === 0 &&
@@ -52,6 +56,7 @@ export class ColumnSchemaCache {
         }
 
         this._updatingCache = true;
+        const version = this._version;
         try {
             const visibleIndices = [...new Set(cacheUpdateDescriptor.columnIndices)];
             const columnIndices = cacheUpdateDescriptor.invalidateCache
@@ -61,7 +66,7 @@ export class ColumnSchemaCache {
                           !this._columnSchemaCache.has(columnIndex),
                   );
             const tableSchema = await this._schemaClient.getSchema(columnIndices);
-            if (this._disposed) {
+            if (this._disposed || version !== this._version) {
                 return;
             }
 
@@ -77,6 +82,9 @@ export class ColumnSchemaCache {
             this._emitDidUpdateCache();
         } finally {
             this._updatingCache = false;
+            if (this._disposed) {
+                return;
+            }
             if (this._pendingCacheUpdateDescriptor) {
                 const pendingCacheUpdateDescriptor =
                     this._pendingCacheUpdateDescriptor;
@@ -86,6 +94,7 @@ export class ColumnSchemaCache {
             }
 
             if (
+                version === this._version &&
                 !cacheUpdateDescriptor.invalidateCache &&
                 cacheUpdateDescriptor.columnIndices.length > 0
             ) {
@@ -124,6 +133,7 @@ export class ColumnSchemaCache {
     }
 
     clear(): void {
+        this._version++;
         this._clearTrimCacheTimeout();
         this._pendingCacheUpdateDescriptor = undefined;
         this._columnSchemaCache.clear();
@@ -131,6 +141,7 @@ export class ColumnSchemaCache {
     }
 
     dispose(): void {
+        this._version++;
         this._disposed = true;
         this._clearTrimCacheTimeout();
         this._pendingCacheUpdateDescriptor = undefined;

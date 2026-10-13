@@ -93,14 +93,17 @@
     }
 
     function handleKeyDown(event: KeyboardEvent) {
-        if (!dialogBoxRef) {
+        if (!dialogBoxRef || event.defaultPrevented || event.isComposing) {
             return;
         }
 
         switch (event.key) {
             case "Enter": {
                 const activeElement = document.activeElement;
-                if (activeElement instanceof HTMLTextAreaElement) {
+                if (activeElement instanceof HTMLElement && (
+                    activeElement.isContentEditable ||
+                    activeElement.closest("button, a[href], select, textarea, [role='button'], [role='combobox']")
+                )) {
                     return;
                 }
 
