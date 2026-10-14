@@ -151,9 +151,14 @@ export class RuntimeItemActivity extends RuntimeItem {
                 const existingItem = this._activityItems[i];
                 if (existingItem instanceof ActivityItemInput) {
                     if (
-                        existingItem.state === ActivityItemInputState.Provisional &&
+                        (existingItem.state === ActivityItemInputState.Provisional ||
+                            existingItem.state === ActivityItemInputState.Completed) &&
                         existingItem.parentId === item.parentId
                     ) {
+                        // Idle can arrive before the runtime's input echo.
+                        if (existingItem.state === ActivityItemInputState.Completed) {
+                            item.state = ActivityItemInputState.Completed;
+                        }
                         this._activityItems[i] = item;
                         return;
                     }

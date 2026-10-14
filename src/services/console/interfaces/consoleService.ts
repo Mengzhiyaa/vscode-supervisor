@@ -287,6 +287,8 @@ export interface IPositronConsoleInstance extends vscode.Disposable {
         attribution: IConsoleCodeAttribution,
         checkCompleteness?: boolean,
     ): Promise<ConsoleSubmissionResult>;
+    /** Cancel only a completeness check that has not entered runtime acceptance. */
+    cancelCompletenessCheck(): void;
     cancelCodeSubmission(): void;
     replyToPrompt(value: string): void;
     attachRuntimeSession(session: RuntimeSession | undefined, mode: SessionAttachMode): void;

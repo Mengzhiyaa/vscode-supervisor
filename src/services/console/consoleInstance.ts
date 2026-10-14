@@ -100,7 +100,6 @@ const ON_DID_CHANGE_RUNTIME_ITEMS_THROTTLE_THRESHOLD = 20;
 const ON_DID_CHANGE_RUNTIME_ITEMS_THROTTLE_INTERVAL = 50;
 const DEFAULT_INPUT_PROMPT = '>';
 const DEFAULT_CONTINUATION_PROMPT = '+';
-const DEFAULT_CODE_COMPLETENESS_TIMEOUT_MS = 5000;
 
 function normalizePromptValue(prompt: string | undefined): string | undefined {
     if (typeof prompt !== 'string') {
@@ -174,12 +173,16 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
     private _runtimeItemPendingInput: RuntimeItemPendingInput | undefined;
     private _runtimeItemSubmittingInput: RuntimeItemPendingInput | undefined;
     private _submissionGeneration = 0;
-    private _cancelActiveSubmission: (() => void) | undefined;
+    private _cancelActiveSubmission: ((interruptRuntime?: boolean) => void) | undefined;
     private _enqueueCheckInProgress = false;
     private _pendingBusyExecutionId: string | undefined;
     private _submissionTokenSource: vscode.CancellationTokenSource | undefined;
-    private readonly _codeCompletenessTimeoutMs = DEFAULT_CODE_COMPLETENESS_TIMEOUT_MS;
+    private _submissionAtSupervisor = false;
     private _lastPastedText = '';
+    private readonly _inputBoundaryDocumentScheme = `supervisor-console-input-${randomUUID()}`;
+    private readonly _inputBoundaryDocuments = new Map<string, string>();
+    // This registration belongs to the Console, not the attached session.
+    private _inputBoundaryDocumentRegistration: vscode.Disposable | undefined;
 
     // Input history (1:1 Positron)
     private _inputHistory: string[] = [];
@@ -912,6 +915,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
         const generation = ++this._submissionGeneration;
         const tokenSource = new vscode.CancellationTokenSource();
         this._submissionTokenSource = tokenSource;
+        this._submissionAtSupervisor = false;
         const submittingItem = new RuntimeItemPendingInput(
             this.generateId(),
             new Date(),
@@ -925,13 +929,13 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
         this._runtimeItemSubmittingInput = submittingItem;
         this.addRuntimeItem(submittingItem);
 
-        let cancelSubmission!: () => void;
+        let cancelSubmission!: (interruptRuntime?: boolean) => void;
         let checkingAtSupervisor = false;
         const cancelled = new Promise<undefined>((resolve) => {
-            cancelSubmission = () => {
-                const interruptRuntime = checkingAtSupervisor && !tokenSource.token.isCancellationRequested;
+            cancelSubmission = (interruptRuntime = true) => {
+                const shouldInterrupt = interruptRuntime && checkingAtSupervisor && !tokenSource.token.isCancellationRequested;
                 tokenSource.cancel();
-                if (interruptRuntime) {
+                if (shouldInterrupt) {
                     void session.interrupt().catch(error => this._outputChannel.warn(String(error)));
                 }
                 resolve(undefined);
@@ -982,6 +986,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
                     const executionAttribution = this._normalizeSubmittedAttribution(code, attribution);
                     this._pendingBusyExecutionId = executionId;
                     checkingAtSupervisor = true;
+                    this._submissionAtSupervisor = true;
                     try {
                         const accepted = await Promise.race([
                             Promise.resolve(session.execute(code, executionId, RuntimeCodeExecutionMode.Unprocessed,
@@ -1011,6 +1016,9 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
                         throw error;
                     } finally {
                         checkingAtSupervisor = false;
+                        if (this._submissionTokenSource === tokenSource) {
+                            this._submissionAtSupervisor = false;
+                        }
                     }
                 }
             }
@@ -1066,40 +1074,37 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
         cancelled: Promise<undefined>,
         session: RuntimeSession,
     ): Promise<RuntimeCodeFragmentStatus | undefined> {
-        let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
-        const timedOut = new Promise<RuntimeCodeFragmentStatus>((resolve) => {
-            timeoutHandle = setTimeout(() => {
-                timeoutHandle = undefined;
-                this._outputChannel.warn(
-                    `[ConsoleInstance] Code completeness check timed out after ` +
-                    `${this._codeCompletenessTimeoutMs}ms; submitting code for runtime validation`,
-                );
-                resolve(RuntimeCodeFragmentStatus.Unknown);
-            }, this._codeCompletenessTimeoutMs);
-        });
+        // Slow checks remain pending until the runtime responds or the user
+        // cancels. A host timeout is not evidence that the code is incomplete.
+        return Promise.race([session.isCodeFragmentComplete(code), cancelled]);
+    }
 
-        try {
-            return await Promise.race([
-                session.isCodeFragmentComplete(code),
-                cancelled,
-                timedOut,
-            ]);
-        } finally {
-            if (timeoutHandle !== undefined) {
-                clearTimeout(timeoutHandle);
-            }
+    cancelCompletenessCheck(): void {
+        // Busy/input messages can arrive before execute() reports acceptance,
+        // so the pending-busy ID alone cannot identify a cancellable check.
+        if (this._cancelActiveSubmission && !this._pendingBusyExecutionId && !this._submissionAtSupervisor) {
+            this._cancelActiveSubmission(false);
         }
     }
 
     cancelCodeSubmission(interruptRuntime = true): void {
-        if (!this._cancelActiveSubmission && !this._runtimeItemSubmittingInput) {
+        const cancelActiveSubmission = this._cancelActiveSubmission;
+        const pendingExecutionId = this._pendingBusyExecutionId;
+        if (!cancelActiveSubmission && !this._runtimeItemSubmittingInput && !pendingExecutionId) {
             return;
         }
         this._submissionGeneration += 1;
-        // The interrupt command interrupts once after cancelling the local submission.
-        if (!interruptRuntime) { this._submissionTokenSource?.cancel(); }
-        this._cancelActiveSubmission?.();
+        // An active submission owns its supervisor-side cancellation. After
+        // acceptance, interrupt here while waiting for the execution's busy event.
+        cancelActiveSubmission?.(interruptRuntime);
+        if (pendingExecutionId) {
+            this._pendingBusyExecutionId = undefined;
+            if (interruptRuntime && !cancelActiveSubmission) {
+                void this._session?.interrupt().catch(error => this._outputChannel.warn(String(error)));
+            }
+        }
         this._cancelActiveSubmission = undefined;
+        this._submissionAtSupervisor = false;
         const submittingItem = this._runtimeItemSubmittingInput;
         this._runtimeItemSubmittingInput = undefined;
         if (submittingItem) {
@@ -1128,12 +1133,36 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
         token: vscode.CancellationToken,
     ): Promise<IInputBoundaryFragments | undefined> {
         const provider = this._session?.lsp.inputBoundaryProvider;
-        if (!provider || !this._session) { return undefined; }
+        if (!provider || !this._session || this._isDisposed || token.isCancellationRequested) { return undefined; }
+        const uri = vscode.Uri.from({
+            scheme: this._inputBoundaryDocumentScheme,
+            path: `/input/${randomUUID()}`,
+        });
         try {
-            const document = await vscode.workspace.openTextDocument({
-                language: this._runtimeMetadata.languageId, content: code,
-            });
-            if (token.isCancellationRequested) { return undefined; }
+            // Content-provider documents are read-only and clean. An untitled
+            // document with initial content becomes dirty and the Workbench
+            // automatically opens an editor for it, even without showTextDocument.
+            if (!this._inputBoundaryDocumentRegistration) {
+                this._inputBoundaryDocumentRegistration = vscode.workspace.registerTextDocumentContentProvider(
+                    this._inputBoundaryDocumentScheme,
+                    {
+                        provideTextDocumentContent: documentUri => {
+                            const content = this._inputBoundaryDocuments.get(documentUri.toString());
+                            if (content === undefined) {
+                                throw new Error('Console input boundary document is no longer available.');
+                            }
+                            return content;
+                        },
+                    },
+                );
+            }
+            this._inputBoundaryDocuments.set(uri.toString(), code);
+            let document = await vscode.workspace.openTextDocument(uri);
+            if (this._isDisposed || token.isCancellationRequested) { return undefined; }
+            if (document.languageId !== this._runtimeMetadata.languageId) {
+                document = await vscode.languages.setTextDocumentLanguage(document, this._runtimeMetadata.languageId);
+            }
+            if (this._isDisposed || token.isCancellationRequested) { return undefined; }
             const range = new vscode.Range(0, 0, document.lineCount - 1,
                 document.lineAt(document.lineCount - 1).text.length);
             const boundaries = await provider.provideInputBoundaries(document, range, token);
@@ -1143,6 +1172,8 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
                 this._outputChannel.debug(`[ConsoleInstance] Input boundary provider failed: ${String(error)}`);
             }
             return undefined;
+        } finally {
+            this._inputBoundaryDocuments.delete(uri.toString());
         }
     }
 
@@ -1187,8 +1218,10 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
         const execId = executionId || this.generateExecutionId(code);
         const executionAttribution = this._normalizeSubmittedAttribution(code, attribution);
 
-        let replacementActivity: RuntimeItemActivity | undefined;
-        if (mode !== RuntimeCodeExecutionMode.Silent) {
+        const existingActivity = this._runtimeItemActivities.get(execId);
+        let replacementActivity = replaceRuntimeItem ? existingActivity : undefined;
+        const hasInput = existingActivity?.activityItems.some(item => item instanceof ActivityItemInput);
+        if (mode !== RuntimeCodeExecutionMode.Silent && !hasInput) {
             const inputPrompt = this._inputPrompt;
             const continuationPrompt = this._continuationPrompt;
             const inputItem = new ActivityItemInput(
@@ -1201,9 +1234,41 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
                 code,
             );
             if (replaceRuntimeItem) {
-                replacementActivity = new RuntimeItemActivity(execId, inputItem);
+                if (replacementActivity) {
+                    replacementActivity.addActivityItem(inputItem);
+                } else {
+                    replacementActivity = new RuntimeItemActivity(execId, inputItem);
+                }
             } else {
                 this.addOrUpdateRuntimeItemActivity(execId, inputItem);
+            }
+        }
+
+        if (replacementActivity && replaceRuntimeItem) {
+            // Unprocessed execution can echo input/output before acceptance
+            // resolves. Reuse that activity, preserving its output and state.
+            const existingIndex = this._runtimeItems.indexOf(replacementActivity);
+            if (existingIndex >= 0) {
+                this._runtimeItems.splice(existingIndex, 1);
+            }
+            const replacementIndex = this._runtimeItems.indexOf(replaceRuntimeItem);
+            this._runtimeItemActivities.set(execId, replacementActivity);
+            if (this._runtimeItemSubmittingInput === replaceRuntimeItem) {
+                this._runtimeItemSubmittingInput = undefined;
+            }
+            if (replacementIndex >= 0) {
+                this._runtimeItems.splice(replacementIndex, 1, replacementActivity);
+            } else {
+                this._runtimeItems.push(replacementActivity);
+            }
+            this.optimizeScrollback();
+            if (existingIndex >= 0) {
+                // Moving an existing activity also removes its previous slot.
+                this._emitRuntimeItemsRestoreRequired();
+            } else if (replacementIndex >= 0) {
+                this._emitReplaceRuntimeItem(replaceRuntimeItem.id, replacementActivity);
+            } else {
+                this._emitAppendRuntimeItem(replacementActivity);
             }
         }
 
@@ -1220,21 +1285,6 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
             } catch (error) {
                 rejected(error);
                 throw error;
-            }
-        }
-        if (replacementActivity && replaceRuntimeItem) {
-            const replacementIndex = this._runtimeItems.indexOf(replaceRuntimeItem);
-            this._runtimeItemActivities.set(execId, replacementActivity);
-            if (replacementIndex >= 0) {
-                this._runtimeItems.splice(replacementIndex, 1, replacementActivity);
-                this._runtimeItemSubmittingInput = undefined;
-                this.optimizeScrollback();
-                this._emitReplaceRuntimeItem(replaceRuntimeItem.id, replacementActivity);
-            } else {
-                this._runtimeItems = [...this._runtimeItems, replacementActivity];
-                this._runtimeItemSubmittingInput = undefined;
-                this.optimizeScrollback();
-                this._emitAppendRuntimeItem(replacementActivity);
             }
         }
         this._executionHistoryService?.recordExecutionInput(
@@ -2342,6 +2392,9 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
         }
         this._errorFollowupTokenSources.clear();
         this.detachRuntimeSession();
+        this._inputBoundaryDocuments.clear();
+        this._inputBoundaryDocumentRegistration?.dispose();
+        this._inputBoundaryDocumentRegistration = undefined;
         this._disposables.forEach(d => d.dispose());
         this._onFocusInputEmitter.dispose();
         this._onDidChangeStateEmitter.dispose();
@@ -2497,7 +2550,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
         const activity = this._runtimeItemActivities.get(executionId);
         if (activity) {
             const inputItem = activity.activityItems.find(item => item instanceof ActivityItemInput) as ActivityItemInput | undefined;
-            if (inputItem && inputItem.state !== ActivityItemInputState.Provisional) {
+            if (inputItem && (inputItem.state !== ActivityItemInputState.Provisional || !busy)) {
                 inputItem.state = busy ? ActivityItemInputState.Executing : ActivityItemInputState.Completed;
                 this._emitUpdateActivityInputState(executionId, inputItem.state);
             }

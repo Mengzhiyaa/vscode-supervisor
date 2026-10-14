@@ -132,6 +132,15 @@ export namespace SubmitCodeRequest {
     export const type = new RequestType<Params, Result, void>('console/submitCode');
 }
 
+export namespace CancelCompletenessCheckRequest {
+
+    export interface Params {
+        sessionId: string;
+    }
+
+    export const type = new RequestType<Params, void, void>('console/cancelCompletenessCheck');
+}
+
 export namespace CancelSubmissionRequest {
 
     export interface Params {

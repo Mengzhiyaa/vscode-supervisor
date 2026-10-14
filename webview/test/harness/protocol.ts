@@ -181,6 +181,7 @@ export const SessionMethods = {
 export const ConsoleMethods = {
     isComplete: 'console/isComplete',
     submitCode: 'console/submitCode',
+    cancelCompletenessCheck: 'console/cancelCompletenessCheck',
     cancelSubmission: 'console/cancelSubmission',
     execute: 'console/execute',
     interrupt: 'console/interrupt',

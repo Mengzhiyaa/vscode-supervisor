@@ -586,6 +586,11 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
             }
         });
 
+        connection.onRequest(ConsoleProtocol.CancelCompletenessCheckRequest.type, async (params) => {
+            this._resolveConsoleInstance('cancelCompletenessCheck', params.sessionId)
+                ?.cancelCompletenessCheck();
+        });
+
         connection.onRequest(ConsoleProtocol.CancelSubmissionRequest.type, async (params) => {
             this._resolveConsoleInstance('cancelSubmission', params.sessionId)
                 ?.cancelCodeSubmission();

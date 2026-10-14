@@ -200,6 +200,7 @@ export function registerConsoleDefaults(
     backend.onRequest(SessionMethods.showOutputChannel, () => undefined);
     backend.onRequest(ConsoleMethods.isComplete, () => ({ status: 'complete' }));
     backend.onRequest(ConsoleMethods.submitCode, () => ({ status: 'executed' }));
+    backend.onRequest(ConsoleMethods.cancelCompletenessCheck, () => undefined);
     backend.onRequest(ConsoleMethods.cancelSubmission, () => undefined);
     backend.onRequest(ConsoleMethods.requestWorkspaceTrust, () => undefined);
     backend.onRequest(ConsoleMethods.replyPrompt, () => undefined);

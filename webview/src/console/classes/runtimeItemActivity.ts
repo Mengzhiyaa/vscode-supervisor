@@ -157,12 +157,16 @@ export class RuntimeItemActivity extends RuntimeItem {
                 }
             } else if (activityItem instanceof ActivityItemInput && activityItem.state !== ActivityItemInputState.Provisional) {
                 // When a non-provisional ActivityItemInput is being added, see if there's a
-                // provisional ActivityItemInput for it in the activity items.
+                // provisional or already-completed ActivityItemInput for it in the activity items.
                 for (let i = this._activityItems.length - 1; i >= 0; --i) {
                     const activityItemToCheck = this._activityItems[i];
                     if (activityItemToCheck instanceof ActivityItemInput) {
-                        if (activityItemToCheck.state === ActivityItemInputState.Provisional &&
+                        if ((activityItemToCheck.state === ActivityItemInputState.Provisional ||
+                            activityItemToCheck.state === ActivityItemInputState.Completed) &&
                             activityItemToCheck.parentId === activityItem.parentId) {
+                            if (activityItemToCheck.state === ActivityItemInputState.Completed) {
+                                activityItem.state = ActivityItemInputState.Completed;
+                            }
                             const nextActivityItems = [...this._activityItems];
                             nextActivityItems[i] = activityItem;
                             this._setActivityItems(nextActivityItems);
@@ -222,7 +226,7 @@ export class RuntimeItemActivity extends RuntimeItem {
     public markInputBusyState(busy: boolean): void {
         for (const item of this._activityItems) {
             if (item instanceof ActivityItemInput) {
-                if (item.state !== ActivityItemInputState.Provisional) {
+                if (item.state !== ActivityItemInputState.Provisional || !busy) {
                     item.state = busy
                         ? ActivityItemInputState.Executing
                         : ActivityItemInputState.Completed;

@@ -1063,6 +1063,14 @@
         if (submissionInFlightRef.current) {
             if (submissionSessionIdRef.current === requestedSessionId) {
                 resubmitQueuedRef.current = true;
+                // Follow-up Enter may cancel a check, but must preserve an
+                // accepted execution and its authoritative submit response.
+                if (connection) {
+                    void connection.sendRequest("console/cancelCompletenessCheck", {
+                        sessionId: requestedSessionId,
+                    });
+                }
+                return true;
             } else {
                 deferredExecuteSessionIdRef.current = requestedSessionId;
                 resubmitQueuedRef.current = false;

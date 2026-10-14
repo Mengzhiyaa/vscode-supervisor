@@ -364,6 +364,21 @@
     },
     {
       "kind": "request",
+      "name": "CancelCompletenessCheckRequest",
+      "method": "console/cancelCompletenessCheck",
+      "paramsType": "Params",
+      "resultType": "void",
+      "errorType": "void",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [{ "name": "sessionId", "type": "string" }]
+        }
+      ]
+    },
+    {
+      "kind": "request",
       "name": "CancelSubmissionRequest",
       "method": "console/cancelSubmission",
       "paramsType": "Params",
