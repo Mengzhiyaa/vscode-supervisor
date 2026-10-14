@@ -3,6 +3,7 @@
  *  Licensed under the Elastic License 2.0. See LICENSE.txt for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { getErrorMessage } from '../shared/errors';
 import * as vscode from 'vscode';
 import { KallichoreSession } from './KallichoreSession';
 import { createUniqueId } from './util';
@@ -176,13 +177,13 @@ export class CommBackendRequest {
 		this.send(msg);
 	}
 
-	reject(error: Error, code = -32000) {
+	reject(error: unknown, code = -32000) {
 		const msg: CommRpcMessageError = {
 			jsonrpc: '2.0',
 			id: this.id,
 			error: {
 				method: this.method,
-				message: `${error}`,
+				message: getErrorMessage(error),
 				code,
 			}
 		};

@@ -3,6 +3,7 @@
  *  1:1 replication of Positron's variables instance class
  *--------------------------------------------------------------------------------------------*/
 
+import { getErrorMessage, formatErrorForLogging } from '../../shared/errors';
 import * as vscode from 'vscode';
 import {
     IPositronVariablesInstance,
@@ -813,7 +814,7 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
             if (!isCurrent() || error instanceof vscode.CancellationError) { return; }
             if (reportErrors) { throw error; }
             this._outputChannel.warn(
-                `[VariablesInstance] Failed to load children for ${JSON.stringify(variableItem.path)}: ${error}`
+                `[VariablesInstance] Failed to load children for ${JSON.stringify(variableItem.path)}: ${formatErrorForLogging(error)}`
             );
             variableItem.childItems = [];
             variableItem.overflowEntry = undefined;
@@ -855,8 +856,11 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
     }
 
     private async _notifyRequestError(action: string, error: unknown): Promise<void> {
-        const message = error instanceof Error ? error.message : String(error);
-        this._outputChannel.warn(`[VariablesInstance] Error ${action} variables: ${message}`);
+        const message = getErrorMessage(error);
+        this._outputChannel.warn(
+            `[VariablesInstance] Error ${action} variables: ${message}; ` +
+            `session=${this._session.sessionId}; details=${formatErrorForLogging(error)}`,
+        );
         void vscode.window.showErrorMessage(`Error ${action} variables: ${message}`);
     }
 

@@ -3,6 +3,7 @@
  *  Licensed under the Elastic License 2.0. See LICENSE.txt for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { getErrorMessage } from '../shared/errors';
 import * as vscode from 'vscode';
 import * as positron from './positron';
 import { JupyterLanguageRuntimeSession, Comm } from './positron-supervisor';
@@ -64,7 +65,7 @@ export class DapComm {
 				await this.connect();
 			} catch (err) {
 				this.session.emitJupyterLog(
-					`Failed to reconnect debug session: ${err}`,
+					`Failed to reconnect debug session: ${getErrorMessage(err)}`,
 					vscode.LogLevel.Warning
 				);
 			}
@@ -294,7 +295,7 @@ export class DapComm {
 			}
 			disposable?.dispose();
 			this.disableAutoAttach(
-				`Can't start debug session for DAP server ${this._comm.id}: ${err}`
+				`Can't start debug session for DAP server ${this._comm.id}: ${getErrorMessage(err)}`
 			);
 			return undefined;
 		}

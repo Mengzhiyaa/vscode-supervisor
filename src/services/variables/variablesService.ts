@@ -3,6 +3,7 @@
  *  1:1 replication of Positron's variables service class
  *--------------------------------------------------------------------------------------------*/
 
+import { getErrorMessage } from '../../shared/errors';
 import * as vscode from 'vscode';
 import {
     IPositronVariablesService,
@@ -226,7 +227,7 @@ export class PositronVariablesService implements IPositronVariablesService {
         this._activeVariablesInstance = instance;
         if (instance) {
             void instance.requestRefresh().catch(error => {
-                this._outputChannel.warn(`[VariablesService] Failed to refresh active variables: ${error}`);
+                this._outputChannel.warn(`[VariablesService] Failed to refresh active variables: ${getErrorMessage(error)}`);
             });
         }
         this._onDidChangeActivePositronVariablesInstanceEmitter.fire(instance);

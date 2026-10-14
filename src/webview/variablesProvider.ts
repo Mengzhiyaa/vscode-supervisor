@@ -1,3 +1,4 @@
+import { getErrorMessage, formatErrorForLogging } from '../shared/errors';
 import * as vscode from 'vscode';
 import { MessageConnection } from 'vscode-jsonrpc/node';
 import { BaseWebviewProvider } from './baseProvider';
@@ -296,7 +297,7 @@ export class VariablesViewProvider extends BaseWebviewProvider {
                     }
                     return { variables };
                 } catch (e) {
-                    this.log(`Failed to list variables: ${e}`, vscode.LogLevel.Warning);
+                    this._logVariableRequestError('list variables', e, sessionId);
                 }
             }
 
@@ -318,7 +319,7 @@ export class VariablesViewProvider extends BaseWebviewProvider {
                         length: result.length
                     };
                 } catch (e) {
-                    this.log(`Failed to inspect variable: ${e}`, vscode.LogLevel.Warning);
+                    this._logVariableRequestError('inspect variable', e, sessionId, params.path);
                 }
             }
 
@@ -484,9 +485,9 @@ export class VariablesViewProvider extends BaseWebviewProvider {
             try {
                 return await instance.clipboardFormat(targetPath, params.format);
             } catch (e) {
-                this.log(`Failed to format variable for clipboard: ${e}`, vscode.LogLevel.Warning);
+                this._logVariableRequestError('format variable for clipboard', e, sessionId, targetPath);
                 void vscode.window.showErrorMessage(
-                    vscode.l10n.t('Unable to copy the variable: {0}', String(e)),
+                    vscode.l10n.t('Unable to copy the variable: {0}', getErrorMessage(e)),
                 );
                 return '';
             }
@@ -518,13 +519,22 @@ export class VariablesViewProvider extends BaseWebviewProvider {
                 }
                 return await instance.view(targetPath);
             } catch (e) {
-                this.log(`Failed to open variable viewer: ${e}`, vscode.LogLevel.Warning);
+                this._logVariableRequestError('open variable viewer', e, sessionId, targetPath);
                 void vscode.window.showErrorMessage(
-                    vscode.l10n.t('Unable to open the variable viewer: {0}', String(e)),
+                    vscode.l10n.t('Unable to open the variable viewer: {0}', getErrorMessage(e)),
                 );
                 return undefined;
             }
         });
+    }
+
+    private _logVariableRequestError(action: string, error: unknown, sessionId: string, path?: string[]): void {
+        this.log(
+            `Failed to ${action}: ${getErrorMessage(error)}; ` +
+            `session=${JSON.stringify(sessionId)} path=${JSON.stringify(path ?? [])}; ` +
+            `details=${formatErrorForLogging(error)}`,
+            vscode.LogLevel.Warning,
+        );
     }
 
     protected _getHtmlContent(webview: vscode.Webview): string {

@@ -3,6 +3,7 @@
  *  Licensed under the Elastic License 2.0. See LICENSE.txt for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { getErrorMessage } from '../shared/errors';
 import * as vscode from 'vscode';
 import * as positron from './positron';
 
@@ -755,7 +756,7 @@ export class KallichoreInstances {
 			const document = await vscode.workspace.openTextDocument(vscode.Uri.file(logPath));
 			await vscode.window.showTextDocument(document, { preview: false });
 		} catch (err) {
-			const message = err instanceof Error ? err.message : String(err);
+			const message = getErrorMessage(err);
 			await vscode.window.showErrorMessage(vscode.l10n.t("Failed to open supervisor log file: {0}", message));
 		}
 	}
@@ -771,7 +772,7 @@ export class KallichoreInstances {
 		try {
 			await vscode.commands.executeCommand('vscode.openFolder', workspaceUri, true);
 		} catch (err) {
-			const message = err instanceof Error ? err.message : String(err);
+			const message = getErrorMessage(err);
 			await vscode.window.showErrorMessage(vscode.l10n.t("Failed to open workspace {0}: {1}", supervisorLabel, message));
 		}
 	}

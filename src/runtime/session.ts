@@ -1,3 +1,4 @@
+import { getErrorMessage, formatErrorForLogging } from '../shared/errors';
 import * as crypto from 'crypto';
 import * as vscode from 'vscode';
 import { dispatchStructuredLog, formatLogContext, truncateStructuredMessage } from '../logging/logSinks';
@@ -88,7 +89,7 @@ function toLanguageRuntimeStartupFailure(error: unknown): LanguageRuntimeStartup
         if (Array.isArray(errorWithMetadata.errors) && errorWithMetadata.errors.length > 0) {
             details.push(
                 errorWithMetadata.errors
-                    .map(entry => entry instanceof Error ? entry.toString() : String(entry))
+                    .map(entry => formatErrorForLogging(entry))
                     .join('\n\n')
             );
         }
@@ -98,7 +99,7 @@ function toLanguageRuntimeStartupFailure(error: unknown): LanguageRuntimeStartup
         }
 
         return {
-            message: error.message || error.name || String(error),
+            message: error.message || error.name || getErrorMessage(error),
             details: details.join('\n\n'),
             exitCode: typeof errorWithMetadata.exitCode === 'number'
                 ? errorWithMetadata.exitCode
@@ -107,7 +108,7 @@ function toLanguageRuntimeStartupFailure(error: unknown): LanguageRuntimeStartup
     }
 
     return {
-        message: String(error),
+        message: getErrorMessage(error),
         details: '',
         exitCode: undefined,
     };
@@ -501,7 +502,7 @@ export class RuntimeSession implements vscode.Disposable {
                     dapComm?.then((dap) => dap.dispose()),
                 ])
                     .catch((error) => {
-                        this.log(`Failed to clean up session services after runtime end: ${error}`, vscode.LogLevel.Warning);
+                        this.log(`Failed to clean up session services after runtime end: ${getErrorMessage(error)}`, vscode.LogLevel.Warning);
                     })
                     .finally(() => {
                         if (this._dapComm === dapComm) {
@@ -773,7 +774,7 @@ export class RuntimeSession implements vscode.Disposable {
             await this._clientManager.initializeClients();
             await this._flushPendingConsoleWidth();
         } catch (error) {
-            this.log(`Failed to initialize Positron clients: ${error}`, vscode.LogLevel.Error);
+            this.log(`Failed to initialize Positron clients: ${getErrorMessage(error)}`, vscode.LogLevel.Error);
         }
     }
 
@@ -1011,7 +1012,7 @@ export class RuntimeSession implements vscode.Disposable {
 
             cancellationDisposable = token?.onCancellationRequested(() => {
                 void this.interrupt().catch(error => {
-                    this.log(`Failed to interrupt cancelled execution ${id}: ${error}`, vscode.LogLevel.Warning);
+                    this.log(`Failed to interrupt cancelled execution ${id}: ${getErrorMessage(error)}`, vscode.LogLevel.Warning);
                 });
                 finish(new vscode.CancellationError());
             });
@@ -1159,7 +1160,7 @@ export class RuntimeSession implements vscode.Disposable {
                 vscode.LogLevel.Debug
             );
         } catch (error) {
-            this.log(`Failed to update plots render settings: ${error}`, vscode.LogLevel.Debug);
+            this.log(`Failed to update plots render settings: ${getErrorMessage(error)}`, vscode.LogLevel.Debug);
         }
     }
 
@@ -1191,7 +1192,7 @@ export class RuntimeSession implements vscode.Disposable {
                 }),
             ]);
         } catch (error) {
-            this.log(`Failed to ${label}: ${error}`, vscode.LogLevel.Warning);
+            this.log(`Failed to ${label}: ${getErrorMessage(error)}`, vscode.LogLevel.Warning);
         } finally {
             if (timer !== undefined) {
                 clearTimeout(timer);
@@ -1373,7 +1374,7 @@ export class RuntimeSession implements vscode.Disposable {
                     this.log(`Console width set to ${widthToApply}`, vscode.LogLevel.Debug);
                 } catch (error) {
                     // Silently ignore if kernel doesn't support this method.
-                    this.log(`Failed to set console width: ${error}`, vscode.LogLevel.Debug);
+                    this.log(`Failed to set console width: ${getErrorMessage(error)}`, vscode.LogLevel.Debug);
                     return;
                 }
             }
@@ -1541,7 +1542,7 @@ export class RuntimeSession implements vscode.Disposable {
             await this._dapComm;
             void this.startDapMessageLoop();
         } catch (error) {
-            this.log(`Error starting DAP: ${error}`, vscode.LogLevel.Error);
+            this.log(`Error starting DAP: ${getErrorMessage(error)}`, vscode.LogLevel.Error);
             this._dapComm = undefined;
             throw error;
         }
@@ -1617,7 +1618,7 @@ export class RuntimeSession implements vscode.Disposable {
             if (!current) {
                 return;
             }
-            this.log(`Error starting Positron LSP: ${err}`, vscode.LogLevel.Error);
+            this.log(`Error starting Positron LSP: ${getErrorMessage(err)}`, vscode.LogLevel.Error);
             throw err;
         }
     }
@@ -1635,7 +1636,7 @@ export class RuntimeSession implements vscode.Disposable {
         try {
             kernel.removeClient(clientId);
         } catch (error) {
-            this.log(`Failed to release LSP client ${clientId}: ${error}`, vscode.LogLevel.Warning);
+            this.log(`Failed to release LSP client ${clientId}: ${getErrorMessage(error)}`, vscode.LogLevel.Warning);
         }
     }
 
@@ -1694,7 +1695,7 @@ export class RuntimeSession implements vscode.Disposable {
                 }
             }
         } catch (err) {
-            this.log(`Error in DAP loop: ${err}`, vscode.LogLevel.Error);
+            this.log(`Error in DAP loop: ${getErrorMessage(err)}`, vscode.LogLevel.Error);
         }
 
         this.log('Exiting DAP loop', vscode.LogLevel.Info);

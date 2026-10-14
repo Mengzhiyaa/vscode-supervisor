@@ -1,3 +1,4 @@
+import { getErrorMessage } from '../shared/errors';
 import * as vscode from 'vscode';
 import {
     type ILanguageStatementRangeProvider,
@@ -31,7 +32,7 @@ export async function resolveStatementRangeProvider(
         }
     } catch (error) {
         outputChannel.warn(
-            `[LspBridge] Failed waiting for statement range provider: ${error}`,
+            `[LspBridge] Failed waiting for statement range provider: ${getErrorMessage(error)}`,
         );
         return undefined;
     }

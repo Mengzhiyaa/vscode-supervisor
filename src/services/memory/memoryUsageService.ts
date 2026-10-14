@@ -1,3 +1,4 @@
+import { getErrorMessage } from '../../shared/errors';
 import * as vscode from 'vscode';
 import { RuntimeSessionService } from '../../runtime/runtimeSession';
 import { RuntimeSession } from '../../runtime/session';
@@ -382,7 +383,7 @@ export class MemoryUsageService implements vscode.Disposable {
             this._onDidUpdateMemoryUsage.fire(snapshot);
         } catch (error) {
             this._consecutivePollingFailures++;
-            this._outputChannel.warn(`[MemoryUsage] Failed to poll memory usage: ${error}`);
+            this._outputChannel.warn(`[MemoryUsage] Failed to poll memory usage: ${getErrorMessage(error)}`);
             if (this._consecutivePollingFailures >= 5) {
                 this._stopPolling();
                 this._outputChannel.warn('[MemoryUsage] Polling paused after 5 consecutive failures; focus the window to retry.');

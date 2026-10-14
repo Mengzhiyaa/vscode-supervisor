@@ -1,3 +1,4 @@
+import { getErrorMessage } from '../../shared/errors';
 import { createHash, randomUUID } from 'crypto';
 import { mkdir, readFile, rename, rm, writeFile } from 'fs/promises';
 import * as path from 'path';
@@ -96,7 +97,7 @@ export class ConsoleRecoveryFileStore {
             };
         } catch (error) {
             if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-                this._logChannel.warn(`[ConsoleRecovery] Ignoring invalid manifest: ${error}`);
+                this._logChannel.warn(`[ConsoleRecovery] Ignoring invalid manifest: ${getErrorMessage(error)}`);
             }
             return;
         }
@@ -139,7 +140,7 @@ export class ConsoleRecoveryFileStore {
                 }
             } catch (error) {
                 this._logChannel.warn(
-                    `[ConsoleRecovery] Failed to load checkpoint for ${entry.sessionId}: ${error}`,
+                    `[ConsoleRecovery] Failed to load checkpoint for ${entry.sessionId}: ${getErrorMessage(error)}`,
                 );
             }
         }));
@@ -158,7 +159,7 @@ export class ConsoleRecoveryFileStore {
                 );
             } catch (error) {
                 this._logChannel.warn(
-                    `[ConsoleRecovery] Failed to migrate journal for ${migration.entry.sessionId}: ${error}`,
+                    `[ConsoleRecovery] Failed to migrate journal for ${migration.entry.sessionId}: ${getErrorMessage(error)}`,
                 );
             }
         }
@@ -293,7 +294,7 @@ export class ConsoleRecoveryFileStore {
                         throw new Error('invalid journal checksum or schema');
                     }
                 } catch (error) {
-                    this._logChannel.warn(`[ConsoleRecovery] Ignoring invalid journal record for ${entry.sessionId}: ${error}`);
+                    this._logChannel.warn(`[ConsoleRecovery] Ignoring invalid journal record for ${entry.sessionId}: ${getErrorMessage(error)}`);
                     continue;
                 }
                 if (
@@ -305,7 +306,7 @@ export class ConsoleRecoveryFileStore {
                 }
             }
         } catch (error) {
-            this._logChannel.warn(`[ConsoleRecovery] Failed to replay journal for ${entry.sessionId}: ${error}`);
+            this._logChannel.warn(`[ConsoleRecovery] Failed to replay journal for ${entry.sessionId}: ${getErrorMessage(error)}`);
         }
         return recovered;
     }

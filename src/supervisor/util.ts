@@ -3,6 +3,7 @@
  *  Licensed under the Elastic License 2.0. See LICENSE.txt for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { getErrorMessage } from '../shared/errors';
 import { AxiosError, isAxiosError } from './httpClient';
 import { Buffer } from 'buffer';
 import * as vscode from 'vscode';
@@ -29,19 +30,12 @@ export function summarizeError(err: any): string {
 	if (isAxiosError(err)) {
 		// HTTP errors are common and should be summarized
 		return summarizeAxiosError(err);
-	} else if (err.errors) {
+	} else if (err && Array.isArray(err.errors)) {
 		// If we have multiple errors (as in the case of an AggregateError),
 		// summarize each one
 		return err.errors.map(summarizeError).join('\n\n');
-	} else if (err instanceof Error) {
-		// Other errors should be summarized as their message
-		return err.message;
-	} else if (typeof err === 'string') {
-		// Strings are returned as-is
-		return err;
 	}
-	// For anything else, return the JSON representation
-	return JSON.stringify(err);
+	return getErrorMessage(err);
 }
 
 /**
@@ -338,7 +332,7 @@ export function unpackSerializedObjectWithBuffers(payload: unknown): {
 						buffers.push(bufferInstance.toString('base64'));
 					}
 				} catch (e) {
-					logFrameworkDiagnostic('SupervisorUtil', `Error processing buffer: ${e}`, vscode.LogLevel.Error);
+					logFrameworkDiagnostic('SupervisorUtil', `Error processing buffer: ${getErrorMessage(e)}`, vscode.LogLevel.Error);
 					// Continue processing other buffers
 				}
 			}

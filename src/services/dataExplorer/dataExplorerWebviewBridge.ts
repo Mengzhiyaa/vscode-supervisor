@@ -2,6 +2,7 @@
  *  Data Explorer webview bridge
  *--------------------------------------------------------------------------------------------*/
 
+import { getErrorMessage, getErrorSummary, formatErrorForLogging } from '../../shared/errors';
 import * as vscode from 'vscode';
 import type { MessageConnection } from 'vscode-jsonrpc/node';
 import type {
@@ -118,29 +119,6 @@ interface DataUpdateCoordinator {
 }
 
 const dataUpdateCoordinators = new WeakMap<object, DataUpdateCoordinator>();
-
-function formatError(error: unknown): string {
-    if (error instanceof Error) {
-        return `${error.name}: ${error.message}`;
-    }
-    if (
-        typeof error === 'object' &&
-        error !== null &&
-        'message' in error &&
-        typeof error.message === 'string'
-    ) {
-        const name =
-            'name' in error && typeof error.name === 'string'
-                ? `${error.name}: `
-                : '';
-        return `${name}${error.message}`;
-    }
-    try {
-        return JSON.stringify(error);
-    } catch {
-        return String(error);
-    }
-}
 
 function normalizeColumnDisplayType(
     typeDisplay: string | undefined,
@@ -418,7 +396,7 @@ export class DataExplorerWebviewBridge {
                     columns: [],
                     requestId: params.requestId,
                 });
-                this._sendError(String(error), 'requestSchema', {
+                this._sendError(getErrorMessage(error), 'requestSchema', {
                     requestId: params.requestId,
                 });
             }
@@ -494,7 +472,7 @@ export class DataExplorerWebviewBridge {
                         requestId: params.requestId,
                     },
                 );
-                this._sendError(String(error), 'searchSchema', {
+                this._sendError(getErrorMessage(error), 'searchSchema', {
                     requestId: params.requestId,
                 });
             }
@@ -640,7 +618,7 @@ export class DataExplorerWebviewBridge {
                                 columnIndex,
                                 profile: undefined,
                             })),
-                            error: String(error),
+                            error: getErrorMessage(error),
                             requestId: params.requestId,
                             generation: params.generation,
                         },
@@ -730,7 +708,7 @@ export class DataExplorerWebviewBridge {
                     );
                 });
             } catch (error) {
-                this._sendError(String(error), 'sort');
+                this._sendError(getErrorMessage(error), 'sort');
             }
         });
 
@@ -741,7 +719,7 @@ export class DataExplorerWebviewBridge {
                     await instance.setSortColumns([]);
                 });
             } catch (error) {
-                this._sendError(String(error), 'clearSort');
+                this._sendError(getErrorMessage(error), 'clearSort');
             }
         });
 
@@ -754,7 +732,7 @@ export class DataExplorerWebviewBridge {
                 try {
                     await this._mutateRowFilters(() => []);
                 } catch (error) {
-                    this._sendError(String(error), 'clearFilters');
+                    this._sendError(getErrorMessage(error), 'clearFilters');
                 }
             },
         );
@@ -767,7 +745,7 @@ export class DataExplorerWebviewBridge {
                     params.filter as RowFilter,
                 ]);
             } catch (error) {
-                this._sendError(String(error), 'addFilter');
+                this._sendError(getErrorMessage(error), 'addFilter');
             }
         });
 
@@ -783,7 +761,7 @@ export class DataExplorerWebviewBridge {
                     ),
                 );
             } catch (error) {
-                this._sendError(String(error), 'updateFilter');
+                this._sendError(getErrorMessage(error), 'updateFilter');
             }
         });
 
@@ -796,7 +774,7 @@ export class DataExplorerWebviewBridge {
                     ),
                 );
             } catch (error) {
-                this._sendError(String(error), 'removeFilter');
+                this._sendError(getErrorMessage(error), 'removeFilter');
             }
         });
     }
@@ -901,8 +879,8 @@ export class DataExplorerWebviewBridge {
                         logChannel.info('[DataExplorerEditor] Copied to clipboard');
                     }
                 } catch (error) {
-                    logChannel.error(`[DataExplorerEditor] Copy failed: ${error}`);
-                    this._sendError(`Copy failed: ${String(error)}`, 'copy', {
+                    logChannel.error(`[DataExplorerEditor] Copy failed: ${getErrorMessage(error)}`);
+                    this._sendError(`Copy failed: ${getErrorMessage(error)}`, 'copy', {
                         presentation: 'notification',
                     });
                 }
@@ -981,10 +959,10 @@ export class DataExplorerWebviewBridge {
                 );
             } catch (error) {
                 logChannel.error(
-                    `[DataExplorerEditor] Copy table data failed: ${error}`,
+                    `[DataExplorerEditor] Copy table data failed: ${getErrorMessage(error)}`,
                 );
                 vscode.window.showErrorMessage(
-                    `Copy table data failed: ${String(error)}`,
+                    `Copy table data failed: ${getErrorMessage(error)}`,
                 );
             }
         });
@@ -1046,8 +1024,8 @@ export class DataExplorerWebviewBridge {
                     `[DataExplorerEditor] Exported data to ${saveUri.fsPath}`,
                 );
             } catch (error) {
-                logChannel.error(`[DataExplorerEditor] Export failed: ${error}`);
-                vscode.window.showErrorMessage(`Export failed: ${String(error)}`);
+                logChannel.error(`[DataExplorerEditor] Export failed: ${getErrorMessage(error)}`);
+                vscode.window.showErrorMessage(`Export failed: ${getErrorMessage(error)}`);
             }
         });
     }
@@ -1068,7 +1046,7 @@ export class DataExplorerWebviewBridge {
                     await this._options.onMoveToNewWindow();
                 } catch (error) {
                     this._sendError(
-                        `Failed to move editor to new window: ${String(error)}`,
+                        `Failed to move editor to new window: ${getErrorMessage(error)}`,
                         'moveToNewWindow',
                         { presentation: 'notification' },
                     );
@@ -1116,7 +1094,7 @@ export class DataExplorerWebviewBridge {
                             desiredSyntax: params.desiredSyntax,
                             requestId: params.requestId,
                             code: '',
-                            error: String(error),
+                            error: getErrorMessage(error),
                         },
                     );
                 }
@@ -1150,7 +1128,7 @@ export class DataExplorerWebviewBridge {
                     `Converted to ${params.desiredSyntax} code and copied to clipboard.`,
                 );
             } catch (error) {
-                this._sendError(`Convert to code failed: ${String(error)}`, 'convertToCode', {
+                this._sendError(`Convert to code failed: ${getErrorMessage(error)}`, 'convertToCode', {
                     presentation: 'notification',
                 });
             }
@@ -1167,7 +1145,7 @@ export class DataExplorerWebviewBridge {
             try {
                 await this._options.openAsPlaintext();
             } catch (error) {
-                this._sendError(`Open as plain text failed: ${String(error)}`, 'openAsPlaintext', {
+                this._sendError(`Open as plain text failed: ${getErrorMessage(error)}`, 'openAsPlaintext', {
                     presentation: 'notification',
                 });
             }
@@ -1178,7 +1156,7 @@ export class DataExplorerWebviewBridge {
             try {
                 await this._options.openAsSpreadsheet();
             } catch (error) {
-                this._sendError(`Open as spreadsheet failed: ${String(error)}`, 'openAsSpreadsheet', {
+                this._sendError(`Open as spreadsheet failed: ${getErrorMessage(error)}`, 'openAsSpreadsheet', {
                     presentation: 'notification',
                 });
             }
@@ -1213,7 +1191,7 @@ export class DataExplorerWebviewBridge {
                         return;
                     }
                     this._sendError(
-                        `File options update failed: ${String(error)}`,
+                        `File options update failed: ${getErrorMessage(error)}`,
                         'applyFileOptions',
                         { presentation: 'notification' },
                     );
@@ -1436,8 +1414,11 @@ export class DataExplorerWebviewBridge {
                 generation: request.generation,
             });
         } catch (error) {
-            logChannel.error(`[DataExplorerEditor] Error fetching data: ${error}`);
-            this._sendError(String(error), 'requestData', {
+            logChannel.error(
+                `[DataExplorerEditor] Error fetching data: ${getErrorSummary(error)}; ` +
+                `details=${formatErrorForLogging(error)}`,
+            );
+            this._sendError(getErrorSummary(error), 'requestData', {
                 requestId: request.requestId,
             });
         }
@@ -1546,7 +1527,8 @@ export class DataExplorerWebviewBridge {
             await instance.clientInstance.updateBackendState();
         } catch (error) {
             logChannel.error(
-                `[DataExplorerEditor] Backend state update failed: ${formatError(error)}`,
+                `[DataExplorerEditor] Backend state update failed: ${getErrorSummary(error)}; ` +
+                `details=${formatErrorForLogging(error)}`,
             );
         }
     }

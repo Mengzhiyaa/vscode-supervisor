@@ -1,3 +1,4 @@
+import { getErrorMessage } from '../shared/errors';
 import * as vscode from 'vscode';
 import { MessageConnection } from 'vscode-jsonrpc/node';
 import { ViewIds, WorkbenchViewContainerCommands } from '../coreCommandIds';
@@ -54,7 +55,7 @@ export class ViewerViewProvider extends BaseWebviewProvider {
                 this._acceptPreview(preview, false);
             }
         }).catch(error => {
-            this.log(`Failed to restore Viewer model: ${error}`, vscode.LogLevel.Warning);
+            this.log(`Failed to restore Viewer model: ${getErrorMessage(error)}`, vscode.LogLevel.Warning);
         });
     }
 
@@ -273,7 +274,7 @@ export class ViewerViewProvider extends BaseWebviewProvider {
                     );
                     return;
                 } catch (err) {
-                    this.log(`[ViewerViewProvider] Source interrupt failed: ${err}`, vscode.LogLevel.Warning);
+                    this.log(`[ViewerViewProvider] Source interrupt failed: ${getErrorMessage(err)}`, vscode.LogLevel.Warning);
                     return;
                 }
             } finally {
@@ -302,7 +303,7 @@ export class ViewerViewProvider extends BaseWebviewProvider {
                 this._sendInterruptStateNotification(state.interruptible, state.interrupting);
             }
         } catch (error) {
-            this.log(`[ViewerViewProvider] Failed to resolve interrupt state: ${error}`, vscode.LogLevel.Warning);
+            this.log(`[ViewerViewProvider] Failed to resolve interrupt state: ${getErrorMessage(error)}`, vscode.LogLevel.Warning);
             if (preview === this._lastPreview) {
                 this._sendInterruptStateNotification(false, false);
             }
@@ -352,14 +353,14 @@ export class ViewerViewProvider extends BaseWebviewProvider {
                 return;
             }
         } catch (error) {
-            this.log(`Ignored invalid Viewer navigation ${rawUrl}: ${error}`, vscode.LogLevel.Debug);
+            this.log(`Ignored invalid Viewer navigation ${rawUrl}: ${getErrorMessage(error)}`, vscode.LogLevel.Debug);
             return;
         }
 
         void this._previewService.handleShowUrl(current.sessionId, {
             url: targetUrl,
             source: current.sourceIdentity,
-        }).catch(error => this.log(`Failed to navigate Viewer: ${error}`, vscode.LogLevel.Warning));
+        }).catch(error => this.log(`Failed to navigate Viewer: ${getErrorMessage(error)}`, vscode.LogLevel.Warning));
     }
 
     private _didNavigate(params: ViewerProtocol.ViewerDidNavigateNotification.Params): void {
@@ -388,7 +389,7 @@ export class ViewerViewProvider extends BaseWebviewProvider {
                 title: params.title || current.title,
             }, false, { ...params, navigationType }, 'sync');
         } catch (error) {
-            this.log(`Ignored invalid Viewer location: ${error}`, vscode.LogLevel.Debug);
+            this.log(`Ignored invalid Viewer location: ${getErrorMessage(error)}`, vscode.LogLevel.Debug);
         }
     }
 
@@ -462,11 +463,11 @@ export class ViewerViewProvider extends BaseWebviewProvider {
         try {
             await vscode.commands.executeCommand('workbench.views.action.showView', ViewIds.viewer);
         } catch (err) {
-            this.log(`Failed to reveal viewer view: ${err}`, vscode.LogLevel.Warning);
+            this.log(`Failed to reveal viewer view: ${getErrorMessage(err)}`, vscode.LogLevel.Warning);
             try {
                 await vscode.commands.executeCommand(WorkbenchViewContainerCommands.viewer);
             } catch (fallbackErr) {
-                this.log(`Failed to reveal viewer container: ${fallbackErr}`, vscode.LogLevel.Warning);
+                this.log(`Failed to reveal viewer container: ${getErrorMessage(fallbackErr)}`, vscode.LogLevel.Warning);
             }
         } finally {
             await restoreFocus();
@@ -490,7 +491,7 @@ export class ViewerViewProvider extends BaseWebviewProvider {
                 return await this._openPreviewInEditor(preview);
             }
         } catch (error) {
-            this.log(`Failed to open preview in ${target}: ${error}`, vscode.LogLevel.Warning);
+            this.log(`Failed to open preview in ${target}: ${getErrorMessage(error)}`, vscode.LogLevel.Warning);
             return false;
         }
     }
@@ -509,7 +510,7 @@ export class ViewerViewProvider extends BaseWebviewProvider {
             await vscode.commands.executeCommand('workbench.action.moveEditorToNewWindow');
             return true;
         } catch (error) {
-            this.log(`Failed to move preview to a new window: ${error}`, vscode.LogLevel.Warning);
+            this.log(`Failed to move preview to a new window: ${getErrorMessage(error)}`, vscode.LogLevel.Warning);
             return false;
         }
     }
@@ -540,7 +541,7 @@ export class ViewerViewProvider extends BaseWebviewProvider {
                 preview.uri = uri;
                 entry.proxyLease = this._previewService.retainProxyUri(uri);
                 this._publishPreviewToWebview(preview, generation, mode);
-            }).catch(error => this.log(`Failed to restore preview: ${error}`, vscode.LogLevel.Warning));
+            }).catch(error => this.log(`Failed to restore preview: ${getErrorMessage(error)}`, vscode.LogLevel.Warning));
             return;
         }
         this._publishPreviewToWebview(preview, generation, mode);
@@ -569,7 +570,7 @@ export class ViewerViewProvider extends BaseWebviewProvider {
             this._previewPublished = true;
             this._flushPendingActions();
             void this._sendInterruptState();
-        }).catch(error => this.log(`Failed to publish preview: ${error}`, vscode.LogLevel.Warning));
+        }).catch(error => this.log(`Failed to publish preview: ${getErrorMessage(error)}`, vscode.LogLevel.Warning));
     }
 
     private _flushPendingActions(): void {

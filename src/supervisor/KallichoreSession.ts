@@ -3,6 +3,7 @@
  *  Licensed under the Elastic License 2.0. See LICENSE.txt for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { getErrorMessage, formatErrorForLogging } from '../shared/errors';
 import * as vscode from 'vscode';
 import * as positron from './positron';
 import * as os from 'os';
@@ -793,7 +794,7 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 			req.promise.resolve(response.result);
 		})
 			.catch((err) => {
-				this.log(`Failed to send UI comm request: ${JSON.stringify(err)}`, vscode.LogLevel.Error);
+				this.log(`Failed to send UI comm request: ${formatErrorForLogging(err)}`, vscode.LogLevel.Error);
 				req.promise.reject(err);
 			});
 
@@ -887,7 +888,7 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 		}).catch((err) => {
 			// This should be exceedingly rare; it represents a failure to send
 			// the request to Kallichore rather than a failure to execute it
-			this.log(`Failed to send execution request for '${code}': ${err}`, vscode.LogLevel.Error);
+			this.log(`Failed to send execution request for '${code}': ${getErrorMessage(err)}`, vscode.LogLevel.Error);
 		});
 	}
 
@@ -1102,7 +1103,7 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 
 		const commClose = new CommCloseCommand(id);
 		this.sendCommand(commClose).catch((err) => {
-			this.log(`Failed to close comm ${id}: ${err}`, vscode.LogLevel.Error);
+			this.log(`Failed to close comm ${id}: ${getErrorMessage(err)}`, vscode.LogLevel.Error);
 		});
 	}
 
@@ -1123,7 +1124,7 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 		this.sendCommand(commMsg).then(() => {
 			// Nothing to do here; the message was sent successfully
 		}).catch((err) => {
-			this.log(`Failed to send message ${JSON.stringify(message)} to ${client_id}: ${err}`, vscode.LogLevel.Error);
+			this.log(`Failed to send message ${JSON.stringify(message)} to ${client_id}: ${getErrorMessage(err)}`, vscode.LogLevel.Error);
 		});
 	}
 
@@ -1141,7 +1142,7 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 		const reply = new InputReplyCommand(this._activeBackendRequestHeader, value);
 		this.log(`Sending input reply for ${id}: ${value}`, vscode.LogLevel.Debug);
 		this.sendCommand(reply).catch((err) => {
-			this.log(`Failed to send input reply for ${id}: ${err}`, vscode.LogLevel.Error);
+			this.log(`Failed to send input reply for ${id}: ${getErrorMessage(err)}`, vscode.LogLevel.Error);
 		});
 	}
 
@@ -1559,7 +1560,7 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 			try {
 				await this._extra!.attachOnStartup!.attach();
 			} catch (err) {
-				this.log(`Can't execute attach action: ${err}`, vscode.LogLevel.Error);
+				this.log(`Can't execute attach action: ${getErrorMessage(err)}`, vscode.LogLevel.Error);
 			}
 		}
 
@@ -1869,13 +1870,13 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 			};
 
 			this._socket.ws.onerror = (err: any) => {
-				this.log(`Websocket error: ${JSON.stringify(err)}`, vscode.LogLevel.Error);
+				this.log(`Websocket error: ${formatErrorForLogging(err)}`, vscode.LogLevel.Error);
 				if (this._connected.isOpen()) {
 					// If the error happened after the connection was established,
 					// something bad happened. Close the connected barrier and
 					// show an error.
 					this.closeConnectedBarrier();
-					vscode.window.showErrorMessage(`Error connecting to ${this.dynState.sessionName} (${this.metadata.sessionId}): ${JSON.stringify(err)}`);
+					vscode.window.showErrorMessage(`Error connecting to ${this.dynState.sessionName} (${this.metadata.sessionId}): ${getErrorMessage(err)}`);
 				} else {
 					// The connection never established; reject the promise and
 					// let the caller handle it.
@@ -1909,7 +1910,7 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 					const data = JSON.parse(msg.data.toString());
 					this.handleMessage(data);
 				} catch (err) {
-					this.log(`Could not parse message: ${err}`, vscode.LogLevel.Error);
+					this.log(`Could not parse message: ${getErrorMessage(err)}`, vscode.LogLevel.Error);
 				}
 			};
 		});
@@ -2025,13 +2026,13 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 			// A disconnected or unresponsive kernel cannot acknowledge the
 			// Jupyter shutdown. Ask the supervisor to terminate it before the
 			// caller removes the session from its list.
-			this.log(`Graceful shutdown failed; terminating session: ${error}`, vscode.LogLevel.Warning);
+			this.log(`Graceful shutdown failed; terminating session: ${getErrorMessage(error)}`, vscode.LogLevel.Warning);
 			try {
 				await this._api.killSession(this.metadata.sessionId, { timeout: 5000 });
 			} catch (killError) {
 				// It may have exited between the deadline and the kill request,
 				// or the reply may have been lost. Confirm the backend state below.
-				this.log(`Force quit request failed: ${killError}`, vscode.LogLevel.Warning);
+				this.log(`Force quit request failed: ${getErrorMessage(killError)}`, vscode.LogLevel.Warning);
 			}
 			await this._confirmSessionExited(() => exitObserved);
 		} finally {
@@ -2494,7 +2495,7 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 						await this.onCommRequest(msg);
 						this.log(`Handled comm request: ${JSON.stringify(msg.content)}`, vscode.LogLevel.Debug);
 					} catch (err) {
-						this.log(`Failed to handle comm request: ${JSON.stringify(err)}`, vscode.LogLevel.Error);
+						this.log(`Failed to handle comm request: ${formatErrorForLogging(err)}`, vscode.LogLevel.Error);
 					}
 					break;
 				}
@@ -2704,7 +2705,7 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 			try {
 				await this.performUiCommRequest(req, uiCommId);
 			} catch (err) {
-				this.log(`Failed to perform queued request '${req.method}': ${err}`, vscode.LogLevel.Error);
+				this.log(`Failed to perform queued request '${req.method}': ${getErrorMessage(err)}`, vscode.LogLevel.Error);
 			}
 		}
 	}

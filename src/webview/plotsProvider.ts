@@ -1,3 +1,4 @@
+import { getErrorMessage } from '../shared/errors';
 import * as vscode from 'vscode';
 import { savePlotImage, offerPlotImageExport } from '../runtime/plotImageExport';
 import { createMessageConnection, MessageConnection } from 'vscode-jsonrpc';
@@ -1433,9 +1434,9 @@ export class PlotsViewProvider extends BaseWebviewProvider {
 
                 return { success: false, error: 'Save cancelled' };
             } catch (e) {
-                this.log(`Failed to save plot: ${e}`, vscode.LogLevel.Warning);
-                void vscode.window.showErrorMessage(vscode.l10n.t('Failed to export plot: {0}', String(e)));
-                return { success: false, error: String(e) };
+                this.log(`Failed to save plot: ${getErrorMessage(e)}`, vscode.LogLevel.Warning);
+                void vscode.window.showErrorMessage(vscode.l10n.t('Failed to export plot: {0}', getErrorMessage(e)));
+                return { success: false, error: getErrorMessage(e) };
             }
         });
 
@@ -1457,7 +1458,7 @@ export class PlotsViewProvider extends BaseWebviewProvider {
             // otherwise report the unsupported capability honestly.
             const error = await offerPlotImageExport(() =>
                 savePlotImage(plot.data, `plot-${params.plotId}`, plot.suggestedFileName));
-            this.log(`Cannot copy plot ${params.plotId}: ${error}`, vscode.LogLevel.Warning);
+            this.log(`Cannot copy plot ${params.plotId}: ${getErrorMessage(error)}`, vscode.LogLevel.Warning);
             return { success: false, error };
         });
     }
@@ -1690,8 +1691,8 @@ export class PlotsViewProvider extends BaseWebviewProvider {
                 this.log(`Opened plot ${plotId} in new window`, vscode.LogLevel.Debug);
                 return { success: true };
             } catch (e) {
-                this.log(`Failed to open plot in new window: ${e}`, vscode.LogLevel.Warning);
-                return { success: false, error: String(e) };
+                this.log(`Failed to open plot in new window: ${getErrorMessage(e)}`, vscode.LogLevel.Warning);
+                return { success: false, error: getErrorMessage(e) };
             }
         });
 
@@ -1717,8 +1718,8 @@ export class PlotsViewProvider extends BaseWebviewProvider {
                 this.log(`Opened plot ${plotId} in editor`, vscode.LogLevel.Debug);
                 return { success: true };
             } catch (e) {
-                this.log(`Failed to open plot in editor: ${e}`, vscode.LogLevel.Warning);
-                return { success: false, error: String(e) };
+                this.log(`Failed to open plot in editor: ${getErrorMessage(e)}`, vscode.LogLevel.Warning);
+                return { success: false, error: getErrorMessage(e) };
             }
         });
 
@@ -1729,8 +1730,8 @@ export class PlotsViewProvider extends BaseWebviewProvider {
                 this.log('Opened plots gallery in new window', vscode.LogLevel.Debug);
                 return { success: true };
             } catch (e) {
-                this.log('Failed to open plots gallery in new window: ' + String(e), vscode.LogLevel.Warning);
-                return { success: false, error: String(e) };
+                this.log('Failed to open plots gallery in new window: ' + getErrorMessage(e), vscode.LogLevel.Warning);
+                return { success: false, error: getErrorMessage(e) };
             }
         });
 
@@ -1744,7 +1745,7 @@ export class PlotsViewProvider extends BaseWebviewProvider {
                 close();
                 return { success: true };
             } catch (e) {
-                return { success: false, error: String(e) };
+                return { success: false, error: getErrorMessage(e) };
             }
         });
     }
@@ -1759,8 +1760,8 @@ export class PlotsViewProvider extends BaseWebviewProvider {
                 }
                 return { success: true };
             } catch (e) {
-                this.log('Failed to reveal plot code in console: ' + String(e), vscode.LogLevel.Warning);
-                return { success: false, error: String(e) };
+                this.log('Failed to reveal plot code in console: ' + getErrorMessage(e), vscode.LogLevel.Warning);
+                return { success: false, error: getErrorMessage(e) };
             }
         });
 
@@ -1769,8 +1770,8 @@ export class PlotsViewProvider extends BaseWebviewProvider {
                 this._consoleService.setActivePositronConsoleSession(params.sessionId);
                 return { success: true };
             } catch (e) {
-                this.log('Failed to activate console session from plot: ' + String(e), vscode.LogLevel.Warning);
-                return { success: false, error: String(e) };
+                this.log('Failed to activate console session from plot: ' + getErrorMessage(e), vscode.LogLevel.Warning);
+                return { success: false, error: getErrorMessage(e) };
             }
         });
 
@@ -1807,8 +1808,8 @@ export class PlotsViewProvider extends BaseWebviewProvider {
 
                 return { success: true };
             } catch (e) {
-                this.log('Failed to open plot origin file: ' + String(e), vscode.LogLevel.Warning);
-                return { success: false, error: String(e) };
+                this.log('Failed to open plot origin file: ' + getErrorMessage(e), vscode.LogLevel.Warning);
+                return { success: false, error: getErrorMessage(e) };
             }
         });
 
@@ -1820,8 +1821,8 @@ export class PlotsViewProvider extends BaseWebviewProvider {
                 );
                 return { success: true };
             } catch (e) {
-                this.log('Failed to open dark filter settings: ' + String(e), vscode.LogLevel.Warning);
-                return { success: false, error: String(e) };
+                this.log('Failed to open dark filter settings: ' + getErrorMessage(e), vscode.LogLevel.Warning);
+                return { success: false, error: getErrorMessage(e) };
             }
         });
 
@@ -1836,8 +1837,8 @@ export class PlotsViewProvider extends BaseWebviewProvider {
                 );
                 return { success: true };
             } catch (e) {
-                this.log('Failed to run plot code again: ' + String(e), vscode.LogLevel.Warning);
-                return { success: false, error: String(e) };
+                this.log('Failed to run plot code again: ' + getErrorMessage(e), vscode.LogLevel.Warning);
+                return { success: false, error: getErrorMessage(e) };
             }
         });
     }
@@ -2057,7 +2058,7 @@ export class PlotsViewProvider extends BaseWebviewProvider {
             // opens the view's container and resolves the webview on first use.
             await vscode.commands.executeCommand(`${ViewIds.plots}.focus`, { preserveFocus });
         } catch (err) {
-            this.log(`Failed to reveal plots view: ${err}`, vscode.LogLevel.Warning);
+            this.log(`Failed to reveal plots view: ${getErrorMessage(err)}`, vscode.LogLevel.Warning);
         }
     }
 }

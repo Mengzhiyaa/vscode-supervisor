@@ -234,7 +234,9 @@ export class RuntimeClientInstance implements vscode.Disposable {
         timeout?: number,
         responseKeys: Array<string> = []
     ): Promise<T> {
-        const response = await this.performRpcWithBuffers<T>(data, timeout ?? 10000, responseKeys);
+        // Omitted timeouts use the default; explicit undefined disables the timeout.
+        const effectiveTimeout = arguments.length >= 2 ? timeout : 10000;
+        const response = await this.performRpcWithBuffers<T>(data, effectiveTimeout, responseKeys);
         return response.data;
     }
 

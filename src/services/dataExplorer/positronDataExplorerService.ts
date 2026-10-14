@@ -4,6 +4,7 @@
  *  Manages Data Explorer instances and their lifecycle
  *--------------------------------------------------------------------------------------------*/
 
+import { getErrorMessage } from '../../shared/errors';
 import * as vscode from 'vscode';
 import { DataExplorerClientInstance, DataExplorerClientStatus } from './languageRuntimeDataExplorerClient';
 import { RuntimeSessionService } from '../../runtime/runtimeSession';
@@ -404,7 +405,7 @@ export class PositronDataExplorerService implements IPositronDataExplorerService
             if (error instanceof vscode.CancellationError) {
                 throw error;
             }
-            const errorMsg = String(error);
+            const errorMsg = getErrorMessage(error);
             this._logChannel.error(`[PositronDataExplorerService] Failed to open file with DuckDB: ${errorMsg}`);
 
             // FR-013: Distinguish WASM initialization failures from file I/O errors

@@ -3,6 +3,7 @@
  *  Licensed under the Elastic License 2.0. See LICENSE.txt for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { getErrorMessage } from '../shared/errors';
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import { Tail } from 'tail';
@@ -36,7 +37,7 @@ export class LogStreamer implements vscode.Disposable {
 
 		// Establish listeners for new lines in the log file
 		this._tail.on('line', (line) => this.appendLine(line, true));
-		this._tail.on('error', (error) => this.appendLine(String(error), false));
+		this._tail.on('error', (error) => this.appendLine(getErrorMessage(error), false));
 	}
 
 	/**

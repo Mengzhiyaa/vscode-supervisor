@@ -1,3 +1,4 @@
+import { getErrorMessage } from '../shared/errors';
 import * as vscode from 'vscode';
 import { MessageConnection } from 'vscode-jsonrpc/node';
 import { BaseWebviewProvider } from './baseProvider';
@@ -62,7 +63,7 @@ export class HelpViewProvider extends BaseWebviewProvider {
         try {
             await vscode.commands.executeCommand(ViewCommands.helpFocus);
         } catch (err) {
-            this.log(`Failed to reveal help view: ${err}`, vscode.LogLevel.Warning);
+            this.log(`Failed to reveal help view: ${getErrorMessage(err)}`, vscode.LogLevel.Warning);
             await vscode.commands.executeCommand(WorkbenchViewContainerCommands.help);
         } finally {
             await restoreFocus();
@@ -231,7 +232,7 @@ export class HelpViewProvider extends BaseWebviewProvider {
             }
             this._pendingActions.clear();
         } catch (error) {
-            this.log(`Failed to synchronize help view: ${error}`, vscode.LogLevel.Warning);
+            this.log(`Failed to synchronize help view: ${getErrorMessage(error)}`, vscode.LogLevel.Warning);
         }
     }
 

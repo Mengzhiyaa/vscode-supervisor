@@ -1,3 +1,4 @@
+import { getErrorMessage } from '../shared/errors';
 import * as fs from 'fs';
 import { createHash, randomUUID } from 'crypto';
 import * as vscode from 'vscode';
@@ -219,7 +220,7 @@ export class RuntimeStartupService implements vscode.Disposable {
             this._disposables.push(onDidRegisterRuntimeProvider((languageId) => {
                 void this._retryPendingRestoredSessions(languageId).catch((error) => {
                     this._outputChannel.error(
-                        `[RuntimeStartup] Failed to retry deferred ${languageId} sessions: ${error}`,
+                        `[RuntimeStartup] Failed to retry deferred ${languageId} sessions: ${getErrorMessage(error)}`,
                     );
                 });
             }));
@@ -411,7 +412,7 @@ export class RuntimeStartupService implements vscode.Disposable {
                 await this._startRecommendedLanguageRuntimes();
             }
         } catch (error) {
-            this._outputChannel.error(`[RuntimeStartup] Error while auto-starting runtimes: ${error}`);
+            this._outputChannel.error(`[RuntimeStartup] Error while auto-starting runtimes: ${getErrorMessage(error)}`);
         }
 
         this._resetDiscoveryCompletionState();
@@ -457,7 +458,7 @@ export class RuntimeStartupService implements vscode.Disposable {
     private _enqueueSessionRestore(sessions: SerializedSessionMetadata[]): Promise<void> {
         const restore = this._sessionRestoreQueue.then(() => this._restoreSessions(sessions));
         this._sessionRestoreQueue = restore.catch((error) => {
-            this._outputChannel.error(`[RuntimeStartup] Session restore queue failed: ${error}`);
+            this._outputChannel.error(`[RuntimeStartup] Session restore queue failed: ${getErrorMessage(error)}`);
         });
         return restore;
     }
@@ -749,7 +750,7 @@ export class RuntimeStartupService implements vscode.Disposable {
             await this._notifySessionCrash(session, exitCode, true);
         } catch (error) {
             this._outputChannel.error(
-                `[RuntimeStartup] Failed to restart crashed session ${session.sessionId}: ${error}`,
+                `[RuntimeStartup] Failed to restart crashed session ${session.sessionId}: ${getErrorMessage(error)}`,
             );
             const choice = await vscode.window.showErrorMessage(
                 `${session.runtimeMetadata.runtimeName} exited unexpectedly and could not be restarted. ` +
@@ -923,7 +924,7 @@ export class RuntimeStartupService implements vscode.Disposable {
                 };
             } catch (error) {
                 await this._discardFailedRestoredSession(persisted.metadata.sessionId);
-                const normalizedError = error instanceof Error ? error : new Error(String(error));
+                const normalizedError = error instanceof Error ? error : new Error(getErrorMessage(error));
                 this._outputChannel.error(
                     `[RuntimeStartup] Error validating persisted session ` +
                     `${persisted.sessionName} (${persisted.metadata.sessionId}): ${normalizedError}`,
@@ -989,7 +990,7 @@ export class RuntimeStartupService implements vscode.Disposable {
                 this._restoringRestoredSessionIds.delete(persisted.metadata.sessionId);
             } catch (error) {
                 await this._discardFailedRestoredSession(persisted.metadata.sessionId);
-                const normalizedError = error instanceof Error ? error : new Error(String(error));
+                const normalizedError = error instanceof Error ? error : new Error(getErrorMessage(error));
                 this._outputChannel.error(
                     `[RuntimeStartup] Failed to restore session ${persisted.metadata.sessionId}: ${normalizedError}`,
                 );
@@ -1025,7 +1026,7 @@ export class RuntimeStartupService implements vscode.Disposable {
             await this._sessionManager.deleteSession(sessionId);
         } catch (error) {
             this._outputChannel.warn(
-                `[RuntimeStartup] Failed to discard restored session ${sessionId}: ${error}`,
+                `[RuntimeStartup] Failed to discard restored session ${sessionId}: ${getErrorMessage(error)}`,
             );
         }
     }
@@ -1261,7 +1262,7 @@ export class RuntimeStartupService implements vscode.Disposable {
         for (const affiliation of affiliations.slice(1)) {
             void this._startAffiliatedRuntime(affiliation, false).catch(error => {
                 this._outputChannel.warn(
-                    `[RuntimeStartup] Failed to start affiliated runtime ${affiliation.metadata.runtimeName}: ${error}`,
+                    `[RuntimeStartup] Failed to start affiliated runtime ${affiliation.metadata.runtimeName}: ${getErrorMessage(error)}`,
                 );
             });
         }
@@ -1383,7 +1384,7 @@ export class RuntimeStartupService implements vscode.Disposable {
                         );
                     } catch (error) {
                         this._outputChannel.warn(
-                            `[RuntimeStartup] Failed to auto-start immediate runtime ${immediateRuntime.runtimeName}: ${error}`,
+                            `[RuntimeStartup] Failed to auto-start immediate runtime ${immediateRuntime.runtimeName}: ${getErrorMessage(error)}`,
                         );
                     }
                     return;
@@ -1398,7 +1399,7 @@ export class RuntimeStartupService implements vscode.Disposable {
                         );
                     } catch (error) {
                         this._outputChannel.warn(
-                            `[RuntimeStartup] Failed to auto-start runtime ${runtimes[0].runtimeName}: ${error}`,
+                            `[RuntimeStartup] Failed to auto-start runtime ${runtimes[0].runtimeName}: ${getErrorMessage(error)}`,
                         );
                     }
                     return;
@@ -1480,7 +1481,7 @@ export class RuntimeStartupService implements vscode.Disposable {
                 await this._activateExtension(extensionId, languageId);
             } catch (error) {
                 this._outputChannel.debug(
-                    `[RuntimeStartup] Error activating extension ${extensionId}: ${error}`,
+                    `[RuntimeStartup] Error activating extension ${extensionId}: ${getErrorMessage(error)}`,
                 );
             }
         }));
@@ -1547,7 +1548,7 @@ export class RuntimeStartupService implements vscode.Disposable {
                 );
             } catch (error) {
                 this._outputChannel.warn(
-                    `[RuntimeStartup] Failed to auto-start implicit runtime ${runtime.runtimeName}: ${error}`,
+                    `[RuntimeStartup] Failed to auto-start implicit runtime ${runtime.runtimeName}: ${getErrorMessage(error)}`,
                 );
             }
             return;
@@ -1593,7 +1594,7 @@ export class RuntimeStartupService implements vscode.Disposable {
                 }
             } catch (error) {
                 this._outputChannel.warn(
-                    `[RuntimeStartup] Failed to refresh workspace startup signals for '${languageId}': ${error}`,
+                    `[RuntimeStartup] Failed to refresh workspace startup signals for '${languageId}': ${getErrorMessage(error)}`,
                 );
             }
         }

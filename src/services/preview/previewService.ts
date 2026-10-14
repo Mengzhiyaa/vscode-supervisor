@@ -3,6 +3,7 @@
  *  Handles runtime UI events and routes them to viewer/plots/editor.
  *--------------------------------------------------------------------------------------------*/
 
+import { getErrorMessage } from '../../shared/errors';
 import * as vscode from 'vscode';
 import { RuntimeSessionService } from '../../runtime/runtimeSession';
 import { PositronPlotsService } from '../../runtime/positronPlotsService';
@@ -106,7 +107,7 @@ export class PositronPreviewService implements vscode.Disposable {
         this._viewerCleared = cleared;
         this._viewerStateWrites = this._viewerStateWrites
             .then(async () => { await this._workspaceState?.update(ViewerClearedStorageKey, cleared); })
-            .catch(error => this._outputChannel.warn(`[PositronPreviewService] Failed to save Viewer state: ${error}`));
+            .catch(error => this._outputChannel.warn(`[PositronPreviewService] Failed to save Viewer state: ${getErrorMessage(error)}`));
     }
 
     initialize(): void {
@@ -343,7 +344,7 @@ export class PositronPreviewService implements vscode.Disposable {
                     externalUri = await vscode.env.asExternalUri(uri);
                 } catch (error) {
                     this._outputChannel.debug(
-                        `[PositronPreviewService] Failed to resolve external URI for ${event.url}: ${error}`
+                        `[PositronPreviewService] Failed to resolve external URI for ${event.url}: ${getErrorMessage(error)}`
                     );
                 }
                 if (signal?.aborted) {
@@ -365,7 +366,7 @@ export class PositronPreviewService implements vscode.Disposable {
                     return;
                 }
                 this._outputChannel.debug(
-                    `[PositronPreviewService] Failed to proxy local URI for ${event.url}: ${error}`
+                    `[PositronPreviewService] Failed to proxy local URI for ${event.url}: ${getErrorMessage(error)}`
                 );
                 uri = await vscode.env.asExternalUri(uri);
             }

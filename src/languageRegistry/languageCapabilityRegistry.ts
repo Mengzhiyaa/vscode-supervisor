@@ -1,3 +1,4 @@
+import { getErrorMessage } from '../shared/errors';
 import * as vscode from 'vscode';
 import type {
     IBinaryProvider,
@@ -89,7 +90,7 @@ function serializeError(error: unknown, kind: SerializedCapabilityError['kind'] 
     if (error instanceof Error) {
         return { kind, message: error.message, stack: error.stack };
     }
-    return { kind, message: String(error) };
+    return { kind, message: getErrorMessage(error) };
 }
 
 function sameOptionalDescriptor(
@@ -467,7 +468,7 @@ export class LanguageCapabilityRegistry implements ILanguageCapabilityRegistry, 
             this._options.log?.error(
                 `[LanguageRegistry] owner=${active.snapshot.identity.ownerExtensionId} ` +
                 `language=${active.snapshot.identity.languageId} capability=${descriptor.id} ` +
-                `generation=${active.snapshot.generation} attempt=${attempt} state=failed: ${error}`,
+                `generation=${active.snapshot.generation} attempt=${attempt} state=failed: ${getErrorMessage(error)}`,
             );
             this._activateReadyOptionalCapabilities(active);
         }
@@ -625,7 +626,7 @@ export class LanguageCapabilityRegistry implements ILanguageCapabilityRegistry, 
             try {
                 disposable.dispose();
             } catch (error) {
-                this._options.log?.error(`[LanguageRegistry] Failed to dispose registration: ${error}`);
+                this._options.log?.error(`[LanguageRegistry] Failed to dispose registration: ${getErrorMessage(error)}`);
             }
         }
     }

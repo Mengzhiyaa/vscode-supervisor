@@ -5,6 +5,7 @@
  * This creates a full-featured plot viewer with zoom controls and save/copy actions.
  */
 
+import { getErrorMessage } from '../shared/errors';
 import * as vscode from 'vscode';
 import { createMessageConnection, type MessageConnection } from 'vscode-jsonrpc/node';
 import { PlotClientInstance } from '../runtime/PlotClientInstance';
@@ -347,7 +348,7 @@ export class PlotEditorProvider implements vscode.Disposable {
                 mimeType: rendered.mimeType,
             });
         } catch (error) {
-            this._outputChannel.warn(`Failed to re-render plot ${plotId} in editor: ${error}`);
+            this._outputChannel.warn(`Failed to re-render plot ${plotId} in editor: ${getErrorMessage(error)}`);
         }
     }
 
@@ -427,9 +428,9 @@ export class PlotEditorProvider implements vscode.Disposable {
                 void vscode.window.showInformationMessage(message);
             }
         } catch (e) {
-            this._outputChannel.error(`Failed to save plot: ${e}`);
-            this._sendStatus(plotId, vscode.l10n.t('Failed to export plot: {0}', String(e)), true);
-            vscode.window.showErrorMessage(`Failed to save plot: ${e}`);
+            this._outputChannel.error(`Failed to save plot: ${getErrorMessage(e)}`);
+            this._sendStatus(plotId, vscode.l10n.t('Failed to export plot: {0}', getErrorMessage(e)), true);
+            vscode.window.showErrorMessage(`Failed to save plot: ${getErrorMessage(e)}`);
         }
     }
 
@@ -451,9 +452,9 @@ export class PlotEditorProvider implements vscode.Disposable {
             this._sendStatus(plotId, message);
             void vscode.window.showInformationMessage(message);
         } catch (e) {
-            this._outputChannel.error(`Failed to copy plot: ${e}`);
-            this._sendStatus(plotId, vscode.l10n.t('Failed to copy plot: {0}', String(e)), true);
-            vscode.window.showErrorMessage(`Failed to copy plot: ${e}`);
+            this._outputChannel.error(`Failed to copy plot: ${getErrorMessage(e)}`);
+            this._sendStatus(plotId, vscode.l10n.t('Failed to copy plot: {0}', getErrorMessage(e)), true);
+            vscode.window.showErrorMessage(`Failed to copy plot: ${getErrorMessage(e)}`);
         }
     }
 

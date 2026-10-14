@@ -3,6 +3,7 @@
  *  Provides a local HTTP server for HTML files with relative resources.
  *--------------------------------------------------------------------------------------------*/
 
+import { getErrorMessage } from '../../shared/errors';
 import * as http from 'http';
 import * as https from 'https';
 import * as path from 'path';
@@ -204,7 +205,7 @@ export class HtmlProxyService implements vscode.Disposable {
                 return;
             }
             void this._handleHttpUpgrade(info, req, socket, head).catch(error => {
-                this._outputChannel.debug(`[HtmlProxyService] Websocket upgrade failed: ${error}`);
+                this._outputChannel.debug(`[HtmlProxyService] Websocket upgrade failed: ${getErrorMessage(error)}`);
                 socket.destroy();
             });
         });
@@ -253,7 +254,7 @@ export class HtmlProxyService implements vscode.Disposable {
             this._serverSockets.delete(server);
         });
         server.on('error', error => {
-            this._outputChannel.debug(`[HtmlProxyService] Server error: ${error}`);
+            this._outputChannel.debug(`[HtmlProxyService] Server error: ${getErrorMessage(error)}`);
         });
         try {
             const port = await new Promise<number>((resolve, reject) => {
@@ -485,7 +486,7 @@ export class HtmlProxyService implements vscode.Disposable {
         } catch (error) {
             res.writeHead(404);
             res.end('Not found');
-            this._outputChannel.debug(`[HtmlProxyService] Failed to serve file request: ${error}`);
+            this._outputChannel.debug(`[HtmlProxyService] Failed to serve file request: ${getErrorMessage(error)}`);
         }
     }
 
@@ -532,7 +533,7 @@ export class HtmlProxyService implements vscode.Disposable {
 
             upstream.on('error', (error) => {
                 this._outputChannel.debug(
-                    `[HtmlProxyService] Failed to proxy ${requestUrl.toString()}: ${error}`
+                    `[HtmlProxyService] Failed to proxy ${requestUrl.toString()}: ${getErrorMessage(error)}`
                 );
                 if (!res.headersSent) {
                     res.writeHead(502);
@@ -551,7 +552,7 @@ export class HtmlProxyService implements vscode.Disposable {
                 req.pipe(upstream);
             }
         } catch (error) {
-            this._outputChannel.debug(`[HtmlProxyService] Failed to prepare HTTP proxy request: ${error}`);
+            this._outputChannel.debug(`[HtmlProxyService] Failed to prepare HTTP proxy request: ${getErrorMessage(error)}`);
             if (!res.headersSent) {
                 res.writeHead(502);
                 res.end('Bad gateway');
@@ -615,7 +616,7 @@ export class HtmlProxyService implements vscode.Disposable {
         });
 
         upstreamResponse.on('error', (error) => {
-            this._outputChannel.debug(`[HtmlProxyService] Failed to read proxied response: ${error}`);
+            this._outputChannel.debug(`[HtmlProxyService] Failed to read proxied response: ${getErrorMessage(error)}`);
             if (!res.headersSent) {
                 res.writeHead(502);
                 res.end('Bad gateway');
@@ -689,7 +690,7 @@ export class HtmlProxyService implements vscode.Disposable {
 
         upstream.once('error', (error) => {
             this._outputChannel.debug(
-                `[HtmlProxyService] Failed to proxy websocket ${targetUrl}: ${error}`
+                `[HtmlProxyService] Failed to proxy websocket ${targetUrl}: ${getErrorMessage(error)}`
             );
             if (!downstreamUpgraded && !socket.destroyed) {
                 socket.write('HTTP/1.1 502 Bad Gateway\r\n\r\n');
@@ -742,11 +743,11 @@ export class HtmlProxyService implements vscode.Disposable {
         });
 
         upstream.once('error', (error) => {
-            this._outputChannel.debug(`[HtmlProxyService] Upstream websocket error: ${error}`);
+            this._outputChannel.debug(`[HtmlProxyService] Upstream websocket error: ${getErrorMessage(error)}`);
             downstream.terminate();
         });
         downstream.once('error', (error) => {
-            this._outputChannel.debug(`[HtmlProxyService] Downstream websocket error: ${error}`);
+            this._outputChannel.debug(`[HtmlProxyService] Downstream websocket error: ${getErrorMessage(error)}`);
             upstream.terminate();
         });
     }

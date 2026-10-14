@@ -3,6 +3,7 @@
  *  1:1 port from Positron's languageRuntimeDataExplorerClient.ts
  *--------------------------------------------------------------------------------------------*/
 
+import { getErrorSummary, formatErrorForLogging } from '../../shared/errors';
 import * as vscode from 'vscode';
 import {
     BackendState,
@@ -108,29 +109,6 @@ const DEFAULT_PROFILE_FORMAT_OPTIONS: FormatOptions = {
 };
 
 const BACKEND_STATE_MAX_ATTEMPTS = 2;
-
-function formatError(error: unknown): string {
-    if (error instanceof Error) {
-        return `${error.name}: ${error.message}`;
-    }
-    if (
-        typeof error === 'object' &&
-        error !== null &&
-        'message' in error &&
-        typeof error.message === 'string'
-    ) {
-        const name =
-            'name' in error && typeof error.name === 'string'
-                ? `${error.name}: `
-                : '';
-        return `${name}${error.message}`;
-    }
-    try {
-        return JSON.stringify(error) ?? String(error);
-    } catch {
-        return String(error);
-    }
-}
 
 /**
  * A data explorer client instance that wraps an IDataExplorerComm
@@ -606,7 +584,8 @@ export class DataExplorerClientInstance implements vscode.Disposable {
                     throw error;
                 }
                 this._logChannel.warn(
-                    `DataExplorerClientInstance: get_state attempt ${attempt}/${BACKEND_STATE_MAX_ATTEMPTS} failed: ${formatError(error)}; retrying.`,
+                    `DataExplorerClientInstance: get_state attempt ${attempt}/${BACKEND_STATE_MAX_ATTEMPTS} failed: ${getErrorSummary(error)}; retrying. ` +
+                    `details=${formatErrorForLogging(error)}`,
                 );
             }
         }

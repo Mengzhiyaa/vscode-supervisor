@@ -1,3 +1,4 @@
+import { getErrorMessage } from '../shared/errors';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import {
@@ -313,7 +314,7 @@ export class PositronNewFolderService implements IPositronNewFolderService {
                 this._newFolderRuntimeMetadata = registration.runtimeMetadata;
             }
         } catch (error) {
-            this._outputChannel.error(`${logPrefix} '${registration.label}' failed: ${error}`);
+            this._outputChannel.error(`${logPrefix} '${registration.label}' failed: ${getErrorMessage(error)}`);
         } finally {
             registrations.delete(registration.id);
         }

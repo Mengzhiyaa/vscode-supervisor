@@ -1,3 +1,4 @@
+import { getErrorMessage } from '../../shared/errors';
 import * as vscode from 'vscode';
 import { LanguageRuntimeSessionMode, type IDataConnectionDriver } from '../../api';
 import { RuntimeClientState, RuntimeClientType } from '../../internal/runtimeTypes';
@@ -223,7 +224,7 @@ class ProfileConnectionInstance implements IConnectionInstance {
 
     disconnect(): void {
         void this._disconnect().catch(error => {
-            this._outputChannel.error(`[Connections] Failed to disconnect ${this.id}: ${error}`);
+            this._outputChannel.error(`[Connections] Failed to disconnect ${this.id}: ${getErrorMessage(error)}`);
         });
     }
 
@@ -472,7 +473,7 @@ export class PositronConnectionsService implements vscode.Disposable {
         try {
             await instance?.dispose();
         } catch (error) {
-            this._outputChannel.warn(`[Connections] Failed to dispose ${instance?.id}: ${error}`);
+            this._outputChannel.warn(`[Connections] Failed to dispose ${instance?.id}: ${getErrorMessage(error)}`);
         }
     }
 
@@ -547,7 +548,7 @@ export class PositronConnectionsService implements vscode.Disposable {
             this._onDidChangeConnections.fire(this.connections);
         } catch (error) {
             comm.dispose();
-            this._outputChannel.error(`[Connections] Failed to register ${id}: ${error}`);
+            this._outputChannel.error(`[Connections] Failed to register ${id}: ${getErrorMessage(error)}`);
         } finally {
             this._pendingClients.delete(id);
         }

@@ -3,6 +3,7 @@
  *  Licensed under the Elastic License 2.0. See LICENSE.txt for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { getErrorMessage } from '../shared/errors';
 import * as vscode from 'vscode';
 import { JupyterLanguageRuntimeSession } from '../supervisor/positron-supervisor';
 import {
@@ -259,7 +260,7 @@ export class RuntimeClientManager implements vscode.Disposable {
                 if (!this._isCurrent(generation)) {
                     return;
                 }
-                this._logChannel.error(`RuntimeClientManager: Failed to initialize clients: ${error}`);
+                this._logChannel.error(`RuntimeClientManager: Failed to initialize clients: ${getErrorMessage(error)}`);
                 throw error;
             }
         })();
@@ -282,7 +283,7 @@ export class RuntimeClientManager implements vscode.Disposable {
         try {
             this._session.removeClient(clientId);
         } catch (error) {
-            this._logChannel.warn(`RuntimeClientManager: Failed to remove cancelled client ${clientId}: ${error}`);
+            this._logChannel.warn(`RuntimeClientManager: Failed to remove cancelled client ${clientId}: ${getErrorMessage(error)}`);
         }
     }
 
@@ -316,7 +317,7 @@ export class RuntimeClientManager implements vscode.Disposable {
             this._registerSyntheticClient(clientId, RuntimeClientType.Variables);
             this._logChannel.info(`RuntimeClientManager: Variables client created and registered: ${clientId}`);
         } catch (error) {
-            this._logChannel.error(`RuntimeClientManager: Failed to create Variables client: ${error}`);
+            this._logChannel.error(`RuntimeClientManager: Failed to create Variables client: ${getErrorMessage(error)}`);
             throw error;
         }
     }
@@ -355,7 +356,7 @@ export class RuntimeClientManager implements vscode.Disposable {
             this._registerSyntheticClient(clientId, RuntimeClientType.Ui);
             this._logChannel.info(`RuntimeClientManager: UI client created and registered: ${clientId}`);
         } catch (error) {
-            this._logChannel.error(`RuntimeClientManager: Failed to create UI client: ${error}`);
+            this._logChannel.error(`RuntimeClientManager: Failed to create UI client: ${getErrorMessage(error)}`);
             throw error;
         }
     }
@@ -409,7 +410,7 @@ export class RuntimeClientManager implements vscode.Disposable {
             this._logChannel.info(`RuntimeClientManager: Help client created and registered: ${clientId}`);
         } catch (error) {
             // Help comm is optional - log but don't throw
-            this._logChannel.warn(`RuntimeClientManager: Failed to create Help client (optional): ${error}`);
+            this._logChannel.warn(`RuntimeClientManager: Failed to create Help client (optional): ${getErrorMessage(error)}`);
         }
     }
 
@@ -489,7 +490,7 @@ export class RuntimeClientManager implements vscode.Disposable {
                 }
             }
         } catch (error) {
-            this._logChannel.warn(`RuntimeClientManager: Failed to restore existing clients: ${error}`);
+            this._logChannel.warn(`RuntimeClientManager: Failed to restore existing clients: ${getErrorMessage(error)}`);
         }
     }
 

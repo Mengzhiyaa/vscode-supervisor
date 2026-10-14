@@ -4,6 +4,7 @@
  *  This adapts DuckDB SQL queries to the Data Explorer communication protocol
  *--------------------------------------------------------------------------------------------*/
 
+import { getErrorMessage } from '../../shared/errors';
 import * as vscode from 'vscode';
 import { DuckDBTableView } from './duckdbTableView';
 import { ColumnProfileEvaluator } from './columnProfileEvaluator';
@@ -165,11 +166,11 @@ export class DuckDBDataExplorerComm implements IDataExplorerComm {
                 profiles: results,
             });
         } catch (error) {
-            this._logChannel.error(`[DuckDB] Column profile evaluation failed: ${error}`);
+            this._logChannel.error(`[DuckDB] Column profile evaluation failed: ${getErrorMessage(error)}`);
             this._onDidReturnColumnProfiles.fire({
                 callback_id: callbackId,
                 profiles: profiles.map(() => ({})),
-                error_message: String(error),
+                error_message: getErrorMessage(error),
             });
         }
     }
@@ -244,7 +245,7 @@ export class DuckDBDataExplorerComm implements IDataExplorerComm {
                     if (error instanceof vscode.CancellationError) {
                         return;
                     }
-                    this._logChannel.error(`[DuckDB] File reload failed: ${error}`);
+                    this._logChannel.error(`[DuckDB] File reload failed: ${getErrorMessage(error)}`);
                 }
             });
 
@@ -253,7 +254,7 @@ export class DuckDBDataExplorerComm implements IDataExplorerComm {
                 this.dispose();
             });
         } catch (error) {
-            this._logChannel.warn(`[DuckDB] File watcher setup failed: ${error}`);
+            this._logChannel.warn(`[DuckDB] File watcher setup failed: ${getErrorMessage(error)}`);
         }
     }
 }

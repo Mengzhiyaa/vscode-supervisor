@@ -7,6 +7,7 @@
  *  import with VFS cleanup, rowid stable sorting, gzip support, CSV retry.
  *--------------------------------------------------------------------------------------------*/
 
+import { getErrorMessage } from '../../shared/errors';
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { readImportFile, throwIfImportCancelled } from './fileImport';
@@ -359,7 +360,7 @@ export class DuckDBTableView {
             await this.importFile(options);
         } catch (error) {
             if (error instanceof vscode.CancellationError || this._fileType !== 'xlsx' ||
-                !options?.sheet_name || !/(?:work)?sheet\b.*\bnot found/i.test(String(error))) {
+                !options?.sheet_name || !/(?:work)?sheet\b.*\bnot found/i.test(getErrorMessage(error))) {
                 throw error;
             }
             if (this.importOptions !== options) {
@@ -445,7 +446,7 @@ export class DuckDBTableView {
                 await this._duckdb.query('LOAD excel', token);
             } catch (error) {
                 throwIfImportCancelled(token);
-                throw new Error(`DuckDB Excel support could not be loaded: ${String(error)}`);
+                throw new Error(`DuckDB Excel support could not be loaded: ${getErrorMessage(error)}`);
             }
         }
     }
@@ -473,7 +474,7 @@ export class DuckDBTableView {
             return asText;
         } catch (error) {
             throwIfImportCancelled(token);
-            if (asText || !/(?:could not|cannot|can't|failed to) (?:convert|cast)|conversion error|failed to parse cell/i.test(String(error))) {
+            if (asText || !/(?:could not|cannot|can't|failed to) (?:convert|cast)|conversion error|failed to parse cell/i.test(getErrorMessage(error))) {
                 throw error;
             }
             await this._duckdb.query(query(true), token);
@@ -503,7 +504,7 @@ export class DuckDBTableView {
             const maxRecoveryCells = 5_000_000;
             if (range.width * range.height > maxRecoveryCells) {
                 if (firstReadFailed) {
-                    throw new Error(`${String(firstError)}. The declared worksheet range is too large for automatic recovery.`);
+                    throw new Error(`${getErrorMessage(firstError)}. The declared worksheet range is too large for automatic recovery.`);
                 }
                 this._xlsxRecoverySkipped = true;
                 return;
@@ -1228,7 +1229,7 @@ ORDER BY row_order.sort_order`;
             if (error instanceof vscode.CancellationError) {
                 throw error;
             }
-            return { error_message: String(error) };
+            return { error_message: getErrorMessage(error) };
         }
     }
 

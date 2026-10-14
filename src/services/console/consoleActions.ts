@@ -3,6 +3,7 @@
  *  1:1 replication of Positron's console actions for editor integration
  *--------------------------------------------------------------------------------------------*/
 
+import { getErrorMessage } from '../../shared/errors';
 import * as vscode from 'vscode';
 import type { Utf8Location } from '../../api';
 import { CoreCommandIds, InternalCommandIds } from '../../coreCommandIds';
@@ -100,7 +101,7 @@ async function executeEditorCode(
         );
         return true;
     } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
+        const message = getErrorMessage(error);
         void vscode.window.showErrorMessage(`Cannot execute code: ${message}`);
         return false;
     }
@@ -163,7 +164,7 @@ async function synchronizeDirtyFileBreakpoints(
         vscode.debug.removeBreakpoints(breakpoints);
         vscode.debug.addBreakpoints(breakpoints);
     } catch (error) {
-        outputChannel.warn(`[ConsoleActions] Failed to synchronize dirty breakpoints: ${error}`);
+        outputChannel.warn(`[ConsoleActions] Failed to synchronize dirty breakpoints: ${getErrorMessage(error)}`);
         throw error;
     }
 }
@@ -697,7 +698,7 @@ async function getStatementRangeAtPosition(
         }
     } catch (err) {
         // Statement range provider not available or threw error
-        outputChannel.debug(`[ConsoleActions] Failed to get statement range: ${err}`);
+        outputChannel.debug(`[ConsoleActions] Failed to get statement range: ${getErrorMessage(err)}`);
     }
 
     return undefined;

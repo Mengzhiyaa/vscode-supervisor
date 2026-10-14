@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { getErrorMessage } from '@shared/errors';
     import { onMount } from 'svelte';
     import type { MessageConnection } from 'vscode-jsonrpc/browser';
     import type { PackageDetailAction, PackageDetailState } from '@shared/packages';
@@ -44,7 +45,7 @@
         try {
             applyState(await connection.sendRequest('packageDetail/action', { action }) as PackageDetailState);
         } catch (error) {
-            operationError = error instanceof Error ? error.message : String(error);
+            operationError = getErrorMessage(error);
         } finally {
             pending = false;
         }
@@ -54,7 +55,7 @@
         try {
             await connection?.sendRequest('packageDetail/openExternal', { url });
         } catch (error) {
-            operationError = error instanceof Error ? error.message : String(error);
+            operationError = getErrorMessage(error);
         }
     }
 
@@ -78,7 +79,7 @@
         void rpc.sendRequest('packageDetail/getState').then(value => {
             if (!disposed) applyState(value as PackageDetailState);
         }).catch(error => {
-            if (!disposed) operationError = error instanceof Error ? error.message : String(error);
+            if (!disposed) operationError = getErrorMessage(error);
         });
         return () => {
             disposed = true;

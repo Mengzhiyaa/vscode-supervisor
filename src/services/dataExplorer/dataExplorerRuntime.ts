@@ -9,6 +9,7 @@ import { RuntimeSession } from '../../runtime/session';
 import { RuntimeClientInstance } from '../../runtime/RuntimeClientInstance';
 import type { RuntimeClientManager } from '../../runtime/runtimeClientManager';
 import { DataExplorerClientInstance } from './languageRuntimeDataExplorerClient';
+import { formatErrorForLogging } from '../../shared/errors';
 import { DataExplorerBackendRequest, PositronDataExplorerComm } from '../../runtime/comms/positronDataExplorerComm';
 import type {
     IPositronDataExplorerService,
@@ -199,7 +200,7 @@ export class DataExplorerRuntime implements vscode.Disposable {
                 (variablePath ? ` (path: ${JSON.stringify(variablePath)})` : '')
             );
         } catch (error) {
-            const message = error instanceof Error ? error.message : JSON.stringify(error);
+            const message = formatErrorForLogging(error);
             this._logChannel.error(
                 `[DataExplorerRuntime] Failed to create DataExplorer instance: ${message}`
             );

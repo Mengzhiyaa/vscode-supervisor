@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { getErrorMessage } from "@shared/errors";
     import { getRpcConnection } from "$lib/rpc/client";
     import type { ActivityItemErrorSuggestion } from "./classes";
     import { localize } from "$lib/localization";
@@ -26,7 +27,7 @@
                 suggestionId,
             });
         } catch (error) {
-            actionError = error instanceof Error ? error.message : String(error);
+            actionError = getErrorMessage(error);
         } finally {
             runningSuggestionId = undefined;
         }

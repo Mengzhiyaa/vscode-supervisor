@@ -1,3 +1,4 @@
+import { getErrorMessage } from '../shared/errors';
 import * as vscode from 'vscode';
 import type {
     IRuntimeOutputRenderer,
@@ -504,7 +505,7 @@ export class RichOutputRouter implements vscode.Disposable {
                 return true;
             }
             this._outputChannel.error(
-                `[RichOutputRouter] Renderer '${renderer.id}' failed: ${error}`,
+                `[RichOutputRouter] Renderer '${renderer.id}' failed: ${getErrorMessage(error)}`,
             );
             return false;
         }
@@ -555,7 +556,7 @@ export class RichOutputRouter implements vscode.Disposable {
         try {
             await renderer.disposeOutput?.(this._rendererContext({ session, message }));
         } catch (error) {
-            this._outputChannel.warn(`[RichOutputRouter] Renderer '${renderer.id}' failed to dispose output: ${error}`);
+            this._outputChannel.warn(`[RichOutputRouter] Renderer '${renderer.id}' failed to dispose output: ${getErrorMessage(error)}`);
         }
     }
 
@@ -988,7 +989,7 @@ ${plainText ? `<pre>${escapeHtml(plainText)}</pre>` : ''}
         message: RichOutputMessage,
         error: unknown,
     ): Promise<void> {
-        const detail = error instanceof Error ? error.message : String(error);
+        const detail = getErrorMessage(error);
         this._record(session, message, 'rich-output-router', 'failed', detail);
         this._outputChannel.error(
             `[RichOutputRouter] Failed to route ${message.kind} output ${message.output_id ?? message.id}: ${detail}`

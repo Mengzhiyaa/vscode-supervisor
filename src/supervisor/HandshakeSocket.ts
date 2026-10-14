@@ -3,6 +3,7 @@
  *  Licensed under the Elastic License 2.0. See LICENSE.txt for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { getErrorMessage } from '../shared/errors';
 import * as vscode from 'vscode';
 import * as os from 'os';
 import * as path from 'path';
@@ -35,7 +36,7 @@ export class HandshakeSocket implements vscode.Disposable {
 				try {
 					this._payload.resolve(HandshakeSocket.parsePayload(text));
 				} catch (err) {
-					this._payload.reject(new Error(`Failed to parse handshake payload: ${err}`));
+					this._payload.reject(new Error(`Failed to parse handshake payload: ${getErrorMessage(err)}`));
 				}
 			});
 			socket.on('error', err => this._payload.reject(err));
@@ -152,7 +153,7 @@ export class HandshakeSocket implements vscode.Disposable {
 			try {
 				handles.resolve(HandshakeSocket.parsePayload(text));
 			} catch (err) {
-				handles.reject(new Error(`Failed to parse handshake payload: ${err}`));
+				handles.reject(new Error(`Failed to parse handshake payload: ${getErrorMessage(err)}`));
 			}
 		});
 		socket.on('error', err => handles.reject(err));

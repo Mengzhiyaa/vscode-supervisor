@@ -6,6 +6,7 @@
  * For VS Code compatibility, we provide local definitions here.
  */
 
+import { getErrorMessage } from '../shared/errors';
 import * as vscode from 'vscode';
 import { registerRuntimeClientInstance } from '../runtime/runtimeClientRegistry';
 import {
@@ -440,7 +441,7 @@ function evaluateWhenClause(whenClause: string): boolean {
         return new WhenClauseParser(tokenizeWhenClause(whenClause)).parse();
     } catch (error) {
         throw new PositronCompatibilityError(
-            `Failed to evaluate when clause '${whenClause}': ${error instanceof Error ? error.message : String(error)}`,
+            `Failed to evaluate when clause '${whenClause}': ${getErrorMessage(error)}`,
             RuntimeMethodErrorCode.InvalidParams
         );
     }
@@ -744,7 +745,7 @@ export const methods = {
             }
             return errorReply(
                 RuntimeMethodErrorCode.InternalError,
-                error instanceof Error ? error.message : String(error)
+                getErrorMessage(error)
             );
         }
     },

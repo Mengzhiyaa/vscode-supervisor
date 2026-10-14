@@ -1,3 +1,4 @@
+import { getErrorMessage } from '../shared/errors';
 import * as vscode from 'vscode';
 import type { ConsoleThemeData, ConsoleThemeRule } from '../shared/console';
 import { logFrameworkDiagnostic } from '../logging/frameworkLogger';
@@ -473,7 +474,7 @@ export class ConsoleThemeProvider {
         } catch (error) {
             logFrameworkDiagnostic(
                 'ConsoleThemeProvider',
-                `Cannot read theme ${themeUri.toString()}: ${error}`,
+                `Cannot read theme ${themeUri.toString()}: ${getErrorMessage(error)}`,
                 vscode.LogLevel.Debug,
             );
             return undefined;

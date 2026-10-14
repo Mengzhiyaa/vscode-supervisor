@@ -1,3 +1,4 @@
+import { getErrorMessage } from '../../shared/errors';
 import * as vscode from 'vscode';
 
 /** Shared editor-backed browser route for runtime events and Viewer actions. */
@@ -12,14 +13,14 @@ export async function openPreviewInEditor(
         });
         return true;
     } catch (error) {
-        outputChannel.debug(`[PreviewEditor] simpleBrowser.api.open failed for ${uri}: ${error}`);
+        outputChannel.debug(`[PreviewEditor] simpleBrowser.api.open failed for ${uri}: ${getErrorMessage(error)}`);
     }
 
     try {
         await vscode.commands.executeCommand('simpleBrowser.show', uri.toString(true));
         return true;
     } catch (error) {
-        outputChannel.warn(`[PreviewEditor] Failed to open ${uri} in an editor: ${error}`);
+        outputChannel.warn(`[PreviewEditor] Failed to open ${uri} in an editor: ${getErrorMessage(error)}`);
         return false;
     }
 }

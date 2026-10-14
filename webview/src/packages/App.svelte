@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { getErrorMessage } from "@shared/errors";
     import { onDestroy, onMount } from "svelte";
     import type { MessageConnection } from "vscode-jsonrpc/browser";
     import { getRpcConnection } from "$lib/rpc/client";
@@ -115,13 +116,6 @@
         itemSize = state.itemSize ?? "card";
     }
 
-    function formatError(error: unknown): string {
-        if (error instanceof Error) {
-            return error.message;
-        }
-        return String(error);
-    }
-
     async function requestState(): Promise<void> {
         if (!connection) {
             return;
@@ -149,7 +143,7 @@
             applyState(state);
             return generation === sessionGeneration && !state.cancelled;
         } catch (error) {
-            if (generation === sessionGeneration) operationError = formatError(error);
+            if (generation === sessionGeneration) operationError = getErrorMessage(error);
             return false;
         } finally {
             if (generation === sessionGeneration) requestPending = false;
@@ -240,7 +234,7 @@
             searchResults = uniqueResults.slice(0, 100);
         } catch (error) {
             if (generation === searchGeneration) {
-                operationError = formatError(error);
+                operationError = getErrorMessage(error);
                 searchResults = [];
             }
         } finally {
@@ -256,7 +250,7 @@
             void connection.sendRequest("packages/openPackage", {
                 name: pkg.name, sessionId: activeSession.id, pinned,
             }).catch(error => {
-                if (generation === sessionGeneration) operationError = formatError(error);
+                if (generation === sessionGeneration) operationError = getErrorMessage(error);
             });
         }
     }
@@ -330,7 +324,7 @@
             "packages/state",
             (state: unknown) => applyState(state as PackagesState),
         );
-        void requestState().catch(error => { operationError = formatError(error); });
+        void requestState().catch(error => { operationError = getErrorMessage(error); });
 
         return () => {
             stateDisposable.dispose();

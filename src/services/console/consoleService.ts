@@ -3,6 +3,7 @@
  *  1:1 replication of Positron's console service class
  *--------------------------------------------------------------------------------------------*/
 
+import { getErrorMessage } from '../../shared/errors';
 import * as vscode from 'vscode';
 import { CoreConfigurationKeys, CoreConfigurationSections, ViewCommands, ViewIds } from '../../coreCommandIds';
 import {
@@ -658,7 +659,7 @@ export class PositronConsoleService implements IPositronConsoleService {
                 );
             }
         } catch (error) {
-            this._outputChannel.error(`[PositronConsoleService] Failed to restore console instances: ${error}`);
+            this._outputChannel.error(`[PositronConsoleService] Failed to restore console instances: ${getErrorMessage(error)}`);
         }
     }
 

@@ -1,3 +1,4 @@
+import { getErrorMessage } from '../../shared/errors';
 import * as vscode from 'vscode';
 
 const DefaultStorageKey = 'supervisor.surfaceModels.v1';
@@ -422,7 +423,7 @@ export class SurfaceLifecycleService implements vscode.Disposable {
         try {
             model.ownedResource?.dispose();
         } catch (error) {
-            this._outputChannel.warn(`[SurfaceLifecycle] Failed to dispose resource for ${modelId}: ${error}`);
+            this._outputChannel.warn(`[SurfaceLifecycle] Failed to dispose resource for ${modelId}: ${getErrorMessage(error)}`);
         }
         this._onDidChangeEmitter.fire({
             type: 'disposed',
@@ -508,7 +509,7 @@ export class SurfaceLifecycleService implements vscode.Disposable {
         }
         model.restore[layer] = state;
         if (state === 'failed') {
-            model.restore.errors[layer] = error instanceof Error ? error.message : String(error ?? 'Unknown error');
+            model.restore.errors[layer] = getErrorMessage(error ?? 'Unknown error');
         } else {
             delete model.restore.errors[layer];
         }
@@ -697,7 +698,7 @@ export class SurfaceLifecycleService implements vscode.Disposable {
             .catch(() => undefined)
             .then(() => this._workspaceState.update(this._storageKey, tokens))
             .catch(error => {
-                this._outputChannel.warn(`[SurfaceLifecycle] Failed to persist restore tokens: ${error}`);
+                this._outputChannel.warn(`[SurfaceLifecycle] Failed to persist restore tokens: ${getErrorMessage(error)}`);
             });
     }
 

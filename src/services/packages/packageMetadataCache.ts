@@ -1,3 +1,4 @@
+import { getErrorMessage } from '../../shared/errors';
 import { randomUUID } from 'crypto';
 import { mkdir, readFile, rename, rm, writeFile } from 'fs/promises';
 import * as path from 'path';
@@ -68,7 +69,7 @@ export class PackageMetadataCache {
             }
         } catch (error) {
             if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-                this._outputChannel.warn(`[Packages] Ignoring invalid package metadata cache: ${error}`);
+                this._outputChannel.warn(`[Packages] Ignoring invalid package metadata cache: ${getErrorMessage(error)}`);
             }
         }
 
@@ -175,7 +176,7 @@ export class PackageMetadataCache {
             void this._storage.update(PACKAGE_METADATA_CACHE_STORAGE_KEY, this._cache).then(
                 undefined,
                 error => this._outputChannel.warn(
-                    `[Packages] Failed to persist package metadata cache: ${error}`,
+                    `[Packages] Failed to persist package metadata cache: ${getErrorMessage(error)}`,
                 ),
             );
             return;
@@ -188,7 +189,7 @@ export class PackageMetadataCache {
         const drain = this._drainFileWrites()
             .catch(error => {
                 this._outputChannel.warn(
-                    `[Packages] Failed to persist package metadata cache: ${error}`,
+                    `[Packages] Failed to persist package metadata cache: ${getErrorMessage(error)}`,
                 );
             })
             .finally(() => {

@@ -1,3 +1,4 @@
+import { getErrorMessage } from '../shared/errors';
 import * as vscode from 'vscode';
 import {
     type IDiscoveredLanguageRuntime,
@@ -107,7 +108,7 @@ export class RuntimeManager implements vscode.Disposable, IRuntimeManager {
                 try {
                     disposable.dispose();
                 } catch (error) {
-                    this._outputChannel.warn(`[Discovery] Failed to dispose provider listener: ${error}`);
+                    this._outputChannel.warn(`[Discovery] Failed to dispose provider listener: ${getErrorMessage(error)}`);
                 }
             }
             if (this._runtimeProviderRegistrationTokens.get(provider.languageId) !== registrationToken) {
@@ -155,7 +156,7 @@ export class RuntimeManager implements vscode.Disposable, IRuntimeManager {
                             this.registerDiscoveredRuntime(provider.languageId, installation, metadata);
                         } catch (error) {
                             this._outputChannel.error(
-                                `[Discovery] Failed to register dynamic ${provider.languageId} installation: ${error}`,
+                                `[Discovery] Failed to register dynamic ${provider.languageId} installation: ${getErrorMessage(error)}`,
                             );
                         }
                     });
@@ -312,13 +313,13 @@ export class RuntimeManager implements vscode.Disposable, IRuntimeManager {
                         );
                         void this._discoverProvider(provider, plan.discoveryRootSignature, registrationToken).catch(error => {
                             this._outputChannel.error(
-                                `Error revalidating runtimes for ${provider.languageId}: ${error}`,
+                                `Error revalidating runtimes for ${provider.languageId}: ${getErrorMessage(error)}`,
                             );
                         });
                     }
                 } catch (error) {
                     this._outputChannel.error(
-                        `Error discovering runtimes for ${provider.languageId}: ${error}`,
+                        `Error discovering runtimes for ${provider.languageId}: ${getErrorMessage(error)}`,
                     );
                 }
             });
@@ -706,7 +707,7 @@ export class RuntimeManager implements vscode.Disposable, IRuntimeManager {
                 }
             } catch (error) {
                 this._outputChannel.warn(
-                    `Failed to compute discovery root signature for ${provider.languageName}: ${error}`,
+                    `Failed to compute discovery root signature for ${provider.languageName}: ${getErrorMessage(error)}`,
                 );
             }
         }

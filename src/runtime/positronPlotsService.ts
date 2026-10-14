@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 
+import { getErrorMessage, formatErrorForLogging } from '../shared/errors';
 import * as vscode from 'vscode';
 import { LanguageRuntimeSessionMode } from '../api';
 import { savePlotImage, offerPlotImageExport } from './plotImageExport';
@@ -955,7 +956,7 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
                 void vscode.window.showInformationMessage(vscode.l10n.t('Plot exported to {0}', uri.fsPath));
             }
         } catch (error) {
-            void vscode.window.showErrorMessage(vscode.l10n.t('Failed to export plot: {0}', String(error)));
+            void vscode.window.showErrorMessage(vscode.l10n.t('Failed to export plot: {0}', getErrorMessage(error)));
         }
     }
 
@@ -1159,7 +1160,7 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
                         this._renderSettings.format
                     );
                 } catch (error) {
-                    vscode.window.showErrorMessage(`Failed to render plot for editor: ${error}`);
+                    vscode.window.showErrorMessage(`Failed to render plot for editor: ${getErrorMessage(error)}`);
                     return;
                 }
             }
@@ -1724,22 +1725,8 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
 
             this._onDidUpdatePlotMetadata.fire(metadata.id);
         } catch (err) {
-            const errMessage = err?.message ? String(err.message) : String(err);
-            let dataSuffix = '';
-            if (err?.data) {
-                const dataMessage = err.data?.message ? String(err.data.message) : '';
-                if (dataMessage) {
-                    dataSuffix = `; data=${dataMessage}`;
-                } else {
-                    try {
-                        dataSuffix = `; data=${JSON.stringify(err.data)}`;
-                    } catch {
-                        dataSuffix = '; data=[unserializable]';
-                    }
-                }
-            }
             this._outputChannel?.warn(
-                `[PositronPlotsService] Failed to fetch metadata for plot ${metadata.id}: ${errMessage}${dataSuffix}`
+                `[PositronPlotsService] Failed to fetch metadata for plot ${metadata.id}: ${formatErrorForLogging(err)}`
             );
         }
     }

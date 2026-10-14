@@ -5,6 +5,7 @@
  * the locally migrated Kallichore code.
  */
 
+import { getErrorMessage } from '../shared/errors';
 import * as vscode from 'vscode';
 import * as os from 'os';
 import {
@@ -98,8 +99,8 @@ export class LocalSupervisorApi implements vscode.Disposable {
 
             this.log('Local supervisor initialized successfully');
         } catch (error) {
-            this.log(`Failed to initialize supervisor: ${error}`, vscode.LogLevel.Error);
-            this._outputChannel.error(`Failed to initialize Kernel Supervisor: ${error}. See the Kernel Supervisor output channel for details.`);
+            this.log(`Failed to initialize supervisor: ${getErrorMessage(error)}`, vscode.LogLevel.Error);
+            this._outputChannel.error(`Failed to initialize Kernel Supervisor: ${getErrorMessage(error)}. See the Kernel Supervisor output channel for details.`);
             throw error;
         }
     }

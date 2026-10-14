@@ -1,3 +1,4 @@
+import { getErrorMessage } from '../../shared/errors';
 import * as vscode from "vscode";
 import { createHash } from 'crypto';
 import { PositronConsoleInstance, SerializedConsoleState } from "./consoleInstance";
@@ -140,7 +141,7 @@ export class ConsoleStateStore implements vscode.Disposable {
             }
             return state;
         } catch (error) {
-            this._logChannel.warn(`[ConsoleStateStore] Failed to restore state for ${instance.sessionId}: ${error}`);
+            this._logChannel.warn(`[ConsoleStateStore] Failed to restore state for ${instance.sessionId}: ${getErrorMessage(error)}`);
         }
         return undefined;
     }
@@ -163,7 +164,7 @@ export class ConsoleStateStore implements vscode.Disposable {
         const flushDirty = () => {
             void this.flush().catch(error => {
                 this._logChannel.warn(
-                    `[ConsoleStateStore] Immediate flush failed for ${sessionId}: ${error}`,
+                    `[ConsoleStateStore] Immediate flush failed for ${sessionId}: ${getErrorMessage(error)}`,
                 );
             });
         };
@@ -285,7 +286,7 @@ export class ConsoleStateStore implements vscode.Disposable {
         try {
             await this.flush();
         } catch (error) {
-            this._logChannel.warn(`[ConsoleStateStore] ${reason} flush failed: ${error}`);
+            this._logChannel.warn(`[ConsoleStateStore] ${reason} flush failed: ${getErrorMessage(error)}`);
         }
     }
 
@@ -364,7 +365,7 @@ export class ConsoleStateStore implements vscode.Disposable {
                     })
                     .catch((error) => {
                         this._logChannel.warn(
-                            `[ConsoleStateStore] Failed to persist state for ${sid}: ${error}`
+                            `[ConsoleStateStore] Failed to persist state for ${sid}: ${getErrorMessage(error)}`
                         );
                         throw error;
                     });
@@ -372,7 +373,7 @@ export class ConsoleStateStore implements vscode.Disposable {
                 writePromises.push(p);
             } catch (error) {
                 this._logChannel.warn(
-                    `[ConsoleStateStore] Failed to serialize state for ${sid}: ${error}`
+                    `[ConsoleStateStore] Failed to serialize state for ${sid}: ${getErrorMessage(error)}`
                 );
                 throw error;
             }

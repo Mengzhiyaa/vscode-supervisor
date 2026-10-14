@@ -1,3 +1,4 @@
+import { getErrorMessage } from '../shared/errors';
 import * as vscode from 'vscode';
 import {
     OpenEditorKind,
@@ -37,7 +38,7 @@ export class RuntimeFrontendEventService implements vscode.Disposable {
         this._disposables.push(
             this._sessionManager.onDidReceiveRuntimeEvent((runtimeEvent) => {
                 void this.handleRuntimeEvent(runtimeEvent).catch((error) => {
-                    const message = error instanceof Error ? error.message : String(error);
+                    const message = getErrorMessage(error);
                     this._outputChannel.warn(`[RuntimeFrontendEvent] Failed to handle ${runtimeEvent.event.name}: ${message}`);
                 });
             }),

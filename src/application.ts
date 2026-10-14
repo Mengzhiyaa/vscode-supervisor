@@ -1,3 +1,4 @@
+import { getErrorMessage } from './shared/errors';
 import * as vscode from 'vscode';
 import { DataImporterRegistry } from './services/dataExplorer/dataImporterRegistry';
 import { buildDataImportView } from './services/dataExplorer/dataImportView';
@@ -714,7 +715,7 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
                     void ensureBinaries(this._context, this._outputChannel, [snapshot.binaryProvider!])
                         .catch(error => this._outputChannel.error(
                             `[LanguageRegistry] Failed to ensure binaries for ` +
-                            `${snapshot.identity.languageId}: ${error}`,
+                            `${snapshot.identity.languageId}: ${getErrorMessage(error)}`,
                         ));
                 });
             }
@@ -724,7 +725,7 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
                 try {
                     disposable.dispose();
                 } catch (cleanupError) {
-                    this._outputChannel.warn(`[LanguageRegistry] Failed to roll back registration: ${cleanupError}`);
+                    this._outputChannel.warn(`[LanguageRegistry] Failed to roll back registration: ${getErrorMessage(cleanupError)}`);
                 }
             }
             throw error;
@@ -772,7 +773,7 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
                 changedAt: Date.now(),
                 error: {
                     kind: 'transient-io',
-                    message: error instanceof Error ? error.message : String(error),
+                    message: getErrorMessage(error),
                     stack: error instanceof Error ? error.stack : undefined,
                 },
             });
@@ -797,7 +798,7 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
             this._runtimeStartupStarted = true;
             void this._runtimeStartupService.startup().catch((error) => {
                 this._runtimeStartupStarted = false;
-                this._outputChannel.error(`[RuntimeStartup] Failed to start runtime startup sequence: ${error}`);
+                this._outputChannel.error(`[RuntimeStartup] Failed to start runtime startup sequence: ${getErrorMessage(error)}`);
             });
         }
     }
@@ -1155,8 +1156,8 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
                 provider.formatRuntimeName(selected.installation)
             );
         } catch (error) {
-            this._outputChannel.error(`[Supervisor] Failed to create session: ${error}`);
-            vscode.window.showErrorMessage(`Failed to create session: ${error}`);
+            this._outputChannel.error(`[Supervisor] Failed to create session: ${getErrorMessage(error)}`);
+            vscode.window.showErrorMessage(`Failed to create session: ${getErrorMessage(error)}`);
         }
     }
 
@@ -1193,8 +1194,8 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
                 this._requireRuntimeProvider(this._getPreferredLanguageId()).formatRuntimeName(selected.installation)
             );
         } catch (error) {
-            this._outputChannel.error(`[Supervisor] Failed to quick launch session: ${error}`);
-            vscode.window.showErrorMessage(`Failed to quick launch session: ${error}`);
+            this._outputChannel.error(`[Supervisor] Failed to quick launch session: ${getErrorMessage(error)}`);
+            vscode.window.showErrorMessage(`Failed to quick launch session: ${getErrorMessage(error)}`);
         }
     }
 
@@ -1223,8 +1224,8 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
                 currentSession.dynState.sessionName || currentSession.sessionMetadata.sessionName || currentSession.runtimeMetadata.runtimeName
             );
         } catch (error) {
-            this._outputChannel.error(`[Supervisor] Failed to duplicate session: ${error}`);
-            vscode.window.showErrorMessage(`Failed to duplicate session: ${error}`);
+            this._outputChannel.error(`[Supervisor] Failed to duplicate session: ${getErrorMessage(error)}`);
+            vscode.window.showErrorMessage(`Failed to duplicate session: ${getErrorMessage(error)}`);
         }
     }
 
@@ -1237,7 +1238,7 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
         try {
             await migrateLegacyPlotsConfiguration(this._outputChannel);
         } catch (error) {
-            this._outputChannel.warn(`[Plots] Failed to migrate legacy configuration: ${error}`);
+            this._outputChannel.warn(`[Plots] Failed to migrate legacy configuration: ${getErrorMessage(error)}`);
         }
 
         // Initialize service-class services before session restore so they can
@@ -1468,7 +1469,7 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
                                 line: error.line,
                             };
                         }
-                        this._outputChannel.debug(`[LspBridge] Failed to resolve statement range: ${error}`);
+                        this._outputChannel.debug(`[LspBridge] Failed to resolve statement range: ${getErrorMessage(error)}`);
                         return undefined;
                     } finally {
                         tokenSource.dispose();
@@ -1581,8 +1582,8 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
                 try {
                     await this._packagesService.refreshPackages(undefined, true);
                 } catch (error) {
-                    this._outputChannel.warn(`[Packages] Refresh failed: ${error}`);
-                    vscode.window.showErrorMessage(`Failed to refresh packages: ${error}`);
+                    this._outputChannel.warn(`[Packages] Refresh failed: ${getErrorMessage(error)}`);
+                    vscode.window.showErrorMessage(`Failed to refresh packages: ${getErrorMessage(error)}`);
                 }
             })
         );
@@ -1592,8 +1593,8 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
                 try {
                     await this._packagesService.updateAllPackages();
                 } catch (error) {
-                    this._outputChannel.warn(`[Packages] Update all failed: ${error}`);
-                    vscode.window.showErrorMessage(`Failed to update packages: ${error}`);
+                    this._outputChannel.warn(`[Packages] Update all failed: ${getErrorMessage(error)}`);
+                    vscode.window.showErrorMessage(`Failed to update packages: ${getErrorMessage(error)}`);
                 }
             })
         );
@@ -1727,8 +1728,8 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
                 try {
                     await this._positronDataExplorerService.openWithDuckDB(uri);
                 } catch (error) {
-                    this._outputChannel.error(`[DuckDB] Failed to open file: ${error}`);
-                    vscode.window.showErrorMessage(`Failed to open file in Data Explorer: ${error}`);
+                    this._outputChannel.error(`[DuckDB] Failed to open file: ${getErrorMessage(error)}`);
+                    vscode.window.showErrorMessage(`Failed to open file in Data Explorer: ${getErrorMessage(error)}`);
                 }
             })
         );
@@ -1948,7 +1949,7 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
                 await operation();
             } catch (error) {
                 errors.push(error);
-                this._outputChannel.warn(`[Supervisor] Failed to ${label} during shutdown: ${error}`);
+                this._outputChannel.warn(`[Supervisor] Failed to ${label} during shutdown: ${getErrorMessage(error)}`);
             }
         };
 

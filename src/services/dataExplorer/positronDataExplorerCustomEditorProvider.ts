@@ -4,6 +4,7 @@
  *  in the "Reopen With Editor" menu for CSV, TSV, and Parquet files.
  *--------------------------------------------------------------------------------------------*/
 
+import { getErrorMessage } from '../../shared/errors';
 import * as vscode from 'vscode';
 import type { IPositronDataExplorerService } from './positronDataExplorerService';
 import { PositronDataExplorerEditorProvider } from './positronDataExplorerEditorProvider';
@@ -94,7 +95,7 @@ export class PositronDataExplorerCustomEditorProvider implements vscode.CustomRe
         } catch (error) {
             this._editorProvider.unmarkExternalPanel(identifier);
             this._logChannel.error(
-                `[DataExplorerCustomEditor] Failed to open file: ${error}`
+                `[DataExplorerCustomEditor] Failed to open file: ${getErrorMessage(error)}`
             );
             this._editorProvider.showError(webviewPanel, error);
         }

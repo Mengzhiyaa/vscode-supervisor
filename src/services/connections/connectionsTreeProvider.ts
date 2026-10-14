@@ -1,3 +1,4 @@
+import { getErrorMessage } from '../../shared/errors';
 import * as vscode from 'vscode';
 import { randomUUID } from 'crypto';
 import { CoreCommandIds, ViewContainerIds } from '../../coreCommandIds';
@@ -163,7 +164,7 @@ export class ConnectionsTreeProvider implements vscode.TreeDataProvider<Connecti
                 object,
             }));
         } catch (error) {
-            return [{ kind: 'error', message: error instanceof Error ? error.message : String(error) }];
+            return [{ kind: 'error', message: getErrorMessage(error) }];
         }
     }
 

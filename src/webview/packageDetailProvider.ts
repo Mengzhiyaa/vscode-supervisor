@@ -1,3 +1,4 @@
+import { getErrorMessage } from '../shared/errors';
 import * as vscode from 'vscode';
 import { createMessageConnection, type MessageConnection } from 'vscode-jsonrpc/node';
 import type { ILanguageRuntimeSession, IPositronPackagesInstance, LanguageRuntimePackage } from '../api';
@@ -123,7 +124,7 @@ export class PackageDetailProvider extends BaseWebviewProvider implements vscode
             }
         } catch (error) {
             if (!token.isCancellationRequested) {
-                this._error = error instanceof Error ? error.message : String(error);
+                this._error = getErrorMessage(error);
             }
         } finally {
             if (!this._disposed) {

@@ -1,3 +1,4 @@
+import { getErrorMessage } from '../../shared/errors';
 import * as vscode from 'vscode';
 import {
     type ILanguageRuntimePackageManager,
@@ -358,7 +359,7 @@ export class PositronPackagesInstance implements IPositronPackagesInstance, vsco
             this._session.onDidChangeRuntimeState(state => {
                 if (state === RuntimeState.Ready) {
                     void this.refreshPackages().catch(error => {
-                        this._outputChannel.warn(`[Packages] Failed to refresh packages: ${error}`);
+                        this._outputChannel.warn(`[Packages] Failed to refresh packages: ${getErrorMessage(error)}`);
                     });
                 } else if (state === RuntimeState.Exited) {
                     this.detachRuntime();
@@ -371,7 +372,7 @@ export class PositronPackagesInstance implements IPositronPackagesInstance, vsco
             currentState === RuntimeState.Idle ||
             currentState === RuntimeState.Busy) {
             void this.refreshPackages().catch(error => {
-                this._outputChannel.warn(`[Packages] Failed to refresh packages on attach: ${error}`);
+                this._outputChannel.warn(`[Packages] Failed to refresh packages on attach: ${getErrorMessage(error)}`);
             });
         }
     }
@@ -450,14 +451,14 @@ export class PositronPackagesInstance implements IPositronPackagesInstance, vsco
 
         if (this._session.metadata.sessionMode === LanguageRuntimeSessionMode.Console) {
             void this.refreshVulnerabilities().catch(error => {
-                if (!isCancellationError(error)) { this._outputChannel.warn(String(error)); }
+                if (!isCancellationError(error)) { this._outputChannel.warn(getErrorMessage(error)); }
             });
         }
         if (this._packageManager.getPackageMetadata && this._packages.length > 0) {
             const fetchAll = forceMetadata || !this._persistedMetadataCache.isFresh(this._runtimeId);
             void this._fetchAndMergeMetadata(undefined, fetchAll).catch(error => {
                 if (!isCancellationError(error)) {
-                    this._outputChannel.warn(`[Packages] Failed to fetch package metadata: ${error}`);
+                    this._outputChannel.warn(`[Packages] Failed to fetch package metadata: ${getErrorMessage(error)}`);
                 }
             });
         }

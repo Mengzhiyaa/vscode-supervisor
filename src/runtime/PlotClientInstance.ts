@@ -3,6 +3,7 @@
  *  Licensed under the Elastic License 2.0. See LICENSE.txt for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { getErrorMessage } from '../shared/errors';
 import * as vscode from 'vscode';
 import {
     type LanguageRuntimeMessageCommData,
@@ -259,7 +260,7 @@ export class PlotClientInstance extends RuntimeClientInstance {
                 if (needsSelect && !this._disposedPlot) { this._renderUpdateEmitter.fire(rendered); }
             } catch (error) {
                 if (this._disposedPlot || (error instanceof Error && error.message === 'Canceled')) { return; }
-                logFrameworkDiagnostic('PlotClientInstance', `Failed to queue plot update request: ${error}`);
+                logFrameworkDiagnostic('PlotClientInstance', `Failed to queue plot update request: ${getErrorMessage(error)}`);
                 this._onDidUpdatePlot.fire();
             }
         }));

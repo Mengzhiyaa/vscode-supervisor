@@ -8,6 +8,7 @@ import { RuntimeClientInstance, RuntimeClientOutput } from '../RuntimeClientInst
 import { RuntimeClientState } from '../../internal/runtimeTypes';
 import { createUniqueId } from '../../supervisor/util';
 import { logFrameworkDiagnostic } from '../../logging/frameworkLogger';
+import { getErrorMessage } from '../../shared/errors';
 
 /**
  * An enum representing the set of JSON-RPC error codes.
@@ -267,12 +268,13 @@ export class PositronBaseComm implements vscode.Disposable {
         try {
             // Wait for a response that includes either a result or an error.
             response = await this.clientInstance.performRpc<any>(request, timeout, ['result', 'error']);
-        } catch (err: any) {
+        } catch (err: unknown) {
             // Convert the error to a comm error
             const error: PositronCommError = {
                 code: JsonRpcErrorCode.InternalError,
-                message: err.message || 'Unknown error',
-                name: err.name || 'Error',
+                message: getErrorMessage(err),
+                name: typeof err === 'object' && err !== null &&
+                    'name' in err && typeof err.name === 'string' && err.name.length > 0 ? err.name : 'Error',
                 data: err
             };
             throw error;

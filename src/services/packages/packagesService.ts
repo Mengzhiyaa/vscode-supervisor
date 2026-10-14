@@ -1,3 +1,4 @@
+import { getErrorMessage } from '../../shared/errors';
 import * as vscode from 'vscode';
 import {
     type ILanguageRuntimePackageManagerProvider,
@@ -66,7 +67,7 @@ export class PositronPackagesService implements IPositronPackagesService {
             if (event.affectsConfiguration('packages.vulnerabilities')) {
                 for (const instance of this._instancesBySessionId.values()) {
                     if (instance.session.metadata.sessionMode === LanguageRuntimeSessionMode.Console) {
-                        void instance.refreshVulnerabilities().catch(error => this._outputChannel.warn(String(error)));
+                        void instance.refreshVulnerabilities().catch(error => this._outputChannel.warn(getErrorMessage(error)));
                     }
                 }
             }

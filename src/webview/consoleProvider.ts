@@ -1,3 +1,4 @@
+import { getErrorMessage } from '../shared/errors';
 import * as vscode from 'vscode';
 import { createHash, randomUUID } from 'crypto';
 import { MessageConnection } from 'vscode-jsonrpc/node';
@@ -498,7 +499,7 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
                 );
                 return { executionId };
             } catch (error) {
-                const message = error instanceof Error ? error.message : String(error);
+                const message = getErrorMessage(error);
                 void vscode.window.showErrorMessage(`Cannot execute code: ${message}`);
                 throw error;
             }
@@ -560,7 +561,7 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
                 >;
                 return { status: statusMap[status] ?? 'unknown' };
             } catch (error) {
-                const message = error instanceof Error ? error.message : String(error);
+                const message = getErrorMessage(error);
                 void vscode.window.showErrorMessage(`Cannot execute code: ${message}`);
                 throw error;
             }
@@ -714,7 +715,7 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
                     session: sessions.find(candidate => candidate.id === session.sessionId),
                 };
             } catch (error) {
-                const message = error instanceof Error ? error.message : String(error);
+                const message = getErrorMessage(error);
                 this.log(`Create session request failed: ${message}`, vscode.LogLevel.Error);
                 void vscode.window.showErrorMessage(`Failed to create session: ${message}`);
                 this._sendSessionInfoUpdate();
@@ -748,7 +749,7 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
                     await this._sessionManager.deleteSession(params.sessionId);
                 }
             } catch (error) {
-                const message = error instanceof Error ? error.message : String(error);
+                const message = getErrorMessage(error);
                 void vscode.window.showErrorMessage(vscode.l10n.t('Failed to delete session: {0}', message));
                 throw error;
             } finally {
@@ -860,7 +861,7 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
             try {
                 await openConsoleFile(params, instance.workingDirectory);
             } catch (error) {
-                this.log(`Failed to open console file: ${error}`, vscode.LogLevel.Warning);
+                this.log(`Failed to open console file: ${getErrorMessage(error)}`, vscode.LogLevel.Warning);
                 void vscode.window.showWarningMessage(vscode.l10n.t('Could not open console file: {0}', params.path));
             }
         });
@@ -878,7 +879,7 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
                 }
                 void vscode.env.openExternal(uri);
             } catch (error) {
-                this.log(`Failed to open external URL from console output: ${error}`, vscode.LogLevel.Warning);
+                this.log(`Failed to open external URL from console output: ${getErrorMessage(error)}`, vscode.LogLevel.Warning);
             }
         });
     }
@@ -924,7 +925,7 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
                 }));
                 return { items: result };
             } catch (error) {
-                this.log(`LSP completion error: ${error}`, vscode.LogLevel.Warning);
+                this.log(`LSP completion error: ${getErrorMessage(error)}`, vscode.LogLevel.Warning);
                 return { items: [] };
             }
         });
@@ -976,7 +977,7 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
                     range: result.range
                 };
             } catch (error) {
-                this.log(`LSP hover error: ${error}`, vscode.LogLevel.Warning);
+                this.log(`LSP hover error: ${getErrorMessage(error)}`, vscode.LogLevel.Warning);
                 return null;
             }
         });
@@ -1022,7 +1023,7 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
                     activeParameter: result.activeParameter
                 };
             } catch (error) {
-                this.log(`LSP signature help error: ${error}`, vscode.LogLevel.Warning);
+                this.log(`LSP signature help error: ${getErrorMessage(error)}`, vscode.LogLevel.Warning);
                 return null;
             }
         });

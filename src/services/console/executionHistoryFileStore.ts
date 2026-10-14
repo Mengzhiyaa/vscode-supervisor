@@ -1,3 +1,4 @@
+import { getErrorMessage } from '../../shared/errors';
 import { createHash, randomUUID } from 'crypto';
 import { mkdir, readFile, readdir, rename, rm, writeFile } from 'fs/promises';
 import * as path from 'path';
@@ -112,7 +113,7 @@ export class ExecutionHistoryFileStore {
                     this._mapFor(value.kind).set(value.id, value.entries);
                 } catch (error) {
                     this._outputChannel.warn(
-                        `[ExecutionHistoryService] Ignoring invalid history file ${file}: ${error}`,
+                        `[ExecutionHistoryService] Ignoring invalid history file ${file}: ${getErrorMessage(error)}`,
                     );
                 }
             }));

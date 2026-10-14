@@ -3,6 +3,7 @@
  *  1:1 replication of Positron's console instance class
  *--------------------------------------------------------------------------------------------*/
 
+import { getErrorMessage } from '../../shared/errors';
 import * as vscode from 'vscode';
 import { randomUUID } from 'crypto';
 import { codeFragmentsFromBoundaries, type IInputBoundaryFragments, type IInputBoundaryFragment } from './inputBoundaries';
@@ -936,7 +937,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
                 const shouldInterrupt = interruptRuntime && checkingAtSupervisor && !tokenSource.token.isCancellationRequested;
                 tokenSource.cancel();
                 if (shouldInterrupt) {
-                    void session.interrupt().catch(error => this._outputChannel.warn(String(error)));
+                    void session.interrupt().catch(error => this._outputChannel.warn(getErrorMessage(error)));
                 }
                 resolve(undefined);
             };
@@ -1055,7 +1056,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
             return 'executed';
         } catch (error) {
             this._outputChannel.error(
-                `[ConsoleInstance] Code submission failed: ${error instanceof Error ? error.message : String(error)}`,
+                `[ConsoleInstance] Code submission failed: ${getErrorMessage(error)}`,
             );
             removeSubmittingItem();
             return 'failed';
@@ -1100,7 +1101,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
         if (pendingExecutionId) {
             this._pendingBusyExecutionId = undefined;
             if (interruptRuntime && !cancelActiveSubmission) {
-                void this._session?.interrupt().catch(error => this._outputChannel.warn(String(error)));
+                void this._session?.interrupt().catch(error => this._outputChannel.warn(getErrorMessage(error)));
             }
         }
         this._cancelActiveSubmission = undefined;
@@ -1124,7 +1125,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
             return;
         }
         void this.processPendingInput().catch(error => {
-            this._outputChannel.error(`[ConsoleInstance] Pending input failed: ${String(error)}`);
+            this._outputChannel.error(`[ConsoleInstance] Pending input failed: ${getErrorMessage(error)}`);
         });
     }
 
@@ -1169,7 +1170,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
             return boundaries ? codeFragmentsFromBoundaries(code, boundaries) : undefined;
         } catch (error) {
             if (!token.isCancellationRequested) {
-                this._outputChannel.debug(`[ConsoleInstance] Input boundary provider failed: ${String(error)}`);
+                this._outputChannel.debug(`[ConsoleInstance] Input boundary provider failed: ${getErrorMessage(error)}`);
             }
             return undefined;
         } finally {
@@ -1275,7 +1276,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
         if (this._alignConsoleSubmission && !executionAccepted) { this._pendingBusyExecutionId = execId; }
         const rejected = (error: unknown) => {
             if (this._pendingBusyExecutionId === execId) { this._pendingBusyExecutionId = undefined; }
-            this._outputChannel.error(`[ConsoleInstance] Execution was not accepted: ${String(error)}`);
+            this._outputChannel.error(`[ConsoleInstance] Execution was not accepted: ${getErrorMessage(error)}`);
             this._drainPendingInputIfIdle();
         };
         if (!executionAccepted) {
@@ -1497,7 +1498,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
             );
         } catch (error) {
             if (this._pendingBusyExecutionId === id) { this._pendingBusyExecutionId = undefined; }
-            this._outputChannel.error(`[ConsoleInstance] Queued execution was not accepted: ${String(error)}`);
+            this._outputChannel.error(`[ConsoleInstance] Queued execution was not accepted: ${getErrorMessage(error)}`);
             return true;
         }
         this._executionHistoryService?.recordExecutionInput(
@@ -2488,7 +2489,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
                 ),
             );
         } catch (error) {
-            this._outputChannel.debug(`[ConsoleInstance] Error follow-up provider failed: ${error}`);
+            this._outputChannel.debug(`[ConsoleInstance] Error follow-up provider failed: ${getErrorMessage(error)}`);
         } finally {
             this._errorFollowupTokenSources.delete(tokenSource);
             tokenSource.dispose();
@@ -2870,7 +2871,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
         // When the runtime goes idle or ready, process pending input (Positron pattern)
         if (state === RuntimeState.Idle || state === RuntimeState.Ready) {
             void this.processPendingInput().catch(error => {
-                this._outputChannel.error(`[ConsoleInstance] Pending input failed: ${String(error)}`);
+                this._outputChannel.error(`[ConsoleInstance] Pending input failed: ${getErrorMessage(error)}`);
             });
             this.completeStartup();
         }

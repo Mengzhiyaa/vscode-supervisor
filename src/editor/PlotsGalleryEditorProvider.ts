@@ -5,6 +5,7 @@
  * This reuses the existing plots webview component to display all plots in a gallery format.
  */
 
+import { getErrorMessage } from '../shared/errors';
 import * as vscode from 'vscode';
 import { CoreCommandIds } from '../coreCommandIds';
 import type { PlotsViewProvider } from '../webview/plotsProvider';
@@ -228,7 +229,7 @@ export class PlotsGalleryEditorProvider implements vscode.Disposable {
 
             this._outputChannel.debug('Moved plots gallery to new window');
         } catch (error) {
-            this._outputChannel.warn(`Failed to move plots gallery to new window: ${error}`);
+            this._outputChannel.warn(`Failed to move plots gallery to new window: ${getErrorMessage(error)}`);
             throw error;
         }
     }

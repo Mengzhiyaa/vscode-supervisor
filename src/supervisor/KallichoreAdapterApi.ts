@@ -3,6 +3,7 @@
  *  Licensed under the Elastic License 2.0. See LICENSE.txt for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { getErrorMessage, formatErrorForLogging } from '../shared/errors';
 import * as vscode from 'vscode';
 import * as positron from './positron';
 import * as os from 'os';
@@ -273,7 +274,7 @@ export class KCApi implements PositronSupervisorApi {
 			// keep the server alive.
 			this.startClientHeartbeat();
 		}).catch((err) => {
-			this.log(`Failed to start Kallichore server: ${err}`, vscode.LogLevel.Error);
+			this.log(`Failed to start Kallichore server: ${getErrorMessage(err)}`, vscode.LogLevel.Error);
 		});
 	}
 
@@ -503,7 +504,7 @@ export class KCApi implements PositronSupervisorApi {
 					(serverState.socket_path ? `socket:${serverState.socket_path}` : '') ||
 					(serverState.named_pipe ? `pipe:${serverState.named_pipe}` : '');
 				this.log(`Failed to reconnect to Kallichore server ` +
-					` at ${connectionInfo}: ${err}. Starting a new server.`, vscode.LogLevel.Warning);
+					` at ${connectionInfo}: ${getErrorMessage(err)}. Starting a new server.`, vscode.LogLevel.Warning);
 			}
 		}
 
@@ -699,7 +700,7 @@ export class KCApi implements PositronSupervisorApi {
 			try {
 				fs.unlinkSync(outFile);
 			} catch (err) {
-				this.log(`Error cleaning up output file ${outFile}: ${err}`, vscode.LogLevel.Warning);
+				this.log(`Error cleaning up output file ${outFile}: ${getErrorMessage(err)}`, vscode.LogLevel.Warning);
 			}
 		}));
 
@@ -716,7 +717,7 @@ export class KCApi implements PositronSupervisorApi {
 					}
 				}
 			} catch (err) {
-				this.log(`Error reading supervisor output file ${outFile}: ${err}`, vscode.LogLevel.Warning);
+				this.log(`Error reading supervisor output file ${outFile}: ${getErrorMessage(err)}`, vscode.LogLevel.Warning);
 			}
 			return '';
 		};
@@ -748,7 +749,7 @@ export class KCApi implements PositronSupervisorApi {
 				processExited,
 			]);
 		} catch (err) {
-			const base = err instanceof Error ? err.message : String(err);
+			const base = getErrorMessage(err);
 			const message = base.includes('output:') ? base : base + readServerOutput();
 			this.log(message, vscode.LogLevel.Error);
 			throw new Error(message);
@@ -815,7 +816,7 @@ export class KCApi implements PositronSupervisorApi {
 			}
 			this.log(`Failed to get initial server status from Kallichore; ` +
 				`server may not be running or may not be ready. Check the terminal for errors. ` +
-				`Error: ${JSON.stringify(err)}`, vscode.LogLevel.Error);
+				`Error: ${formatErrorForLogging(err)}`, vscode.LogLevel.Error);
 			throw err;
 		}
 
@@ -1499,7 +1500,7 @@ export class KCApi implements PositronSupervisorApi {
 				try {
 					session.restore(kcSession);
 				} catch (err) {
-					this.log(`Failed to restore session ${sessionMetadata.sessionId}: ${JSON.stringify(err)}`, vscode.LogLevel.Error);
+					this.log(`Failed to restore session ${sessionMetadata.sessionId}: ${formatErrorForLogging(err)}`, vscode.LogLevel.Error);
 					if (err.code === 'ECONNREFUSED') {
 						this.log(`Connection refused while attempting to restore session; checking server status`, vscode.LogLevel.Warning);
 						await this.testServerExited();
@@ -1521,7 +1522,7 @@ export class KCApi implements PositronSupervisorApi {
 					reject(message);
 					return;
 				}
-				this.log(`Failed to reconnect to session ${sessionMetadata.sessionId}: ${JSON.stringify(err)}`, vscode.LogLevel.Error);
+				this.log(`Failed to reconnect to session ${sessionMetadata.sessionId}: ${formatErrorForLogging(err)}`, vscode.LogLevel.Error);
 				reject(err);
 			});
 		});
@@ -1693,7 +1694,7 @@ export class KCApi implements PositronSupervisorApi {
 				// Not fatal; just log the error. We'll unset the environment
 				// variable so we don't try to use this file again in any case.
 				this.log(
-					`Failed to delete connection file ${connectionFile}: ${err}`);
+					`Failed to delete connection file ${connectionFile}: ${getErrorMessage(err)}`);
 			}
 		}
 

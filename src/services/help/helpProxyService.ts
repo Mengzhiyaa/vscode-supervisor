@@ -3,6 +3,7 @@
  *  Provides a local HTTP proxy for help content with injected styles/scripts.
  *--------------------------------------------------------------------------------------------*/
 
+import { getErrorMessage } from '../../shared/errors';
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as http from 'http';
@@ -110,7 +111,7 @@ export class HelpProxyService implements vscode.Disposable {
     private async _startProxyServer(targetOrigin: string, isCurrent: () => boolean): Promise<HelpProxyInfo> {
         const server = http.createServer((req, res) => {
             void this._handleProxyRequest(targetOrigin, req, res).catch(error => {
-                this._outputChannel.debug(`[HelpProxyService] Failed to prepare proxy request: ${error}`);
+                this._outputChannel.debug(`[HelpProxyService] Failed to prepare proxy request: ${getErrorMessage(error)}`);
                 if (!res.headersSent) {
                     res.writeHead(502);
                     res.end('Proxy error');
@@ -187,7 +188,7 @@ export class HelpProxyService implements vscode.Disposable {
             const script = getScriptElement(scripts, 'help-script');
             return new HelpHtmlConfig(styleDefaults, styleOverrides, script, {});
         } catch (error) {
-            this._outputChannel.error(`[HelpProxyService] Failed to load help resources: ${error}`);
+            this._outputChannel.error(`[HelpProxyService] Failed to load help resources: ${getErrorMessage(error)}`);
             return new HelpHtmlConfig();
         }
     }
@@ -263,7 +264,7 @@ export class HelpProxyService implements vscode.Disposable {
         );
 
         proxyReq.on('error', (error) => {
-            this._outputChannel.debug(`[HelpProxyService] Proxy request failed: ${error}`);
+            this._outputChannel.debug(`[HelpProxyService] Proxy request failed: ${getErrorMessage(error)}`);
             res.writeHead(502);
             res.end('Proxy error');
         });

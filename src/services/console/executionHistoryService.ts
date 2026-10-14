@@ -1,3 +1,4 @@
+import { getErrorMessage } from '../../shared/errors';
 import * as vscode from 'vscode';
 import type { SerializedConsoleState } from '../../shared/consoleState';
 
@@ -525,7 +526,7 @@ export class ExecutionHistoryService implements vscode.Disposable {
             .then(() => this._storage.update(key, snapshot))
             .catch(error => {
                 this._outputChannel.warn(
-                    `[ExecutionHistoryService] Failed to persist ${key}: ${error}`,
+                    `[ExecutionHistoryService] Failed to persist ${key}: ${getErrorMessage(error)}`,
                 );
             });
     }

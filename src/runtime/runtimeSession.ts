@@ -1,3 +1,4 @@
+import { getErrorMessage } from '../shared/errors';
 import * as vscode from 'vscode';
 import {
     type ILanguageInstallationPickerOptions,
@@ -299,7 +300,7 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
                 void session.bindLspFactory(factory, effectiveGeneration).catch(error => {
                     this._outputChannel.error(
                         `[RuntimeSession] Failed to attach late LSP factory to ` +
-                        `${session.sessionId}: ${error}`,
+                        `${session.sessionId}: ${getErrorMessage(error)}`,
                     );
                 });
             }
@@ -325,7 +326,7 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
                 for (const session of this._sessions.values()) {
                     if (session.runtimeMetadata.languageId === factory.languageId) {
                         void session.removeLspFactory(session.boundLspGeneration).catch(error => {
-                            this._outputChannel.warn(`[RuntimeSession] Failed to remove LSP factory: ${error}`);
+                            this._outputChannel.warn(`[RuntimeSession] Failed to remove LSP factory: ${getErrorMessage(error)}`);
                         });
                     }
                 }
@@ -483,7 +484,7 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
             this.updateActiveLanguages();
             this._outputChannel.debug('[RuntimeSession] Initialized');
         } catch (error) {
-            this._outputChannel.error(`[RuntimeSession] Error initializing: ${error}`);
+            this._outputChannel.error(`[RuntimeSession] Error initializing: ${getErrorMessage(error)}`);
             throw error;
         }
     }
@@ -1055,7 +1056,7 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
             return sessionManager.validateSession(runtimeMetadata, sessionId);
         } catch (error) {
             this._outputChannel.error(
-                `[RuntimeSession] Failed to validate session ${sessionId} for ${runtimeMetadata.runtimeName}: ${error}`,
+                `[RuntimeSession] Failed to validate session ${sessionId} for ${runtimeMetadata.runtimeName}: ${getErrorMessage(error)}`,
             );
             return false;
         }
@@ -1218,7 +1219,7 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
                     `[RuntimeSession] Kernel ${sessionId} exited after ${Date.now() - started}ms`,
                 );
             } catch (error) {
-                this._outputChannel.warn(`[RuntimeSession] Shutdown failed for ${sessionId}: ${error}`);
+                this._outputChannel.warn(`[RuntimeSession] Shutdown failed for ${sessionId}: ${getErrorMessage(error)}`);
                 // A failed request does not prove that the process exited.
                 // Retain its connection and UI so shutdown can be retried.
                 if (this._sessions.get(sessionId)?.state !== RuntimeState.Exited) {
@@ -1408,13 +1409,13 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
                 try {
                     await session.shutdown();
                 } catch (error) {
-                    this._outputChannel.warn(`[RuntimeSession] Error shutting down session ${session.sessionId}: ${error}`);
+                    this._outputChannel.warn(`[RuntimeSession] Error shutting down session ${session.sessionId}: ${getErrorMessage(error)}`);
                 }
 
                 try {
                     await this._removeSession(session);
                 } catch (error) {
-                    this._outputChannel.warn(`[RuntimeSession] Error disposing session ${session.sessionId}: ${error}`);
+                    this._outputChannel.warn(`[RuntimeSession] Error disposing session ${session.sessionId}: ${getErrorMessage(error)}`);
                 }
             }
 
@@ -1427,7 +1428,7 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
                 await this._localSupervisor?.shutdownForQuit();
             } catch (error) {
                 this._outputChannel.warn(
-                    `[RuntimeSession] Error shutting down the local supervisor on quit: ${error}`,
+                    `[RuntimeSession] Error shutting down the local supervisor on quit: ${getErrorMessage(error)}`,
                 );
             }
             this._localSupervisor?.dispose();
@@ -1451,7 +1452,7 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
                     await session.detachForExtensionHostShutdown();
                 } catch (error) {
                     this._outputChannel.warn(
-                        `[RuntimeSession] Error detaching session ${session.sessionId} for extension host shutdown: ${error}`,
+                        `[RuntimeSession] Error detaching session ${session.sessionId} for extension host shutdown: ${getErrorMessage(error)}`,
                     );
                 }
             }));
@@ -1572,7 +1573,7 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
                         lateStateDisposable.dispose();
                         void finalizeStart().catch(finalizeError => {
                             this._outputChannel.error(
-                                `[RuntimeSession] Failed to finalize late start for ${session.sessionId}: ${finalizeError}`,
+                                `[RuntimeSession] Failed to finalize late start for ${session.sessionId}: ${getErrorMessage(finalizeError)}`,
                             );
                         });
                     } else if (state === RuntimeState.Exited) {
@@ -2254,7 +2255,7 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
             return true;
         } catch (error) {
             void vscode.window.showWarningMessage(
-                `Failed to interrupt the ${session.runtimeMetadata.languageName} session. Reason: ${error}`,
+                `Failed to interrupt the ${session.runtimeMetadata.languageName} session. Reason: ${getErrorMessage(error)}`,
             );
             return false;
         }
@@ -2375,7 +2376,7 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
         ) {
             void this._setForegroundSession(session.sessionId).catch(error => {
                 this._outputChannel.error(
-                    `[RuntimeSession] Failed to reconcile foreground session ${session.sessionId}: ${error}`,
+                    `[RuntimeSession] Failed to reconcile foreground session ${session.sessionId}: ${getErrorMessage(error)}`,
                 );
             });
         }
@@ -2472,7 +2473,7 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
             await this.forceQuitSession(session.sessionId);
         } catch (error) {
             this._outputChannel.error(
-                `[RuntimeSession] Failed to force quit ${session.sessionId}: ${error}`,
+                `[RuntimeSession] Failed to force quit ${session.sessionId}: ${getErrorMessage(error)}`,
             );
             void vscode.window.showErrorMessage(
                 `Failed to force quit ${session.runtimeMetadata.runtimeName}. See the Supervisor log for details.`,
@@ -2547,7 +2548,7 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
         // Disposal retires the session synchronously, then releases editor
         // resources. Publish removal before waiting for that asynchronous work.
         const cleanup = session.dispose().catch(error => {
-            this._outputChannel.warn(`[RuntimeSession] Cleanup failed for ${session.sessionId}: ${error}`);
+            this._outputChannel.warn(`[RuntimeSession] Cleanup failed for ${session.sessionId}: ${getErrorMessage(error)}`);
         });
         const detachedForegroundSession = this._detachSessionFromServiceState(session);
         try {

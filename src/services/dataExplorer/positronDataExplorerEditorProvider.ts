@@ -4,6 +4,7 @@
  *  Uses JSON-RPC MessageConnection for webview communication (same pattern as console/plots)
  *--------------------------------------------------------------------------------------------*/
 
+import { getErrorMessage } from '../../shared/errors';
 import * as vscode from 'vscode';
 import { CoreCommandIds } from '../../coreCommandIds';
 import { buildDataImportView } from './dataImportView';
@@ -230,7 +231,7 @@ export class PositronDataExplorerEditorProvider implements vscode.Disposable {
                 try {
                     await this._openAsSpreadsheet(instance);
                 } catch (error) {
-                    vscode.window.showErrorMessage(String(error));
+                    vscode.window.showErrorMessage(getErrorMessage(error));
                 }
             })
         );
@@ -367,7 +368,7 @@ export class PositronDataExplorerEditorProvider implements vscode.Disposable {
                 availableSyntaxes,
             });
         } catch (error) {
-            vscode.window.showErrorMessage(`Convert to code failed: ${String(error)}`);
+            vscode.window.showErrorMessage(`Convert to code failed: ${getErrorMessage(error)}`);
         }
     }
 
@@ -439,7 +440,7 @@ export class PositronDataExplorerEditorProvider implements vscode.Disposable {
                 return;
             }
             vscode.window.showErrorMessage(
-                vscode.l10n.t('Failed to select worksheet: {0}', String(error)),
+                vscode.l10n.t('Failed to select worksheet: {0}', getErrorMessage(error)),
             );
         }
     }
@@ -609,7 +610,7 @@ export class PositronDataExplorerEditorProvider implements vscode.Disposable {
             () => this._openingInstances.delete(instance.identifier),
             error => {
                 this._openingInstances.delete(instance.identifier);
-                this._logChannel.error(`[DataExplorerEditor] Failed to open ${instance.identifier}: ${error}`);
+                this._logChannel.error(`[DataExplorerEditor] Failed to open ${instance.identifier}: ${getErrorMessage(error)}`);
             },
         );
     }
@@ -646,7 +647,7 @@ export class PositronDataExplorerEditorProvider implements vscode.Disposable {
     public showError(panel: vscode.WebviewPanel, error: unknown): void {
         panel.webview.html = this._getStatusHtml(
             vscode.l10n.t('Failed to open in Data Explorer'),
-            String(error),
+            getErrorMessage(error),
             true,
         );
     }
@@ -924,9 +925,28 @@ export class PositronDataExplorerEditorProvider implements vscode.Disposable {
         });
         window.addEventListener('unhandledrejection', (event) => {
             const reason = event.reason;
+            // Capture failures before the webview bundle (and shared helpers) loads.
+            let message = typeof reason?.message === 'string' ? reason.message : undefined;
+            if (message === undefined) {
+                try {
+                    const seen = new WeakSet();
+                    message = reason !== null && typeof reason === 'object'
+                        ? JSON.stringify(reason, (_key, value) => {
+                            if (typeof value === 'bigint') return String(value);
+                            if (value !== null && typeof value === 'object') {
+                                if (seen.has(value)) return '[Circular]';
+                                seen.add(value);
+                            }
+                            return value;
+                        })
+                        : String(reason);
+                } catch {
+                    message = '[Unserializable promise rejection]';
+                }
+            }
             vscode.postMessage({
                 type: 'dataExplorerWebviewError',
-                message: reason?.message ?? String(reason),
+                message: message ?? 'Unhandled promise rejection',
                 stack: reason?.stack,
             });
         });

@@ -3,6 +3,7 @@
  *  Handles Help comm events and routes them to the Help view.
  *--------------------------------------------------------------------------------------------*/
 
+import { getErrorMessage } from '../../shared/errors';
 import * as vscode from 'vscode';
 import { ViewIds } from '../../coreCommandIds';
 import { RuntimeSessionService } from '../../runtime/runtimeSession';
@@ -210,7 +211,7 @@ export class PositronHelpService implements IPositronHelpService {
                 storedEntry.sourceUrl = this._proxyService.buildProxyUrl(targetUrl, proxyInfo);
             }
         } catch (error) {
-            this._outputChannel.error(`[PositronHelpService] Failed to refresh help proxy for ${targetUrl.origin}: ${error}`);
+            this._outputChannel.error(`[PositronHelpService] Failed to refresh help proxy for ${targetUrl.origin}: ${getErrorMessage(error)}`);
         }
     }
 
@@ -243,7 +244,7 @@ export class PositronHelpService implements IPositronHelpService {
         try {
             proxyInfo = await this._proxyService.startProxyServer(targetUrl.origin);
         } catch (error) {
-            this._outputChannel.error(`[PositronHelpService] Failed to start help proxy for ${targetUrl.origin}: ${error}`);
+            this._outputChannel.error(`[PositronHelpService] Failed to start help proxy for ${targetUrl.origin}: ${getErrorMessage(error)}`);
         }
 
         if (!proxyInfo) {
@@ -366,7 +367,7 @@ export class PositronHelpService implements IPositronHelpService {
         try {
             proxyInfo = await this._proxyService.startProxyServer(targetUrl.origin);
         } catch (error) {
-            this._outputChannel.error(`[PositronHelpService] Failed to start help proxy for ${targetUrl.origin}: ${error}`);
+            this._outputChannel.error(`[PositronHelpService] Failed to start help proxy for ${targetUrl.origin}: ${getErrorMessage(error)}`);
         }
 
         if (!proxyInfo) {

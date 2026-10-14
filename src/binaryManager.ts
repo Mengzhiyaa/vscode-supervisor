@@ -6,6 +6,7 @@
  * Code progress notification.
  */
 
+import { getErrorMessage } from './shared/errors';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -222,7 +223,7 @@ function download(
                 });
 
                 response.on('error', (err) => {
-                    fail(err instanceof Error ? err : new Error(String(err)));
+                    fail(err instanceof Error ? err : new Error(getErrorMessage(err)));
                 });
 
                 response.pipe(file);
@@ -230,7 +231,7 @@ function download(
 
             activeRequest = requestRef;
             requestRef.on('error', (err) => {
-                fail(err instanceof Error ? err : new Error(String(err)));
+                fail(err instanceof Error ? err : new Error(getErrorMessage(err)));
             });
         };
 
@@ -534,7 +535,7 @@ export async function ensureBinaries(
                     installedVersions[name] = getExpectedBinaryVersion(def, version);
                     installedVersionsChanged = true;
                 } catch (err) {
-                    const message = err instanceof Error ? err.message : String(err);
+                    const message = getErrorMessage(err);
                     log.error(`[BinaryManager] Failed to install ${name}: ${message}`);
 
                     if (err instanceof DownloadTimeoutError) {

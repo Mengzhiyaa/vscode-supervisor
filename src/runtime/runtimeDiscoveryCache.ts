@@ -1,3 +1,4 @@
+import { getErrorMessage } from '../shared/errors';
 import { promises as fs } from 'fs';
 import * as vscode from 'vscode';
 import type { LanguageRuntimeMetadata, RuntimeRootSignature } from '../api';
@@ -190,7 +191,7 @@ export class RuntimeDiscoveryCache {
                 },
             };
         } catch (error) {
-            this._outputChannel.trace(`[Runtime cache] stat failed for ${runtimePath}: ${error}`);
+            this._outputChannel.trace(`[Runtime cache] stat failed for ${runtimePath}: ${getErrorMessage(error)}`);
             return undefined;
         }
     }

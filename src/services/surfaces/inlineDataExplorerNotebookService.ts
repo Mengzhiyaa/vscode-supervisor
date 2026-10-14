@@ -1,3 +1,4 @@
+import { getErrorMessage } from '../../shared/errors';
 import * as vscode from 'vscode';
 import { CoreCommandIds } from '../../coreCommandIds';
 import type { IPositronDataExplorerService } from '../dataExplorer/positronDataExplorerService';
@@ -166,7 +167,7 @@ export class InlineDataExplorerNotebookService implements vscode.Disposable {
                 })),
             }, editor);
         } catch (error) {
-            const detail = error instanceof Error ? error.message : String(error);
+            const detail = getErrorMessage(error);
             this._outputChannel.warn(`[InlineDataExplorer] ${detail}`);
             await this._messaging.postMessage({
                 type: 'inlineDataExplorer/error',
