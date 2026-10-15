@@ -168,6 +168,9 @@ export function registerConsoleDefaults(
         sessions,
         activeSessionId,
     }));
+    // Console models request native LSP independently of language tokenizer modules.
+    backend.onRequest('lspTunnel/open', () => ({ supported: false }));
+    backend.onRequest('lspTunnel/close', () => undefined);
     backend.onRequest(ConsoleMethods.getSettings, () => ({
         scrollbackSize: 1000,
         fontFamily: 'var(--vscode-editor-font-family)',

@@ -1,4 +1,3 @@
-import type { MessageConnection } from "vscode-jsonrpc/browser";
 import type * as MonacoTypes from "monaco-editor/editor";
 import {
     type LanguageTextMateGrammarDefinition,
@@ -13,14 +12,6 @@ type MonacoApi = typeof import("monaco-editor/editor");
 export interface LanguageMonacoSupportModule {
     registerLanguage(monaco: MonacoApi): void;
     ensureTokenizerReady(monaco: MonacoApi): Promise<void>;
-    ensureProviders?(monaco: MonacoApi): void;
-    registerModel?(
-        monaco: MonacoApi,
-        model: MonacoTypes.editor.ITextModel,
-        sessionId: string,
-        connection: MessageConnection,
-    ): void;
-    unregisterModel?(monaco: MonacoApi, model: MonacoTypes.editor.ITextModel): void;
     getTextMateThemeRules?(): MonacoTypes.editor.ITokenThemeRule[];
     updateTextMateThemeRules?(theme: ConsoleThemeData): void;
 }

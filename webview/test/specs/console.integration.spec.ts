@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import type * as Monaco from 'monaco-editor/editor';
 import { ConsoleMethods, SessionMethods, createSession, registerConsoleDefaults } from '../harness/domains';
 import { openWebviewPage } from '../harness/page';
 
@@ -2941,35 +2942,55 @@ test('console safely handles switching to a restarting session and defers execut
         sessions: [session1, session2Restarting],
         activeSessionId: 'session-2',
     });
-    await page.waitForTimeout(200);
 
     // The console input should still be visible even during restart
     await expect(page.locator('.console-input')).toBeVisible();
-    const monacoInput = page.locator('.console-input textarea').last();
+    const readInput = () => page.evaluate(() => {
+        const monaco = (globalThis as typeof globalThis & { monaco: typeof Monaco }).monaco;
+        const editor = monaco.editor.getEditors().find(editor =>
+            editor.getDomNode()?.closest('.console-input'),
+        );
+        return {
+            uri: editor?.getModel()?.uri.toString(),
+            code: editor?.getValue(),
+            focused: editor?.hasTextFocus() ?? false,
+        };
+    });
+    await expect.poll(async () => (await readInput()).uri)
+        .toBe('inmemory://console/session-session-2.r');
 
     // Try to execute code — it should be deferred because session is restarting
-    await monacoInput.focus();
     await backend.notify(ConsoleMethods.setPendingCode, {
         sessionId: 'session-2',
         code: 'deferred_code <- 1',
     });
-    await page.waitForTimeout(200);
+    await expect.poll(async () => (await readInput()).code).toBe('deferred_code <- 1');
+    await page.evaluate(() => {
+        const monaco = (globalThis as typeof globalThis & { monaco: typeof Monaco }).monaco;
+        monaco.editor.getEditors().find(editor =>
+            editor.getDomNode()?.closest('.console-input'),
+        )!.focus();
+    });
+    await expect.poll(async () => (await readInput()).focused).toBe(true);
 
     const executeCountBefore = backend.requestCount(ConsoleMethods.submitCode);
-    await monacoInput.press('Enter');
-    await page.waitForTimeout(200);
-    expect.soft(backend.requestCount(ConsoleMethods.submitCode)).toBe(executeCountBefore);
+    await page.keyboard.press('Enter');
+    expect((await readInput()).code).toBe('deferred_code <- 1');
+    expect(backend.requestCount(ConsoleMethods.submitCode)).toBe(executeCountBefore);
 
     // Session-2 finishes restarting and becomes ready
-    const session2Ready = { ...session2Restarting, state: 'ready' as const };
+    const session2Ready = {
+        ...session2Restarting,
+        state: 'ready' as const,
+        runtimeState: 'ready' as const,
+    };
     await backend.notify(SessionMethods.info, {
         sessions: [session1, session2Ready],
         activeSessionId: 'session-2',
     });
-    await page.waitForTimeout(300);
 
     // The deferred execute should now fire
-    expect.soft(backend.requestCount(ConsoleMethods.submitCode)).toBe(executeCountBefore + 1);
+    await expect.poll(() => backend.requestCount(ConsoleMethods.submitCode)).toBe(executeCountBefore + 1);
     expect
         .soft(backend.requests(ConsoleMethods.submitCode).at(-1)?.params)
         .toEqual(

@@ -1,0 +1,56 @@
+{
+  "$schema": "./schema/webview-rpc-contract.schema.json",
+  "domain": "lspTunnel",
+  "declarations": [
+    {
+      "kind": "request",
+      "name": "LspTunnelOpenRequest",
+      "method": "lspTunnel/open",
+      "paramsType": "import('../../shared/lspTunnel').LspTunnelOpenParams",
+      "resultType": "import('../../shared/lspTunnel').LspTunnelOpenResult",
+      "errorType": "void"
+    },
+    {
+      "kind": "request",
+      "name": "LspTunnelSendRequest",
+      "method": "lspTunnel/send",
+      "paramsType": "import('../../shared/lspTunnel').LspTunnelMessage",
+      "resultType": "void",
+      "errorType": "void"
+    },
+    {
+      "kind": "request",
+      "name": "LspTunnelCloseRequest",
+      "method": "lspTunnel/close",
+      "paramsType": "import('../../shared/lspTunnel').LspTunnelKey",
+      "resultType": "void",
+      "errorType": "void"
+    },
+    {
+      "kind": "notification",
+      "name": "LspTunnelMessageNotification",
+      "method": "lspTunnel/message",
+      "paramsType": "import('../../shared/lspTunnel').LspTunnelMessage"
+    },
+    {
+      "kind": "notification",
+      "name": "LspTunnelStateNotification",
+      "method": "lspTunnel/state",
+      "paramsType": "import('../../shared/lspTunnel').LspTunnelState"
+    },
+    {
+      "kind": "request",
+      "name": "LspTunnelOpenDocumentRequest",
+      "method": "lspTunnel/openDocument",
+      "paramsType": "import('../../shared/lspTunnel').LspTunnelOpenDocument",
+      "resultType": "boolean",
+      "errorType": "void"
+    },
+    {
+      "kind": "notification",
+      "name": "LspTunnelConfigurationChangedNotification",
+      "method": "lspTunnel/configurationChanged",
+      "paramsType": "import('../../shared/lspTunnel').LspTunnelConfigurationChanged"
+    }
+  ]
+}

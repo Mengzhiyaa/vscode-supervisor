@@ -858,9 +858,6 @@ suite('[Unit] supervisor core backports', () => {
             deactivate: async () => undefined,
             wait: async () => true,
             showOutput: () => undefined,
-            requestCompletion: async () => [],
-            requestHover: async () => null,
-            requestSignatureHelp: async () => null,
             dispose: () => undefined,
         };
         const session = new RuntimeSession(
@@ -913,9 +910,6 @@ suite('[Unit] supervisor core backports', () => {
             deactivate: async () => undefined,
             wait: async () => false,
             showOutput: () => undefined,
-            requestCompletion: async () => [],
-            requestHover: async () => null,
-            requestSignatureHelp: async () => null,
             dispose: () => undefined,
         };
         const session = new RuntimeSession(

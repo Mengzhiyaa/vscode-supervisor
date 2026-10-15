@@ -5,7 +5,6 @@ import { MessageConnection } from 'vscode-jsonrpc/node';
 import { ContextKeys, CoreConfigurationKeys, CoreConfigurationSections, ViewIds } from '../coreCommandIds';
 import { BaseWebviewProvider } from './baseProvider';
 import * as ConsoleProtocol from '../rpc/webview/console';
-import * as LspProtocol from '../rpc/webview/lsp';
 import * as SessionProtocol from '../rpc/webview/session';
 import * as PlotsProtocol from '../rpc/webview/plots';
 import { LanguageRuntimeSessionMode } from '../api';
@@ -30,6 +29,7 @@ import {
 } from './consoleResourceUsageCoordinator';
 import { ConsoleSyncCoordinator } from './consoleSyncCoordinator';
 import { openConsoleFile } from './consoleFileLink';
+import { LspTunnelService } from '../lspTunnel/lspTunnelService';
 
 /**
  * Webview provider for the R Console panel.
@@ -37,6 +37,7 @@ import { openConsoleFile } from './consoleFileLink';
  * Supports multiple sessions with per-session message routing.
  */
 export class ConsoleViewProvider extends BaseWebviewProvider {
+    private _lspTunnelService: LspTunnelService | undefined;
     private readonly _consoleServiceDisposables: vscode.Disposable[] = [];
     private readonly _sessionSnapshotBuilder: SessionSnapshotBuilder;
 
@@ -169,6 +170,8 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
     }
 
     protected override _onDidDisposeWebviewView(): void {
+        this._lspTunnelService?.dispose();
+        this._lspTunnelService = undefined;
         this._webviewReady = false;
         for (const sessionId of this._allSessionSubscriptions.keys()) {
             this._consoleSyncCoordinator.cancelSession(sessionId);
@@ -221,6 +224,7 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
      * Unsubscribes from a session's events.
      */
     unsubscribeFromSession(sessionId: string): void {
+        this._lspTunnelService?.closeSession(sessionId);
         const disposables = this._allSessionSubscriptions.get(sessionId);
         if (disposables) {
             disposables.forEach(d => d.dispose());
@@ -349,6 +353,9 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
     }
 
     protected _registerRpcHandlers(connection: MessageConnection): void {
+        this._lspTunnelService?.dispose();
+        this._lspTunnelService = new LspTunnelService(connection,
+            id => this._sessionManager?.getSession(id), this._outputChannel);
         this._webviewReady = false;
         this._resourceUsageCoordinator.resetPublication();
         this._pendingRestoreStatesForInstances = true;
@@ -432,7 +439,6 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
         this._registerConsoleActionHandlers(connection);
         this._registerSessionHandlers(connection);
         this._registerOutputNavigationHandlers(connection);
-        this._registerLanguageServiceHandlers(connection);
         connection.onRequest(PlotsProtocol.SelectPlotRequest.type, async params => {
             if (!this._plotsService) { return; }
             const plot = this._plotsService.positronPlotInstances.find(candidate => candidate.id === params.plotId);
@@ -880,151 +886,6 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
                 void vscode.env.openExternal(uri);
             } catch (error) {
                 this.log(`Failed to open external URL from console output: ${getErrorMessage(error)}`, vscode.LogLevel.Warning);
-            }
-        });
-    }
-
-    private _registerLanguageServiceHandlers(connection: MessageConnection): void {
-
-        // =====================================================================
-        // LSP RPC Handlers (Console LSP Bridge)
-        // These forward LSP requests from the webview to the session's LSP client
-        // =====================================================================
-
-        // Handle LSP completion request
-        connection.onRequest(LspProtocol.LspCompletionRequest.type, async (params) => {
-            this.log(`LSP completion request for session ${params.sessionId}`, vscode.LogLevel.Debug);
-
-            if (!params.sessionId) {
-                this._warnMissingSession('lspCompletion');
-                return { items: [] };
-            }
-            const targetSession = this._sessionManager?.getSession(params.sessionId);
-            if (!targetSession) {
-                this.log(`LSP completion: session ${params.sessionId} not found`, vscode.LogLevel.Debug);
-                return { items: [] };
-            }
-
-            const lsp = targetSession.lsp;
-            if (!lsp) {
-                this.log(`LSP completion: no LSP client for session ${params.sessionId}`, vscode.LogLevel.Debug);
-                return { items: [] };
-            }
-
-            try {
-                const items = await lsp.requestCompletion(params.code, params.position);
-                // Convert LSP items to our protocol format
-                const result: LspProtocol.LspCompletionItem[] = items.map((item: any) => ({
-                    label: item.label || item,
-                    kind: item.kind,
-                    detail: item.detail,
-                    documentation: item.documentation,
-                    insertText: item.insertText || item.textEdit?.newText,
-                    filterText: item.filterText,
-                    sortText: item.sortText
-                }));
-                return { items: result };
-            } catch (error) {
-                this.log(`LSP completion error: ${getErrorMessage(error)}`, vscode.LogLevel.Warning);
-                return { items: [] };
-            }
-        });
-
-        // Handle LSP hover request
-        connection.onRequest(LspProtocol.LspHoverRequest.type, async (params) => {
-            this.log(`LSP hover request for session ${params.sessionId}`, vscode.LogLevel.Debug);
-
-            if (!params.sessionId) {
-                this._warnMissingSession('lspHover');
-                return null;
-            }
-            const targetSession = this._sessionManager?.getSession(params.sessionId);
-            if (!targetSession) {
-                return null;
-            }
-
-            const lsp = targetSession.lsp;
-            if (!lsp) {
-                return null;
-            }
-
-            try {
-                const result = await lsp.requestHover(params.code, params.position);
-                if (!result) {
-                    return null;
-                }
-
-                // Convert LSP hover to our protocol format
-                let contents: LspProtocol.LspMarkupContent | string;
-                if (typeof result.contents === 'string') {
-                    contents = result.contents;
-                } else if (Array.isArray(result.contents)) {
-                    // MarkedString array - join them
-                    contents = result.contents.map((c: any) =>
-                        typeof c === 'string' ? c : c.value
-                    ).join('\n\n');
-                } else if ('value' in result.contents) {
-                    contents = {
-                        kind: result.contents.kind || 'markdown',
-                        value: result.contents.value
-                    };
-                } else {
-                    contents = String(result.contents);
-                }
-
-                return {
-                    contents,
-                    range: result.range
-                };
-            } catch (error) {
-                this.log(`LSP hover error: ${getErrorMessage(error)}`, vscode.LogLevel.Warning);
-                return null;
-            }
-        });
-
-        // Handle LSP signature help request
-        connection.onRequest(LspProtocol.LspSignatureHelpRequest.type, async (params) => {
-            this.log(`LSP signature help request for session ${params.sessionId}`, vscode.LogLevel.Debug);
-
-            if (!params.sessionId) {
-                this._warnMissingSession('lspSignatureHelp');
-                return null;
-            }
-            const targetSession = this._sessionManager?.getSession(params.sessionId);
-            if (!targetSession) {
-                return null;
-            }
-
-            const lsp = targetSession.lsp;
-            if (!lsp) {
-                return null;
-            }
-
-            try {
-                const result = await lsp.requestSignatureHelp(params.code, params.position);
-                if (!result || !result.signatures || result.signatures.length === 0) {
-                    return null;
-                }
-
-                // Convert LSP signature help to our protocol format
-                const signatures: LspProtocol.LspSignatureInformation[] = result.signatures.map((sig: any) => ({
-                    label: sig.label,
-                    documentation: sig.documentation,
-                    parameters: sig.parameters?.map((p: any) => ({
-                        label: p.label,
-                        documentation: p.documentation
-                    })),
-                    activeParameter: sig.activeParameter
-                }));
-
-                return {
-                    signatures,
-                    activeSignature: result.activeSignature,
-                    activeParameter: result.activeParameter
-                };
-            } catch (error) {
-                this.log(`LSP signature help error: ${getErrorMessage(error)}`, vscode.LogLevel.Warning);
-                return null;
             }
         });
     }

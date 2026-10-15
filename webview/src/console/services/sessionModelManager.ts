@@ -1,7 +1,8 @@
 import type * as MonacoApi from "monaco-editor/editor";
 import type { MessageConnection } from "vscode-jsonrpc/browser";
-import { loadLanguageMonacoSupportModule } from "$lib/monaco/languageSupport";
 import type { IInputHistoryEntry } from "../history";
+import type { LspClientManager } from "$lib/lsp/lspClientManager";
+import { consoleLspModelUri } from "@shared/lspTunnel";
 
 export type ConsoleInputCommand =
     | { kind: "focus" }
@@ -58,6 +59,7 @@ export interface SessionModelManager {
 export interface SessionModelManagerOptions {
     monaco: typeof MonacoApi;
     getConnection: () => MessageConnection | undefined;
+    lspClientManager?: LspClientManager;
 }
 
 function cloneHistoryState(state: SessionHistoryState): SessionHistoryState {
@@ -74,7 +76,7 @@ function cloneHistoryState(state: SessionHistoryState): SessionHistoryState {
 export function createSessionModelManager(
     options: SessionModelManagerOptions,
 ): SessionModelManager {
-    const { monaco, getConnection } = options;
+    const { monaco, getConnection, lspClientManager } = options;
 
     const sessionStateById = new Map<string, SessionState>();
     const pendingCommandsBySession = new Map<string, ConsoleInputCommand[]>();
@@ -96,13 +98,7 @@ export function createSessionModelManager(
         sessionId: string,
         languageId: string,
     ): MonacoApi.Uri {
-        const normalizedLanguageId = normalizeLanguageId(languageId).replace(
-            /[^a-z0-9_-]+/g,
-            "-",
-        );
-        return monaco.Uri.parse(
-            `inmemory://console/session-${encodeURIComponent(sessionId)}.${normalizedLanguageId}`,
-        );
+        return monaco.Uri.parse(consoleLspModelUri(sessionId, normalizeLanguageId(languageId)));
     }
 
     function syncModelLanguage(
@@ -117,43 +113,18 @@ export function createSessionModelManager(
     function registerSessionModel(
         model: MonacoApi.editor.ITextModel,
         sessionId: string,
-        languageId: string,
         connectionOverride?: MessageConnection,
     ): void {
         const connection = connectionOverride ?? getConnection();
         if (connection) {
-            void loadLanguageMonacoSupportModule(languageId)
-                .then((support) => {
-                    support?.registerModel?.(
-                        monaco,
-                        model,
-                        sessionId,
-                        connection,
-                    );
-                })
-                .catch((error) => {
-                    console.warn(
-                        `[sessionModelManager] Failed to register model for '${languageId}'`,
-                        error,
-                    );
-                });
+            lspClientManager?.attachModel(model, sessionId, connection);
+        } else {
+            lspClientManager?.detachModel(model);
         }
     }
 
-    function unregisterSessionModel(
-        model: MonacoApi.editor.ITextModel,
-        languageId: string,
-    ): void {
-        void loadLanguageMonacoSupportModule(languageId)
-            .then((support) => {
-                support?.unregisterModel?.(monaco, model);
-            })
-            .catch((error) => {
-                console.warn(
-                    `[sessionModelManager] Failed to unregister model for '${languageId}'`,
-                    error,
-                );
-            });
+    function unregisterSessionModel(model: MonacoApi.editor.ITextModel): void {
+        lspClientManager?.detachModel(model);
     }
 
     function createSessionState(
@@ -176,7 +147,7 @@ export function createSessionModelManager(
             model.setValue(initialValue);
         }
 
-        registerSessionModel(model, sessionId, normalizedLanguageId);
+        registerSessionModel(model, sessionId);
 
         return {
             editor: {
@@ -201,7 +172,7 @@ export function createSessionModelManager(
             sessionState.editor.model.getValue(),
         );
 
-        unregisterSessionModel(sessionState.editor.model, sessionState.languageId);
+        unregisterSessionModel(sessionState.editor.model);
         sessionState.editor.model.dispose();
         sessionStateById.set(sessionId, nextState);
         return nextState;
@@ -298,7 +269,7 @@ export function createSessionModelManager(
                 return;
             }
 
-            unregisterSessionModel(state.editor.model, state.languageId);
+            unregisterSessionModel(state.editor.model);
             state.editor.model.dispose();
             sessionStateById.delete(sessionId);
             pendingCommandsBySession.delete(sessionId);
@@ -319,6 +290,9 @@ export function createSessionModelManager(
 
         updateConnection(connection) {
             if (!connection) {
+                for (const state of sessionStateById.values()) {
+                    unregisterSessionModel(state.editor.model);
+                }
                 return;
             }
 
@@ -326,7 +300,6 @@ export function createSessionModelManager(
                 registerSessionModel(
                     state.editor.model,
                     sessionId,
-                    state.languageId,
                     connection,
                 );
             }

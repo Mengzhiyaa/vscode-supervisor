@@ -6,6 +6,7 @@
     import { onMount, setContext, tick } from "svelte";
     import { SvelteMap } from "svelte/reactivity";
     import { getRpcConnection } from "$lib/rpc/client";
+    import { LspClientManager, lspClientManagerContext } from "$lib/lsp/lspClientManager";
     import ActionBar from "./ActionBar.svelte";
     import ConsoleTabList from "./ConsoleTabList.svelte";
     import ConsoleInstance from "./ConsoleInstance.svelte";
@@ -65,6 +66,8 @@
 
     const promptInputs: PromptInputControllers = new Map();
     setContext(promptInputControllersContext, promptInputs);
+    const lspClientManager = new LspClientManager();
+    setContext(lspClientManagerContext, lspClientManager);
 
     // Per-session data storage
     interface SessionData {
@@ -129,6 +132,11 @@
     // State
     let connection = $state<MessageConnection | undefined>();
     let sessions = $state<SessionInfo[]>([]);
+    $effect(() => {
+        lspClientManager.updateSessions(sessions.map(session => ({
+            id: session.id, runtimeState: session.runtimeState, runtimeAttached: session.runtimeAttached,
+        })));
+    });
     let activeConsoleSessionId = $state<string | undefined>();
     let pendingForegroundSessionId = $state<string | undefined>();
     const sessionDataMap = new SvelteMap<string, SessionData>();
@@ -1967,6 +1975,7 @@
         })();
 
         return () => {
+            lspClientManager.dispose();
             resizeObserver.disconnect();
         };
     });

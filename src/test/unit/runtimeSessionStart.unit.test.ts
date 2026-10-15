@@ -582,9 +582,6 @@ suite('[Unit] runtime session start semantics', () => {
             deactivate: async () => undefined,
             wait: async () => false,
             showOutput: () => undefined,
-            requestCompletion: async () => [],
-            requestHover: async () => null,
-            requestSignatureHelp: async () => null,
             dispose: () => { disposed++; },
         };
         const session = new RuntimeSession(
@@ -620,9 +617,6 @@ suite('[Unit] runtime session start semantics', () => {
             deactivate: async () => undefined,
             wait: async () => false,
             showOutput: () => undefined,
-            requestCompletion: async () => [],
-            requestHover: async () => null,
-            requestSignatureHelp: async () => null,
             dispose: () => { disposals[index]++; },
         });
         const first = makeLsp(0);

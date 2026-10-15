@@ -12,14 +12,16 @@
     - Current code fragment preservation
 -->
 <script lang="ts">
-    import { onMount, onDestroy, tick } from "svelte";
+    import { getContext, onMount, onDestroy, tick } from "svelte";
     import {
         CancellationTokenSource,
         type MessageConnection,
     } from "vscode-jsonrpc/browser";
     import { monaco, ensureMonacoRuntime } from "$lib/monaco/setup";
+    import { lspClientManagerContext, type LspClientManager } from "$lib/lsp/lspClientManager";
     import {
         ensureLanguageTextMateTokenizerReady,
+        getLanguageMonacoSupportModuleUrl,
         getTextMateThemeRules,
         loadLanguageMonacoSupportModule,
         type ConsoleThemeData,
@@ -145,8 +147,6 @@
 
     // Disposables for cleanup
     let disposables: monaco.IDisposable[] = [];
-    let languageMonacoSupportModule: LanguageMonacoSupportModule | undefined;
-    let languageMonacoSupportModuleLanguageId = "";
     let destroyed = false;
     let inputVisibilityAnimationFrame: number | undefined;
     let activationEpoch = 0;
@@ -159,6 +159,7 @@
     const sessionModelManager = createSessionModelManager({
         monaco,
         getConnection: () => connection,
+        lspClientManager: getContext<LspClientManager | undefined>(lspClientManagerContext),
     });
 
     // Ref object to hold current active state (solves closure capture issue)
@@ -196,39 +197,33 @@
         targetLanguageId: string,
     ): Promise<LanguageMonacoSupportModule | undefined> {
         const normalizedLanguageId = normalizeLanguageId(targetLanguageId);
-        if (
-            languageMonacoSupportModule &&
-            languageMonacoSupportModuleLanguageId === normalizedLanguageId
-        ) {
-            return languageMonacoSupportModule;
-        }
-
         try {
-            languageMonacoSupportModule =
-                await loadLanguageMonacoSupportModule(normalizedLanguageId);
-            languageMonacoSupportModuleLanguageId = languageMonacoSupportModule
-                ? normalizedLanguageId
-                : "";
+            // The shared loader caches by language and module URL.
+            return await loadLanguageMonacoSupportModule(normalizedLanguageId);
         } catch (error) {
             console.warn(
                 `[ConsoleInput] Failed to load language support for '${normalizedLanguageId}'`,
                 error,
             );
-            languageMonacoSupportModule = undefined;
-            languageMonacoSupportModuleLanguageId = "";
+            return undefined;
         }
-        return languageMonacoSupportModule;
     }
 
     async function ensureLanguageSupportRegistered(
         targetLanguageId: string,
     ): Promise<LanguageMonacoSupportModule | undefined> {
         const normalizedLanguageId = normalizeLanguageId(targetLanguageId);
+        const assetsVersion = languageAssetsVersion;
+        const moduleUrl = getLanguageMonacoSupportModuleUrl(normalizedLanguageId);
+        const isCurrent = () => !destroyed &&
+            assetsVersion === languageAssetsVersion &&
+            normalizedLanguageId === currentLanguageId() &&
+            moduleUrl === getLanguageMonacoSupportModuleUrl(normalizedLanguageId);
         const languageMonacoSupport =
             await ensureLanguageMonacoSupportModule(normalizedLanguageId);
 
-        if (destroyed) {
-            return languageMonacoSupport;
+        if (!isCurrent()) {
+            return undefined;
         }
 
         languageMonacoSupport?.registerLanguage(monaco);
@@ -236,7 +231,9 @@
             monaco,
             normalizedLanguageId,
         );
-        languageMonacoSupport?.ensureProviders?.(monaco);
+        if (!isCurrent()) {
+            return undefined;
+        }
         return languageMonacoSupport;
     }
 
@@ -1626,6 +1623,7 @@
     });
 
     $effect(() => {
+        void languageAssetsVersion;
         syncKnownSessionModels();
         sessionModelManager.updateConnection(connection);
     });
@@ -1633,10 +1631,15 @@
     $effect(() => {
         const targetSessionId = sessionId;
         const targetLanguageId = currentLanguageId();
-        void languageAssetsVersion;
+        const assetsVersion = languageAssetsVersion;
 
         void ensureLanguageSupportRegistered(targetLanguageId).then(() => {
-            if (destroyed || !codeEditorWidget) {
+            if (
+                destroyed || !codeEditorWidget ||
+                sessionId !== targetSessionId ||
+                currentLanguageId() !== targetLanguageId ||
+                languageAssetsVersion !== assetsVersion
+            ) {
                 return;
             }
 
@@ -1689,12 +1692,20 @@
     }
 
     function hasVisibleSuggestWidget(): boolean {
-        if (typeof document === "undefined") {
+        const editorDomNode = codeEditorWidget.getDomNode();
+        if (!editorDomNode) {
             return false;
         }
+        // Monaco adds the `visible` class after a 100ms delay. The widget can
+        // already own keyboard input during that delay, so inspect its actual
+        // visibility and keep the lookup scoped to this editor.
         return Array.from(
-            document.getElementsByClassName("suggest-widget"),
-        ).some((widget) => widget.classList.contains("visible"));
+            editorDomNode.querySelectorAll<HTMLElement>(".suggest-widget"),
+        ).some((widget) => {
+            const visibility = getComputedStyle(widget).visibility;
+            return widget.getClientRects().length > 0 &&
+                visibility !== "hidden" && visibility !== "collapse";
+        });
     }
 
     function cancelSuggestWidget(): void {
@@ -1817,8 +1828,8 @@
         // Handle Enter/Shift+Enter via editor keydown to avoid global keybinding leakage
         disposables.push(
             codeEditorWidget.onKeyDown((e: monaco.IKeyboardEvent) => {
-                // Match Positron: if the suggest widget is visibly open, let Monaco
-                // own Tab/Enter/arrow handling instead of second-guessing suggest state.
+                // Leave Tab and navigation to Monaco as soon as suggestions are
+                // displayed, including before its delayed `visible` class appears.
                 const ctrlCmd = e.ctrlKey || e.metaKey;
                 const suggestVisible = hasVisibleSuggestWidget();
                 if (!ctrlCmd && suggestVisible) {

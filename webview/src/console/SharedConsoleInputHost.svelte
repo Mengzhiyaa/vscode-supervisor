@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { mount, unmount } from "svelte";
+    import { getAllContexts, mount, unmount } from "svelte";
     import type { ConsoleState, ConsoleSettings } from "../types/console";
     import ConsoleInput from "./ConsoleInput.svelte";
     import type { MessageConnection } from "vscode-jsonrpc/browser";
@@ -103,6 +103,7 @@
     }
 
     let mountedInput: MountedInputInstance | undefined;
+    const inputContexts = getAllContexts();
     let mountedProps = $state<ConsoleInputMountProps | undefined>(undefined);
 
     function createMountProps(
@@ -189,6 +190,7 @@
         const component = mount(ConsoleInput, {
             target: hostContainer,
             props: mountedProps,
+            context: inputContexts,
         });
 
         mountedInput = {

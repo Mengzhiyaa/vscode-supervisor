@@ -11,6 +11,7 @@ import {
     type IRuntimeSessionMetadata,
     type ILanguageLsp,
     type ILanguageLspFactory,
+    type ILanguageConsoleLspConfiguration,
     type ILanguageRuntimeClientInstance,
     type RuntimeSessionOutputChannel,
     type Utf8Location,
@@ -135,18 +136,6 @@ class NullLanguageLsp implements ILanguageLsp {
         return;
     }
 
-    async requestCompletion(): Promise<any[]> {
-        return [];
-    }
-
-    async requestHover(): Promise<any | null> {
-        return null;
-    }
-
-    async requestSignatureHelp(): Promise<any | null> {
-        return null;
-    }
-
     dispose(): void {
         return;
     }
@@ -239,6 +228,8 @@ export class RuntimeSession implements vscode.Disposable {
     private _lspClientId?: string;
     private readonly _lspClientsByKernel = new WeakMap<JupyterLanguageRuntimeSession, Set<string>>();
     private _lspTransportKind: 'serverComm' | undefined;
+    private readonly _consoleLspConfigurationEmitter = new vscode.EventEmitter<void>();
+    readonly onDidChangeConsoleLspConfiguration = this._consoleLspConfigurationEmitter.event;
     public dynState: LanguageRuntimeDynState;
 
     // Flag to indicate if this session is the foreground (active) session
@@ -1417,6 +1408,10 @@ export class RuntimeSession implements vscode.Disposable {
         return this._boundLspGeneration;
     }
 
+    public get consoleLspConfiguration(): ILanguageConsoleLspConfiguration | undefined {
+        return this._lsp.consoleLspConfiguration ?? this._lspFactory?.consoleLsp;
+    }
+
     /**
      * Attaches an LSP factory that was registered after this session was
      * created. Language extensions are activated independently from session
@@ -1458,6 +1453,7 @@ export class RuntimeSession implements vscode.Disposable {
         this._lspFactory = factory;
         this._supportsLsp = true;
         this._lsp = lsp;
+        this._consoleLspConfigurationEmitter.fire();
 
         if (
             this._lspRequestedActive &&
@@ -1482,6 +1478,7 @@ export class RuntimeSession implements vscode.Disposable {
         this._lspFactory = undefined;
         this._supportsLsp = false;
         this._lsp = new NullLanguageLsp();
+        this._consoleLspConfigurationEmitter.fire();
         try {
             await previousLsp.deactivate();
         } finally {
@@ -1743,6 +1740,7 @@ export class RuntimeSession implements vscode.Disposable {
             return;
         }
         this._disposed = true;
+        this._consoleLspConfigurationEmitter.dispose();
 
         if (this._eventQueueTimer) {
             clearTimeout(this._eventQueueTimer);

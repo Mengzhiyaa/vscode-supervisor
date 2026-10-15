@@ -60,6 +60,10 @@ class FakeConnection {
         return { dispose: () => undefined };
     }
 
+    onClose(): vscode.Disposable {
+        return { dispose: () => undefined };
+    }
+
     sendNotification(type: { method: string }, params?: unknown): void {
         this.notifications.push({ method: type.method, params });
     }

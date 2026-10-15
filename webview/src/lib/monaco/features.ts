@@ -3,7 +3,7 @@
 // Diff editors, folding, sticky scroll, GPU commands, CodeLens, color pickers,
 // inlay hints, token inspection, and section headers are unused
 // by the Console and Data Explorer surfaces. The public API may retain core code.
-// In Monaco 0.56, inlineCompletions also imports the SuggestController used by
+// In Monaco 0.56/0.57, inlineCompletions also imports the SuggestController used by
 // regular completion popups. Keep this public entry until suggest/register does so.
 import "monaco-editor/features/anchorSelect/register";
 import "monaco-editor/features/bracketMatching/register";
