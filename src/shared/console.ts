@@ -1,3 +1,12 @@
+/** Browser-safe provenance for executions requested outside the Console. */
+export interface ConsoleExecutionAttribution {
+    source: string;
+    agentName?: string;
+    agentVersion?: string;
+    workspaceId?: string;
+    tool?: string;
+}
+
 export enum ActivityItemPromptState {
     Unanswered = 'Unanswered',
     Answered = 'Answered',

@@ -42,11 +42,10 @@
         HistoryPrefixMatchStrategy,
         HistoryInfixMatchStrategy,
     } from "./history";
-    import {
-        copyScopedSelection,
-        writeClipboardText,
-    } from "./utils/selectionUtils";
+    import { copyScopedSelection } from "./utils/selectionUtils";
+    import { copyEditorSelection } from "./utils/editorClipboard";
     import { isTabSuggestContext } from "./tabSuggest";
+    import { localize } from "$lib/localization";
 
     // Position constants (Positron pattern - using const instead of enum for Svelte compatibility)
     const Position = {
@@ -144,6 +143,19 @@
     let historyBrowserActive = $state(false);
     let historyBrowserSelectedIndex = $state(0);
     let historyItems = $state<HistoryMatch[]>([]);
+    let historyBrowserContext: monaco.editor.IContextKey<boolean> | undefined;
+    let interruptContext: monaco.editor.IContextKey<boolean> | undefined;
+
+    function setHistoryBrowserActive(value: boolean): void {
+        historyBrowserActive = value;
+        historyBrowserContext?.set(value);
+    }
+
+    function updateInterruptContext(): void {
+        interruptContext?.set(
+            stateRef.current === "busy" || submissionInFlightRef.current,
+        );
+    }
 
     // Disposables for cleanup
     let disposables: monaco.IDisposable[] = [];
@@ -429,31 +441,15 @@
             return;
         }
 
-        const contributionIds = [
-            "editor.contrib.suggestController",
-            "editor.contrib.parameterHintsController",
-            "editor.contrib.contentHover",
-            "snippetController2",
+        const commands = [
+            "hideSuggestWidget",
+            "closeParameterHints",
+            "editor.action.hideHover",
+            "leaveSnippet",
         ];
 
-        for (const contributionId of contributionIds) {
-            const contribution = (codeEditorWidget as any).getContribution?.(
-                contributionId,
-            ) as
-                | {
-                      cancelSuggestWidget?: () => void;
-                      cancel?: () => void;
-                      hide?: () => void;
-                      reset?: () => void;
-                      cancelSession?: () => void;
-                  }
-                | undefined;
-
-            contribution?.cancelSuggestWidget?.();
-            contribution?.cancel?.();
-            contribution?.hide?.();
-            contribution?.reset?.();
-            contribution?.cancelSession?.();
+        for (const command of commands) {
+            codeEditorWidget.trigger("console", command, null);
         }
     }
 
@@ -464,6 +460,7 @@
     $effect(() => {
         const previousState = stateRef.current;
         stateRef.current = consoleState;
+        updateInterruptContext();
 
         // Positron pattern: Update line numbers on state change
         if (codeEditorWidget) {
@@ -606,14 +603,14 @@
         historyBrowserSelectedIndex = Math.max(0, matches.length - 1);
 
         // Make the history browser active
-        historyBrowserActive = true;
+        setHistoryBrowserActive(true);
     }
 
     /**
      * Disengages the history browser (Positron pattern).
      */
     function disengageHistoryBrowser() {
-        historyBrowserActive = false;
+        setHistoryBrowserActive(false);
         historyItems = [];
     }
 
@@ -746,47 +743,22 @@
 
         historyEntries = normalized;
         historyIndex = -1;
-        historyBrowserActive = false;
+        setHistoryBrowserActive(false);
         historyItems = [];
         historyBrowserSelectedIndex = 0;
     }
 
     function applyPasteText(text: string) {
-        const selections = codeEditorWidget.getSelections();
-        if (!selections || !selections.length) {
-            return;
-        }
-
-        const lines = text.split("\n");
-        const edits: monaco.editor.IIdentifiedSingleEditOperation[] = [];
-
-        if (lines.length === selections.length) {
-            for (let i = 0; i < lines.length; i++) {
-                edits.push({
-                    range: selections[i],
-                    text: lines[i],
-                    forceMoveMarkers: true,
-                });
-            }
-        } else {
-            for (const selection of selections) {
-                edits.push({
-                    range: selection,
-                    text,
-                    forceMoveMarkers: true,
-                });
-            }
-        }
-
-        codeEditorWidget.executeEdits("console", edits);
-        updateCodeEditorWidgetPosition(Position.Last, Position.Last);
+        // Let Monaco place each caret after its pasted text and manage undo.
+        codeEditorWidget.trigger("console", "paste", { text });
+        scheduleScrollInputIntoView();
     }
 
     function clearHistory() {
         historyEntries = [];
         historyIndex = -1;
         currentCodeFragment = undefined;
-        historyBrowserActive = false;
+        setHistoryBrowserActive(false);
         historyItems = [];
         historyBrowserSelectedIndex = 0;
     }
@@ -806,7 +778,7 @@
         historyEntries = state ? [...state.historyEntries] : [];
         historyIndex = state?.historyIndex ?? -1;
         currentCodeFragment = state?.currentCodeFragment;
-        historyBrowserActive = false;
+        setHistoryBrowserActive(false);
         historyItems = [];
         historyBrowserSelectedIndex = 0;
     }
@@ -1094,6 +1066,7 @@
         }
 
         submissionInFlightRef.current = true;
+        updateInterruptContext();
         submissionSessionIdRef.current = requestedSessionId;
         onSubmittingChanged?.(requestedSessionId, true);
 
@@ -1220,6 +1193,7 @@
             submissionCancellationSourceRef.current?.dispose();
             submissionCancellationSourceRef.current = undefined;
             submissionInFlightRef.current = false;
+            updateInterruptContext();
             resubmitQueuedRef.current = false;
             submissionSessionIdRef.current = undefined;
             onSubmittingChanged?.(requestedSessionId, false);
@@ -1343,8 +1317,11 @@
                     // Enable suggestions/completions
                     quickSuggestions: true,
                     suggestOnTriggerCharacters: true,
-                    acceptSuggestionOnEnter: "off", // Don't auto-accept on Enter (keep for execute)
+                    acceptSuggestionOnEnter: "on",
                     tabCompletion: "on",
+                    // Also delete empty pairs restored from history or pasted in.
+                    autoClosingDelete: "always",
+                    emptySelectionClipboard: false,
                     // Hover support
                     hover: {
                         enabled: "on",
@@ -1388,13 +1365,10 @@
                 }),
             );
 
-            // Set the paste event handler (Positron pattern)
+            // Keep pasted input visible without overriding Monaco's caret positions.
             disposables.push(
                 codeEditorWidget.onDidPaste(() => {
-                    updateCodeEditorWidgetPosition(
-                        Position.Last,
-                        Position.Last,
-                    );
+                    scheduleScrollInputIntoView();
                 }),
             );
 
@@ -1551,6 +1525,8 @@
         handledCommandNonces.clear();
 
         disposables.forEach((d) => d.dispose());
+        historyBrowserContext = undefined;
+        interruptContext = undefined;
         if (inputVisibilityAnimationFrame !== undefined) {
             cancelAnimationFrame(inputVisibilityAnimationFrame);
         }
@@ -1691,28 +1667,8 @@
         );
     }
 
-    function hasVisibleSuggestWidget(): boolean {
-        const editorDomNode = codeEditorWidget.getDomNode();
-        if (!editorDomNode) {
-            return false;
-        }
-        // Monaco adds the `visible` class after a 100ms delay. The widget can
-        // already own keyboard input during that delay, so inspect its actual
-        // visibility and keep the lookup scoped to this editor.
-        return Array.from(
-            editorDomNode.querySelectorAll<HTMLElement>(".suggest-widget"),
-        ).some((widget) => {
-            const visibility = getComputedStyle(widget).visibility;
-            return widget.getClientRects().length > 0 &&
-                visibility !== "hidden" && visibility !== "collapse";
-        });
-    }
-
     function cancelSuggestWidget(): void {
-        const suggestController = codeEditorWidget.getContribution(
-            "editor.contrib.suggestController",
-        ) as { cancelSuggestWidget?: () => void } | undefined;
-        suggestController?.cancelSuggestWidget?.();
+        codeEditorWidget.trigger("console", "hideSuggestWidget", null);
     }
 
     function moveHistoryBrowserSelection(delta: number): void {
@@ -1728,6 +1684,9 @@
     }
 
     function handleEditorClipboardKeyDown(event: KeyboardEvent): void {
+        if (!codeEditorWidget.hasTextFocus()) {
+            return;
+        }
         const ctrlCmd = event.ctrlKey || event.metaKey;
         if (!ctrlCmd || event.shiftKey || event.altKey) {
             return;
@@ -1749,31 +1708,9 @@
             return;
         }
 
-        const selections = codeEditorWidget
-            .getSelections()
-            ?.filter((selection) => !selection.isEmpty());
-        const model = codeEditorWidget.getModel();
-        if (model && selections?.length) {
+        if (copyEditorSelection(codeEditorWidget, key === "x")) {
             event.preventDefault();
             event.stopPropagation();
-
-            const text = selections
-                .map((selection) => model.getValueInRange(selection))
-                .join("\n");
-            void writeClipboardText(text);
-
-            if (key === "x") {
-                codeEditorWidget.pushUndoStop();
-                codeEditorWidget.executeEdits(
-                    "console.clipboardCut",
-                    selections.map((selection) => ({
-                        range: selection,
-                        text: "",
-                        forceMoveMarkers: true,
-                    })),
-                );
-                codeEditorWidget.pushUndoStop();
-            }
             return;
         }
 
@@ -1804,312 +1741,124 @@
         }
     }
 
+    async function submitInput(): Promise<void> {
+        if (!activeRef.current) {
+            onActivate(currentSessionId());
+        }
+        if (stateRef.current !== "ready") {
+            if (!deferCodeEditorWidgetCodeUntilReady()) {
+                codeEditorWidget.trigger("keyboard", "type", { text: "\n" });
+            }
+            return;
+        }
+        if (!(await executeCodeEditorWidgetCodeIfPossible())) {
+            codeEditorWidget.trigger("keyboard", "type", { text: "\n" });
+        }
+    }
+
     function setupKeyBindings() {
-        // Monaco's internal keybinding service can consume clipboard commands
-        // before onKeyDown subscribers run. Capture only copy/cut at the editor
-        // DOM boundary so model selections are handled deterministically.
-        const editorKeyEventBoundary = codeEditorWidgetContainerRef;
-        if (editorKeyEventBoundary) {
-            editorKeyEventBoundary.addEventListener(
-                "keydown",
-                handleEditorClipboardKeyDown,
-                true,
-            );
-            disposables.push({
-                dispose: () =>
-                    editorKeyEventBoundary.removeEventListener(
-                        "keydown",
-                        handleEditorClipboardKeyDown,
-                        true,
-                    ),
+        const editor = codeEditorWidget;
+        historyBrowserContext = editor.createContextKey<boolean>("consoleHistoryVisible", historyBrowserActive);
+        interruptContext = editor.createContextKey<boolean>("consoleCanInterrupt", false);
+        const firstLine = editor.createContextKey<boolean>("consoleInputFirstLine", false);
+        const lastLine = editor.createContextKey<boolean>("consoleInputLastLine", false);
+        const emptyInput = editor.createContextKey<boolean>("consoleInputEmpty", true);
+        const tabSuggest = editor.createContextKey<boolean>("consoleTabSuggest", false);
+        const updateInputContexts = () => {
+            const model = editor.getModel();
+            const position = editor.getPosition();
+            const selections = editor.getSelections();
+            const singleCaret = selections?.length === 1 && selections[0].isEmpty();
+            firstLine.set(!!singleCaret && position?.lineNumber === 1);
+            lastLine.set(!!singleCaret && !!model && position?.lineNumber === model.getLineCount());
+            emptyInput.set(!!model && model.getValueLength() === 0);
+            tabSuggest.set(selections?.length === 1 && shouldTriggerSuggestOnTab());
+        };
+        disposables.push(
+            editor.onDidChangeCursorSelection(updateInputContexts),
+            editor.onDidChangeModelContent(updateInputContexts),
+            editor.onDidChangeModel(updateInputContexts),
+        );
+        updateInputContexts();
+        updateInterruptContext();
+
+        // addAction scopes each binding to this editor and supplies disposal.
+        // Native suggestion/snippet commands keep ownership of their keys.
+        const addAction = (
+            id: string,
+            label: string,
+            keybindings: number[],
+            keybindingContext: string,
+            run: () => void | Promise<void>,
+        ) => {
+            disposables.push(editor.addAction({
+                id: `console.${id}`,
+                label: localize(`console.action.${id}`, label),
+                keybindings,
+                precondition: "editorTextFocus",
+                keybindingContext,
+                run,
+            }));
+        };
+        const commandKeys = (key: number) => [
+            monaco.KeyMod.CtrlCmd | key,
+            monaco.KeyMod.WinCtrl | key,
+        ];
+        const noSuggestion = "!suggestWidgetVisible";
+        const normalInput = `${noSuggestion} && !consoleHistoryVisible`;
+        addAction("submit", "Submit Console Input", [monaco.KeyCode.Enter], normalInput, submitInput);
+        addAction("newLine", "Insert Console Newline", [monaco.KeyMod.Shift | monaco.KeyCode.Enter], noSuggestion, () => {
+            editor.trigger("keyboard", "type", { text: "\n" });
+        });
+        addAction("tabSuggest", "Show Console Suggestions", [monaco.KeyCode.Tab],
+            `${normalInput} && consoleTabSuggest && !inSnippetMode && !inlineSuggestionVisible`, () => {
+                editor.trigger("console", "editor.action.triggerSuggest", null);
+            });
+        addAction("acceptHistory", "Accept Console History", [monaco.KeyCode.Enter, monaco.KeyCode.Tab],
+            `${noSuggestion} && consoleHistoryVisible`, () => acceptHistoryMatch(historyBrowserSelectedIndex));
+        addAction("previousHistory", "Previous Console History", [monaco.KeyCode.UpArrow],
+            `${normalInput} && consoleInputFirstLine`, navigateHistoryUp);
+        addAction("nextHistory", "Next Console History", [monaco.KeyCode.DownArrow],
+            `${normalInput} && consoleInputLastLine`, navigateHistoryDown);
+        addAction("previousHistoryMatch", "Previous Console History Match", [monaco.KeyCode.UpArrow],
+            `${noSuggestion} && consoleHistoryVisible`, () => moveHistoryBrowserSelection(-1));
+        addAction("nextHistoryMatch", "Next Console History Match", [monaco.KeyCode.DownArrow],
+            `${noSuggestion} && consoleHistoryVisible`, () => moveHistoryBrowserSelection(1));
+        addAction("searchHistoryPrefix", "Search Console History by Prefix", commandKeys(monaco.KeyCode.UpArrow), normalInput, () => {
+            engageHistoryBrowser(new HistoryPrefixMatchStrategy(historyEntries));
+        });
+        if (!isMacintosh) {
+            addAction("searchHistory", "Search Console History", [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyR], "", () => {
+                engageHistoryBrowser(new HistoryInfixMatchStrategy(historyEntries));
             });
         }
+        addAction("deleteAllLeft", "Delete Console Input to Line Start", commandKeys(monaco.KeyCode.KeyU), "", () => {
+            // Preserve the Console's line-start no-op instead of joining lines.
+            if (editor.getSelections()?.some((selection) => selection.isEmpty() && selection.positionColumn === 1)) {
+                return;
+            }
+            editor.trigger("console", "deleteAllLeft", null);
+        });
+        addAction("selectOutput", "Select All Console Output", commandKeys(monaco.KeyCode.KeyA), "consoleInputEmpty", onSelectAll);
+        addAction("find", "Find in Console", commandKeys(monaco.KeyCode.KeyF), "", () => onOpenSearch?.(currentSessionId()));
+        addAction("insertPipe", "Insert Pipe Operator", commandKeys(monaco.KeyMod.Shift | monaco.KeyCode.KeyM), "", () => {
+            editor.trigger("keyboard", "type", { text: " |> " });
+        });
+        addAction("clear", "Clear Console", commandKeys(monaco.KeyCode.KeyL), "", () => onClearConsole?.(currentSessionId()));
+        addAction("insertAssignment", "Insert Assignment Operator", [monaco.KeyMod.Alt | monaco.KeyCode.Minus], "", () => {
+            editor.trigger("keyboard", "type", { text: " <- " });
+        });
+        addAction("closeHistory", "Close Console History", [monaco.KeyCode.Escape],
+            `${noSuggestion} && consoleHistoryVisible`, disengageHistoryBrowser);
+        addAction("interrupt", "Interrupt Execution", [monaco.KeyCode.Escape],
+            `${normalInput} && consoleCanInterrupt && !inSnippetMode && !parameterHintsVisible && !editorHoverVisible`, interruptOrCancelSubmission);
 
-        // Handle Enter/Shift+Enter via editor keydown to avoid global keybinding leakage
-        disposables.push(
-            codeEditorWidget.onKeyDown((e: monaco.IKeyboardEvent) => {
-                // Leave Tab and navigation to Monaco as soon as suggestions are
-                // displayed, including before its delayed `visible` class appears.
-                const ctrlCmd = e.ctrlKey || e.metaKey;
-                const suggestVisible = hasVisibleSuggestWidget();
-                if (!ctrlCmd && suggestVisible) {
-                    if (e.keyCode === monaco.KeyCode.Enter && !e.shiftKey) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        codeEditorWidget.trigger(
-                            "keyboard",
-                            "acceptSelectedSuggestion",
-                            null,
-                        );
-                    }
-                    return;
-                }
-
-                if (e.keyCode === monaco.KeyCode.Tab) {
-                    if (historyBrowserActive) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        acceptHistoryMatch(historyBrowserSelectedIndex);
-                        return;
-                    }
-
-                    // Only trigger completions when there's a meaningful token before the cursor.
-                    if (shouldTriggerSuggestOnTab()) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        codeEditorWidget.trigger(
-                            "keyboard",
-                            "editor.action.triggerSuggest",
-                            null,
-                        );
-                    }
-                    return;
-                }
-
-                if (e.keyCode === monaco.KeyCode.Enter && !e.shiftKey) {
-                    if (historyBrowserActive) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        acceptHistoryMatch(historyBrowserSelectedIndex);
-                        return;
-                    }
-
-                    const editorDomNode = codeEditorWidget.getDomNode();
-                    const activeElement =
-                        document.activeElement as HTMLElement | null;
-                    const hasFocus =
-                        codeEditorWidget.hasTextFocus() ||
-                        codeEditorWidget.hasWidgetFocus() ||
-                        (!!editorDomNode &&
-                            !!activeElement &&
-                            editorDomNode.contains(activeElement));
-
-                    if (!activeRef.current && !hasFocus) {
-                        return;
-                    }
-                    if (!activeRef.current && hasFocus) {
-                        onActivate(currentSessionId());
-                    }
-                    if (stateRef.current !== "ready") {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        if (!deferCodeEditorWidgetCodeUntilReady()) {
-                            codeEditorWidget.trigger("keyboard", "type", {
-                                text: "\n",
-                            });
-                        }
-                        return;
-                    }
-
-                    e.preventDefault();
-                    e.stopPropagation();
-
-                    void (async () => {
-                        if (!(await executeCodeEditorWidgetCodeIfPossible())) {
-                            // Code was not executed, insert a new line
-                            codeEditorWidget.trigger("keyboard", "type", {
-                                text: "\n",
-                            });
-                        }
-                    })();
-                    return;
-                }
-
-                if (e.keyCode === monaco.KeyCode.Enter && e.shiftKey) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    codeEditorWidget.trigger("keyboard", "type", {
-                        text: "\n",
-                    });
-                    return;
-                }
-
-                // UpArrow: Ctrl+Up for history search, or suggest widget nav, or history
-                // Uses onKeyDown (per-editor) instead of addCommand (global)
-                // to avoid cross-editor interference in multi-session mode
-                if (e.keyCode === monaco.KeyCode.UpArrow) {
-                    if (historyBrowserActive) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        moveHistoryBrowserSelection(-1);
-                        return;
-                    }
-
-                    // Ctrl/Cmd+Up: Engage prefix history search (RStudio style)
-                    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        engageHistoryBrowser(
-                            new HistoryPrefixMatchStrategy(historyEntries),
-                        );
-                        return;
-                    }
-
-                    const position = codeEditorWidget.getPosition();
-                    if (position?.lineNumber === 1) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        navigateHistoryUp();
-                        return;
-                    }
-
-                    return;
-                }
-
-                // DownArrow: navigate suggest widget or history
-                if (e.keyCode === monaco.KeyCode.DownArrow) {
-                    if (historyBrowserActive) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        moveHistoryBrowserSelection(1);
-                        return;
-                    }
-
-                    const position = codeEditorWidget.getPosition();
-                    const textModel = codeEditorWidget.getModel();
-                    if (position?.lineNumber === textModel?.getLineCount()) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        navigateHistoryDown();
-                        return;
-                    }
-
-                    return;
-                }
-
-                // Ctrl/Cmd+U: Delete all left (Positron pattern)
-                if (
-                    ctrlCmd &&
-                    e.keyCode === monaco.KeyCode.KeyU &&
-                    !e.shiftKey &&
-                    !e.altKey
-                ) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    const position = codeEditorWidget.getPosition();
-                    if (position) {
-                        const model = codeEditorWidget.getModel();
-                        if (model) {
-                            const range = new monaco.Range(
-                                position.lineNumber,
-                                1,
-                                position.lineNumber,
-                                position.column,
-                            );
-                            model.applyEdits([{ range, text: "" }]);
-                        }
-                    }
-                    return;
-                }
-
-                // Ctrl/Cmd+A: Select all (Positron pattern)
-                if (
-                    ctrlCmd &&
-                    e.keyCode === monaco.KeyCode.KeyA &&
-                    !e.shiftKey &&
-                    !e.altKey
-                ) {
-                    const codeFragment = codeEditorWidget.getValue();
-                    if (!codeFragment.length) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        onSelectAll();
-                    }
-                    return;
-                }
-
-                // Ctrl/Cmd+F: open whole-console search instead of Monaco find.
-                if (
-                    ctrlCmd &&
-                    e.keyCode === monaco.KeyCode.KeyF &&
-                    !e.shiftKey &&
-                    !e.altKey
-                ) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    onOpenSearch?.(currentSessionId());
-                    return;
-                }
-
-                // Ctrl+R: engage infix history search (bash style).
-                if (
-                    !isMacintosh &&
-                    e.ctrlKey &&
-                    !e.metaKey &&
-                    e.keyCode === monaco.KeyCode.KeyR &&
-                    !e.shiftKey &&
-                    !e.altKey
-                ) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    engageHistoryBrowser(
-                        new HistoryInfixMatchStrategy(historyEntries),
-                    );
-                    return;
-                }
-
-                // Ctrl/Cmd+Shift+M: Insert pipe operator |> (RStudio style)
-                if (
-                    ctrlCmd &&
-                    e.shiftKey &&
-                    e.keyCode === monaco.KeyCode.KeyM &&
-                    !e.altKey
-                ) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    codeEditorWidget.trigger("keyboard", "type", {
-                        text: " |> ",
-                    });
-                    return;
-                }
-
-                // Ctrl/Cmd+L: Clear console (RStudio style)
-                if (
-                    ctrlCmd &&
-                    e.keyCode === monaco.KeyCode.KeyL &&
-                    !e.shiftKey &&
-                    !e.altKey
-                ) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    onClearConsole?.(currentSessionId());
-                    return;
-                }
-
-                // Alt+-: Insert assignment operator <- (RStudio style)
-                if (
-                    e.altKey &&
-                    e.keyCode === monaco.KeyCode.Minus &&
-                    !e.ctrlKey &&
-                    !e.metaKey &&
-                    !e.shiftKey
-                ) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    codeEditorWidget.trigger("keyboard", "type", {
-                        text: " <- ",
-                    });
-                    return;
-                }
-
-                // Escape: Dismiss history browser or interrupt
-                if (e.keyCode === monaco.KeyCode.Escape) {
-                    if (historyBrowserActive) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        disengageHistoryBrowser();
-                    } else if (
-                        stateRef.current === "busy" ||
-                        submissionInFlightRef.current
-                    ) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        interruptOrCancelSubmission();
-                    }
-                    return;
-                }
-            }),
-        );
+        // Clipboard capture also handles output selection and Ctrl+C interrupt.
+        const boundary = codeEditorWidgetContainerRef;
+        boundary.addEventListener("keydown", handleEditorClipboardKeyDown, true);
+        disposables.push({
+            dispose: () => boundary.removeEventListener("keydown", handleEditorClipboardKeyDown, true),
+        });
     }
 
     // Focus management for multi-session support.

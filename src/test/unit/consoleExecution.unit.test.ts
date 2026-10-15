@@ -125,6 +125,7 @@ function createRuntimeSession(
         },
         interrupt: () => kernel.interrupt(),
         onDidChangeRuntimeState: createEventStub(),
+        onDidReceiveRuntimeMessage: createEventStub(),
         onDidReceiveRuntimeMessageStream: createEventStub(),
         onDidReceiveRuntimeMessageInput: createEventStub(),
         onDidReceiveRuntimeMessageError: createEventStub(),

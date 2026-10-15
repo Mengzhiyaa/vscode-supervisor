@@ -23,5 +23,7 @@
   "supervisor.dataExplorer.showRowContextMenu.title": "显示行上下文菜单",
   "supervisor.dataExplorer.showCellContextMenu.title": "显示单元格上下文菜单",
   "supervisor.dataExplorer.openFile.title": "在数据浏览器中打开",
-  "supervisor.dataExplorer.editor.displayName": "数据浏览器"
+  "supervisor.dataExplorer.editor.displayName": "数据浏览器",
+  "supervisor.mcp.provider.label": "Supervisor 会话",
+  "supervisor.mcp.enabled.description": "允许 MCP Agent 查看并在此受信任工作区的会话中执行代码。向 VS Code、集成终端和 Kallichore stdio 桥接发布经认证的本地端点。需要 Kallichore 0.1.71 或更高版本。"
 }

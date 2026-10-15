@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "kallichore": {
+    "version": "0.1.71",
+    "specCommit": "553cae09afbed0a5f185fedb2c0221562357b612",
+    "specSha256": "2f6522f43fa8a65caefc4ee18c1a144c376cec4d59ceee32ddd7b8757467df81"
+  },
+  "positron": {
+    "kallichoreVersion": "0.1.71",
+    "apiCommit": "03e152f8ecad2753014f697b07857620a44194d5",
+    "apiSha256": "3c179b978c3c9fc7c9962434be36ef3fa8bb9d19aac233387726f9b93dbbce93"
+  },
+  "generator": {
+    "name": "typescript-axios",
+    "version": "7.17.0"
+  },
+  "standaloneApiSha256": "8c17f97baca9c24317a3eff7d7b9d7ca97950a318550cb059654c5aab0d7dd13"
+}

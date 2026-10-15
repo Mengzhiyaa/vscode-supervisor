@@ -5,6 +5,7 @@
     Mirrors: positron/.../components/activityInput.tsx
 -->
 <script lang="ts">
+    import { localize } from "$lib/localization";
     import { onMount } from "svelte";
     import { monaco, ensureMonacoRuntime } from "$lib/monaco/setup";
     import {
@@ -165,6 +166,12 @@
         : undefined}
 >
     <div class="progress-bar"></div>
+    {#if activityItemInput.attribution}
+        <div class="execution-attribution">
+            {localize("console.input.executedBy", "Executed by {0}",
+                activityItemInput.attribution.agentName || activityItemInput.attribution.source)}
+        </div>
+    {/if}
 
     {#if isColorized && colorizedLines.length > 0}
         <!-- Colorized output using Monaco tokenization -->
@@ -190,6 +197,12 @@
 </div>
 
 <style>
+    .execution-attribution {
+        color: var(--vscode-descriptionForeground);
+        font-size: 0.9em;
+        overflow-wrap: anywhere;
+    }
+
     .activity-input {
         position: relative;
         font-family: var(--console-content-font-family);

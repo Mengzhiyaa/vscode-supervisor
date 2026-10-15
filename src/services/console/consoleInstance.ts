@@ -72,6 +72,7 @@ import {
 import type {
     LanguageRuntimeError as LanguageRuntimeErrorMessage,
     LanguageRuntimeInput,
+    LanguageRuntimeExecutionRequested,
     LanguageRuntimePrompt,
     LanguageRuntimeClearOutput,
     LanguageRuntimeState,
@@ -79,6 +80,7 @@ import type {
     RuntimeOnlineState,
 } from '../../internal/runtimeTypes';
 import {
+    LanguageRuntimeMessageType,
     RuntimeCodeFragmentStatus,
     RuntimeExitReason,
     RuntimeState,
@@ -1695,9 +1697,49 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
         }
     }
 
+    handleExecutionRequested(message: LanguageRuntimeExecutionRequested): void {
+        // A replay or local execution echo must not create a second activity.
+        if (this._runtimeItemActivities.get(message.parent_id)?.activityItems.some(
+            item => item instanceof ActivityItemInput,
+        )) {
+            return;
+        }
+        this._externalExecutionIds.add(message.parent_id);
+        const metadata = message.attribution.metadata;
+        const readString = (value: unknown) => typeof value === 'string' ? value : undefined;
+        this.addOrUpdateRuntimeItemActivity(message.parent_id, new ActivityItemInput(
+            message.id, message.parent_id, new Date(message.when),
+            ActivityItemInputState.Provisional, this._inputPrompt,
+            this._continuationPrompt, message.code, {
+                source: message.attribution.source,
+                agentName: readString(metadata?.agentName),
+                agentVersion: readString(metadata?.agentVersion),
+                workspaceId: readString(metadata?.workspaceId),
+                tool: readString(metadata?.tool),
+            },
+        ));
+        this._executionHistoryService?.recordExecutionInput(
+            this.sessionId, message.parent_id, this._inputPrompt,
+            message.code, Date.parse(message.when),
+        );
+        this._onDidExecuteCodeEmitter.fire({
+            executionId: message.parent_id,
+            sessionId: this.sessionId,
+            code: message.code,
+            mode: RuntimeCodeExecutionMode.Interactive,
+            attribution: message.attribution,
+            errorBehavior: RuntimeErrorBehavior.Continue,
+            languageId: this._runtimeMetadata.languageId,
+            runtimeName: this._runtimeMetadata.runtimeName,
+        });
+    }
+
     handleInput(message: LanguageRuntimeInput): void {
         const inputPrompt = this._inputPrompt;
         const continuationPrompt = this._continuationPrompt;
+        const previous = this._runtimeItemActivities.get(message.parent_id)?.activityItems.find(
+            item => item instanceof ActivityItemInput,
+        ) as ActivityItemInput | undefined;
         const inputItem = new ActivityItemInput(
             message.id || this.generateId(),
             message.parent_id,
@@ -1705,7 +1747,8 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
             ActivityItemInputState.Executing,
             inputPrompt,
             continuationPrompt,
-            message.code
+            message.code,
+            previous?.attribution
         );
         this.addOrUpdateRuntimeItemActivity(message.parent_id, inputItem);
         this._executionHistoryService?.recordExecutionInput(
@@ -2171,7 +2214,8 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
                 state: item.state,
                 inputPrompt: item.inputPrompt,
                 continuationPrompt: item.continuationPrompt,
-                code: item.code
+                code: item.code,
+                attribution: item.attribution
             };
         }
 
@@ -2304,7 +2348,8 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
                         : item.state,
                     item.inputPrompt,
                     item.continuationPrompt,
-                    item.code
+                    item.code,
+                    item.attribution
                 );
             case 'stream':
                 return new ActivityItemStream(
@@ -2731,6 +2776,12 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
         this._disposables.push(
             session.onDidChangeRuntimeState((state: RuntimeState) => this.handleRuntimeStateChange(state))
         );
+
+        this._disposables.push(session.onDidReceiveRuntimeMessage(message => {
+            if (message.type === LanguageRuntimeMessageType.ExecutionRequested) {
+                this.handleExecutionRequested(message as LanguageRuntimeExecutionRequested);
+            }
+        }));
 
         // Direct typed message subscriptions (1:1 Positron pattern)
         this._disposables.push(

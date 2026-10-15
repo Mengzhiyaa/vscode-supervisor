@@ -16,7 +16,8 @@ import { JupyterClearOutput } from './jupyter/JupyterClearOutput';
 import { JupyterErrorReply } from './jupyter/JupyterErrorReply';
 import { JupyterStreamOutput } from './jupyter/JupyterStreamOutput';
 import { JupyterInputRequest } from './jupyter/JupyterInputRequest';
-import { isEnumMember } from './util';
+import { KernelExecutionRequestedMessage } from './ws/KernelMessage';
+import { createUniqueId, isEnumMember } from './util';
 import { JupyterMessageType } from './jupyter/JupyterMessageType';
 import { JupyterUpdateDisplayData } from './jupyter/JupyterUpdateDisplayData';
 
@@ -32,6 +33,7 @@ export class RuntimeMessageEmitter implements vscode.Disposable {
 		| positron.LanguageRuntimeDebugReply
 		| positron.LanguageRuntimeResult
 		| positron.LanguageRuntimeOutput
+		| positron.LanguageRuntimeExecutionRequested
 		| positron.LanguageRuntimeInput
 		| positron.LanguageRuntimeState
 		| positron.LanguageRuntimeClearOutput
@@ -41,6 +43,28 @@ export class RuntimeMessageEmitter implements vscode.Disposable {
 		| positron.LanguageRuntimePrompt>();
 
 	public readonly event = this._emitter.event;
+
+	/** Translate a supervisor announcement without issuing another execution. */
+	public emitExecutionRequested(message: KernelExecutionRequestedMessage): void {
+        const data = message.executionRequested;
+        this._emitter.fire({
+            id: createUniqueId(),
+            event_clock: 0,
+            parent_id: data.msg_id,
+            when: data.requested_at,
+            type: positron.LanguageRuntimeMessageType.ExecutionRequested,
+            code: data.code,
+            attribution: {
+                source: data.attribution.source,
+                metadata: {
+                    agentName: data.attribution.agent_name,
+                    agentVersion: data.attribution.agent_version,
+                    workspaceId: data.attribution.workspace_id,
+                    tool: data.attribution.tool,
+                },
+            },
+        } satisfies positron.LanguageRuntimeExecutionRequested);
+    }
 
 	/**
 	 * Main entry point for message router; consumes a Jupyter message and emits

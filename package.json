@@ -61,21 +61,27 @@
   },
   "positron": {
     "binaryDependencies": {
-      "kallichore": "0.1.67"
+      "kallichore": "0.1.71"
     },
     "binaryChecksums": {
       "kallichore": {
-        "darwin-arm64": "sha256:766631a16d2291b9d2b9505d655ff12d2d13af50d6f8d0c1c1580882821a0b0a",
-        "darwin-universal": "sha256:9e98877f34bef1f5d90a26ff8b8fe5042c53f344558f8e7fec235a6e4fd6091c",
-        "darwin-x64": "sha256:a340b145049d7adaa13dfd71029452017b723514baf1054989e8d7bd58812fe3",
-        "linux-arm64": "sha256:e11a101d1f14118f918f606b1b64db96fae3368a305d77fd02c8d2f814ff608e",
-        "linux-x64": "sha256:052b712ccd3110378caef01f016fe71b31d71e6dc40740a42edb9d9d5ea08569",
-        "windows-arm64": "sha256:c8f644105e31918a1d1f9ec119d4a9bdfab3cfbb2a41a64817270acabd1dfcf5",
-        "windows-x64": "sha256:1a977eb068917f253f1090c324bc9219942681a2649696772217686ca3c9bafd"
+        "darwin-arm64": "sha256:67d0ca8d7711b5a935a0588a421f78c6940d8cb79db9df97aff8929244fccd4b",
+        "darwin-universal": "sha256:584a8a917bdd28758aa45028b739616c190c303f28bc15df7f1f39bb1f07369e",
+        "darwin-x64": "sha256:aaedbd4299aa21599041507a7a3ee8ac979d1f71da12c70e5f17fceabeb95031",
+        "linux-arm64": "sha256:1a873c439bea3e12e24fc8f0606456ad449d7128176ffd3da1ac0d3d94282d21",
+        "linux-x64": "sha256:7886e3d056aaf417b687749cf2275d9eda4a629b62c57243ff4295eaf205a21a",
+        "windows-arm64": "sha256:761425d23a992febc2f8b8d2a36f19ef516016070fa978f8ebddd8cb1fd67307",
+        "windows-x64": "sha256:0440a7214c33460454cd6a7891ad478b6d7e7ece36f25ec09f0264beee62dce0"
       }
     }
   },
   "contributes": {
+    "mcpServerDefinitionProviders": [
+      {
+        "id": "supervisor-sessions",
+        "label": "%supervisor.mcp.provider.label%"
+      }
+    ],
     "languages": [],
     "grammars": [],
     "colors": [
@@ -973,6 +979,13 @@
     "configuration": {
       "title": "Ark",
       "properties": {
+        "kernelSupervisor.mcp.enabled": {
+          "type": "boolean",
+          "default": false,
+          "scope": "window",
+          "restricted": true,
+          "markdownDescription": "%supervisor.mcp.enabled.description%"
+        },
         "dataConnections.enabled": {
           "type": "boolean",
           "default": true,

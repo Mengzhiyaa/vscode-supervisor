@@ -17,7 +17,7 @@
         type PromptInputController,
         type PromptInputControllers,
     } from "./services/promptInputController";
-    import { writeClipboardText } from "./utils/selectionUtils";
+    import { copyEditorSelection } from "./utils/editorClipboard";
 
     interface Props {
         activityItemPrompt: ActivityItemPrompt;
@@ -219,23 +219,9 @@
     }
 
     function insertTextAtSelection(text: string): void {
-        const editor = codeEditorWidget;
-        const model = codeEditorModel;
-        const selection = editor?.getSelection();
-        if (!editor || !model || !selection) {
-            return;
-        }
-
-        const cleanedText = text.replace(/[\r\n]+/g, " ");
-        const start = selection.getStartPosition();
-        editor.pushUndoStop();
-        editor.executeEdits("activity-prompt-paste", [
-            { range: selection, text: cleanedText, forceMoveMarkers: true },
-        ]);
-        editor.pushUndoStop();
-        editor.setPosition({
-            lineNumber: start.lineNumber,
-            column: start.column + cleanedText.length,
+        // Runtime prompts accept a single line; Monaco owns the edit and caret.
+        codeEditorWidget?.trigger("activity-prompt", "paste", {
+            text: text.replace(/[\r\n]+/g, " "),
         });
     }
 
@@ -304,6 +290,20 @@
     }
 
     function handleKeyDownCapture(event: KeyboardEvent): void {
+        if (!activityItemPrompt.password && !codeEditorWidget?.hasTextFocus()) {
+            return;
+        }
+        const key = event.key.toLowerCase();
+        const onlyCtrl = event.ctrlKey && !event.metaKey && !event.shiftKey &&
+            !event.altKey && !event.getModifierState("AltGraph");
+        if (!activityItemPrompt.password && key === "c" && onlyCtrl &&
+            (isMacintosh || !codeEditorWidget?.getSelections()?.some((selection) => !selection.isEmpty()))) {
+            event.preventDefault();
+            event.stopPropagation();
+            void interruptPrompt();
+            return;
+        }
+
         const cmdOrCtrl = isMacintosh
             ? event.metaKey && !event.ctrlKey
             : event.ctrlKey && !event.metaKey;
@@ -311,16 +311,14 @@
             return;
         }
 
-        if (event.key.toLowerCase() === "v") {
+        if (key === "v" && activityItemPrompt.password) {
             event.preventDefault();
             event.stopPropagation();
             void pasteFromClipboard();
-        } else if (event.key.toLowerCase() === "a" && !activityItemPrompt.password) {
+        } else if (!activityItemPrompt.password && codeEditorWidget &&
+            (key === "c" || key === "x") && copyEditorSelection(codeEditorWidget, key === "x")) {
             event.preventDefault();
             event.stopPropagation();
-            if (codeEditorModel) {
-                codeEditorWidget?.setSelection(codeEditorModel.getFullModelRange());
-            }
         }
     }
 
@@ -330,23 +328,6 @@
             event.stopPropagation();
             void submitAnswer(codeEditorWidget?.getValue() ?? "");
             return;
-        }
-
-        if (
-            event.keyCode === monaco.KeyCode.KeyC &&
-            event.ctrlKey &&
-            !event.metaKey &&
-            !event.shiftKey &&
-            !event.altKey
-        ) {
-            event.preventDefault();
-            event.stopPropagation();
-            const selection = codeEditorWidget?.getSelection();
-            if (isMacintosh || !selection || selection.isEmpty()) {
-                void interruptPrompt();
-            } else if (codeEditorModel) {
-                void writeClipboardText(codeEditorModel.getValueInRange(selection));
-            }
         }
     }
 

@@ -23,5 +23,7 @@
   "supervisor.dataExplorer.showRowContextMenu.title": "Show Row Context Menu",
   "supervisor.dataExplorer.showCellContextMenu.title": "Show Cell Context Menu",
   "supervisor.dataExplorer.openFile.title": "Open in Data Explorer",
-  "supervisor.dataExplorer.editor.displayName": "Data Explorer"
+  "supervisor.dataExplorer.editor.displayName": "Data Explorer",
+  "supervisor.mcp.provider.label": "Supervisor Sessions",
+  "supervisor.mcp.enabled.description": "Allow MCP agents to inspect and execute code in this trusted workspace's sessions. Publishes an authenticated local endpoint to VS Code, integrated terminals and the Kallichore stdio bridge. Requires Kallichore 0.1.71 or later."
 }

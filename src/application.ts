@@ -237,7 +237,8 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
         this._disposables.push(
             setForegroundSessionProvider(() =>
                 this._sessionManager.activeSession?.kernelSession as unknown as
-                    LanguageRuntimeSession | undefined
+                    LanguageRuntimeSession | undefined,
+                this._sessionManager.onDidChangeForegroundSession,
             )
         );
         this._disposables.push(

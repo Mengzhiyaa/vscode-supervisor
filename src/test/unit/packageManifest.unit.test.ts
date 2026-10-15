@@ -95,7 +95,7 @@ suite('[Unit] Supervisor package manifest', () => {
         assert.strictEqual(packageJson.bugs?.url, 'https://github.com/Mengzhiyaa/vscode-supervisor/issues');
         assert.deepStrictEqual(packageJson.activationEvents, ['onStartupFinished']);
         assert.deepStrictEqual(packageJson.workspaces, ['webview']);
-        assert.strictEqual(packageJson.positron?.binaryDependencies?.kallichore, '0.1.67');
+        assert.strictEqual(packageJson.positron?.binaryDependencies?.kallichore, '0.1.71');
         assert.strictEqual(packageJson.positron?.binaryDependencies?.ark, undefined);
         assert.match(
             packageJson.positron?.binaryChecksums?.kallichore?.['linux-x64'] ?? '',
