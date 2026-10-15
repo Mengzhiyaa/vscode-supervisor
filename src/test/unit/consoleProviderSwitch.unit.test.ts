@@ -346,8 +346,8 @@ suite('[Unit] console provider session switching', () => {
         await provider.reveal(true);
 
         assert.deepStrictEqual(executedCommands, [{
-            command: 'workbench.views.action.showView',
-            args: [ViewIds.console],
+            command: `${ViewIds.console}.focus`,
+            args: [{ preserveFocus: true }],
         }]);
         assert.deepStrictEqual(restoredEditors, []);
     });

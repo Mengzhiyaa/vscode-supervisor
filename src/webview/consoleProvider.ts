@@ -2,7 +2,7 @@ import { getErrorMessage } from '../shared/errors';
 import * as vscode from 'vscode';
 import { createHash, randomUUID } from 'crypto';
 import { MessageConnection } from 'vscode-jsonrpc/node';
-import { ContextKeys, CoreConfigurationKeys, CoreConfigurationSections, ViewIds } from '../coreCommandIds';
+import { ContextKeys, CoreConfigurationKeys, CoreConfigurationSections, ViewCommands, ViewIds } from '../coreCommandIds';
 import { BaseWebviewProvider } from './baseProvider';
 import * as ConsoleProtocol from '../rpc/webview/console';
 import * as SessionProtocol from '../rpc/webview/session';
@@ -192,7 +192,7 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
             return;
         }
 
-        await vscode.commands.executeCommand('workbench.views.action.showView', ViewIds.console);
+        await vscode.commands.executeCommand(ViewCommands.consoleFocus, { preserveFocus });
     }
 
     async runFindCommand(

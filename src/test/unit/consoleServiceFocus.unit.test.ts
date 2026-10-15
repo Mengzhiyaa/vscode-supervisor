@@ -117,8 +117,8 @@ suite('[Unit] console service focus preservation', () => {
         await service.revealConsole(true);
 
         assert.deepStrictEqual(executedCommands, [{
-            command: 'workbench.views.action.showView',
-            args: [ViewIds.console],
+            command: `${ViewIds.console}.focus`,
+            args: [{ preserveFocus: true }],
         }]);
         assert.deepStrictEqual(restoreCalls, []);
 

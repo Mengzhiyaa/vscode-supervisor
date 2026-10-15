@@ -5,7 +5,7 @@
 
 import { getErrorMessage } from '../../shared/errors';
 import * as vscode from 'vscode';
-import { CoreConfigurationKeys, CoreConfigurationSections, ViewCommands, ViewIds } from '../../coreCommandIds';
+import { CoreConfigurationKeys, CoreConfigurationSections, ViewCommands } from '../../coreCommandIds';
 import {
     IPositronConsoleService,
     IPositronConsoleInstance,
@@ -432,12 +432,7 @@ export class PositronConsoleService implements IPositronConsoleService {
             return;
         }
 
-        if (!preserveFocus) {
-            await vscode.commands.executeCommand(ViewCommands.consoleFocus);
-            return;
-        }
-
-        await vscode.commands.executeCommand('workbench.views.action.showView', ViewIds.console);
+        await vscode.commands.executeCommand(ViewCommands.consoleFocus, { preserveFocus });
     }
 
     private _setActivePositronConsoleInstance(instance: PositronConsoleInstance): void {
