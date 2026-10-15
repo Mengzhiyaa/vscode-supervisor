@@ -1039,6 +1039,7 @@
                     item.inputPrompt,
                     item.continuationPrompt,
                     item.code,
+                    item.attribution,
                 );
             case "stream":
                 return new ActivityItemStream(

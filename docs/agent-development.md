@@ -79,11 +79,20 @@ Host 定向 lint 可运行 `npx eslint <changed-files>`。没有单独 formatter
 | 消费者 API 声明 | `src/api.ts` 及其导出叶子类型 | `npm run sync:api-dts` / `npm run verify:api-dts` |
 | Host↔Webview RPC | `src/rpc/webview/contracts/*.json` | `npm run sync:webview-rpc-contracts` / `npm run verify:webview-rpc-contracts` |
 | Positron watched snapshot | 对应 Positron checkout 中五个 watched 源文件；清单在同步脚本中 | 审查本地兼容改动后 `npm run sync:positron-contracts` / `npm run verify:positron-contracts` |
-| Kallichore spec 与 client API | `../kallichore/kallichore.json`、`../positron/extensions/positron-supervisor/src/kcclient/api.ts` | 版本一致后 `npm run sync:kallichore-api` / `npm run verify:kallichore-api` |
+| Kallichore spec、client API 与来源记录 | `../kallichore/kallichore.json`、`../positron/extensions/positron-supervisor/src/kcclient/api.ts`、上游 `.openapi-generator/VERSION` | 三方版本一致且契约匹配后 `npm run sync:kallichore-api` / `npm run verify:kallichore-api` |
 | Data Explorer / Grid 文案 | Webview 调用、Host localization payload 与中文 bundle | `npm run verify:data-explorer-localization` |
 
 `verify:contracts` 依次包含 API、Webview RPC、Positron snapshot 和 Data Explorer 本地化检查，**不包含 Kallichore API 检查**。
 Positron snapshot 默认取 `../positron`，允许 `POSITRON_ROOT` 覆盖；Kallichore 同步的兄弟目录布局固定。
+Kallichore 同步要求源码 `crates/kcserver/Cargo.toml`、本仓库 manifest 与 Positron supervisor manifest 的二进制版本完全一致，并在写入前核对操作、HTTP 路径/方法、模型字段及类型、必填性和枚举。`src/supervisor/kcclient/upstream.json` 由同步脚本生成，记录输入内容哈希、来源文件的最后提交、生成器版本与适配后 client 哈希；校验模式同时检查该记录，不能只复制 `api.ts` 消除 drift。
+升级 Kallichore 时先更新匹配的源码 checkout、manifest 版本和 `positron.binaryChecksums.kallichore` 的各平台发布压缩包摘要。当前协议基线为 `0.1.71`，压缩包摘要来自 [kallichore-builds 0.1.71 release](https://github.com/posit-dev/kallichore-builds/releases/tag/0.1.71)。生成 API 继续使用本地 `httpClient`；不要覆盖 `base.ts`、`common.ts`、`configuration.ts` 等适配文件。需要重生成上游 TypeScript 客户端时参考 Positron supervisor 的 `scripts/regen-api.sh`（`typescript-axios`）；Kallichore 仓库同名脚本生成的是 Rust 服务端。
+Console 持久化历史仍由现有服务负责，不改用 Kallichore 的执行历史端点。`executionRequested` 通知用于将外部执行与后续 Jupyter 回显、输出关联，并把来源保留到 Console 快照中。
+
+MCP 工作区生命周期由 `src/supervisor/McpFrontend.ts` 管理，默认关闭；在受信任工作区设置 `kernelSupervisor.mcp.enabled: true` 启用，需要实际运行的 Kallichore 支持 MCP（基线 `0.1.71`）。VS Code 通过原生 MCP server definition provider 发现 `Supervisor Sessions`。集成终端使用兼容 Kallichore 的 `POSITRON_MCP_URL` / `POSITRON_MCP_TOKEN` 环境变量；已有终端按 VS Code 的环境更新提示重新创建。连接描述符位于扩展全局存储下的 `mcp/workspaces/`，索引为 `mcp/connections.json`；本地 stdio 客户端可用 `kcserver mcp-stdio --connections <扩展全局存储>/mcp` 按目录发现工作区。文件包含凭据，以所有者权限原子写入；远程扩展 Host 的文件与监听端口也在远程主机，客户端需在相同主机运行或自行配置通道。
+
+MCP 工作区 ID 和期望端口保存在 `workspaceState`，token 保存在 VS Code `SecretStorage`。窗口重载或服务器重启会重新注册并复用身份；窗口关闭只断开 frontend channel，让分离会话继续可用；关闭设置会注销、清理发现文件和终端环境并删除保存的 token。frontend channel 同步窗口持有的会话、前台会话、焦点和已连接 Agent 数量。内核侧 MCP 会话工具由 Kallichore 提供；本扩展发送空的编辑器命令目录，不移植依赖 Positron 私有 AI 服务的命令代理、Agent 配置写入或 UI 自动化。
+
+启动和重连日志记录实际 Kallichore 版本、预期版本及可执行文件来源；相邻 `../kallichore/target/{debug,release}/kcserver` 的开发构建优先级沿用现有逻辑，更新源码或 manifest 不会自动重编译或替换这些二进制。
 `src/runtime/comms/` 中移植的内核协议不是 Webview RPC generator 的输出；本仓库没有覆盖全部内核 comm 类型的再生成脚本。
 不要因为移植文件头写着 auto-generated 就猜测或运行上游全量生成流程。
 

@@ -1,4 +1,22 @@
 {
+  "Submit Console Input": "提交控制台输入",
+  "Insert Console Newline": "在控制台插入换行",
+  "Show Console Suggestions": "显示控制台补全建议",
+  "Accept Console History": "接受控制台历史记录",
+  "Previous Console History": "上一条控制台历史记录",
+  "Next Console History": "下一条控制台历史记录",
+  "Previous Console History Match": "上一条控制台历史匹配",
+  "Next Console History Match": "下一条控制台历史匹配",
+  "Search Console History by Prefix": "按前缀搜索控制台历史记录",
+  "Search Console History": "搜索控制台历史记录",
+  "Delete Console Input to Line Start": "删除控制台输入至行首",
+  "Select All Console Output": "选择所有控制台输出",
+  "Find in Console": "在控制台中查找",
+  "Insert Pipe Operator": "插入管道运算符",
+  "Clear Console": "清空控制台",
+  "Insert Assignment Operator": "插入赋值运算符",
+  "Close Console History": "关闭控制台历史记录",
+  "Interrupt Execution": "中断执行",
   "Application": "应用程序",
   "Application + kernels": "应用程序和内核",
   "Import Data": "导入数据",
@@ -191,5 +209,9 @@
   "Interpreter": "解释器",
   "No advisories were reported for this version.": "此版本没有已报告的安全公告。",
   "Fixed in {0}": "已在 {0} 中修复",
-  "Published {0}": "发布于 {0}"
+  "Published {0}": "发布于 {0}",
+  "Executed by {0}": "由 {0} 执行",
+  "{0} agents connected to this workspace": "{0} 个 Agent 已连接到此工作区",
+  "Empty Workspace": "空工作区",
+  "Kallichore version {0} is unsupported (expected {1}). Executable or connection: {2}.": "Kallichore 版本 {0} 不受支持（预期为 {1}）。可执行文件或连接：{2}。"
 }

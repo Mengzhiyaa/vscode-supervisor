@@ -640,7 +640,10 @@ suite('[Unit] supervisor core backports', () => {
             start: { line: 2, character: 4 },
             end: { line: 2, character: 12 },
         });
-        assert.deepStrictEqual(capturedMetadata, { source: 'unit-test' });
+        assert.deepStrictEqual(capturedMetadata, {
+            source: 'unit-test',
+            attributionSource: 'editor',
+        });
 
         await session.dispose();
     });

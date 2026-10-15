@@ -79,6 +79,7 @@ function createRuntimeSession(overrides?: {
             currentWorkingDirectory: '/tmp/session-1',
         },
         onDidChangeRuntimeState: createEventStub(),
+        onDidReceiveRuntimeMessage: createEventStub(),
         onDidReceiveRuntimeMessageStream: createEventStub(),
         onDidReceiveRuntimeMessageInput: createEventStub(),
         onDidReceiveRuntimeMessageError: createEventStub(),

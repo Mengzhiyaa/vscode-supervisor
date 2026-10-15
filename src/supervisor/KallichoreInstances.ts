@@ -5,6 +5,7 @@
 
 import { getErrorMessage } from '../shared/errors';
 import * as vscode from 'vscode';
+import * as fs from 'fs';
 import * as positron from './positron';
 
 import { KallichoreApiInstance, KallichoreTransport } from './KallichoreApiInstance';
@@ -125,7 +126,7 @@ export class KallichoreInstances {
 				// Update the toast so users see which entry is under inspection.
 				progress.report({ message: record.workspaceName ?? vscode.l10n.t("Empty Workspace") });
 
-				if (!this.isProcessAlive(record.state.server_pid)) {
+				if (!this.isSupervisorAlive(record.state.server_pid, record.state.socket_path)) {
 					// Mark work complete for the progress UI even though we prune this entry.
 					progress.report({ increment, message: record.workspaceName ?? vscode.l10n.t("Empty Workspace") });
 					this.log?.appendLine(formatRawSupervisorLine(
@@ -535,12 +536,34 @@ export class KallichoreInstances {
 	 * @returns True if the process appears to be alive, false otherwise.
 	 */
 	private static isProcessAlive(pid: number): boolean {
+		if (!Number.isInteger(pid) || pid <= 0) {
+			return false;
+		}
 		try {
 			process.kill(pid, 0);
 			return true;
 		} catch (err) {
 			const error = err as NodeJS.ErrnoException;
 			return error?.code === 'EPERM';
+		}
+	}
+
+	/** Reject stale sockets and Linux PIDs recycled by another process or thread. */
+	private static isSupervisorAlive(pid: number, socketPath?: string): boolean {
+		if (!this.isProcessAlive(pid) || (socketPath && !fs.existsSync(socketPath))) {
+			return false;
+		}
+		if (process.platform !== 'linux') {
+			return true;
+		}
+		try {
+			const status = fs.readFileSync(`/proc/${pid}/status`, 'utf8');
+			return /^Name:\s*kcserver\s*$/m.test(status) &&
+				Number(/^Tgid:\s*(\d+)/m.exec(status)?.[1]) === pid;
+		} catch (error) {
+			// Lack of permission is not evidence that the supervisor exited.
+			const code = (error as NodeJS.ErrnoException).code;
+			return code === 'EACCES' || code === 'EPERM';
 		}
 	}
 
@@ -735,6 +758,11 @@ export class KallichoreInstances {
 			await vscode.window.showInformationMessage(vscode.l10n.t("Supervisor shutdown requested."));
 		} catch (err) {
 			const message = summarizeAxiosError(err);
+			const code = (err as NodeJS.ErrnoException)?.code;
+			const { server_pid, socket_path } = result.record.state;
+			if ((code === 'ENOENT' || code === 'ECONNREFUSED') && !this.isSupervisorAlive(server_pid, socket_path)) {
+				await this.removeByPid(server_pid);
+			}
 			await vscode.window.showErrorMessage(vscode.l10n.t("Failed to shut down supervisor: {0}", message));
 		}
 	}

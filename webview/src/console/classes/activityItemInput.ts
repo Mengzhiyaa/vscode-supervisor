@@ -6,7 +6,7 @@
 
 import { ActivityItem } from './activityItem';
 import { ANSIOutput, type ANSIOutputLine } from '$lib/ansi/ansiOutput';
-import { ActivityItemInputState } from '@shared/console';
+import { type ConsoleExecutionAttribution, ActivityItemInputState } from '@shared/console';
 export { ActivityItemInputState } from '@shared/console';
 
 /**
@@ -95,7 +95,8 @@ export class ActivityItemInput extends ActivityItem {
         state: ActivityItemInputState,
         readonly inputPrompt: string,
         readonly continuationPrompt: string,
-        readonly code: string
+        readonly code: string,
+        readonly attribution?: ConsoleExecutionAttribution
     ) {
         // Call the base class's constructor.
         super(id, parentId, when);

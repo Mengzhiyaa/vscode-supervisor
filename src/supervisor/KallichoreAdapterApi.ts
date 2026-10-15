@@ -18,6 +18,7 @@ import { createUniqueId, summarizeError, summarizeAxiosError } from './util';
 import { isAxiosError } from './httpClient';
 import { KallichoreServerState } from './ServerState';
 import { KallichoreApiInstance, KallichoreTransport } from './KallichoreApiInstance';
+import { McpFrontend } from './McpFrontend';
 import { KallichoreInstances } from './KallichoreInstances';
 import { DapComm } from './DapComm';
 import { HandshakeSocket } from './HandshakeSocket';
@@ -217,6 +218,7 @@ export class KCApi implements PositronSupervisorApi {
 	/** The currently active sessions (only the ones used by this client; does
 	 * not track the full set of sessions on the Kallichore server) */
 	private readonly _sessions: Array<KallichoreSession> = [];
+	private readonly _mcp: McpFrontend;
 
 	/**
 	 * The streamer for the Kallichore server logs
@@ -264,6 +266,11 @@ export class KCApi implements PositronSupervisorApi {
 		ephemeralState?: EphemeralMemento) {
 
 		this._api = new KallichoreApiInstance(_transport);
+        this._mcp = new McpFrontend(_context,
+            () => this._sessions.filter(session => session.runtimeState !== positron.RuntimeState.Exited)
+                .map(session => session.metadata.sessionId),
+            message => this.log(message, vscode.LogLevel.Info));
+        this._disposables.push(this._mcp);
 		this._ephemeralState = ephemeralState ??
 			createReloadPersistentState(this._context.workspaceState);
 
@@ -511,6 +518,7 @@ export class KCApi implements PositronSupervisorApi {
 		// Get the path to the Kallichore server binary. This will throw an
 		// error if the server binary cannot be found.
 		const shellPath = this.getKallichorePath();
+		this.log(`Starting Kallichore executable ${shellPath}`, vscode.LogLevel.Info);
 
 		// Create a server session ID (8 characters)
 		const sessionId = `${createUniqueId()}-${process.pid}`;
@@ -829,16 +837,7 @@ export class KCApi implements PositronSupervisorApi {
 			processId = serverStatus.process_id;
 		}
 
-		// Make sure the version is the one expected in package.json.
-		const version = this._context.extension.packageJSON.positron.binaryDependencies.kallichore;
-		if (serverStatus.version !== version) {
-			vscode.window.showWarningMessage(vscode.l10n.t(
-				'Positron Supervisor version {0} is unsupported (expected {1}). ' +
-				'This may result in unexpected behavior or errors.',
-				serverStatus.version,
-				version)
-			);
-		}
+		this.reportServerVersion(serverStatus.version, shellPath);
 
 		this.log(`Kallichore server started in ${Date.now() - startTime}ms`);
 
@@ -854,8 +853,7 @@ export class KCApi implements PositronSupervisorApi {
 		// Now that we're online, we can dispose of the close listener
 		closeListener.dispose();
 
-		// Open the started barrier and save the server state since we're online
-		this._started.open();
+		// Save the live server before allowing sessions to use its MCP identity.
 
 		const state: KallichoreServerState = {
 			// Save the constructed basePath for API usage
@@ -883,6 +881,10 @@ export class KCApi implements PositronSupervisorApi {
 		}
 
 		await KallichoreInstances.recordSupervisor(this.getWorkspaceName(), state);
+        if (serverStatus.mcp !== undefined) {
+            await this._mcp.attach(this._api.api, state);
+        }
+        this._started.open();
 	}
 
 	/**
@@ -1050,8 +1052,8 @@ export class KCApi implements PositronSupervisorApi {
 				await this.saveServerState(serverState);
 			}
 		}
-		this._started.open();
 		this.log(`Kallichore ${status.data.version} server reconnected with ${status.data.sessions} sessions`);
+		this.reportServerVersion(status.data.version, serverState.server_path || connectionInfo);
 
 		// Update the idle timeout from settings if we aren't in web mode
 		// (in web mode, no idle timeout is used)
@@ -1066,6 +1068,10 @@ export class KCApi implements PositronSupervisorApi {
 		this._newSupervisor = false;
 
 		await KallichoreInstances.recordSupervisor(this.getWorkspaceName(), serverState);
+        if (status.data.mcp !== undefined) {
+            await this._mcp.attach(this._api.api, serverState);
+        }
+        this._started.open();
 
 		return true;
 	}
@@ -1205,7 +1211,8 @@ export class KCApi implements PositronSupervisorApi {
 		let retried = false;
 		while (true) {
 			try {
-				await session.create(kernel);
+				if (!this._mcp.connection) { await this._mcp.sync(); }
+				await session.create(kernel, this._mcp.connection?.workspaceId);
 				break;
 			} catch (err) {
 				// If the connection was refused, check the server status; this
@@ -1237,6 +1244,7 @@ export class KCApi implements PositronSupervisorApi {
 		// Save the session now that it has been created on the server
 		this.addDisconnectHandler(session);
 		this._sessions.push(session);
+		this._mcp.notifySessionsChanged();
 
 		return session;
 	}
@@ -1248,6 +1256,14 @@ export class KCApi implements PositronSupervisorApi {
 	 * @param session The session to add the disconnect handler to
 	 */
 	private addDisconnectHandler(session: KallichoreSession) {
+		let wasExited = session.runtimeState === positron.RuntimeState.Exited;
+		this._disposables.push(session.onDidChangeRuntimeState(state => {
+			const isExited = state === positron.RuntimeState.Exited;
+			if (isExited !== wasExited) {
+				wasExited = isExited;
+				this._mcp.notifySessionsChanged();
+			}
+		}));
 		this._disposables.push(session.disconnected.event(async (evt: DisconnectedEvent) => {
 			if (evt.reason === DisconnectReason.Unknown) {
 				// The websocket disconnected while the session was still
@@ -1367,6 +1383,7 @@ export class KCApi implements PositronSupervisorApi {
 			return false;
 		}
 
+        this._mcp.detach();
 		// The server has exited. Remove its record from the instances
 		await KallichoreInstances.removeByPid(serverState.server_pid);
 
@@ -1514,6 +1531,7 @@ export class KCApi implements PositronSupervisorApi {
 				// Save the session
 				this.addDisconnectHandler(session);
 				this._sessions.push(session);
+                this._mcp.notifySessionsChanged();
 				resolve(session);
 			}).catch((err) => {
 				if (isAxiosError(err)) {
@@ -1570,6 +1588,7 @@ export class KCApi implements PositronSupervisorApi {
 	 * from the API.
 	 */
 	dispose() {
+        this._mcp.dispose();
 		// Dispose of each session
 		this._sessions.forEach(session => session.dispose());
 		this._sessions.length = 0;
@@ -1582,6 +1601,18 @@ export class KCApi implements PositronSupervisorApi {
 
 		// Dispose of any other disposables
 		this._disposables.forEach(disposable => disposable.dispose());
+	}
+
+	/** Diagnose the live server, including reconnects and adjacent developer builds. */
+	private reportServerVersion(actual: string, source: string): void {
+		const expected = this._context.extension.packageJSON.positron.binaryDependencies.kallichore;
+		this.log(`Kallichore version ${actual}; expected ${expected}; source ${source}`,
+			actual === expected ? vscode.LogLevel.Debug : vscode.LogLevel.Warning);
+		if (actual !== expected) {
+			void vscode.window.showWarningMessage(vscode.l10n.t(
+				'Kallichore version {0} is unsupported (expected {1}). Executable or connection: {2}.',
+				actual, expected, source));
+		}
 	}
 
 	/**
@@ -1670,6 +1701,7 @@ export class KCApi implements PositronSupervisorApi {
 		}
 
 		this.log('Restarting Kallichore server');
+        this._mcp.detach();
 		const existingState = this._api.state;
 
 		// Clean up all the sessions and mark them as exited

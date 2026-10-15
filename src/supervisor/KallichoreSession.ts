@@ -396,7 +396,7 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 	 *
 	 * @param kernelSpec The Jupyter kernel spec to use for the session
 	 */
-	public async create(kernelSpec: JupyterKernelSpec) {
+	public async create(kernelSpec: JupyterKernelSpec, workspaceId?: string) {
 		if (!this._new) {
 			throw new Error(`Session ${this.metadata.sessionId} already exists`);
 		}
@@ -487,6 +487,7 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 		const session: NewSession = {
 			argv: args,
 			session_id: this.metadata.sessionId,
+			workspace_id: workspaceId,
 			language: kernelSpec.language,
 			display_name: this.dynState.sessionName,
 			session_mode: this.metadata.sessionMode,
@@ -862,11 +863,11 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 			stop_on_error: errorBehavior === positron.RuntimeErrorBehavior.Stop,
 		};
 
-		// cellId belongs to the Jupyter message envelope metadata. Ark uses this
-		// convention to associate notebook cell execution with breakpoint
-		// injection. All remaining fields are Positron execute extensions and
-		// therefore live directly under content.positron.
-		const { cellId, ...positronMetadata } = executionMetadata ?? {};
+		// cellId and attributionSource belong to the Jupyter message envelope
+		// metadata. Ark uses cellId for notebook breakpoint injection; Kallichore
+		// records the attribution source in its execution history. All remaining
+		// fields are Positron execute extensions under content.positron.
+		const { cellId, attributionSource, ...positronMetadata } = executionMetadata ?? {};
 
 		if (codeLocation || Object.keys(positronMetadata).length > 0) {
 			request.positron = {
@@ -882,6 +883,8 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 			id,
 			request,
 			typeof cellId === 'string' && cellId.length > 0 ? cellId : undefined,
+			typeof attributionSource === 'string' && attributionSource.length > 0
+				? attributionSource : undefined,
 		);
 		this.sendRequest(execute).then((reply) => {
 			this.log(`Execution result: ${JSON.stringify(reply)}`, vscode.LogLevel.Debug);
@@ -2207,6 +2210,8 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 			this._connected.cancel(new Error(
 				`Cannot send message to session ${this.metadata.sessionId}: it was transferred to another client`
 			));
+		} else if (data.hasOwnProperty('executionRequested')) {
+			this._messages.emitExecutionRequested(data);
 		} else if (data.hasOwnProperty('exited')) {
 			this.onExited(data.exited);
 		}
@@ -2434,6 +2439,8 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 			supported_features: reply.supported_features,
 			input_prompt,
 			continuation_prompt,
+			build_version: reply.language_info.positron?.build_version,
+			commit: reply.language_info.positron?.commit,
 		};
 
 		return this._runtimeInfo;

@@ -1,7 +1,16 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import type * as Monaco from 'monaco-editor/editor';
 import { ConsoleMethods, SessionMethods, createSession, registerConsoleDefaults } from '../harness/domains';
 import { openWebviewPage } from '../harness/page';
+
+function consoleEditorInput(page: Page): Locator {
+    // EditContext uses a textbox div and leaves an auxiliary IME textarea in
+    // the DOM. Focus the actual editor input in either Monaco input mode.
+    return page.locator('.console-input .monaco-editor').getByRole('textbox', {
+        name: 'Editor content',
+        exact: true,
+    });
+}
 
 function createConsoleState(outputText: string) {
     return {
@@ -335,6 +344,28 @@ test('console copies output and copies or cuts Monaco selections before treating
     });
     await expect.poll(() => backend.notificationCount(ConsoleMethods.ready)).toBeGreaterThan(0);
 
+    await page.evaluate(() => {
+        const nativeCopies: string[] = [];
+        (globalThis as typeof globalThis & {
+            __consoleNativeCopies?: string[];
+        }).__consoleNativeCopies = nativeCopies;
+        // Bubble phase observes the clipboard payload after Monaco has filled
+        // it. Native copy does not call the Host clipboard RPC.
+        document.addEventListener('copy', (event) => {
+            if (event.defaultPrevented && event.clipboardData) {
+                nativeCopies.push(event.clipboardData.getData('text/plain'));
+            }
+        });
+    });
+    const copiedTexts = async () => [
+        ...backend.requests(ConsoleMethods.writeClipboardText).map(
+            request => (request.params as { text: string }).text,
+        ),
+        ...await page.evaluate(() => (globalThis as typeof globalThis & {
+            __consoleNativeCopies?: string[];
+        }).__consoleNativeCopies ?? []),
+    ];
+
     await backend.notify(ConsoleMethods.restoreState, {
         sessionId: 'session-1',
         syncSeq: 1,
@@ -378,21 +409,13 @@ test('console copies output and copies or cuts Monaco selections before treating
     await page.keyboard.press('Control+a');
 
     await page.keyboard.press('Control+c');
-    await expect
-        .poll(() => backend.requestCount(ConsoleMethods.writeClipboardText))
-        .toBe(2);
-    expect(
-        backend.requests(ConsoleMethods.writeClipboardText).at(-1)?.params,
-    ).toEqual({ text: 'alpha + beta' });
+    await expect.poll(copiedTexts).toEqual(['copy this output', 'alpha + beta']);
     expect(backend.requestCount(ConsoleMethods.interrupt)).toBe(0);
 
     await page.keyboard.press('Control+x');
-    await expect
-        .poll(() => backend.requestCount(ConsoleMethods.writeClipboardText))
-        .toBe(3);
-    expect(
-        backend.requests(ConsoleMethods.writeClipboardText).at(-1)?.params,
-    ).toEqual({ text: 'alpha + beta' });
+    await expect.poll(copiedTexts).toEqual([
+        'copy this output', 'alpha + beta', 'alpha + beta',
+    ]);
     await expect(page.locator('.console-input .view-lines')).not.toContainText(
         'alpha + beta',
     );
@@ -404,6 +427,28 @@ test('console copies output and copies or cuts Monaco selections before treating
     expect((await interruptRequest).params).toEqual({
         sessionId: 'session-1',
     });
+
+    // When native copy is unavailable, the same selection must still reach
+    // the Host clipboard transport without being treated as an interrupt.
+    await backend.notify(ConsoleMethods.setPendingCode, {
+        sessionId: 'session-1',
+        code: 'fallback_copy',
+    });
+    await expect(page.locator('.console-input .view-lines')).toContainText('fallback_copy');
+    const editorInput = consoleEditorInput(page);
+    await editorInput.press('Control+a');
+    await page.evaluate(() => {
+        const queryCommandSupported = document.queryCommandSupported.bind(document);
+        Object.defineProperty(document, 'queryCommandSupported', {
+            configurable: true,
+            value: (command: string) => command === 'copy' ? false : queryCommandSupported(command),
+        });
+    });
+    const fallbackCopy = backend.waitForNextRequest(ConsoleMethods.writeClipboardText);
+    await editorInput.press('Control+c');
+    expect((await fallbackCopy).params).toEqual({ text: 'fallback_copy' });
+    await expect.poll(async () => (await copiedTexts()).length).toBe(4);
+    expect(backend.requestCount(ConsoleMethods.interrupt)).toBe(1);
 });
 
 test('console execution and runtime indicators keep semantic non-black colors', async ({ page }) => {
@@ -807,7 +852,7 @@ test('console restart repro keeps the prompt visible and defers execute until th
         state: createConsoleState('before restart output'),
     });
 
-    const monacoInput = page.locator('.console-input textarea').last();
+    const monacoInput = consoleEditorInput(page);
     await expect(page.locator('.console-input')).toBeVisible();
     await expect.poll(() => readConsoleInputPrompts(page)).toContain('>');
 
@@ -911,7 +956,7 @@ test('console restart repro recovers after a detached runtime frame', async ({ p
         state: createConsoleState('before detached restart output'),
     });
 
-    const monacoInput = page.locator('.console-input textarea').last();
+    const monacoInput = consoleEditorInput(page);
     await expect(page.locator('.console-input')).toBeVisible();
     await expect.poll(() => readConsoleInputPrompts(page)).toContain('>');
 
@@ -1174,7 +1219,7 @@ test('console keeps the current position when a tall input grows after the user 
     });
 
     await expect(page.locator('.console-input')).toBeVisible();
-    const monacoInput = page.locator('.console-input textarea').last();
+    const monacoInput = consoleEditorInput(page);
     await monacoInput.focus();
 
     await backend.notify(ConsoleMethods.setPendingCode, {
@@ -1234,7 +1279,7 @@ test('console stays unlocked after Enter before the first execution output arriv
         .poll(async () => (await readConsoleScrollMetrics(page, readySession.id)).distanceFromBottom)
         .toBeLessThanOrEqual(12);
 
-    const monacoInput = page.locator('.console-input textarea').last();
+    const monacoInput = consoleEditorInput(page);
     await backend.notify(ConsoleMethods.setPendingCode, {
         sessionId: readySession.id,
         code: 'value <- 1',
@@ -1293,7 +1338,7 @@ test('console follows the first execution output while the user stays at the bot
         .poll(async () => (await readConsoleScrollMetrics(page, readySession.id)).distanceFromBottom)
         .toBeLessThanOrEqual(12);
 
-    const monacoInput = page.locator('.console-input textarea').last();
+    const monacoInput = consoleEditorInput(page);
     await backend.notify(ConsoleMethods.setPendingCode, {
         sessionId: readySession.id,
         code: 'value <- 1',
@@ -1360,7 +1405,7 @@ test('console does not force execution output back into view after the user scro
     await expect(page.locator('.console-input')).toBeVisible();
     await scrollConsoleToBottom(page, readySession.id);
 
-    const monacoInput = page.locator('.console-input textarea').last();
+    const monacoInput = consoleEditorInput(page);
     await backend.notify(ConsoleMethods.setPendingCode, {
         sessionId: readySession.id,
         code: 'value <- 2',
@@ -1552,7 +1597,7 @@ test('console executes pending, pasted, and history-driven input and supports se
         state: createConsoleState('existing output'),
     });
     await expect(page.locator('.console-input')).toBeVisible();
-    const monacoInput = page.locator('.console-input textarea').last();
+    const monacoInput = consoleEditorInput(page);
     await expect(monacoInput).toHaveCount(1);
 
     await backend.notify(ConsoleMethods.selectAll, {
@@ -1868,7 +1913,7 @@ test('console respects host-owned submission results for incomplete, executed, a
         state: createConsoleState('existing output'),
     });
 
-    const monacoInput = page.locator('.console-input textarea').last();
+    const monacoInput = consoleEditorInput(page);
     await expect(monacoInput).toHaveCount(1);
     await monacoInput.focus();
 
@@ -1968,7 +2013,7 @@ test('console preserves type-ahead and shows delayed submission feedback with a 
         state: createConsoleState('existing output'),
     });
 
-    const input = page.locator('.console-input textarea').last();
+    const input = consoleEditorInput(page);
     await backend.notify(ConsoleMethods.setPendingCode, {
         sessionId: 'session-1',
         code: 'slow_call()',
@@ -2038,7 +2083,7 @@ test('console cancels a slow host submission and restores submitted code before 
         state: createConsoleState('existing output'),
     });
 
-    const input = page.locator('.console-input textarea').last();
+    const input = consoleEditorInput(page);
     await backend.notify(ConsoleMethods.setPendingCode, {
         sessionId: 'session-1',
         code: 'slow_call()',
@@ -2477,7 +2522,7 @@ test('console navigates input history with ArrowUp and ArrowDown keyboard events
         ]),
     });
     await expect(page.locator('.console-input')).toBeVisible();
-    const monacoInput = page.locator('.console-input textarea').last();
+    const monacoInput = consoleEditorInput(page);
     await expect(monacoInput).toHaveCount(1);
 
     // Add history entries via RPC (simulating entries from previous executions)
@@ -2560,7 +2605,7 @@ test('console navigates restored inputHistory entries with ArrowUp keyboard even
         state: createConsoleState('restored output'),
     });
     await expect(page.locator('.console-input')).toBeVisible();
-    const monacoInput = page.locator('.console-input textarea').last();
+    const monacoInput = consoleEditorInput(page);
     await expect(monacoInput).toHaveCount(1);
 
     // Wait for the async historySet command from restoreConsoleState
@@ -2616,7 +2661,7 @@ test('console recalls executed code with ArrowUp after Enter execution', async (
         ]),
     });
     await expect(page.locator('.console-input')).toBeVisible();
-    const monacoInput = page.locator('.console-input textarea').last();
+    const monacoInput = consoleEditorInput(page);
     await expect(monacoInput).toHaveCount(1);
 
     const getEditorValue = () =>
@@ -2792,7 +2837,7 @@ test('console input history is isolated between sessions', async ({ page }) => {
     });
 
     await expect(page.locator('.console-input')).toBeVisible();
-    const monacoInput = page.locator('.console-input textarea').last();
+    const monacoInput = consoleEditorInput(page);
     await expect(monacoInput).toHaveCount(1);
     await page.waitForTimeout(300);
 
@@ -2829,7 +2874,7 @@ test('console input history is isolated between sessions', async ({ page }) => {
     await page.waitForTimeout(300);
 
     // Session-2 is now active: ArrowUp should yield session-2's history
-    const monacoInput2 = page.locator('.console-input textarea').last();
+    const monacoInput2 = consoleEditorInput(page);
     await monacoInput2.focus();
     await monacoInput2.press('ArrowUp');
     await expect.poll(getEditorValue).toBe('session2_cmd_y');

@@ -98,6 +98,10 @@ export interface LanguageRuntimeInfo {
     supported_features?: string[];
     input_prompt?: string;
     continuation_prompt?: string;
+    /** The kernel's full build version, if reported. */
+    build_version?: string;
+    /** The short git commit hash the kernel was built from, if reported. */
+    commit?: string;
 }
 
 export interface LanguageRuntimeMessage {
@@ -127,6 +131,7 @@ export enum LanguageRuntimeMessageType {
     Result = 'result',
     Error = 'error',
     Input = 'input',
+    ExecutionRequested = 'execution_requested',
     State = 'state',
     Event = 'event',
     CommOpen = 'comm_open',
@@ -166,6 +171,12 @@ export interface LanguageRuntimeWebOutput extends LanguageRuntimeOutput {
 export interface LanguageRuntimeStream extends LanguageRuntimeMessage {
     name: LanguageRuntimeStreamName;
     text: string;
+}
+
+/** A foreign execution announcement; receiving it must never execute code again. */
+export interface LanguageRuntimeExecutionRequested extends LanguageRuntimeMessage {
+    code: string;
+    attribution: import('../api').ICodeExecutionAttribution;
 }
 
 export interface LanguageRuntimeInput extends LanguageRuntimeMessage {

@@ -876,8 +876,13 @@ export class RuntimeSession implements vscode.Disposable {
         this._lastUsed = Date.now();
         const codePreview = code.length > 100 ? code.substring(0, 100) + '...' : code;
         this.log(`>>> SEND execute_request [${id}]: ${codePreview}`, vscode.LogLevel.Debug);
-        const kernelExecutionMetadata = attribution?.metadata || executionMetadata
-            ? { ...attribution?.metadata, ...executionMetadata }
+        const kernelExecutionMetadata = attribution || executionMetadata
+            ? {
+                ...attribution?.metadata,
+                ...executionMetadata,
+                // The explicit attribution is authoritative, matching Positron.
+                ...(attribution ? { attributionSource: attribution.source } : {}),
+            }
             : undefined;
         return this._kernel.execute(
             code,

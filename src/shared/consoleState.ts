@@ -1,4 +1,5 @@
 import type {
+    ConsoleExecutionAttribution,
     ActivityItemInputState,
     ActivityItemPromptState,
     ActivityItemStreamType,
@@ -133,6 +134,7 @@ export type SerializedActivityItem =
     | SerializedActivityPrompt;
 
 export interface SerializedActivityInput {
+    attribution?: ConsoleExecutionAttribution;
     type: 'input';
     id: string;
     parentId: string;

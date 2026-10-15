@@ -19,6 +19,8 @@ import {
 export * from '../api';
 export * from '../internal/runtimeTypes';
 
+const foregroundSessionChanged = new vscode.EventEmitter<void>();
+
 let foregroundSessionProvider:
     (() => LanguageRuntimeSession | undefined | Promise<LanguageRuntimeSession | undefined>)
     | undefined;
@@ -70,13 +72,18 @@ export function setConsoleWidthSource(
     });
 }
 
-export function setForegroundSessionProvider(
-    provider: typeof foregroundSessionProvider
+export function setForegroundSessionProvider<T = void>(
+    provider: typeof foregroundSessionProvider,
+    onDidChange?: vscode.Event<T>,
 ): vscode.Disposable {
     foregroundSessionProvider = provider;
+    const listener = onDidChange?.(() => foregroundSessionChanged.fire());
+    foregroundSessionChanged.fire();
     return new vscode.Disposable(() => {
+        listener?.dispose();
         if (foregroundSessionProvider === provider) {
             foregroundSessionProvider = undefined;
+            foregroundSessionChanged.fire();
         }
     });
 }
@@ -824,6 +831,7 @@ export const window = {
 // ============================================================================
 
 export const runtime = {
+    onDidChangeForegroundSession: foregroundSessionChanged.event,
     registerClientInstance(clientId: string): vscode.Disposable {
         return registerRuntimeClientInstance(clientId);
     },

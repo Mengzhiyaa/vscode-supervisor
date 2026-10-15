@@ -18,10 +18,215 @@ async function openConsole(page: Page) {
     await expect.poll(() => page.evaluate(() => {
         const monaco = (globalThis as typeof globalThis & { monaco?: typeof Monaco }).monaco;
         return monaco?.editor.getEditors().some(editor =>
-            editor.getDomNode()?.closest('.console-input') && editor.getModel(),
+            editor.getDomNode()?.closest('.console-input') && editor.getModel() &&
+            editor.getAction('console.submit'),
         ) ?? false;
     })).toBe(true);
+    return backend;
 }
+
+async function readConsoleInput(page: Page): Promise<string> {
+    return page.evaluate(() => {
+        const monaco = (globalThis as typeof globalThis & { monaco: typeof Monaco }).monaco;
+        return monaco.editor.getEditors().find(editor =>
+            editor.getDomNode()?.closest('.console-input'),
+        )!.getValue();
+    });
+}
+
+test('Console submits consecutive typed expressions with Enter using default editor settings', async ({ page }) => {
+    const backend = await openConsole(page);
+    await page.locator('.console-input .monaco-editor').getByRole('textbox', {
+        name: 'Editor content', exact: true,
+    }).focus();
+    const expressions = ['1 + 1', '2 + 2'];
+    for (const [index, code] of expressions.entries()) {
+        await page.keyboard.type(code);
+        await expect.poll(() => readConsoleInput(page)).toBe(code);
+        await page.keyboard.press('Enter');
+        await expect.poll(() => backend.requestCount(ConsoleMethods.submitCode)).toBe(index + 1);
+        expect(backend.requests(ConsoleMethods.submitCode)[index].params).toEqual({
+            sessionId: 'session-1', code, checkCompleteness: true,
+        });
+        await expect.poll(() => readConsoleInput(page)).toBe('');
+    }
+});
+
+for (const suggestions of ['hidden', 'loading', 'empty', 'unfocused', 'enter-disabled'] as const) {
+    test(`Console submits complete code with Enter when suggestions are ${suggestions}`, async ({ page }) => {
+        const backend = await openConsole(page);
+        await backend.notify(ConsoleMethods.restoreState, {
+            sessionId: 'session-1',
+            syncSeq: 1,
+            state: {
+                version: 1,
+                items: [],
+                inputHistory: [],
+                trace: false,
+                wordWrap: true,
+                inputPrompt: '> ',
+                continuationPrompt: '+ ',
+                workingDirectory: '/workspace',
+            },
+        });
+        const code = suggestions === 'hidden' ? '1 + 1' : 'pi';
+        await page.evaluate(({ suggestions, code }) => {
+            const monaco = (globalThis as typeof globalThis & { monaco: typeof Monaco }).monaco;
+            const editor = monaco.editor.getEditors().find(editor =>
+                editor.getDomNode()?.closest('.console-input'),
+            )!;
+            editor.updateOptions({
+                quickSuggestions: false,
+                suggestOnTriggerCharacters: false,
+                wordBasedSuggestions: 'off',
+                acceptSuggestionOnEnter: suggestions === 'enter-disabled' ? 'off' : 'on',
+                suggest: { selectionMode: suggestions === 'unfocused' ? 'never' : 'always' },
+            });
+            monaco.languages.registerCompletionItemProvider(editor.getModel()!.getLanguageId(), {
+                provideCompletionItems: async (_model, position, _context, token) => {
+                    if (suggestions === 'loading') {
+                        // Keep the actual provider pending until Console dismisses it.
+                        await new Promise<void>(resolve => {
+                            token.onCancellationRequested(() => resolve());
+                        });
+                        return { suggestions: [] };
+                    }
+                    if (suggestions === 'empty') {
+                        return { suggestions: [] };
+                    }
+                    return { suggestions: [{
+                        label: 'pi_completion',
+                        kind: monaco.languages.CompletionItemKind.Constant,
+                        insertText: 'pi_completion',
+                        range: new monaco.Range(position.lineNumber, 1, position.lineNumber, position.column),
+                    }] };
+                },
+            });
+            editor.setValue(code);
+            editor.setPosition({ lineNumber: 1, column: code.length + 1 });
+            editor.focus();
+            if (suggestions !== 'hidden') {
+                // Monaco applies selectionMode only to automatic suggestions.
+                // Loading/empty widgets need a manual trigger to remain visible.
+                editor.trigger('test', 'editor.action.triggerSuggest', {
+                    auto: suggestions === 'unfocused',
+                });
+            }
+        }, { suggestions, code });
+
+        const widget = page.locator('.console-input .monaco-editor .suggest-widget');
+        if (suggestions === 'hidden') {
+            await expect(widget).not.toBeVisible();
+        } else {
+            await expect(widget).toHaveClass(/\bvisible\b/);
+            if (suggestions === 'loading' || suggestions === 'empty') {
+                await expect(widget).toContainText(suggestions === 'loading' ? 'Loading...' : 'No suggestions.');
+            } else {
+                await expect(widget.getByText('pi_completion', { exact: true })).toBeVisible();
+            }
+            await expect(widget.locator('.monaco-list-row.focused'))
+                .toHaveCount(suggestions === 'enter-disabled' ? 1 : 0);
+        }
+
+        // Exercise native keyboard dispatch, not the Console action directly.
+        await page.keyboard.press('Enter');
+        await expect.poll(() => backend.requestCount(ConsoleMethods.submitCode)).toBe(1);
+        expect(backend.requests(ConsoleMethods.submitCode)[0].params).toEqual({
+            sessionId: 'session-1',
+            code,
+            checkCompleteness: true,
+        });
+        await expect.poll(() => readConsoleInput(page)).toBe('');
+        await expect(widget).not.toBeVisible();
+
+        const output = suggestions === 'hidden' ? '[1] 2' : '[1] 3.141593';
+        const when = Date.now();
+        await backend.notify(ConsoleMethods.runtimeChanges, {
+            sessionId: 'session-1',
+            syncSeq: 2,
+            changes: [{
+                kind: 'appendRuntimeItem',
+                runtimeItem: {
+                    type: 'activity',
+                    parentId: 'enter-execution',
+                    items: [{
+                        type: 'input',
+                        id: 'enter-input',
+                        parentId: 'enter-execution',
+                        when,
+                        state: 'completed',
+                        inputPrompt: '> ',
+                        continuationPrompt: '+ ',
+                        code,
+                    }, {
+                        type: 'output',
+                        id: 'enter-output',
+                        parentId: 'enter-execution',
+                        when,
+                        data: { 'text/plain': output },
+                    }],
+                },
+            }],
+        });
+        await expect(page.getByTestId('console-session-1').getByText(output, { exact: true })).toBeVisible();
+        expect(backend.requestCount(ConsoleMethods.submitCode)).toBe(1);
+    });
+}
+
+test('Console inserts a newline with Shift+Enter and submits the complete multiline code with Enter', async ({ page }) => {
+    const backend = await openConsole(page);
+    await page.evaluate(() => {
+        const monaco = (globalThis as typeof globalThis & { monaco: typeof Monaco }).monaco;
+        const editor = monaco.editor.getEditors().find(editor =>
+            editor.getDomNode()?.closest('.console-input'),
+        )!;
+        editor.updateOptions({ quickSuggestions: false, suggestOnTriggerCharacters: false });
+        editor.focus();
+    });
+    await page.keyboard.type('value <- 1');
+    await page.keyboard.press('Shift+Enter');
+    await page.keyboard.type('value + 1');
+    const code = 'value <- 1\nvalue + 1';
+    await expect.poll(() => readConsoleInput(page)).toBe(code);
+    expect(backend.requestCount(ConsoleMethods.submitCode)).toBe(0);
+
+    await page.keyboard.press('Enter');
+    await expect.poll(() => backend.requestCount(ConsoleMethods.submitCode)).toBe(1);
+    expect(backend.requests(ConsoleMethods.submitCode)[0].params).toEqual({
+        sessionId: 'session-1', code, checkCompleteness: true,
+    });
+    await expect.poll(() => readConsoleInput(page)).toBe('');
+});
+
+test('Console accepts a history match with Enter and submits it only on the next Enter', async ({ page }) => {
+    const backend = await openConsole(page);
+    const code = 'value <- 1';
+    await backend.notify(ConsoleMethods.historyAdd, { sessionId: 'session-1', input: code });
+    await page.evaluate(() => {
+        const monaco = (globalThis as typeof globalThis & { monaco: typeof Monaco }).monaco;
+        const editor = monaco.editor.getEditors().find(editor =>
+            editor.getDomNode()?.closest('.console-input'),
+        )!;
+        editor.updateOptions({ quickSuggestions: false, suggestOnTriggerCharacters: false });
+        editor.focus();
+    });
+    await page.keyboard.type('value');
+    await page.keyboard.press(process.platform === 'darwin' ? 'Meta+ArrowUp' : 'Control+ArrowUp');
+    const history = page.getByRole('listbox', { name: 'History browser' });
+    await expect(history).toBeVisible();
+    await expect(history).toContainText(code);
+    await page.keyboard.press('Enter');
+    await expect(history).not.toBeVisible();
+    await expect.poll(() => readConsoleInput(page)).toBe(code);
+    expect(backend.requestCount(ConsoleMethods.submitCode)).toBe(0);
+
+    await page.keyboard.press('Enter');
+    await expect.poll(() => backend.requestCount(ConsoleMethods.submitCode)).toBe(1);
+    expect(backend.requests(ConsoleMethods.submitCode)[0].params).toEqual({
+        sessionId: 'session-1', code, checkCompleteness: true,
+    });
+    await expect.poll(() => readConsoleInput(page)).toBe('');
+});
 
 test('Monaco retains required controllers and omits unused contributions', async ({ page }) => {
     await openConsole(page);
@@ -144,7 +349,7 @@ for (const explicitRange of [false, true]) {
 
 for (const key of ['Tab', 'Enter']) {
     test(`Console accepts a displayed completion with ${key} before its visible class appears`, async ({ page }) => {
-        await openConsole(page);
+        const backend = await openConsole(page);
         await page.evaluate(() => {
             const monaco = (globalThis as typeof globalThis & { monaco: typeof Monaco }).monaco;
             const editor = monaco.editor.getEditors().find(editor =>
@@ -187,6 +392,16 @@ for (const key of ['Tab', 'Enter']) {
                 editor.getDomNode()?.closest('.console-input'),
             )!.getValue();
         })).toBe('probe_completion');
+        expect(backend.requestCount(ConsoleMethods.submitCode)).toBe(0);
+
+        // Accepting a completion must leave the next Enter available to submit it.
+        await expect(widget).not.toBeVisible();
+        await page.keyboard.press('Enter');
+        await expect.poll(() => backend.requestCount(ConsoleMethods.submitCode)).toBe(1);
+        expect(backend.requests(ConsoleMethods.submitCode)[0].params).toEqual({
+            sessionId: 'session-1', code: 'probe_completion', checkCompleteness: true,
+        });
+        await expect.poll(() => readConsoleInput(page)).toBe('');
     });
 }
 

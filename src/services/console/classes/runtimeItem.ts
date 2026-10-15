@@ -6,6 +6,7 @@
 import { SessionAttachMode } from '../interfaces/consoleService';
 import type { ConsoleErrorSuggestion } from '../consoleErrorFollowup';
 import {
+    type ConsoleExecutionAttribution,
     ActivityItemInputState,
     ActivityItemPromptState,
     ActivityItemStreamType,
@@ -454,7 +455,8 @@ export class ActivityItemInput extends ActivityItem {
         public state: ActivityItemInputState,
         public readonly inputPrompt: string,
         public readonly continuationPrompt: string,
-        public readonly code: string
+        public readonly code: string,
+        public readonly attribution?: ConsoleExecutionAttribution
     ) {
         super(id, parentId, when);
     }

@@ -21,3 +21,19 @@ export interface KernelOutputMessage extends SocketMessage {
 	 */
 	output: [string, string];
 }
+
+/** A supervisor-side execution announcement, preceding its Jupyter messages. */
+export interface KernelExecutionRequestedMessage extends SocketMessage {
+    executionRequested: {
+        msg_id: string;
+        code: string;
+        requested_at: string;
+        attribution: {
+            source: string;
+            agent_name?: string;
+            agent_version?: string;
+            workspace_id: string;
+            tool: string;
+        };
+    };
+}
