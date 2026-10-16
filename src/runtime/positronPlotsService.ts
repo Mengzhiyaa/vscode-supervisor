@@ -1731,9 +1731,9 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
         }
     }
 
-    private registerPlotClient(plotClient: PlotClientInstance, fireEvents: boolean): void {
+    private registerPlotClient(plotClient: PlotClientInstance, fireEvents: boolean, index = this._plots.length): void {
         // Add to plots list
-        this._plots.push(plotClient);
+        this._plots.splice(index, 0, plotClient);
 
         // Track by ID for render requests
         this._plotClients.set(plotClient.id, plotClient);
@@ -1799,11 +1799,13 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
         }
 
         const oldPlot = this._plots[index];
+        // Remove the view owner before releasing its resources. The unregister
+        // path preserves clients that are still owned by a view or editor.
+        this._plots.splice(index, 1);
         this.unregisterPlotClient(oldPlot);
 
-        this._plots.splice(index, 1);
         if (newPlot instanceof PlotClientInstance) {
-            this.registerPlotClient(newPlot, false);
+            this.registerPlotClient(newPlot, false, index);
         } else {
             this._plots.splice(index, 0, newPlot);
             if (newPlot instanceof StaticPlotClient || newPlot instanceof HtmlPlotClient) {

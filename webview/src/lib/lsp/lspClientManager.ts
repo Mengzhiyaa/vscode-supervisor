@@ -1,6 +1,6 @@
 import { CancellationTokenSource, type MessageConnection } from 'vscode-jsonrpc/browser';
 import { monaco } from '$lib/monaco/setup';
-import type { LspTunnelConfigurationChanged, LspTunnelMessage, LspTunnelOpenResult, LspTunnelState } from '@shared/lspTunnel';
+import type { LspTunnelAvailabilityChanged, LspTunnelConfigurationChanged, LspTunnelMessage, LspTunnelOpenResult, LspTunnelState } from '@shared/lspTunnel';
 import { ConsoleLspClient } from './consoleLspClient';
 import { RpcLspTransport, requestWithDeadline } from './rpcLspTransport';
 
@@ -16,6 +16,7 @@ interface Binding {
     client?: ConsoleLspClient;
     disposed: boolean;
     opening: boolean;
+    available?: boolean;
     failures: number;
     retryTimer?: ReturnType<typeof setTimeout>;
     opener?: monaco.IDisposable;
@@ -71,10 +72,12 @@ export class LspClientManager {
                 if (binding.retryTimer) { clearTimeout(binding.retryTimer); binding.retryTimer = undefined; }
                 this.retireClient(binding);
                 this.setState(binding.sessionId, 'unavailable');
-            } else if (available && !binding.client && !previous.get(session.id)?.runtimeAttached) {
-                void this.start(binding);
-            } else if (available && !binding.client &&
-                !['ready', 'busy'].includes(previous.get(session.id)?.runtimeState ?? '')) {
+            } else if (!binding.client && (!previous.get(session.id)?.runtimeAttached ||
+                !['ready', 'busy'].includes(previous.get(session.id)?.runtimeState ?? ''))) {
+                // A restarted or reattached runtime may have retired the Host's
+                // old availability watcher. Probe once to subscribe to its LSP again.
+                binding.available = undefined;
+                binding.failures = 0;
                 void this.start(binding);
             }
         }
@@ -107,6 +110,15 @@ export class LspClientManager {
                 }
             }),
             outer.onNotification('lspTunnel/configurationChanged', (params: LspTunnelConfigurationChanged) => this.retry(params.sessionId)),
+            outer.onNotification('lspTunnel/availabilityChanged', (params: LspTunnelAvailabilityChanged) => {
+                if (params.available) {
+                    this.retry(params.sessionId, true);
+                } else {
+                    for (const binding of this.bindings.values()) {
+                        if (binding.sessionId === params.sessionId) { this.pause(binding); }
+                    }
+                }
+            }),
             outer.onClose(() => {
                 for (const binding of [...this.bindings.values()]) {
                     if (binding.outer === outer) { this.detachModel(binding.model); }
@@ -123,9 +135,18 @@ export class LspClientManager {
             binding.model.getLanguageId() === binding.languageId;
     }
 
-    retry(sessionId: string): void {
+    private pause(binding: Binding): void {
+        binding.available = false;
+        binding.cancellation.cancel();
+        if (binding.retryTimer) { clearTimeout(binding.retryTimer); binding.retryTimer = undefined; }
+        this.retireClient(binding);
+        this.setState(binding.sessionId, 'unavailable');
+    }
+
+    retry(sessionId: string, available?: boolean): void {
         for (const binding of this.bindings.values()) {
             if (binding.sessionId === sessionId) {
+                binding.available = available;
                 binding.cancellation.cancel();
                 this.retireClient(binding);
                 if (binding.retryTimer) { clearTimeout(binding.retryTimer); binding.retryTimer = undefined; }
@@ -138,7 +159,7 @@ export class LspClientManager {
 
     private scheduleRetry(binding: Binding): void {
         const session = this.sessions.get(binding.sessionId);
-        if (!this.current(binding) || binding.client || binding.retryTimer || binding.failures >= 3 ||
+        if (!this.current(binding) || binding.available === false || binding.client || binding.retryTimer || binding.failures >= 3 ||
             !session?.runtimeAttached || !['ready', 'busy'].includes(session.runtimeState)) { return; }
         const delay = 250 * 2 ** binding.failures++;
         binding.retryTimer = setTimeout(() => {
@@ -148,7 +169,7 @@ export class LspClientManager {
     }
 
     private async start(binding: Binding): Promise<void> {
-        if (!this.current(binding) || binding.client || binding.opening) { return; }
+        if (!this.current(binding) || binding.available === false || binding.client || binding.opening) { return; }
         const session = this.sessions.get(binding.sessionId);
         if (!session?.runtimeAttached || !['ready', 'busy'].includes(session.runtimeState)) {
             this.setState(binding.sessionId, 'unavailable');
@@ -174,6 +195,12 @@ export class LspClientManager {
             }
             if (!result.supported) {
                 this.setState(binding.sessionId, 'unsupported');
+                return;
+            }
+            if (result.available === false) {
+                // An intentional session-manager stop is not a connection failure.
+                // Wait for Host availability instead of retrying the inactive LSP.
+                this.pause(binding);
                 return;
             }
             if (!result.tunnelId || result.epoch === undefined) {

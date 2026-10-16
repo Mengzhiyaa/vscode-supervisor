@@ -19,6 +19,7 @@ import type {
     LanguageRuntimeMetadata,
     IRuntimeSessionMetadata,
     Utf8Location,
+    ICodeExecutionObserver,
 } from '../../../api';
 import type {
     LanguageRuntimeClearOutput,
@@ -186,6 +187,7 @@ export interface IPositronConsoleService extends vscode.Disposable {
         executionId?: string,
         documentUri?: vscode.Uri,
         executionMetadata?: Record<string, unknown>,
+        observer?: ICodeExecutionObserver,
     ): Promise<string>;
     getConsoleInstance(sessionId: string): IPositronConsoleInstance | undefined;
 

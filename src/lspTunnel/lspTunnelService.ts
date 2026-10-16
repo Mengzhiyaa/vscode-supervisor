@@ -76,7 +76,11 @@ function completionWithDefaults(item: CompletionItem, list: CompletionList): Com
 export class LspTunnelService implements vscode.Disposable {
     private readonly tunnels = new Map<string, Tunnel>();
     private readonly opening = new Map<string, vscode.CancellationTokenSource>();
-    private readonly watchedSessions = new Map<string, { session: RuntimeSession; disposables: vscode.Disposable[] }>();
+    private readonly watchedSessions = new Map<string, {
+        session: RuntimeSession;
+        disposables: vscode.Disposable[];
+        lspListener?: vscode.Disposable;
+    }>();
     private epoch = 0;
     private requestId = 0;
     private disposed = false;
@@ -102,6 +106,27 @@ export class LspTunnelService implements vscode.Disposable {
             tunnel.lsp.state === LanguageLspState.Running;
     }
 
+    private watchSessionLsp(session: RuntimeSession): void {
+        const watched = this.watchedSessions.get(session.sessionId);
+        if (!watched) { return; }
+        watched.lspListener?.dispose();
+        const lsp = session.lsp;
+        // Keep watching after a tunnel closes so a foreground switch can resume
+        // the Console connection when its language session manager starts LSP.
+        watched.lspListener = lsp.onDidChangeState?.(event => {
+            if (session.lsp !== lsp || this.getSession(session.sessionId) !== session) { return; }
+            const available = event.newState === LanguageLspState.Running;
+            if (!available) { this.opening.get(session.sessionId)?.cancel(); }
+            this.notifyAvailability(session, available);
+        });
+    }
+
+    private notifyAvailability(session: RuntimeSession, available: boolean): void {
+        const params = { sessionId: session.sessionId, generation: session.boundLspGeneration, available };
+        void Promise.resolve().then(() => this.connection.sendNotification(
+            Protocol.LspTunnelAvailabilityChangedNotification.type, params)).catch(() => {});
+    }
+
     private async open(params: LspTunnelOpenParams, token: CancellationToken): Promise<LspTunnelOpenResult> {
         if (this.disposed || !vscode.workspace.isTrusted || typeof params?.sessionId !== 'string' ||
             typeof params.webviewClientId !== 'string' || params.webviewClientId.length > 128) {
@@ -121,9 +146,12 @@ export class LspTunnelService implements vscode.Disposable {
                     }
                     void Promise.resolve().then(() => this.connection.sendNotification(Protocol.LspTunnelConfigurationChangedNotification.type,
                         { sessionId: session.sessionId, generation: session.boundLspGeneration })).catch(() => {});
+                    this.watchSessionLsp(session);
+                    this.notifyAvailability(session, session.lsp.state === LanguageLspState.Running);
                 }),
                 session.onDidEndSession(() => this.closeSession(session.sessionId)),
             ] });
+            this.watchSessionLsp(session);
         }
         const configuration = session.consoleLspConfiguration;
         const lsp = session.lsp;
@@ -132,6 +160,10 @@ export class LspTunnelService implements vscode.Disposable {
         if (!['ready', 'idle', 'busy'].includes(session.getRuntimeState())) { throw new Error('Console runtime is unavailable'); }
         const uri = vscode.Uri.parse(consoleLspModelUri(session.sessionId, session.runtimeMetadata.languageId)).toString(true);
         if (params.modelUri !== uri) { throw new Error('Console LSP model does not belong to session'); }
+        // Only the language session manager may activate LSP: it first stops the
+        // other Console clients for this language, as in Positron. Opening a
+        // browser connection must never reactivate a background Console's LSP.
+        if (lsp.state !== LanguageLspState.Running) { return { supported: true, available: false }; }
         this.opening.get(session.sessionId)?.cancel();
         // One Console document owner per session; replacing a surface closes its old logical connection.
         for (const tunnel of [...this.tunnels.values()]) {
@@ -149,7 +181,7 @@ export class LspTunnelService implements vscode.Disposable {
         if (token.isCancellationRequested) { cancellation.cancel(); }
         const generation = session.boundLspGeneration;
         try {
-            await Promise.race([session.activateLsp().then(() => lsp.wait()), cancelled]);
+            await Promise.race([lsp.wait(), cancelled]);
             if (this.disposed || cancellation.token.isCancellationRequested || session !== this.getSession(session.sessionId) ||
                 session.lsp !== lsp || session.boundLspGeneration !== generation || !bridge.capabilities ||
                 lsp.state !== LanguageLspState.Running) { throw new Error('Obsolete or unavailable Host LSP client'); }
@@ -178,7 +210,7 @@ export class LspTunnelService implements vscode.Disposable {
                     if (['restarting', 'exiting', 'exited', 'offline'].includes(state)) { this.close(tunnel); }
                 }),
             );
-            return { supported: true, tunnelId: tunnel.id, epoch: tunnel.epoch, configuration };
+            return { supported: true, available: true, tunnelId: tunnel.id, epoch: tunnel.epoch, configuration };
         } finally {
             clearTimeout(timeout); external.dispose(); cancelListener?.dispose(); cancellation.dispose();
             if (this.opening.get(session.sessionId) === cancellation) { this.opening.delete(session.sessionId); }
@@ -373,7 +405,9 @@ export class LspTunnelService implements vscode.Disposable {
     }
 
     closeSession(sessionId: string): void {
-        for (const disposable of this.watchedSessions.get(sessionId)?.disposables ?? []) { disposable.dispose(); }
+        const watched = this.watchedSessions.get(sessionId);
+        watched?.lspListener?.dispose();
+        for (const disposable of watched?.disposables ?? []) { disposable.dispose(); }
         this.watchedSessions.delete(sessionId);
         this.opening.get(sessionId)?.cancel();
         for (const tunnel of [...this.tunnels.values()]) {
@@ -420,7 +454,10 @@ export class LspTunnelService implements vscode.Disposable {
         for (const pending of this.opening.values()) { pending.cancel(); }
         for (const tunnel of [...this.tunnels.values()]) { this.close(tunnel); }
         for (const handler of this.handlers) { handler.dispose(); }
-        for (const watched of this.watchedSessions.values()) { for (const disposable of watched.disposables) { disposable.dispose(); } }
+        for (const watched of this.watchedSessions.values()) {
+            watched.lspListener?.dispose();
+            for (const disposable of watched.disposables) { disposable.dispose(); }
+        }
         this.watchedSessions.clear();
     }
 }

@@ -428,7 +428,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
         this._runtimeItems = [];
         this._runtimeItemActivities.clear();
         this._runtimeItemPendingInput = undefined;
-        this._pendingCodeQueue = [];
+        this.clearPendingInput();
         this._pendingCode = undefined;
         this._activeActivityItemPrompt = undefined;
 
@@ -678,7 +678,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
         if (preservePendingInput) {
             this._syncPendingInputRuntimeItem();
         } else {
-            this._pendingCodeQueue = [];
+            this.clearPendingInput();
             this._pendingCode = undefined;
         }
         this._clearActiveActivityItemPrompt();
@@ -718,9 +718,9 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
     }
 
     interrupt(code?: string): void {
-        if (this._alignConsoleSubmission) {
-            this.cancelCodeSubmission(false);
-            this._pendingBusyExecutionId = undefined;
+        if (this._alignConsoleSubmission && this.codeSubmissionInProgress) {
+            this.cancelCodeSubmission();
+            return;
         }
         // If a prompt is active, interrupt it (Positron pattern)
         if (this._activeActivityItemPrompt) {
@@ -1394,7 +1394,9 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
     }
 
     private clearPendingInput(): void {
+        const executionIds = this._pendingCodeQueue.flatMap(item => item.executionId ? [item.executionId] : []);
         this._pendingCodeQueue = [];
+        this._session?.cancelExecutions?.(executionIds);
         this._syncPendingInputRuntimeItem();
 
         if (this._pendingInputState === 'Processing') {
@@ -1628,10 +1630,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
 
     handleOutput(message: LanguageRuntimeOutputWithKind): void {
         const activityItem = this.createActivityItemOutput(message);
-        if (!activityItem) {
-            return;
-        }
-        this.addOrUpdateRuntimeItemActivity(message.parent_id, activityItem);
+        if (activityItem) { this.addOrUpdateRuntimeItemActivity(message.parent_id, activityItem); }
         const output = message.data['text/plain'];
         if (typeof output === 'string') {
             this._executionHistoryService?.recordExecutionOutput(
@@ -1647,10 +1646,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
 
     handleResult(message: LanguageRuntimeResultWithKind): void {
         const activityItem = this.createActivityItemOutput(message);
-        if (!activityItem) {
-            return;
-        }
-        this.addOrUpdateRuntimeItemActivity(message.parent_id, activityItem);
+        if (activityItem) { this.addOrUpdateRuntimeItemActivity(message.parent_id, activityItem); }
         const output = message.data['text/plain'];
         if (typeof output === 'string') {
             this._executionHistoryService?.recordExecutionOutput(
@@ -1666,7 +1662,6 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
 
     handleUpdateOutput(message: LanguageRuntimeUpdateOutputWithKind): void {
         const activityItem = this.createActivityItemOutput(message);
-        if (!activityItem) { return; }
         const outputId = message.output_id;
         const output = message.data['text/plain'];
         const historyUpdated = outputId
@@ -1674,6 +1669,15 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
                 this.sessionId, outputId, typeof output === 'string' ? output : '',
             ) ?? false
             : false;
+        if (!activityItem) {
+            if (!historyUpdated && typeof output === 'string') {
+                this._executionHistoryService?.recordExecutionOutput(
+                    this.sessionId, message.parent_id, output,
+                    message.when ? Date.parse(message.when) : Date.now(), false, outputId,
+                );
+            }
+            return;
+        }
         let replaced = false;
         if (outputId) {
             for (const [parentId, activity] of this._runtimeItemActivities) {
@@ -2432,6 +2436,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
     dispose(): void {
         this._isDisposed = true;
         this.cancelCodeSubmission();
+        this.clearPendingInput();
         for (const tokenSource of this._errorFollowupTokenSources) {
             tokenSource.cancel();
             tokenSource.dispose();

@@ -25,6 +25,8 @@ export interface LspTunnelOpenParams {
 
 export interface LspTunnelOpenResult {
     supported: boolean;
+    /** False while the language session manager has not activated the Host LSP. */
+    available?: boolean;
     tunnelId?: string;
     epoch?: number;
     configuration?: ConsoleLspConfiguration;
@@ -52,6 +54,12 @@ export interface LspTunnelOpenDocument extends LspTunnelKey {
 export interface LspTunnelConfigurationChanged {
     sessionId: string;
     generation: number;
+}
+
+export interface LspTunnelAvailabilityChanged {
+    sessionId: string;
+    generation: number;
+    available: boolean;
 }
 
 export function consoleLspModelUri(sessionId: string, languageId: string): string {

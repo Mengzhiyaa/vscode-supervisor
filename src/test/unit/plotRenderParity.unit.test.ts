@@ -373,6 +373,40 @@ suite('[Unit] Plot render parity', () => {
         } finally { service.dispose(); }
     });
 
+    test('replacing a plot releases the old view and retains its position and shared editor', () => {
+        const service = new PositronPlotsService();
+        const before = f.create('before');
+        const old = f.create();
+        const after = f.create('after');
+        const editor = f.create();
+        const replacement = f.create();
+        service.addPlotClient(before);
+        service.addPlotClient(old);
+        service.addPlotClient(after);
+        let commCloses = 0;
+        Object.assign(service, {
+            _editorPlotClients: new Map([['plot', editor]]),
+            _plotClientsByComm: new Map([['plot', [old, editor, replacement]]]),
+            _plotCommProxies: new Map([['plot', { dispose: () => commCloses++ }]]),
+        });
+        const removed: unknown[] = [];
+        service.onDidRemovePlot(plot => removed.push(plot));
+        try {
+            (service as any).replacePlot('plot', replacement);
+            assert.strictEqual(old.state, PlotClientState.Closed);
+            assert.deepStrictEqual(service.positronPlotInstances, [before, replacement, after]);
+            assert.strictEqual(service.getPlotClient('plot'), replacement);
+            assert.strictEqual(service.getEditorInstance('plot'), editor);
+            assert.notStrictEqual(editor.state, PlotClientState.Closed);
+            assert.strictEqual(commCloses, 0);
+            assert.deepStrictEqual(removed, [old]);
+            service.removePlot('plot');
+            assert.strictEqual(commCloses, 0);
+            service.removeEditorPlot('plot');
+            assert.strictEqual(commCloses, 1);
+        } finally { service.dispose(); }
+    });
+
     test('the shared proxy closes the real kernel client once after both surface clients release it', () => {
         const state = new vscode.EventEmitter<QueueRuntimeState>();
         const queue = new PositronPlotRenderQueue({ sessionId: 'session', getRuntimeState: () => QueueRuntimeState.Idle, onDidChangeRuntimeState: state.event });

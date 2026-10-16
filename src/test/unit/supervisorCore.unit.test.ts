@@ -590,6 +590,48 @@ suite('[Unit] supervisor core backports', () => {
         );
     });
 
+    test('force quit bounds service cleanup and tolerates cleanup failure', async () => {
+        for (const outcome of ['pending', 'failed'] as const) {
+            const session = new RuntimeSession('session-1', makeRuntimeMetadata(), makeSessionMetadata(), makeNoopLogChannel());
+            let release!: () => void;
+            let killed = 0;
+            const cleanup = new Promise<void>(resolve => { release = resolve; });
+            session.deactivateLsp = () => outcome === 'pending' ? cleanup : Promise.reject(new Error('LSP unavailable'));
+            session.disconnectDap = async () => undefined;
+            (session as any)._kernel = { forceQuit: async () => { killed++; } };
+            try {
+                await session.forceQuit();
+                assert.strictEqual(killed, 1);
+            } finally {
+                release();
+                await session.dispose();
+            }
+        }
+    });
+
+    test('execution cancellation distinguishes completed work from interrupted and rejected requests', async () => {
+        const session = new RuntimeSession('session-1', makeRuntimeMetadata(), makeSessionMetadata(), makeNoopLogChannel());
+        const cancelled: string[] = [];
+        session.onDidCancelExecution(id => cancelled.push(id));
+        (session as any)._kernel = {
+            execute: async (_code: string, id: string) => {
+                if (id === 'rejected') { throw new Error('Transport unavailable'); }
+            },
+            interrupt: async () => { throw new Error('Interrupt failed'); },
+        };
+        try {
+            await session.execute('1', 'completed');
+            (session as any).processMessage({ type: LanguageRuntimeMessageType.State, parent_id: 'completed', state: 'idle' });
+            await session.execute('slow()', 'running');
+            await assert.rejects(session.interrupt(), /Interrupt failed/);
+            assert.deepStrictEqual(cancelled, ['running']);
+            await assert.rejects(Promise.resolve(session.execute('2', 'rejected')), /Transport unavailable/);
+            assert.deepStrictEqual(cancelled, ['running', 'rejected']);
+            session.cancelExecutions(['queued']);
+            assert.deepStrictEqual(cancelled, ['running', 'rejected', 'queued']);
+        } finally { await session.dispose(); }
+    });
+
     test('runtime session converts editor attribution into utf8 code locations', async () => {
         const session = new RuntimeSession(
             'session-1',

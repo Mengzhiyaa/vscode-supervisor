@@ -9,7 +9,7 @@
   ],
   "publicApi": {
     "declarations": {
-      "LanguageRuntimeMessageType": "export enum LanguageRuntimeMessageType { ClearOutput = 'clear_output', Output = 'output', Result = 'result', Stream = 'stream', Input = 'input', Error = 'error', Prompt = 'prompt', State = 'state', Event = 'event', CommOpen = 'comm_open', CommData = 'comm_data', CommClosed = 'comm_closed', DebugEvent = 'debug_event', DebugReply = 'debug_reply', IPyWidget = 'ipywidget', UpdateOutput = 'update_output' }",
+      "LanguageRuntimeMessageType": "export enum LanguageRuntimeMessageType { ClearOutput = 'clear_output', Output = 'output', Result = 'result', Stream = 'stream', Input = 'input', Error = 'error', Prompt = 'prompt', State = 'state', Event = 'event', CommOpen = 'comm_open', CommData = 'comm_data', CommClosed = 'comm_closed', DebugEvent = 'debug_event', DebugReply = 'debug_reply', IPyWidget = 'ipywidget', UpdateOutput = 'update_output', ExecutionRequested = 'execution_requested' }",
       "LanguageRuntimeMessage": "export interface LanguageRuntimeMessage { id: string; parent_id: string; when: string; type: LanguageRuntimeMessageType; metadata?: Record<string, unknown>; buffers?: Array<Uint8Array>; }",
       "LanguageRuntimeOutput": "export interface LanguageRuntimeOutput extends LanguageRuntimeMessage { data: Record<string, unknown>; outputMetadata?: Record<string, unknown>; output_id?: string; }",
       "LanguageRuntimeResult": "export interface LanguageRuntimeResult extends LanguageRuntimeOutput { execution_count: number; }",

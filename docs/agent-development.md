@@ -102,6 +102,15 @@ MCP 工作区 ID 和期望端口保存在 `workspaceState`，token 保存在 VS 
 - API v2 的语言注册通过 `languages.forExtension(...).begin(...)` 的 builder 提交 runtime、LSP、binary、session manager、Notebook controller 等能力；具体身份字段查阅接口。
 - `api.services` 有意排除底层注册方法。内部 `RuntimeSessionService.registerNotebookController` 的存在不表示它是顶层公共 API。
 - Console 序列化版本在 `src/shared/consoleState.ts`，持久化预算和刷新逻辑在 `consoleStateStore.ts`。
+- 强制退出最多等待 250 毫秒清理 LSP/DAP；清理失败不会阻止内核终止。Console 在提交检查期间的停止操作只取消本次提交，保留排队输入；真正丢弃队列或中断已提交执行时，按 execution ID 发送可选的 `onDidCancelExecution` 通知，Python 据此清理未命名脚本的快照。
+- 已保存的 Data Connection 可通过展开或“连接”操作重新连接；修改连接参数、驱动、机制或重新填写密钥会关闭旧连接，是否立即重新连接由 `addUpdateProfile` 的 `connect` 参数决定。仅重命名保留现有连接。
+- Console LSP 的启动由语言 session manager 管理：同一语言先停用其他 Console 的 LSP，再启动目标 Console；切到其他语言时保留各语言最近的 Console LSP，Notebook 的 LSP 独立管理。`src/lspTunnel/lspTunnelService.ts` 只连接已经运行的 Host LSP，不负责启动；Webview 在 LSP 不可用时暂停重连，收到 `lspTunnel/availabilityChanged` 的可用通知后恢复。
+- R/Python 恢复 Console LSP 时优先使用当前同语言的前台 Console，其次使用持久化的最后前台 Console；保存的 Console 已不存在或已退出时才回退到最新存活 Console。尚未就绪的已保存会话保留选择，等 Ready 后激活。Python 在等待初始化完成后，通过 `Stopped` 事件等待 LSP 停止，停止阶段最多等待两秒。
+- 发现完成后，打开文档或切换活动编辑器会按该文档语言重新检查 implicit startup；仍受启动设置、workspace trust、恢复状态和新目录初始化屏障约束。Python 整文件执行使用 APK 的 `%run`，跟随已有 Python Console 并保留脚本定义；untitled 文档使用每次执行独立的临时脚本，文件保留到执行完成、会话结束或扩展服务释放后清理。
+- Python 文件执行依赖 APK 的 `%run -G -- <path>`。`../apk/crates/apk/src/modules/apk/_magics.py` 是嵌入内核的源码；修改 magic 的参数解析或脚本导入路径处理后，需要重新构建 APK 并更新语言扩展使用的内核二进制。
+- Console `executeCode` 返回提交后的 session ID，可选 observer 按 execution ID 通知实际完成或失败。Ark 的 RData/RDS 加载和未命名 R 脚本 Source 使用该通知等待结果；未命名脚本使用独立快照并在完成、失败或服务释放后清理。
+- Python 解释器通知区分后台记录刷新与用户切换意图；只有后者选择或启动 Console。解释器删除、同路径重建时更新发现元数据并关闭旧 Console 会话；uv 环境使用 uv 包管理器，根据项目配置选择 `uv add/remove/sync` 或 `uv pip`。
+- Console 的输出展示过滤不影响执行历史：Viewer 和 IPyWidget 输出中的 `text/plain` 也会记录，并按 output ID 更新。
 - `runtimeStartup.ts` 管理恢复来源，`ephemeralState.ts` 只存活于当前 extension-host 进程；`newFolder` 使用自己的配置与任务状态。
 - 文件 Data Explorer 的 DuckDB backend 在 `src/services/duckdb/`，不能把所有 Data Explorer 行为归为语言内核能力。
 - 此仓库未提供统一业务数据库、schema migration CLI 或服务部署系统；相关变更应沿现有 Memento、配置迁移和文件导入实现处理。

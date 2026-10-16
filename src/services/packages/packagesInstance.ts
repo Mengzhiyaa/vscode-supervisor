@@ -121,6 +121,7 @@ export class PositronPackagesInstance implements IPositronPackagesInstance, vsco
         packageManager: ILanguageRuntimePackageManager,
     ): void {
         this.detachRuntime();
+        if (this._packageManager !== packageManager) { this._packageManager.dispose?.(); }
         this._session = session;
         this._packageManager = packageManager;
         this._packages = [];
@@ -402,6 +403,7 @@ export class PositronPackagesInstance implements IPositronPackagesInstance, vsco
         this._metadataTokenSource?.cancel();
         this._metadataTokenSource?.dispose();
         this.detachRuntime();
+        this._packageManager.dispose?.();
         while (this._disposables.length) {
             this._disposables.pop()?.dispose();
         }

@@ -29,7 +29,8 @@ import {
     UiFrontendEvent,
     WorkingDirectoryEvent,
 } from '../../runtime/comms/positronUiComm';
-import { LanguageRuntimeSessionMode } from '../../api';
+import { LanguageRuntimeSessionMode, type ICodeExecutionObserver } from '../../api';
+import { randomUUID } from 'crypto';
 import type { ConsoleErrorFollowupServiceLike } from './consoleErrorFollowup';
 import { ExecutionHistoryService } from './executionHistoryService';
 
@@ -55,6 +56,7 @@ export class PositronConsoleService implements IPositronConsoleService {
     private _scrollbackSize = 10000;
     /** Restore cleanup is runtime-owned, not an explicit Console deletion. */
     private readonly _restoreDiscardsInProgress = new Set<string>();
+    private readonly _executionObservers = new Set<vscode.Disposable>();
 
     // Event emitters (1:1 Positron naming)
     private readonly _onDidStartPositronConsoleInstanceEmitter = new vscode.EventEmitter<IPositronConsoleInstance>();
@@ -308,6 +310,7 @@ export class PositronConsoleService implements IPositronConsoleService {
         executionId?: string,
         _documentUri?: vscode.Uri,
         executionMetadata?: Record<string, unknown>,
+        observer?: ICodeExecutionObserver,
     ): Promise<string> {
         await this.revealConsole(!focus);
 
@@ -328,17 +331,58 @@ export class PositronConsoleService implements IPositronConsoleService {
             instance.focusInput();
         }
 
-        await instance.enqueueCode(
-            code,
-            attribution,
-            allowIncomplete,
-            mode,
-            errorBehavior,
-            executionId,
-            executionMetadata,
-        );
+        const id = executionId ?? (observer ? randomUUID() : undefined);
+        const observation = observer && id
+            ? this._observeExecution(instance, id, observer)
+            : undefined;
+        try {
+            await instance.enqueueCode(
+                code, attribution, allowIncomplete, mode, errorBehavior, id, executionMetadata,
+            );
+        } catch (error) {
+            observation?.fail(error instanceof Error ? error : new Error(getErrorMessage(error)));
+            throw error;
+        }
 
         return instance.sessionId;
+    }
+
+    private _observeExecution(instance: PositronConsoleInstance, id: string, observer: ICodeExecutionObserver) {
+        const session = instance.attachedRuntimeSession;
+        if (!session) { throw new Error('The Console is not attached to a runtime session.'); }
+        const subscriptions: vscode.Disposable[] = [];
+        let settled = false;
+        const finish = (error?: Error) => {
+            if (settled) { return; }
+            settled = true;
+            subscriptions.forEach(subscription => subscription.dispose());
+            this._executionObservers.delete(disposable);
+            if (error) { observer.onFailed?.(error); } else { observer.onFinished?.(); }
+        };
+        const disposable = new vscode.Disposable(() => finish(new vscode.CancellationError()));
+        this._executionObservers.add(disposable);
+        subscriptions.push(
+            session.onDidReceiveRuntimeMessageState(message => {
+                if (message.parent_id === id && String(message.state) === 'idle') { finish(); }
+            }),
+            session.onDidReceiveRuntimeMessageError(message => {
+                if (message.parent_id === id) {
+                    const error = new Error(message.message);
+                    error.name = message.name;
+                    error.stack = message.traceback?.join('\n');
+                    finish(error);
+                }
+            }),
+            session.onDidEndSession(() => finish(new Error('The runtime session ended before execution completed.'))),
+            instance.onDidAttachSession(attached => {
+                if (attached !== session) { finish(new vscode.CancellationError()); }
+            }),
+        );
+        const cancelled = session.onDidCancelExecution?.(executionId => {
+            if (executionId === id) { finish(new vscode.CancellationError()); }
+        });
+        if (cancelled) { subscriptions.push(cancelled); }
+        return { fail: (error: Error) => finish(error) };
     }
 
     getConsoleInstance(sessionId: string): IPositronConsoleInstance | undefined {
@@ -396,6 +440,7 @@ export class PositronConsoleService implements IPositronConsoleService {
     dispose(): void {
         this._outputChannel.debug('[PositronConsoleService] Disposing...');
         this._restoreDiscardsInProgress.clear();
+        for (const observer of [...this._executionObservers]) { observer.dispose(); }
 
         // Dispose all console instances
         for (const instance of this._consoleInstancesBySessionId.values()) {

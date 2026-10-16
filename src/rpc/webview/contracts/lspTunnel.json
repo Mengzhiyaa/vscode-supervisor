@@ -51,6 +51,12 @@
       "name": "LspTunnelConfigurationChangedNotification",
       "method": "lspTunnel/configurationChanged",
       "paramsType": "import('../../shared/lspTunnel').LspTunnelConfigurationChanged"
+    },
+    {
+      "kind": "notification",
+      "name": "LspTunnelAvailabilityChangedNotification",
+      "method": "lspTunnel/availabilityChanged",
+      "paramsType": "import('../../shared/lspTunnel').LspTunnelAvailabilityChanged"
     }
   ]
 }
