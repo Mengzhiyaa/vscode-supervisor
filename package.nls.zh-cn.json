@@ -1,4 +1,5 @@
 {
+  "supervisor.connections.connect.title": "连接",
   "supervisor.inlineDataExplorer.displayName": "Supervisor 内联数据浏览器",
   "supervisor.dataExplorer.category": "Ark 数据浏览器",
   "supervisor.dataExplorer.import.title": "导入数据...",

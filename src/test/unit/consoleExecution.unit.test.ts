@@ -422,6 +422,49 @@ suite('[Unit] console execution alignment', () => {
         instance.dispose();
     });
 
+    test('stopping a local completeness check preserves queued code without interrupting the kernel', async () => {
+        const executeCalls: unknown[][] = [];
+        const instance = createConsoleInstance();
+        const runtimeSession = createRuntimeSession(executeCalls);
+        let checking!: () => void;
+        const checkStarted = new Promise<void>(resolve => { checking = resolve; });
+        runtimeSession.lsp.inputBoundaryProvider = {
+            provideInputBoundaries: () => { checking(); return new Promise(() => undefined); },
+        };
+        let interrupts = 0;
+        runtimeSession.interrupt = async () => { interrupts++; };
+        instance.attachRuntimeSession(runtimeSession, SessionAttachMode.Connected);
+        try {
+            const submission = instance.submitCode('slow()', { source: 'console' });
+            await checkStarted;
+            await instance.enqueueCode('queued()', { source: 'editor' }, true,
+                RuntimeCodeExecutionMode.Interactive, RuntimeErrorBehavior.Continue, 'queued');
+            runtimeSession.state = RuntimeState.Busy;
+            instance.interrupt();
+            assert.strictEqual(await submission, 'cancelled');
+            assert.strictEqual(interrupts, 0);
+            assert.ok(instance.runtimeItems.some(item => item instanceof RuntimeItemPendingInput && item.code === 'queued()'));
+            runtimeSession.state = RuntimeState.Idle;
+            await (instance as any).processPendingInput();
+            assert.strictEqual(executeCalls[0]?.[0], 'queued()');
+        } finally { instance.dispose(); }
+    });
+
+    test('interrupting a busy Console reports the execution IDs removed from its queue', async () => {
+        const instance = createConsoleInstance();
+        const runtimeSession = createRuntimeSession([], RuntimeState.Busy);
+        const cancelled: string[] = [];
+        runtimeSession.cancelExecutions = (ids: string[]) => cancelled.push(...ids);
+        instance.attachRuntimeSession(runtimeSession, SessionAttachMode.Connected);
+        try {
+            await instance.enqueueCode('%run -- scratch.py', { source: 'editor' }, true,
+                RuntimeCodeExecutionMode.Interactive, RuntimeErrorBehavior.Continue, 'scratch');
+            instance.interrupt();
+            assert.deepStrictEqual(cancelled, ['scratch']);
+            assert.ok(!instance.runtimeItems.some(item => item instanceof RuntimeItemPendingInput));
+        } finally { instance.dispose(); }
+    });
+
     test('host-owned submission cancellation wins a slow completeness race', async () => {
         const executeCalls: unknown[][] = [];
         const instance = createConsoleInstance();

@@ -1425,6 +1425,11 @@ test('console does not force execution output back into view after the user scro
     await scrollConsoleUp(page, 320, readySession.id);
     const lockedMetrics = await readConsoleScrollMetrics(page, readySession.id);
 
+    await expect
+        .poll(async () => (await backend.getState<{ scrollLocked?: Record<string, boolean> }>())
+            ?.scrollLocked?.[readySession.id])
+        .toBe(true);
+
     await backend.notify(ConsoleMethods.runtimeChanges, {
         sessionId: readySession.id,
         syncSeq: 2,

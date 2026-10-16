@@ -14,6 +14,7 @@ import {
     EPHEMERAL_WORKSPACE_SESSIONS,
     LanguageStartupBehavior,
     RuntimeStartupService,
+    RuntimeStartupPhase,
 } from '../../runtime/runtimeStartup';
 import type { SerializedSessionMetadata } from '../../runtime/runtimeSessionService';
 
@@ -298,6 +299,52 @@ function makeNewFolderService(
 }
 
 suite('[Unit] runtime startup', () => {
+    test('starts a newly encountered language after discovery and deduplicates concurrent editor signals', async () => {
+        const context = makeContext();
+        const logChannel = makeNoopLogChannel();
+        const sessionManager = makeSessionManager();
+        const runtime = makeRuntimeMetadata({ languageId: 'python', runtimeId: 'python-implicit',
+            startupBehavior: LanguageRuntimeStartupBehavior.Implicit });
+        const startupService = new RuntimeStartupService(
+            context, { ...makeRuntimeManager(), runtimes: [runtime] }, sessionManager.value,
+            makeNewFolderService(context, logChannel), logChannel, createMemento(),
+        );
+        const pending = createDeferred<void>();
+        const starts: string[] = [];
+        const internalService = startupService as unknown as {
+            _autoStartEncounteredLanguage(languageId: string): Promise<void>;
+        };
+        const encounter = (languageId: string) => internalService._autoStartEncounteredLanguage(languageId);
+        Object.assign(startupService, {
+            _autoStartRuntime: async (metadata: LanguageRuntimeMetadata) => {
+                starts.push(metadata.runtimeId);
+                await pending.promise;
+            },
+        });
+        try {
+            await encounter('python');
+            assert.deepStrictEqual(starts, []);
+            Object.assign(startupService, { _startupPhase: RuntimeStartupPhase.Complete });
+            sessionManager.value.implicitStartupSuppressed = true;
+            await encounter('python');
+            assert.deepStrictEqual(starts, []);
+            sessionManager.value.implicitStartupSuppressed = false;
+            sessionManager.value.hasStartingOrRunningConsole = () => true;
+            await encounter('python');
+            assert.deepStrictEqual(starts, []);
+            sessionManager.value.hasStartingOrRunningConsole = () => false;
+            await encounter('r');
+            const first = encounter('python');
+            await encounter('python');
+            assert.deepStrictEqual(starts, ['python-implicit']);
+            pending.resolve();
+            await first;
+        } finally {
+            pending.resolve();
+            startupService.dispose();
+        }
+    });
+
     test('skips stale active and recently started runtimes when selecting a preference', () => {
         const context = makeContext();
         const logChannel = makeNoopLogChannel();

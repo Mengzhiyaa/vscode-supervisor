@@ -120,7 +120,7 @@
     let widthInCharsAnimationFrame: number | undefined;
     let lastRuntimeItemsMarker = $state(0);
     let lastExecuteScrollMarker = $state(0);
-    let ignoreNextScrollEvent = $state(false);
+    let expectedProgrammaticScrollTop: number | undefined;
     let lastObservedSize:
         | { scrollHeight: number; clientHeight: number }
         | undefined;
@@ -213,8 +213,7 @@
 
             requestAnimationFrame(() => {
                 if (consoleInstanceRef) {
-                    ignoreNextScrollEvent = true;
-                    consoleInstanceRef.scrollTop = savedPosition;
+                    setProgrammaticScrollTop(savedPosition);
                     setScrollLocked(savedLocked, true);
                     hasRestoredScroll = true;
                 }
@@ -235,8 +234,11 @@
             clientHeight: container.clientHeight,
         };
 
-        if (ignoreNextScrollEvent) {
-            ignoreNextScrollEvent = false;
+        const expectedScrollTop = expectedProgrammaticScrollTop;
+        expectedProgrammaticScrollTop = undefined;
+        const maximumScrollTop = Math.max(0, container.scrollHeight - container.clientHeight);
+        if (expectedScrollTop !== undefined &&
+            Math.abs(container.scrollTop - Math.min(expectedScrollTop, maximumScrollTop)) < 1) {
             lastObservedSize = currentSize;
             return;
         }
@@ -246,7 +248,9 @@
             (currentSize.scrollHeight !== lastObservedSize.scrollHeight ||
                 currentSize.clientHeight !== lastObservedSize.clientHeight);
         lastObservedSize = currentSize;
-        if (sizeChanged) {
+        // A different position overrides our pending programmatic scroll, even
+        // if the input layout also changed before the user's scroll event.
+        if (sizeChanged && expectedScrollTop === undefined) {
             return;
         }
 
@@ -259,14 +263,28 @@
         saveScrollPosition();
     }
 
+    function setProgrammaticScrollTop(position: number) {
+        if (!consoleInstanceRef) return;
+
+        const previousScrollTop = consoleInstanceRef.scrollTop;
+        consoleInstanceRef.scrollTop = position;
+        // A no-op scroll does not emit an event. Only ignore an event at the
+        // position we actually wrote, so a later user scroll still locks output.
+        expectedProgrammaticScrollTop = previousScrollTop !== consoleInstanceRef.scrollTop
+            ? consoleInstanceRef.scrollTop : undefined;
+        lastObservedSize = {
+            scrollHeight: consoleInstanceRef.scrollHeight,
+            clientHeight: consoleInstanceRef.clientHeight,
+        };
+    }
+
     /**
      * Scroll to bottom
      */
     function scrollToBottom() {
         setScrollLocked(false);
         if (consoleInstanceRef) {
-            ignoreNextScrollEvent = true;
-            consoleInstanceRef.scrollTop = consoleInstanceRef.scrollHeight;
+            setProgrammaticScrollTop(consoleInstanceRef.scrollHeight);
             saveScrollPosition();
         }
     }
@@ -280,8 +298,7 @@
                 if (scrollLocked || !consoleInstanceRef) {
                     return;
                 }
-                ignoreNextScrollEvent = true;
-                consoleInstanceRef.scrollTop = consoleInstanceRef.scrollHeight;
+                setProgrammaticScrollTop(consoleInstanceRef.scrollHeight);
                 saveScrollPosition();
             });
         }
@@ -803,11 +820,7 @@
             if (!active || scrollLocked || !consoleInstanceRef) {
                 return;
             }
-            ignoreNextScrollEvent = true;
-            consoleInstanceRef.scrollTo(
-                consoleInstanceRef.scrollLeft,
-                consoleInstanceRef.scrollHeight,
-            );
+            setProgrammaticScrollTop(consoleInstanceRef.scrollHeight);
         });
         instanceResizeObserver.observe(consoleInstanceRef);
         scheduleWidthInCharsUpdate();

@@ -441,6 +441,7 @@ suite('[Unit] Supervisor package manifest', () => {
 
         const commands = new Set((packageJson.contributes?.commands ?? []).map(entry => entry.command));
         assert.ok(commands.has('supervisor.connections.refresh'));
+        assert.ok(commands.has('supervisor.connections.connect'));
         assert.ok(commands.has('supervisor.connections.disconnect'));
         assert.ok(commands.has('supervisor.connections.preview'));
         const connectionViews = packageJson.contributes?.views?.['supervisor-connections'] ?? [];

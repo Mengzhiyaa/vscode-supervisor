@@ -49,6 +49,11 @@ export class ConnectionsTreeProvider implements vscode.TreeDataProvider<Connecti
                 this.refresh();
             }),
             vscode.commands.registerCommand(CoreCommandIds.connectionsNew, () => this._createConnection()),
+            vscode.commands.registerCommand(CoreCommandIds.connectionsConnect, async (node?: ConnectionsTreeNode) => {
+                if (node?.kind === 'connection' && node.connection.sessionId === 'profile') {
+                    await this._connections.connectProfile(node.connection.clientId);
+                }
+            }),
             vscode.commands.registerCommand(CoreCommandIds.connectionsDisconnect, (node?: ConnectionsTreeNode) => {
                 if (node?.kind === 'connection') {
                     node.connection.disconnect();
@@ -82,7 +87,7 @@ export class ConnectionsTreeProvider implements vscode.TreeDataProvider<Connecti
         if (node.kind === 'connection') {
             const item = new vscode.TreeItem(
                 node.connection.metadata.name,
-                node.connection.active
+                node.connection.active || node.connection.sessionId === 'profile'
                     ? vscode.TreeItemCollapsibleState.Collapsed
                     : vscode.TreeItemCollapsibleState.None,
             );
@@ -98,7 +103,9 @@ export class ConnectionsTreeProvider implements vscode.TreeDataProvider<Connecti
                 `State: ${node.connection.active ? 'connected' : 'disconnected'}`,
             ].join('\n');
             item.iconPath = new vscode.ThemeIcon(node.connection.active ? 'database' : 'debug-disconnect');
-            item.contextValue = node.connection.active ? 'supervisor.connection.active' : 'supervisor.connection.inactive';
+            item.contextValue = node.connection.active ? 'supervisor.connection.active'
+                : node.connection.sessionId === 'profile' ? 'supervisor.connection.profile.inactive'
+                    : 'supervisor.connection.inactive';
             item.accessibilityInformation = {
                 label: `${node.connection.metadata.name}, ${node.connection.active ? 'connected' : 'disconnected'}${item.description ? `, ${item.description}` : ''}`,
                 role: 'treeitem',
@@ -153,14 +160,20 @@ export class ConnectionsTreeProvider implements vscode.TreeDataProvider<Connecti
         if (node.kind === 'error') {
             return [];
         }
-        if (!node.connection.active) {
-            return [];
-        }
         try {
+            // A root node may predate a reconnect/refresh. Always use the live
+            // instance, and open saved profiles on expansion as Positron does.
+            let connection = this._connections.connections.find(value => value.id === node.connection.id);
+            if (!connection) { return []; }
+            if (node.kind === 'object' && connection !== node.connection) { return []; }
+            if (!connection.active) {
+                if (node.kind !== 'connection' || connection.sessionId !== 'profile') { return []; }
+                connection = await this._connections.connectProfile(connection.clientId);
+            }
             const path: readonly ConnectionPathEntry[] = node.kind === 'object' ? node.object.path : [];
-            return (await node.connection.getChildren(path)).map(object => ({
+            return (await connection.getChildren(path)).map(object => ({
                 kind: 'object',
-                connection: node.connection,
+                connection,
                 object,
             }));
         } catch (error) {

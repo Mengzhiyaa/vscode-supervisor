@@ -38,3 +38,8 @@ export namespace LspTunnelConfigurationChangedNotification {
 
     export const type = new NotificationType<import('../../shared/lspTunnel').LspTunnelConfigurationChanged>('lspTunnel/configurationChanged');
 }
+
+export namespace LspTunnelAvailabilityChangedNotification {
+
+    export const type = new NotificationType<import('../../shared/lspTunnel').LspTunnelAvailabilityChanged>('lspTunnel/availabilityChanged');
+}

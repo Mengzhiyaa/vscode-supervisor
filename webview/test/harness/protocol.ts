@@ -1,12 +1,13 @@
 export type {
     LspTunnelOpenParams, LspTunnelOpenResult, LspTunnelKey, LspTunnelMessage, LspTunnelState,
-    LspTunnelOpenDocument, LspTunnelConfigurationChanged,
+    LspTunnelOpenDocument, LspTunnelConfigurationChanged, LspTunnelAvailabilityChanged,
 } from '../../../src/shared/lspTunnel';
 
 export const LspTunnelMethods = {
     open: 'lspTunnel/open', send: 'lspTunnel/send', close: 'lspTunnel/close',
     message: 'lspTunnel/message', state: 'lspTunnel/state', openDocument: 'lspTunnel/openDocument',
     configurationChanged: 'lspTunnel/configurationChanged',
+    availabilityChanged: 'lspTunnel/availabilityChanged',
 } as const;
 
 export interface SessionInfo {

@@ -1,6 +1,8 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
 import type { DataConnection, DataConnectionDriver } from '../../api';
+import { CoreCommandIds } from '../../coreCommandIds';
+import { ConnectionsTreeProvider } from '../../services/connections/connectionsTreeProvider';
 import {
     PositronConnectionInstance,
     PositronConnectionsService,
@@ -86,6 +88,122 @@ function createConnection(disconnect: () => Promise<void> = async () => undefine
 }
 
 suite('[Unit] Connections surface', () => {
+    test('editing parameters retires the live connection and reconnects using the new values', async () => {
+        const received: Array<Record<string, boolean | number | string>> = [];
+        let disconnects = 0;
+        const harness = await createProfileHarness(async (_mechanism, parameters) => {
+            received.push({ ...parameters });
+            return createConnection(async () => { disconnects++; });
+        });
+        try {
+            await harness.service.addUpdateProfile({ ...harness.profile,
+                parameterValues: { host: 'old', readOnly: false } }, false);
+            const old = await harness.service.connectProfile(harness.profile.id);
+            await harness.service.addUpdateProfile({ ...harness.profile,
+                parameterValues: { host: 'new', readOnly: true } }, false);
+            assert.strictEqual(old.active, false);
+            assert.strictEqual(disconnects, 1);
+            assert.strictEqual(harness.service.connections[0].active, false);
+            const current = await harness.service.connectProfile(harness.profile.id);
+            assert.notStrictEqual(current, old);
+            assert.deepStrictEqual(received[1], { host: 'new', readOnly: true, password: 'secret' });
+
+            await harness.service.addUpdateProfile({ ...harness.profile,
+                parameterValues: { host: 'new', readOnly: true, password: 'rotated' } }, false);
+            assert.strictEqual(current.active, false);
+            assert.strictEqual(disconnects, 2);
+            await harness.service.connectProfile(harness.profile.id);
+            assert.strictEqual(received[2].password, 'rotated');
+        } finally { harness.dispose(); }
+    });
+
+    test('renaming a connected profile preserves its channel and updates its displayed name', async () => {
+        let connects = 0;
+        let disconnects = 0;
+        const harness = await createProfileHarness(async () => {
+            connects++;
+            return createConnection(async () => { disconnects++; });
+        });
+        try {
+            const instance = await harness.service.connectProfile(harness.profile.id);
+            await harness.service.addUpdateProfile({ ...harness.service.profileStore.getProfile(harness.profile.id)!,
+                connectionName: 'Renamed' }, false);
+            assert.strictEqual(await harness.service.connectProfile(harness.profile.id), instance);
+            assert.strictEqual(instance.metadata.name, 'Renamed');
+            assert.strictEqual(connects, 1);
+            assert.strictEqual(disconnects, 0);
+        } finally { harness.dispose(); }
+    });
+
+    test('editing parameters cancels an older in-flight connection before it can publish', async () => {
+        const firstHandle = deferred<DataConnection>();
+        const connecting = deferred<void>();
+        const values: string[] = [];
+        let disconnects = 0;
+        const harness = await createProfileHarness(async (_mechanism, parameters) => {
+            values.push(String(parameters.host));
+            if (values.length === 1) { connecting.resolve(); return firstHandle.promise; }
+            return createConnection();
+        });
+        try {
+            await harness.service.addUpdateProfile({ ...harness.profile, parameterValues: { host: 'old' } }, false);
+            const first = harness.service.connectProfile(harness.profile.id);
+            const rejected = assert.rejects(first, /cancelled/);
+            await connecting.promise;
+            await harness.service.addUpdateProfile({ ...harness.profile, parameterValues: { host: 'new' } }, false);
+            const replacement = await harness.service.connectProfile(harness.profile.id);
+            firstHandle.resolve(createConnection(async () => { disconnects++; }));
+            await rejected;
+            assert.deepStrictEqual(values, ['old', 'new']);
+            assert.strictEqual(disconnects, 1);
+            assert.strictEqual(harness.service.connections[0], replacement);
+        } finally { firstHandle.resolve(createConnection()); harness.dispose(); }
+    });
+
+    test('saved profiles connect on expansion and reconnect from their context command', async () => {
+        let connects = 0;
+        const harness = await createProfileHarness(async () => {
+            connects++;
+            return { ...createConnection(), getChildren: async () => [{ name: 'sales', kind: DataConnectionNodeKind.Table }] };
+        });
+        const registeredCommands = new Map<string, (...args: any[]) => unknown>();
+        const commands = vscode.commands as { registerCommand: typeof vscode.commands.registerCommand };
+        const originalRegisterCommand = commands.registerCommand;
+        let tree: ConnectionsTreeProvider | undefined;
+        try {
+            // The activated extension already owns these global command IDs.
+            // Capture this instance's handlers without replacing its commands.
+            commands.registerCommand = (command, callback, thisArg) => {
+                registeredCommands.set(command, callback.bind(thisArg));
+                return new vscode.Disposable(() => { registeredCommands.delete(command); });
+            };
+            try {
+                tree = new ConnectionsTreeProvider(harness.service, harness.lifecycle);
+            } finally {
+                commands.registerCommand = originalRegisterCommand;
+            }
+            const [root] = await tree.getChildren();
+            assert.strictEqual(tree.getTreeItem(root).collapsibleState, vscode.TreeItemCollapsibleState.Collapsed);
+            assert.strictEqual(tree.getTreeItem(root).contextValue, 'supervisor.connection.profile.inactive');
+            const children = await tree.getChildren(root);
+            assert.strictEqual(children.length, 1);
+            assert.strictEqual(children[0].kind, 'object');
+            const instance = harness.service.connections[0];
+            const disconnected = new Promise<void>(resolve => {
+                instance.onDidChange(() => { if (!instance.active) { resolve(); } });
+            });
+            instance.disconnect();
+            await disconnected;
+            const connect = registeredCommands.get(CoreCommandIds.connectionsConnect);
+            assert.ok(connect, 'Expected the saved-profile connect command to be registered');
+            await connect({ kind: 'connection', connection: instance });
+            assert.strictEqual(connects, 2);
+            assert.strictEqual(harness.service.connections[0].active, true);
+            // A root captured before connection still resolves to the current handle.
+            assert.strictEqual((await tree.getChildren(root)).length, 1);
+        } finally { tree?.dispose(); harness.dispose(); }
+    });
+
     test('coalesces profile connections before asynchronous secret reads', async () => {
         let connects = 0;
         const harness = await createProfileHarness(async () => { connects++; return createConnection(); });

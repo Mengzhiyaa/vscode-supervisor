@@ -409,15 +409,24 @@ export class RuntimeManager implements vscode.Disposable, IRuntimeManager {
         }
 
         const runtimePath = provider.getRuntimePath(installation);
-        if (installations.some((existing) => provider.getRuntimePath(existing as TInstallation) === runtimePath)) {
-            this._runtimes.set(metadata.runtimeId, metadata);
-            this._sessionManager.registerDiscoveredRuntime(languageId, installation, metadata);
-            return false;
+        const index = installations.findIndex(existing => provider.getRuntimePath(existing as TInstallation) === runtimePath);
+        const knownRuntime = this._runtimes.has(metadata.runtimeId);
+        if (index >= 0) {
+            installations[index] = installation;
+        } else {
+            installations.push(installation);
         }
-
-        installations.push(installation);
+        // A recreated interpreter can keep its path while changing runtime ID.
+        // Retire the previous metadata before publishing the replacement.
+        for (const [id, runtime] of this._runtimes) {
+            if (id !== metadata.runtimeId && runtime.languageId === languageId && runtime.runtimePath === runtimePath) {
+                this._runtimes.delete(id);
+                this._sessionManager.unregisterDiscoveredRuntime(id);
+            }
+        }
         this._runtimes.set(metadata.runtimeId, metadata);
         this._sessionManager.registerDiscoveredRuntime(languageId, installation, metadata);
+        if (knownRuntime) { return false; }
         this._onDidDiscoverRuntime.fire({
             provider,
             installation,
@@ -439,7 +448,9 @@ export class RuntimeManager implements vscode.Disposable, IRuntimeManager {
         this._installationsByLanguageId.set(
             provider.languageId,
             installations.filter(installation =>
-                provider.getRuntimePath(installation as TInstallation) !== metadata.runtimePath),
+                provider.getRuntimePath(installation as TInstallation) !== metadata.runtimePath ||
+                [...this._runtimes.values()].some(runtime => runtime.languageId === provider.languageId &&
+                    runtime.runtimePath === metadata.runtimePath)),
         );
         this._sessionManager.unregisterDiscoveredRuntime(runtimeId);
     }

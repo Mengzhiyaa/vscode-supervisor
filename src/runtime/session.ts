@@ -158,6 +158,8 @@ export class RuntimeSession implements vscode.Disposable {
     private _lastUsed = 0;
     private readonly _stateEmitter = new vscode.EventEmitter<RuntimeState>();
     private readonly _exitEmitter = new vscode.EventEmitter<LanguageRuntimeExit>();
+    private readonly _cancelExecutionEmitter = new vscode.EventEmitter<string>();
+    private readonly _pendingExecutionIds = new Set<string>();
     private readonly _startupCompleteEmitter = new vscode.EventEmitter<LanguageRuntimeInfo>();
     private readonly _startupFailureEmitter = new vscode.EventEmitter<LanguageRuntimeStartupFailure>();
     private readonly _workingDirectoryEmitter = new vscode.EventEmitter<string>();
@@ -237,6 +239,7 @@ export class RuntimeSession implements vscode.Disposable {
 
     readonly onDidChangeRuntimeState = this._stateEmitter.event;
     readonly onDidEndSession = this._exitEmitter.event;
+    readonly onDidCancelExecution = this._cancelExecutionEmitter.event;
     readonly onDidCompleteStartup = this._startupCompleteEmitter.event;
     readonly onDidEncounterStartupFailure = this._startupFailureEmitter.event;
     readonly onDidChangeWorkingDirectory = this._workingDirectoryEmitter.event;
@@ -294,6 +297,7 @@ export class RuntimeSession implements vscode.Disposable {
         ) ?? new NullLanguageLsp();
         this._disposables.push(this._stateEmitter);
         this._disposables.push(this._exitEmitter);
+        this._disposables.push(this._cancelExecutionEmitter);
         this._disposables.push(this._startupCompleteEmitter);
         this._disposables.push(this._startupFailureEmitter);
         this._disposables.push(this._workingDirectoryEmitter);
@@ -485,6 +489,7 @@ export class RuntimeSession implements vscode.Disposable {
 
         this._disposables.push(
             kernel.onDidEndSession((exit) => {
+                this._pendingExecutionIds.clear();
                 this.log(`Session ended: exit_code=${exit.exit_code}, reason=${exit.reason}`, vscode.LogLevel.Info);
 
                 const dapComm = this._dapComm;
@@ -663,6 +668,9 @@ export class RuntimeSession implements vscode.Disposable {
                 this.emitRuntimeMessageResult(message as LanguageRuntimeResult);
                 break;
             case LanguageRuntimeMessageType.State:
+                if ((message as LanguageRuntimeState).state === RuntimeOnlineState.Idle) {
+                    this._pendingExecutionIds.delete(message.parent_id);
+                }
                 if (this._clientManager) {
                     this._clientManager.updatePendingRpcState(message as LanguageRuntimeState);
                 }
@@ -871,6 +879,7 @@ export class RuntimeSession implements vscode.Disposable {
         executionMetadata?: Record<string, unknown>,
     ): void | Promise<void> {
         if (!this._kernel) {
+            this.cancelExecutions([id]);
             throw new Error('Kernel not attached');
         }
         this._lastUsed = Date.now();
@@ -884,14 +893,23 @@ export class RuntimeSession implements vscode.Disposable {
                 ...(attribution ? { attributionSource: attribution.source } : {}),
             }
             : undefined;
-        return this._kernel.execute(
-            code,
-            id,
-            mode,
-            errorBehavior,
-            this._toCodeLocation(attribution),
-            kernelExecutionMetadata,
-        );
+        this._pendingExecutionIds.add(id);
+        try {
+            return Promise.resolve(this._kernel.execute(
+                code,
+                id,
+                mode,
+                errorBehavior,
+                this._toCodeLocation(attribution),
+                kernelExecutionMetadata,
+            )).catch(error => {
+                this.cancelExecutions([id]);
+                throw error;
+            });
+        } catch (error) {
+            this.cancelExecutions([id]);
+            throw error;
+        }
     }
 
     private _toCodeLocation(attribution?: ICodeExecutionAttribution): Utf8Location | undefined {
@@ -1093,7 +1111,22 @@ export class RuntimeSession implements vscode.Disposable {
         if (!this._kernel) {
             throw new Error('Kernel not attached');
         }
-        return this._kernel.interrupt();
+        const executionIds = [...this._pendingExecutionIds];
+        try {
+            return this._kernel.interrupt();
+        } finally {
+            // Like Positron's execution observers, settle interrupted work even
+            // when the backend cannot acknowledge the interrupt.
+            this.cancelExecutions(executionIds);
+        }
+    }
+
+    /** Retires work dropped by the Console queue or rejected by the runtime. */
+    cancelExecutions(executionIds: readonly string[]): void {
+        for (const id of executionIds) {
+            this._pendingExecutionIds.delete(id);
+            this._cancelExecutionEmitter.fire(id);
+        }
     }
 
     async createClient(
@@ -1273,11 +1306,22 @@ export class RuntimeSession implements vscode.Disposable {
      * Immediately terminates an unresponsive runtime.
      */
     async forceQuit(): Promise<void> {
-        if (!this._kernel) {
+        const kernel = this._kernel;
+        if (!kernel) {
             return;
         }
-        await this._deactivateServices('force quitting session');
-        await this._kernel.forceQuit();
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        try {
+            await Promise.race([
+                this._deactivateServices('force quitting session').catch(error => {
+                    this.log(`Failed to stop services before force quit: ${getErrorMessage(error)}`, vscode.LogLevel.Warning);
+                }),
+                new Promise<void>(resolve => { timer = setTimeout(resolve, 250); }),
+            ]);
+        } finally {
+            if (timer !== undefined) { clearTimeout(timer); }
+        }
+        await kernel.forceQuit();
     }
 
     /**
@@ -1745,6 +1789,7 @@ export class RuntimeSession implements vscode.Disposable {
             return;
         }
         this._disposed = true;
+        this.cancelExecutions([...this._pendingExecutionIds]);
         this._consoleLspConfigurationEmitter.dispose();
 
         if (this._eventQueueTimer) {

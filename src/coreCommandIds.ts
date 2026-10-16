@@ -56,6 +56,7 @@ export const CoreCommandIds = {
     dataExplorerViewDataFrameByVariable: 'supervisor.dataExplorer.viewDataFrameByVariable',
     connectionsRefresh: 'supervisor.connections.refresh',
     connectionsNew: 'supervisor.connections.new',
+    connectionsConnect: 'supervisor.connections.connect',
     connectionsDisconnect: 'supervisor.connections.disconnect',
     connectionsPreview: 'supervisor.connections.preview',
     viewerFind: 'supervisor.viewer.find',

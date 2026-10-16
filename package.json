@@ -476,6 +476,12 @@
         "icon": "$(add)"
       },
       {
+        "command": "supervisor.connections.connect",
+        "title": "%supervisor.connections.connect.title%",
+        "category": "Ark Connections",
+        "icon": "$(plug)"
+      },
+      {
         "command": "supervisor.connections.disconnect",
         "title": "Disconnect",
         "category": "Ark Connections",
@@ -676,6 +682,11 @@
         }
       ],
       "view/item/context": [
+        {
+          "command": "supervisor.connections.connect",
+          "when": "view == supervisor.connections && viewItem == supervisor.connection.profile.inactive",
+          "group": "inline@1"
+        },
         {
           "command": "supervisor.connections.preview",
           "when": "view == supervisor.connections && viewItem == supervisor.connectionObject.previewable",

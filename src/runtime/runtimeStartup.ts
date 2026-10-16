@@ -116,6 +116,7 @@ export class RuntimeStartupService implements vscode.Disposable {
     private readonly _restoringRestoredSessionIds = new Set<string>();
     private readonly _completedRestoredSessionIds = new Set<string>();
     private readonly _crashRestartsInProgress = new Set<string>();
+    private readonly _encounteredLanguageStartsInProgress = new Set<string>();
 
     private _startupPhase = RuntimeStartupPhase.Initializing;
     private _startupPromise: Promise<void> | undefined;
@@ -205,6 +206,14 @@ export class RuntimeStartupService implements vscode.Disposable {
             }),
             vscode.workspace.onDidSaveTextDocument(() => {
                 this._scheduleWorkspaceRecommendationSignalsRefresh();
+            }),
+            vscode.workspace.onDidOpenTextDocument((document) => {
+                void this._autoStartEncounteredLanguage(document.languageId);
+            }),
+            vscode.window.onDidChangeActiveTextEditor((editor) => {
+                if (editor) {
+                    void this._autoStartEncounteredLanguage(editor.document.languageId);
+                }
             }),
         );
 
@@ -1519,6 +1528,39 @@ export class RuntimeStartupService implements vscode.Disposable {
             .sort((left, right) =>
                 this._getRecommendationScore(right) - this._getRecommendationScore(left)
             );
+    }
+
+    /** Public VS Code editor events replace Positron's rich-language-feature event. */
+    private async _autoStartEncounteredLanguage(languageId: string): Promise<void> {
+        if (this._startupPhase !== RuntimeStartupPhase.Complete ||
+            this._sessionManager.implicitStartupSuppressed || this._hasOutstandingSessionRestores() ||
+            this._sessionManager.hasStartingOrRunningConsole(languageId) ||
+            this._encounteredLanguageStartsInProgress.has(languageId)) {
+            return;
+        }
+
+        const runtime = this._runtimeManager.runtimes.find((metadata) =>
+            metadata.languageId === languageId &&
+            metadata.startupBehavior === LanguageRuntimeStartupBehavior.Implicit,
+        );
+        if (!runtime) {
+            return;
+        }
+
+        this._encounteredLanguageStartsInProgress.add(languageId);
+        try {
+            await this._autoStartRuntime(
+                runtime,
+                `An editor requested language features for '${languageId}'.`,
+                true,
+            );
+        } catch (error) {
+            this._outputChannel.warn(
+                `[RuntimeStartup] Failed to auto-start implicit runtime ${runtime.runtimeName}: ${getErrorMessage(error)}`,
+            );
+        } finally {
+            this._encounteredLanguageStartsInProgress.delete(languageId);
+        }
     }
 
     private async _startEncounteredLanguageRuntime(): Promise<void> {

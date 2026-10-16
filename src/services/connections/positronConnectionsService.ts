@@ -167,12 +167,12 @@ class ProfileConnectionInstance implements IConnectionInstance {
 
     readonly sessionId = 'profile';
     readonly clientId: string;
-    readonly metadata: ConnectionMetadata;
+    metadata: ConnectionMetadata;
     readonly onDidChange = this._onDidChange.event;
     readonly onDidFocus = this._onDidFocus.event;
 
     constructor(
-        readonly profile: DataConnectionProfile,
+        public profile: DataConnectionProfile,
         readonly driver: DataConnectionDriver,
         private readonly _handle: DataConnection,
         private readonly _outputChannel: vscode.LogOutputChannel,
@@ -188,6 +188,12 @@ class ProfileConnectionInstance implements IConnectionInstance {
 
     get id(): string { return `${this.sessionId}:${this.clientId}`; }
     get active(): boolean { return this._active; }
+
+    updateProfile(profile: DataConnectionProfile): void {
+        this.profile = profile;
+        this.metadata = { ...this.metadata, name: profile.connectionName };
+        this._onDidChange.fire();
+    }
 
     async getChildren(path: readonly ConnectionPathEntry[] = []): Promise<readonly PositronConnectionNode[]> {
         const parent = path.at(-1);
@@ -361,10 +367,31 @@ export class PositronConnectionsService implements vscode.Disposable {
         if (!driver) {
             throw new Error(`Data connection driver '${profile.driverId}' is not registered.`);
         }
+        const previous = this.profileStore.getProfile(profile.id);
+        const secretIds = new Set([
+            ...this.profileStore.getSecretParameterIds(profile.id),
+            ...getSecretParameterIds(driver, profile.mechanismId),
+        ]);
+        // Compare before saving: secret storage has already replaced the old
+        // value afterwards. Re-entering a secret also retires the old channel.
+        const parametersChanged = previous !== undefined && (
+            previous.driverId !== profile.driverId || previous.mechanismId !== profile.mechanismId ||
+            [...secretIds].some(id => profile.parameterValues[id] !== undefined && profile.parameterValues[id] !== '') ||
+            [...new Set([...Object.keys(previous.parameterValues), ...Object.keys(profile.parameterValues)])]
+                .some(id => !secretIds.has(id) && previous.parameterValues[id] !== profile.parameterValues[id])
+        );
+        if (parametersChanged) {
+            this._pendingProfiles.delete(profile.id);
+        }
         const stored = await this.profileStore.addUpdateProfile(
             profile,
             getSecretParameterIds(driver, profile.mechanismId),
         );
+        if (parametersChanged) {
+            const old = this._instances.get(`profile:${profile.id}`);
+            this._instances.delete(`profile:${profile.id}`);
+            await this._disposeConnection(old);
+        }
         this._registerProfileDescriptor(stored);
         this._onDidChangeConnections.fire(this.connections);
         if (connect) {
@@ -571,7 +598,10 @@ export class PositronConnectionsService implements vscode.Disposable {
             },
         });
         const instanceId = `profile:${profile.id}`;
-        if (!this._instances.get(instanceId)?.active) {
+        const existing = this._instances.get(instanceId);
+        if (existing?.active && existing instanceof ProfileConnectionInstance) {
+            existing.updateProfile(profile);
+        } else if (!existing?.active) {
             void this._disposeConnection(this._instances.get(instanceId));
             this._instances.set(instanceId, new StoredProfileConnectionInstance(profile));
         }

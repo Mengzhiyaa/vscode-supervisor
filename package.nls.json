@@ -1,4 +1,5 @@
 {
+  "supervisor.connections.connect.title": "Connect",
   "supervisor.inlineDataExplorer.displayName": "Supervisor Inline Data Explorer",
   "supervisor.dataExplorer.category": "Ark Data Explorer",
   "supervisor.dataExplorer.import.title": "Import Data...",
