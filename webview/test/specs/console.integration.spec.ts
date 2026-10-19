@@ -875,10 +875,10 @@ test('console restart repro keeps the prompt visible and defers execute until th
         syncSeq: 2,
         state: createConsoleStateWithItems([
             {
-                type: 'started' as const,
+                type: 'restarted' as const,
                 id: 'runtime-restarted',
                 when: Date.now(),
-                sessionName: 'Primary restarted.',
+                sessionName: 'Primary',
             },
             {
                 type: 'startup' as const,
@@ -891,6 +891,8 @@ test('console restart repro keeps the prompt visible and defers execute until th
     });
 
     await expect(page.getByText('R version 4.4.1 (restart banner)')).toBeVisible();
+    await expect(page.getByText('Primary restarted.', { exact: true })).toHaveCount(1);
+    await expect(page.getByText('Primary restarted. started.', { exact: true })).toHaveCount(0);
     await expect(page.locator('.console-input')).toBeVisible();
     await page.waitForTimeout(200);
     expect.soft(await readConsoleInputPrompts(page)).toContain('>');
@@ -982,10 +984,10 @@ test('console restart repro recovers after a detached runtime frame', async ({ p
         syncSeq: 2,
         state: createConsoleStateWithItems([
             {
-                type: 'started' as const,
+                type: 'restarted' as const,
                 id: 'runtime-restarted-detached',
                 when: Date.now(),
-                sessionName: 'Primary restarted.',
+                sessionName: 'Primary',
             },
             {
                 type: 'startup' as const,
@@ -2975,7 +2977,7 @@ test('console safely handles switching to a restarting session and defers execut
         syncSeq: 1,
         state: createConsoleStateWithItems([
             {
-                type: 'started' as const,
+                type: 'restarted' as const,
                 id: 'runtime-restarted',
                 when: Date.now(),
                 sessionName: 'Analytics restarting...',

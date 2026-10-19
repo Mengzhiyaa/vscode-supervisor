@@ -1871,6 +1871,13 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
     attachRuntimeSession(session: RuntimeSession | undefined, mode: SessionAttachMode): void {
         this._outputChannel.debug(`[ConsoleInstance] Attaching session: ${session?.sessionId}, mode: ${mode}`);
 
+        // onWillStartSession can also be emitted by the Exited -> Starting
+        // transition. Both notifications describe the same pending operation.
+        if (session === this._session && this._runtimeAttached && this.hasStartingItem() &&
+            (mode === SessionAttachMode.Starting || mode === SessionAttachMode.Restarting)) {
+            return;
+        }
+
         // Detach from old session
         if (this._session) {
             this.detachRuntimeSession();
@@ -1918,7 +1925,8 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
             // Seed the console state from the currently attached runtime when the
             // runtime already has meaningful state. Without this, reconnect/
             // attach flows can lag behind runtime truth until the next event.
-            if (session.state !== RuntimeState.Uninitialized) {
+            const pendingStart = mode === SessionAttachMode.Starting || mode === SessionAttachMode.Restarting;
+            if (session.state !== RuntimeState.Uninitialized && !(pendingStart && session.state === RuntimeState.Exited)) {
                 this.handleRuntimeStateChange(session.state);
             }
         } else {
@@ -2681,7 +2689,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
         } else if (attachMode === SessionAttachMode.Connected) {
             this.setState(PositronConsoleState.Ready);
             this.addRuntimeItem(new RuntimeItemReconnected(
-                this.generateId(), new Date(), `${sessionName} reconnected.`));
+                this.generateId(), new Date(), sessionName));
         }
     }
 
@@ -2704,33 +2712,24 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
                         for (let i = this._runtimeItems.length - 1; i >= 0; i--) {
                             if (this._runtimeItems[i] instanceof RuntimeItemStarting) {
                                 const startingItem = this._runtimeItems[i] as RuntimeItemStarting;
-                                let msg = '';
-                                switch (startingItem.attachMode) {
-                                    case SessionAttachMode.Starting:
-                                    case SessionAttachMode.Switching:
-                                        msg = `${this.sessionName} started.`;
-                                        break;
-                                    case SessionAttachMode.Restarting:
-                                        msg = `${this.sessionName} restarted.`;
-                                        break;
-                                    case SessionAttachMode.Connected:
-                                        msg = `${this.sessionName} connected.`;
-                                        break;
-                                }
-                                if (msg) {
-                                    this._runtimeItems[i] = new RuntimeItemStarted(
-                                        this.generateId(), new Date(), msg);
-                                    this._emitRuntimeItemsRestoreRequired();
+                                const completed = startingItem.attachMode === SessionAttachMode.Restarting
+                                    ? new RuntimeItemRestarted(this.generateId(), new Date(), this.sessionName)
+                                    : startingItem.attachMode === SessionAttachMode.Starting ||
+                                        startingItem.attachMode === SessionAttachMode.Switching
+                                        ? new RuntimeItemStarted(this.generateId(), new Date(), this.sessionName)
+                                        : undefined;
+                                if (completed) {
+                                    this._runtimeItems[i] = completed;
                                 } else {
                                     this._runtimeItems.splice(i, 1);
-                                    this._emitRuntimeItemsRestoreRequired();
                                 }
+                                this._emitRuntimeItemsRestoreRequired();
                             }
                         }
                         break;
                     case PositronConsoleState.Offline:
                         this.addRuntimeItem(new RuntimeItemReconnected(
-                            this.generateId(), new Date(), `${this.sessionName} reconnected.`));
+                            this.generateId(), new Date(), this.sessionName));
                         break;
                 }
                 break;

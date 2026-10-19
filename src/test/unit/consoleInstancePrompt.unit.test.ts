@@ -208,4 +208,36 @@ suite('[Unit] console instance prompt normalization', () => {
         assert.strictEqual(instance.inputPrompt, 'R>');
         assert.strictEqual(instance.continuationPrompt, '+');
     });
+    test('a repeated restart attachment produces one correctly serialized completion', () => {
+        const instance = createConsoleInstance();
+        const changed = new vscode.EventEmitter<RuntimeState>();
+        const session = createRuntimeSession();
+        session.state = RuntimeState.Exited;
+        session.onDidChangeRuntimeState = changed.event;
+        try {
+            instance.attachRuntimeSession(session, SessionAttachMode.Restarting);
+            instance.attachRuntimeSession(session, SessionAttachMode.Restarting);
+            session.state = RuntimeState.Starting;
+            changed.fire(RuntimeState.Starting);
+            session.state = RuntimeState.Ready;
+            changed.fire(RuntimeState.Ready);
+            instance.completeStartup();
+            const items = instance.serializeState().items.filter(item => item.type === 'started' || item.type === 'restarted');
+            assert.strictEqual(items.length, 1);
+            assert.strictEqual(items[0].type, 'restarted');
+            assert.strictEqual((items[0] as { sessionName: string }).sessionName, 'Session 1');
+            assert.deepStrictEqual(instance.runtimeItems[0].getClipboardRepresentation(''), ['Session 1 restarted.']);
+        } finally { instance.dispose(); changed.dispose(); }
+    });
+
+    test('startup completion serializes a session name rather than a formatted sentence', () => {
+        const instance = createConsoleInstance();
+        try {
+            instance.attachRuntimeSession(createRuntimeSession(), SessionAttachMode.Starting);
+            const item = instance.serializeState().items.find(item => item.type === 'started');
+            assert.strictEqual((item as { sessionName: string }).sessionName, 'Session 1');
+            assert.deepStrictEqual(instance.runtimeItems[0].getClipboardRepresentation(''), ['Session 1 started.']);
+        } finally { instance.dispose(); }
+    });
+
 });
