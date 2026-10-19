@@ -43,7 +43,7 @@ export interface DataExplorerState {
  */
 export enum PositronDataExplorerLayout {
     SummaryOnLeft = 'SummaryOnLeft',
-    SummaryOnRight = 'SummaryOnRight'
+    SummaryOnRight = 'SummaryOnRight',
 }
 
 /**
@@ -52,10 +52,30 @@ export enum PositronDataExplorerLayout {
 export type WebviewMessage =
     | { type: 'ready' }
     | { type: 'close' }
-    | { type: 'requestData'; startRow: number; endRow: number; rowIndices?: number[]; columns: number[]; requestId: number; generation: number }
+    | {
+          type: 'requestData';
+          startRow: number;
+          endRow: number;
+          rowIndices?: number[];
+          columns: number[];
+          requestId: number;
+          generation: number;
+      }
     | { type: 'requestSchema'; columns: number[]; requestId: number }
-    | { type: 'searchSchema'; text: string; sortOrder: SearchSchemaSortOrder; pinnedColumns?: number[]; requestId?: number }
-    | { type: 'requestColumnProfiles'; columnIndices: number[]; expandedColumnIndices?: number[]; requestId: number; generation: number }
+    | {
+          type: 'searchSchema';
+          text: string;
+          sortOrder: SearchSchemaSortOrder;
+          pinnedColumns?: number[];
+          requestId?: number;
+      }
+    | {
+          type: 'requestColumnProfiles';
+          columnIndices: number[];
+          expandedColumnIndices?: number[];
+          requestId: number;
+          generation: number;
+      }
     | { type: 'cancelColumnProfiles'; requestIds: number[] }
     | { type: 'refresh' }
     | { type: 'sort'; sortKeys: Array<{ columnIndex: number; ascending: boolean }> }
@@ -64,7 +84,14 @@ export type WebviewMessage =
     | { type: 'updateFilter'; filter: RowFilter }
     | { type: 'removeFilter'; filterId: string }
     | { type: 'clearFilters' }
-    | { type: 'copyToClipboard'; selectionType: 'cell' | 'cells' | 'columns' | 'rows'; columnIndex?: number; rowIndex?: number; columnIndexes?: number[]; rowIndexes?: number[] }
+    | {
+          type: 'copyToClipboard';
+          selectionType: 'cell' | 'cells' | 'columns' | 'rows';
+          columnIndex?: number;
+          rowIndex?: number;
+          columnIndexes?: number[];
+          rowIndexes?: number[];
+      }
     | { type: 'copyTableData' }
     | { type: 'exportData'; format: 'tsv' | 'csv' }
     | { type: 'moveToNewWindow' }
@@ -76,5 +103,12 @@ export type WebviewMessage =
     | { type: 'setLayout'; layout: PositronDataExplorerLayout }
     | { type: 'setSummaryCollapsed'; collapsed: boolean }
     | { type: 'setSummaryWidth'; summaryWidth: number }
-    | { type: 'setSelection'; selectionType: 'cell' | 'cells' | 'columns' | 'rows'; columnIndex?: number; rowIndex?: number; columnIndexes?: number[]; rowIndexes?: number[] }
+    | {
+          type: 'setSelection';
+          selectionType: 'cell' | 'cells' | 'columns' | 'rows';
+          columnIndex?: number;
+          rowIndex?: number;
+          columnIndexes?: number[];
+          rowIndexes?: number[];
+      }
     | { type: 'focusChanged'; focused: boolean };

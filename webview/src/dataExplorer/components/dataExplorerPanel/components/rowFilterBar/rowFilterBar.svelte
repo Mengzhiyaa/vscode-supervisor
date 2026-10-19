@@ -3,41 +3,30 @@
   Port from Positron's rowFilterBar.tsx
 -->
 <script lang="ts">
-    import { tick } from "svelte";
-    import { getDataExplorerContext } from "../../../../positronDataExplorerContext";
-    import RowFilterWidget from "./components/rowFilterWidget.svelte";
-    import AddEditRowFilterModalPopup from "../addEditRowFilterModalPopup/addEditRowFilterModalPopup.svelte";
+    import { tick } from 'svelte';
+    import { getDataExplorerContext } from '../../../../positronDataExplorerContext';
+    import RowFilterWidget from './components/rowFilterWidget.svelte';
+    import AddEditRowFilterModalPopup from '../addEditRowFilterModalPopup/addEditRowFilterModalPopup.svelte';
     import {
         getRowFilterDescriptor,
         type RowFilterDescriptor,
-    } from "../addEditRowFilterModalPopup/rowFilterDescriptor";
-    import type { SchemaColumn } from "../../../../../dataGrid/types";
-    import { MAX_ADVANCED_LAYOUT_ENTRY_COUNT } from "../../../../../dataGrid/classes/layoutManager";
+    } from '../addEditRowFilterModalPopup/rowFilterDescriptor';
+    import type { SchemaColumn } from '../../../../../dataGrid/types';
+    import { MAX_ADVANCED_LAYOUT_ENTRY_COUNT } from '../../../../../dataGrid/classes/layoutManager';
     import PositronContextMenu, {
         type ContextMenuItem as PositronContextMenuItem,
-    } from "../../../../../dataGrid/components/ContextMenu.svelte";
-    import PositronModalDialog from "../../../positronModalDialog/positronModalDialog.svelte";
-    import ContentArea from "../../../positronModalDialog/components/contentArea.svelte";
-    import PlatformNativeDialogActionBar from "../../../positronModalDialog/components/platformNativeDialogActionBar.svelte";
-    import { localize } from "../../../../nls";
+    } from '../../../../../dataGrid/components/ContextMenu.svelte';
+    import PositronModalDialog from '../../../positronModalDialog/positronModalDialog.svelte';
+    import ContentArea from '../../../positronModalDialog/components/contentArea.svelte';
+    import PlatformNativeDialogActionBar from '../../../positronModalDialog/components/platformNativeDialogActionBar.svelte';
+    import { localize } from '../../../../nls';
 
     const MAX_ROW_FILTERS = 15;
 
     const context = getDataExplorerContext();
-    const {
-        stores,
-        postMessage,
-        invalidateTableData,
-    } = context;
-    const tableDataDataGridInstance = $derived(
-        context.instance.tableDataDataGridInstance,
-    );
-    const {
-        rowFilters,
-        columns,
-        pendingAddFilterRequest,
-        state: explorerState,
-    } = stores;
+    const { stores, postMessage, invalidateTableData } = context;
+    const tableDataDataGridInstance = $derived(context.instance.tableDataDataGridInstance);
+    const { rowFilters, columns, pendingAddFilterRequest, state: explorerState } = stores;
 
     let showModal = $state(false);
     let editingFilter = $state<RowFilterDescriptor | undefined>(undefined);
@@ -56,27 +45,20 @@
     let manageButtonRef = $state<HTMLButtonElement | null>(null);
     let addFilterButtonRef = $state<HTMLButtonElement | null>(null);
     let filterEntriesRef = $state<HTMLDivElement | null>(null);
-    let pendingRemovalFocus = $state<
-        | {
-              removedFilterId: string;
-              targetFilterId?: string;
-          }
-        | null
-    >(null);
+    let pendingRemovalFocus = $state<{
+        removedFilterId: string;
+        targetFilterId?: string;
+    } | null>(null);
 
-    const totalColumns = $derived(
-        $explorerState.backendState?.table_shape.num_columns ?? 0,
-    );
+    const totalColumns = $derived($explorerState.backendState?.table_shape.num_columns ?? 0);
 
-    const disableFiltering = $derived(
-        totalColumns >= MAX_ADVANCED_LAYOUT_ENTRY_COUNT,
-    );
+    const disableFiltering = $derived(totalColumns >= MAX_ADVANCED_LAYOUT_ENTRY_COUNT);
 
     const canFilter = $derived.by(() => {
         const supportStatus =
-            $explorerState.backendState?.supported_features?.set_row_filters
-                ?.support_status ?? "unsupported";
-        return supportStatus.toLowerCase() === "supported" && !disableFiltering;
+            $explorerState.backendState?.supported_features?.set_row_filters?.support_status ??
+            'unsupported';
+        return supportStatus.toLowerCase() === 'supported' && !disableFiltering;
     });
 
     const rowFilterDescriptors = $derived(
@@ -87,9 +69,7 @@
     );
 
     const hasFilters = $derived(rowFilterDescriptors.length > 0);
-    const atFilterLimit = $derived(
-        rowFilterDescriptors.length >= MAX_ROW_FILTERS,
-    );
+    const atFilterLimit = $derived(rowFilterDescriptors.length >= MAX_ROW_FILTERS);
 
     function showHover(anchorElement: HTMLElement, content: string) {
         if (!tableDataDataGridInstance?.hoverManager) {
@@ -142,13 +122,13 @@
         if (editingFilterId) {
             invalidateTableData?.();
             postMessage({
-                type: "updateFilter",
+                type: 'updateFilter',
                 filter: backendFilter,
             });
         } else {
             invalidateTableData?.();
             postMessage({
-                type: "addFilter",
+                type: 'addFilter',
                 filter: backendFilter,
             });
         }
@@ -173,10 +153,7 @@
         }
     }
 
-    function handleRemoveFilter(
-        filterId: string,
-        options?: { restoreFocus?: boolean },
-    ) {
+    function handleRemoveFilter(filterId: string, options?: { restoreFocus?: boolean }) {
         if (options?.restoreFocus) {
             const currentIndex = rowFilterDescriptors.findIndex(
                 (entry) => entry.filter.filter_id === filterId,
@@ -192,11 +169,11 @@
         }
 
         invalidateTableData?.();
-        postMessage({ type: "removeFilter", filterId });
+        postMessage({ type: 'removeFilter', filterId });
     }
 
     function handleEditFilter(
-        filter: import("../../../../../dataGrid/types").RowFilter,
+        filter: import('../../../../../dataGrid/types').RowFilter,
         descriptor: RowFilterDescriptor,
         anchor?: HTMLElement | null,
     ) {
@@ -209,7 +186,7 @@
 
     function handleClearAllFilters() {
         invalidateTableData?.();
-        postMessage({ type: "clearFilters" });
+        postMessage({ type: 'clearFilters' });
     }
 
     function showFilterLimitMessage() {
@@ -231,36 +208,36 @@
 
         menuItems = [
             {
-                id: "add-filter",
-                icon: "positron-add-filter",
-                label: localize("positron.addFilter", "Add Filter"),
+                id: 'add-filter',
+                icon: 'positron-add-filter',
+                label: localize('positron.addFilter', 'Add Filter'),
                 disabled: !canFilter,
                 onClick: () => handleAddFilter(manageButtonRef),
             },
-            { id: "sep-add", label: "", separator: true },
+            { id: 'sep-add', label: '', separator: true },
             rowFiltersHidden
                 ? {
-                      id: "show-filters",
-                      icon: "positron-show-filters",
-                      label: localize("positron.showFilters", "Show Filters"),
+                      id: 'show-filters',
+                      icon: 'positron-show-filters',
+                      label: localize('positron.showFilters', 'Show Filters'),
                       onClick: () => {
                           rowFiltersHidden = false;
                       },
                   }
                 : {
-                      id: "hide-filters",
-                      icon: "positron-hide-filters",
-                      label: localize("positron.hideFilters", "Hide Filters"),
+                      id: 'hide-filters',
+                      icon: 'positron-hide-filters',
+                      label: localize('positron.hideFilters', 'Hide Filters'),
                       disabled: !hasFilters,
                       onClick: () => {
                           rowFiltersHidden = true;
                       },
                   },
-            { id: "sep-visibility", label: "", separator: true },
+            { id: 'sep-visibility', label: '', separator: true },
             {
-                id: "clear-filters",
-                icon: "positron-clear-row-filters",
-                label: localize("positron.clearFilters", "Clear Filters"),
+                id: 'clear-filters',
+                icon: 'positron-clear-row-filters',
+                label: localize('positron.clearFilters', 'Clear Filters'),
                 disabled: !hasFilters,
                 onClick: handleClearAllFilters,
             },
@@ -280,11 +257,8 @@
                     ({
                         column_name: column.column_name,
                         column_index: column.column_index ?? index,
-                        type_name: column.type_name ?? "unknown",
-                        type_display:
-                            column.type_display ??
-                            column.type_name ??
-                            "unknown",
+                        type_name: column.type_name ?? 'unknown',
+                        type_display: column.type_display ?? column.type_name ?? 'unknown',
                         description: column.description,
                     }) as SchemaColumn,
             )
@@ -292,8 +266,7 @@
     );
 
     $effect(() => {
-        const { columnIndex, columnSchema, requestId } =
-            $pendingAddFilterRequest;
+        const { columnIndex, columnSchema, requestId } = $pendingAddFilterRequest;
         if (requestId === lastRequestId) {
             return;
         }
@@ -314,10 +287,7 @@
 
         const match =
             columnSchema ??
-            schemaColumns.find(
-                (column: SchemaColumn) =>
-                    column.column_index === columnIndex,
-            );
+            schemaColumns.find((column: SchemaColumn) => column.column_index === columnIndex);
 
         if (!match) {
             if (schemaColumns.length >= totalColumns) {
@@ -343,9 +313,7 @@
         }
 
         if (
-            rowFilterDescriptors.some(
-                (entry) => entry.filter.filter_id === pending.removedFilterId,
-            )
+            rowFilterDescriptors.some((entry) => entry.filter.filter_id === pending.removedFilterId)
         ) {
             return;
         }
@@ -376,19 +344,19 @@
         onmouseenter={(event) =>
             showHover(
                 event.currentTarget as HTMLElement,
-                localize("positron.manageFilters", "Manage Filters"),
+                localize('positron.manageFilters', 'Manage Filters'),
             )}
         onmouseleave={hideHover}
         onfocus={(event) =>
             showHover(
                 event.currentTarget as HTMLElement,
-                localize("positron.manageFilters", "Manage Filters"),
+                localize('positron.manageFilters', 'Manage Filters'),
             )}
         onblur={hideHover}
         title={tableDataDataGridInstance?.hoverManager
             ? undefined
-            : localize("positron.manageFilters", "Manage Filters")}
-        aria-label={localize("positron.manageFilters", "Manage Filters")}
+            : localize('positron.manageFilters', 'Manage Filters')}
+        aria-label={localize('positron.manageFilters', 'Manage Filters')}
         disabled={!canFilter}
     >
         <span class="codicon codicon-positron-row-filter"></span>
@@ -403,17 +371,8 @@
                 <RowFilterWidget
                     filterId={entry.filter.filter_id}
                     rowFilter={entry.descriptor}
-                    onClear={(options) =>
-                        handleRemoveFilter(
-                            entry.filter.filter_id,
-                            options,
-                        )}
-                    onEdit={(anchor) =>
-                        handleEditFilter(
-                            entry.filter,
-                            entry.descriptor,
-                            anchor,
-                        )}
+                    onClear={(options) => handleRemoveFilter(entry.filter.filter_id, options)}
+                    onEdit={(anchor) => handleEditFilter(entry.filter, entry.descriptor, anchor)}
                 />
             {/each}
         {/if}
@@ -426,19 +385,19 @@
             onmouseenter={(event) =>
                 showHover(
                     event.currentTarget as HTMLElement,
-                    localize("positron.addFilter", "Add Filter"),
+                    localize('positron.addFilter', 'Add Filter'),
                 )}
             onmouseleave={hideHover}
             onfocus={(event) =>
                 showHover(
                     event.currentTarget as HTMLElement,
-                    localize("positron.addFilter", "Add Filter"),
+                    localize('positron.addFilter', 'Add Filter'),
                 )}
             onblur={hideHover}
             title={tableDataDataGridInstance?.hoverManager
                 ? undefined
-                : localize("positron.addFilter", "Add Filter")}
-            aria-label={localize("positron.addFilter", "Add Filter")}
+                : localize('positron.addFilter', 'Add Filter')}
+            aria-label={localize('positron.addFilter', 'Add Filter')}
             disabled={!canFilter}
         >
             <span class="codicon codicon-positron-add-filter"></span>
@@ -447,7 +406,7 @@
 
     {#if showFilterLimitDialog}
         <PositronModalDialog
-            title={localize("positron.addFilter", "Add Filter")}
+            title={localize('positron.addFilter', 'Add Filter')}
             width={350}
             height={150}
             onCancel={closeFilterLimitDialog}
@@ -455,8 +414,8 @@
             <ContentArea>
                 <div class="filter-limit-dialog-message">
                     {localize(
-                        "positron.dataExplorer.filtering.filterLimit",
-                        "The maximum number of filters has been reached.",
+                        'positron.dataExplorer.filtering.filterLimit',
+                        'The maximum number of filters has been reached.',
                     )}
                 </div>
             </ContentArea>
@@ -469,7 +428,7 @@
                             class="action-bar-button default"
                             onclick={closeFilterLimitDialog}
                         >
-                            {localize("positronOK", "OK")}
+                            {localize('positronOK', 'OK')}
                         </button>
                     {/snippet}
                 </PlatformNativeDialogActionBar>

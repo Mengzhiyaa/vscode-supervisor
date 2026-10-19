@@ -112,10 +112,7 @@ export function createDataExplorerBackendState(
             },
             convert_to_code: {
                 support_status: 'supported',
-                code_syntaxes: [
-                    { code_syntax_name: 'python' },
-                    { code_syntax_name: 'r' },
-                ],
+                code_syntaxes: [{ code_syntax_name: 'python' }, { code_syntax_name: 'r' }],
             },
         },
         connected: overrides.connected ?? true,
@@ -158,7 +155,10 @@ export function registerConsoleDefaults(
         sessions?: SessionInfo[];
         activeSessionId?: string;
         settings?: ConsoleSettings;
-        onRequestFullState?: (request: { sessionId: string; reason: string }) => Promise<void> | void;
+        onRequestFullState?: (request: {
+            sessionId: string;
+            reason: string;
+        }) => Promise<void> | void;
     } = {},
 ): void {
     const sessions = options.sessions ?? [createSession()];
@@ -176,9 +176,9 @@ export function registerConsoleDefaults(
         fontFamily: 'var(--vscode-editor-font-family)',
         fontSize: 13,
         lineHeight: 1.4,
-        fontLigatures: "off",
-        fontVariations: "off",
-        fontWeight: "normal",
+        fontLigatures: 'off',
+        fontVariations: 'off',
+        fontWeight: 'normal',
         letterSpacing: 0,
         showResourceMonitor: true,
         promptWhenIncomplete: true,
@@ -218,9 +218,7 @@ export function registerConsoleDefaults(
     backend.onRequest(ConsoleMethods.toggleTrace, () => undefined);
     backend.onRequest('console/openInEditor', () => undefined);
     backend.onRequest(ConsoleMethods.requestFullState, async (request) => {
-        await options.onRequestFullState?.(
-            request.params as { sessionId: string; reason: string },
-        );
+        await options.onRequestFullState?.(request.params as { sessionId: string; reason: string });
         return undefined;
     });
     backend.onRequest(ConsoleMethods.runErrorSuggestion, () => undefined);

@@ -1,8 +1,8 @@
 <script lang="ts">
-    import { getErrorMessage } from "@shared/errors";
-    import { getRpcConnection } from "$lib/rpc/client";
-    import type { ActivityItemErrorSuggestion } from "./classes";
-    import { localize } from "$lib/localization";
+    import { getErrorMessage } from '@shared/errors';
+    import { getRpcConnection } from '$lib/rpc/client';
+    import type { ActivityItemErrorSuggestion } from './classes';
+    import { localize } from '$lib/localization';
 
     interface Props {
         activityItemErrorSuggestion: ActivityItemErrorSuggestion;
@@ -21,7 +21,7 @@
         runningSuggestionId = suggestionId;
         actionError = undefined;
         try {
-            await getRpcConnection().sendRequest("console/runErrorSuggestion", {
+            await getRpcConnection().sendRequest('console/runErrorSuggestion', {
                 sessionId,
                 itemId: activityItemErrorSuggestion.id,
                 suggestionId,
@@ -46,14 +46,21 @@
                 onclick={() => runSuggestion(suggestion.id)}
             >
                 <span
-                    class="suggestion-icon codicon codicon-{runningSuggestionId === suggestion.id ? 'loading spin' : suggestion.iconId}"
+                    class="suggestion-icon codicon codicon-{runningSuggestionId === suggestion.id
+                        ? 'loading spin'
+                        : suggestion.iconId}"
                     aria-hidden="true"
                 ></span>
                 <span class="link-text">{suggestion.label}</span>
             </button>
         {/each}
         {#if !activityItemErrorSuggestion.available}
-            <span class="suggestion-status">{localize('console.suggestionUnavailable', 'Suggestion unavailable after restore')}</span>
+            <span class="suggestion-status"
+                >{localize(
+                    'console.suggestionUnavailable',
+                    'Suggestion unavailable after restore',
+                )}</span
+            >
         {/if}
         {#if actionError}
             <span class="suggestion-error" role="alert">{actionError}</span>

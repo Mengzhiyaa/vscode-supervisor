@@ -29,7 +29,7 @@ function getResultRowValue(
     row: any,
     result: any,
     index: number,
-    preferredKeys: string[] = []
+    preferredKeys: string[] = [],
 ): unknown {
     if (!row) {
         return undefined;
@@ -64,11 +64,7 @@ function getResultRowValue(
     return undefined;
 }
 
-function getFirstResultValue(
-    result: any,
-    index: number,
-    preferredKeys: string[] = []
-): unknown {
+function getFirstResultValue(result: any, index: number, preferredKeys: string[] = []): unknown {
     return getResultRowValue(result?.get?.(0), result, index, preferredKeys);
 }
 
@@ -97,11 +93,11 @@ export class ColumnProfileEvaluator {
         profiles: ColumnProfileRequest[],
         _formatOptions: FormatOptions,
         whereClause: string = '',
-        filteredRowCount?: number
+        filteredRowCount?: number,
     ): Promise<ColumnProfileResult[]> {
         // Zero-row optimization (aligned with positron)
         if (filteredRowCount === 0) {
-            return profiles.map(request => {
+            return profiles.map((request) => {
                 const colSchema = schema[request.column_index];
                 return this._createEmptyProfileResult(colSchema, request.profiles);
             });
@@ -119,9 +115,7 @@ export class ColumnProfileEvaluator {
             const result: ColumnProfileResult = {};
 
             for (const spec of request.profiles) {
-                await this._evaluateSingleProfile(
-                    tableName, colSchema, spec, result, whereClause
-                );
+                await this._evaluateSingleProfile(tableName, colSchema, spec, result, whereClause);
             }
 
             results.push(result);
@@ -135,7 +129,7 @@ export class ColumnProfileEvaluator {
      */
     private _createEmptyProfileResult(
         colSchema: ColumnSchema | undefined,
-        specs: ColumnProfileSpec[]
+        specs: ColumnProfileSpec[],
     ): ColumnProfileResult {
         const result: ColumnProfileResult = {};
 
@@ -214,7 +208,7 @@ export class ColumnProfileEvaluator {
         colSchema: ColumnSchema,
         spec: ColumnProfileSpec,
         result: ColumnProfileResult,
-        whereClause: string
+        whereClause: string,
     ): Promise<void> {
         const col = escapeIdentifier(colSchema.column_name);
         const table = escapeIdentifier(tableName);
@@ -223,7 +217,7 @@ export class ColumnProfileEvaluator {
             switch (spec.profile_type) {
                 case ColumnProfileType.NullCount: {
                     const res = await this._duckdb.query(
-                        `SELECT COUNT(*) FILTER (WHERE ${col} IS NULL) AS null_count FROM ${table}${whereClause}`
+                        `SELECT COUNT(*) FILTER (WHERE ${col} IS NULL) AS null_count FROM ${table}${whereClause}`,
                     );
                     result.null_count = Number(getFirstResultValue(res, 0, ['null_count']) ?? 0);
                     break;
@@ -231,7 +225,9 @@ export class ColumnProfileEvaluator {
 
                 case ColumnProfileType.SummaryStats: {
                     result.summary_stats = await this._computeSummaryStats(
-                        tableName, colSchema, whereClause
+                        tableName,
+                        colSchema,
+                        whereClause,
                     );
                     break;
                 }
@@ -239,8 +235,11 @@ export class ColumnProfileEvaluator {
                 case ColumnProfileType.SmallHistogram: {
                     const params = spec.params as ColumnHistogramParams | undefined;
                     result.small_histogram = await this._computeHistogram(
-                        tableName, colSchema, params?.num_bins ?? 80,
-                        params?.method, whereClause
+                        tableName,
+                        colSchema,
+                        params?.num_bins ?? 80,
+                        params?.method,
+                        whereClause,
                     );
                     break;
                 }
@@ -248,8 +247,11 @@ export class ColumnProfileEvaluator {
                 case ColumnProfileType.LargeHistogram: {
                     const params = spec.params as ColumnHistogramParams | undefined;
                     result.large_histogram = await this._computeHistogram(
-                        tableName, colSchema, params?.num_bins ?? 100,
-                        params?.method, whereClause
+                        tableName,
+                        colSchema,
+                        params?.num_bins ?? 100,
+                        params?.method,
+                        whereClause,
                     );
                     break;
                 }
@@ -257,7 +259,10 @@ export class ColumnProfileEvaluator {
                 case ColumnProfileType.SmallFrequencyTable: {
                     const params = spec.params as ColumnFrequencyTableParams | undefined;
                     result.small_frequency_table = await this._computeFrequencyTable(
-                        tableName, colSchema, params?.limit ?? 8, whereClause
+                        tableName,
+                        colSchema,
+                        params?.limit ?? 8,
+                        whereClause,
                     );
                     break;
                 }
@@ -265,7 +270,10 @@ export class ColumnProfileEvaluator {
                 case ColumnProfileType.LargeFrequencyTable: {
                     const params = spec.params as ColumnFrequencyTableParams | undefined;
                     result.large_frequency_table = await this._computeFrequencyTable(
-                        tableName, colSchema, params?.limit ?? 16, whereClause
+                        tableName,
+                        colSchema,
+                        params?.limit ?? 16,
+                        whereClause,
                     );
                     break;
                 }
@@ -278,7 +286,7 @@ export class ColumnProfileEvaluator {
     private async _computeSummaryStats(
         tableName: string,
         colSchema: ColumnSchema,
-        whereClause: string
+        whereClause: string,
     ): Promise<ColumnSummaryStats> {
         const col = escapeIdentifier(colSchema.column_name);
         const table = escapeIdentifier(tableName);
@@ -305,7 +313,7 @@ export class ColumnProfileEvaluator {
                     AVG(${castExpr})::VARCHAR AS mean_val,
                     MEDIAN(${castExpr})::VARCHAR AS median_val,
                     STDDEV_SAMP(${castExpr})::VARCHAR AS stdev_val
-                FROM ${table}${notNullWhere}`
+                FROM ${table}${notNullWhere}`,
             );
             const row = res.get(0);
             if (row) {
@@ -327,7 +335,7 @@ export class ColumnProfileEvaluator {
                 `SELECT
                     COUNT(DISTINCT ${col}) AS num_unique,
                     SUM(CASE WHEN ${col} = '' THEN 1 ELSE 0 END) AS num_empty
-                FROM ${table}${notNullWhere}`
+                FROM ${table}${notNullWhere}`,
             );
             const row = res.get(0);
             if (row) {
@@ -341,7 +349,7 @@ export class ColumnProfileEvaluator {
                 `SELECT
                     SUM(CASE WHEN ${col} THEN 1 ELSE 0 END) AS true_count,
                     SUM(CASE WHEN NOT ${col} THEN 1 ELSE 0 END) AS false_count
-                FROM ${table}${notNullWhere}`
+                FROM ${table}${notNullWhere}`,
             );
             const row = res.get(0);
             if (row) {
@@ -359,7 +367,7 @@ export class ColumnProfileEvaluator {
                     MAX(${col})::VARCHAR AS max_date,
                     strftime(MAKE_TIMESTAMP(CAST(AVG(epoch_ms(${col})) * 1000 AS BIGINT)), '%Y-%m-%d %H:%M:%S') AS mean_ts,
                     strftime(MAKE_TIMESTAMP(CAST(MEDIAN(epoch_ms(${col})) * 1000 AS BIGINT)), '%Y-%m-%d %H:%M:%S') AS median_ts
-                FROM ${table}${notNullWhere}`
+                FROM ${table}${notNullWhere}`,
             );
             const row = res.get(0);
             if (row) {
@@ -377,7 +385,7 @@ export class ColumnProfileEvaluator {
                     COUNT(DISTINCT ${col}) AS num_unique,
                     MIN(${col})::VARCHAR AS min_date,
                     MAX(${col})::VARCHAR AS max_date
-                FROM ${table}${notNullWhere}`
+                FROM ${table}${notNullWhere}`,
             );
             const row = res.get(0);
             if (row) {
@@ -390,7 +398,7 @@ export class ColumnProfileEvaluator {
         } else {
             // Other types — just count unique values
             const res = await this._duckdb.query(
-                `SELECT COUNT(DISTINCT ${col}) AS num_unique FROM ${table}${notNullWhere}`
+                `SELECT COUNT(DISTINCT ${col}) AS num_unique FROM ${table}${notNullWhere}`,
             );
             const row = res.get(0);
             if (row) {
@@ -412,7 +420,7 @@ export class ColumnProfileEvaluator {
         colSchema: ColumnSchema,
         numBins: number,
         method?: ColumnHistogramParamsMethod,
-        whereClause: string = ''
+        whereClause: string = '',
     ): Promise<ColumnHistogram> {
         const col = escapeIdentifier(colSchema.column_name);
         const table = escapeIdentifier(tableName);
@@ -423,15 +431,16 @@ export class ColumnProfileEvaluator {
             : ` WHERE ${col} IS NOT NULL`;
 
         // Get min, max, count, and optionally IQR for FreedmanDiaconis
-        const statsQuery = method === ColumnHistogramParamsMethod.FreedmanDiaconis
-            ? `SELECT
+        const statsQuery =
+            method === ColumnHistogramParamsMethod.FreedmanDiaconis
+                ? `SELECT
                 MIN(${col})::DOUBLE AS min_val,
                 MAX(${col})::DOUBLE AS max_val,
                 COUNT(*)::INTEGER AS total,
                 PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY ${col})::DOUBLE AS q1,
                 PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY ${col})::DOUBLE AS q3
                FROM ${table}${notNullWhere}`
-            : `SELECT
+                : `SELECT
                 MIN(${col})::DOUBLE AS min_val,
                 MAX(${col})::DOUBLE AS max_val,
                 COUNT(*)::INTEGER AS total
@@ -488,13 +497,15 @@ export class ColumnProfileEvaluator {
             `SELECT WIDTH_BUCKET(${col}::DOUBLE, ${minVal}, ${maxVal + binWidth * 0.001}, ${actualBins}) AS bucket, COUNT(*) AS cnt
              FROM ${table}${notNullWhere}
              GROUP BY bucket
-             ORDER BY bucket`
+             ORDER BY bucket`,
         );
 
         const binCounts = new Array(actualBins).fill(0);
         for (let r = 0; r < histRes.numRows; r++) {
             const row = histRes.get(r);
-            if (!row) { continue; }
+            if (!row) {
+                continue;
+            }
             const bucket = Number(getResultRowValue(row, histRes, 0, ['bucket']) ?? 0) - 1;
             if (bucket >= 0 && bucket < actualBins) {
                 binCounts[bucket] = Number(getResultRowValue(row, histRes, 1, ['cnt']) ?? 0);
@@ -507,13 +518,25 @@ export class ColumnProfileEvaluator {
                 PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY ${col})::VARCHAR AS q25,
                 PERCENTILE_CONT(0.50) WITHIN GROUP (ORDER BY ${col})::VARCHAR AS q50,
                 PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY ${col})::VARCHAR AS q75
-             FROM ${table}${notNullWhere}`
+             FROM ${table}${notNullWhere}`,
         );
         const qRow = quantileRes.get(0);
         const quantiles = [
-            { q: 0.25, value: String(getResultRowValue(qRow, quantileRes, 0, ['q25']) ?? ''), exact: false },
-            { q: 0.50, value: String(getResultRowValue(qRow, quantileRes, 1, ['q50']) ?? ''), exact: false },
-            { q: 0.75, value: String(getResultRowValue(qRow, quantileRes, 2, ['q75']) ?? ''), exact: false },
+            {
+                q: 0.25,
+                value: String(getResultRowValue(qRow, quantileRes, 0, ['q25']) ?? ''),
+                exact: false,
+            },
+            {
+                q: 0.5,
+                value: String(getResultRowValue(qRow, quantileRes, 1, ['q50']) ?? ''),
+                exact: false,
+            },
+            {
+                q: 0.75,
+                value: String(getResultRowValue(qRow, quantileRes, 2, ['q75']) ?? ''),
+                exact: false,
+            },
         ];
 
         return { bin_edges: binEdges, bin_counts: binCounts, quantiles };
@@ -523,7 +546,7 @@ export class ColumnProfileEvaluator {
         tableName: string,
         colSchema: ColumnSchema,
         limit: number,
-        whereClause: string = ''
+        whereClause: string = '',
     ): Promise<ColumnFrequencyTable> {
         const col = escapeIdentifier(colSchema.column_name);
         const table = escapeIdentifier(tableName);
@@ -537,7 +560,7 @@ export class ColumnProfileEvaluator {
              FROM ${table}${notNullWhere}
              GROUP BY ${col}
              ORDER BY cnt DESC
-             LIMIT ${limit + 1}`
+             LIMIT ${limit + 1}`,
         );
 
         const values: string[] = [];
@@ -546,7 +569,9 @@ export class ColumnProfileEvaluator {
 
         for (let r = 0; r < Math.min(res.numRows, limit); r++) {
             const row = res.get(r);
-            if (!row) { continue; }
+            if (!row) {
+                continue;
+            }
             values.push(String(getResultRowValue(row, res, 0, ['val']) ?? ''));
             counts.push(Number(getResultRowValue(row, res, 1, ['cnt']) ?? 0));
         }
@@ -554,7 +579,7 @@ export class ColumnProfileEvaluator {
         // If there are more results than the limit, compute an "other" count
         if (res.numRows > limit) {
             const totalRes = await this._duckdb.query(
-                `SELECT COUNT(*) FROM ${table}${notNullWhere}`
+                `SELECT COUNT(*) FROM ${table}${notNullWhere}`,
             );
             const total = Number(getFirstResultValue(totalRes, 0) ?? 0);
             const counted = counts.reduce((a, b) => a + b, 0);
@@ -566,9 +591,11 @@ export class ColumnProfileEvaluator {
 
     // Type helpers
     private _isNumericType(t: ColumnDisplayType): boolean {
-        return t === ColumnDisplayType.Integer ||
+        return (
+            t === ColumnDisplayType.Integer ||
             t === ColumnDisplayType.Floating ||
-            t === ColumnDisplayType.Decimal;
+            t === ColumnDisplayType.Decimal
+        );
     }
 
     private _isStringType(t: ColumnDisplayType): boolean {
@@ -578,5 +605,4 @@ export class ColumnProfileEvaluator {
     private _isBooleanType(t: ColumnDisplayType): boolean {
         return t === ColumnDisplayType.Boolean;
     }
-
 }

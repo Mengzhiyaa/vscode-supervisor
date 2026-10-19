@@ -11,21 +11,21 @@ import { JupyterMessageType } from './JupyterMessageType';
  * @link https://jupyter-client.readthedocs.io/en/stable/messaging.html#message-header
  */
 export interface JupyterMessageHeader {
-	/** The message ID, must be unique per message. */
-	msg_id: string;
+    /** The message ID, must be unique per message. */
+    msg_id: string;
 
-	/** Session ID, must be unique per session */
-	session: string;
+    /** Session ID, must be unique per session */
+    session: string;
 
-	/** Username, must be unique per user */
-	username: string;
+    /** Username, must be unique per user */
+    username: string;
 
-	/** Date/Time when message was created in ISO 8601 format */
-	date: string;
+    /** Date/Time when message was created in ISO 8601 format */
+    date: string;
 
-	/** The message type */
-	msg_type: JupyterMessageType;
+    /** The message type */
+    msg_type: JupyterMessageType;
 
-	/** The message protocol version */
-	version: string;
+    /** The message protocol version */
+    version: string;
 }

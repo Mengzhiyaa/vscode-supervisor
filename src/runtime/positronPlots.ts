@@ -26,7 +26,7 @@ export enum PlotsDisplayLocation {
     MainWindow = 'main',
 
     /** Plots are displayed in an auxiliary window */
-    AuxiliaryWindow = 'auxiliary'
+    AuxiliaryWindow = 'auxiliary',
 }
 
 // PlotRenderSettings/PlotRenderFormat are re-exported above.
@@ -63,9 +63,11 @@ export interface IZoomablePlotClient {
  * Matches Positron's isZoomablePlotClient function.
  */
 export function isZoomablePlotClient(obj: any): obj is IZoomablePlotClient {
-    return obj &&
+    return (
+        obj &&
         typeof obj.zoomLevel !== 'undefined' &&
-        typeof obj.onDidChangeZoomLevel !== 'undefined';
+        typeof obj.onDidChangeZoomLevel !== 'undefined'
+    );
 }
 
 /**

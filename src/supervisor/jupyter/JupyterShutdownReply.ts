@@ -9,9 +9,9 @@
  * @link https://jupyter-client.readthedocs.io/en/stable/messaging.html#kernel-shutdown
  */
 export interface JupyterShutdownReply {
-	/** Shutdown status */
-	status: 'ok' | 'error';
+    /** Shutdown status */
+    status: 'ok' | 'error';
 
-	/** Whether the shutdown precedes a restart */
-	restart: boolean;
+    /** Whether the shutdown precedes a restart */
+    restart: boolean;
 }

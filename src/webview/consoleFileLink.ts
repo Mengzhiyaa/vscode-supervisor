@@ -39,14 +39,23 @@ export function resolveConsoleFileUri(filePath: string, workingDirectory?: strin
     return vscode.Uri.file(path.resolve(workingDirectory, filePath));
 }
 
-export async function openConsoleFile(location: ConsoleFileLocation, workingDirectory?: string): Promise<void> {
-    if (!Number.isSafeInteger(location.line) || location.line < 1 ||
-        (location.column !== undefined && (!Number.isSafeInteger(location.column) || location.column < 1))) {
+export async function openConsoleFile(
+    location: ConsoleFileLocation,
+    workingDirectory?: string,
+): Promise<void> {
+    if (
+        !Number.isSafeInteger(location.line) ||
+        location.line < 1 ||
+        (location.column !== undefined &&
+            (!Number.isSafeInteger(location.column) || location.column < 1))
+    ) {
         throw new Error('Invalid console file position');
     }
     const uri = resolveConsoleFileUri(location.path, workingDirectory);
     const document = await vscode.workspace.openTextDocument(uri);
-    const position = document.validatePosition(new vscode.Position(location.line - 1, (location.column ?? 1) - 1));
+    const position = document.validatePosition(
+        new vscode.Position(location.line - 1, (location.column ?? 1) - 1),
+    );
     await vscode.window.showTextDocument(document, {
         selection: new vscode.Selection(position, position),
         preview: true,

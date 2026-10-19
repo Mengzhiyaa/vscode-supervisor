@@ -67,7 +67,7 @@ class TestPanel implements MovableWebviewPanel {
         readonly id: string,
         private readonly _host: TestMoveHost,
         private readonly _activateOnReveal = true,
-    ) { }
+    ) {}
 
     get active(): boolean {
         return this._active;

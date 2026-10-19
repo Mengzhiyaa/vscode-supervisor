@@ -1,16 +1,9 @@
 import * as assert from 'assert';
-import {
-    isLocalhostUrl,
-    shouldOpenUrlInViewer,
-} from '../../services/preview/previewUrlPolicy';
+import { isLocalhostUrl, shouldOpenUrlInViewer } from '../../services/preview/previewUrlPolicy';
 
 suite('[Unit] viewer URL policy', () => {
     test('embeds localhost and loopback URLs when enabled', () => {
-        for (const url of [
-            'http://localhost:8787',
-            'http://127.0.0.1:3000',
-            'http://[::1]:8000',
-        ]) {
+        for (const url of ['http://localhost:8787', 'http://127.0.0.1:3000', 'http://[::1]:8000']) {
             assert.strictEqual(isLocalhostUrl(url), true, url);
             assert.strictEqual(shouldOpenUrlInViewer(url, true), true, url);
         }

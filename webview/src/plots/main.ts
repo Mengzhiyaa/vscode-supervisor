@@ -6,7 +6,7 @@ import './styles.css';
 installWebviewContextMenuGuard();
 
 const app = mount(App, {
-    target: document.getElementById('app')!
+    target: document.getElementById('app')!,
 });
 
 export default app;

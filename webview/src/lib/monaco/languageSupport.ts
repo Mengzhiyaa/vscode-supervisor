@@ -1,13 +1,13 @@
-import type * as MonacoTypes from "monaco-editor/editor";
+import type * as MonacoTypes from 'monaco-editor/editor';
 import {
     type LanguageTextMateGrammarDefinition,
     ensureLanguageTextMateTokenizerReady,
     getLanguageTextMateGrammarDefinition,
     getTextMateThemeRules,
-} from "./textMateTokenization";
-import type { ConsoleThemeData } from "@shared/console";
-export type { ConsoleThemeData, ConsoleThemeRule } from "@shared/console";
-type MonacoApi = typeof import("monaco-editor/editor");
+} from './textMateTokenization';
+import type { ConsoleThemeData } from '@shared/console';
+export type { ConsoleThemeData, ConsoleThemeRule } from '@shared/console';
+type MonacoApi = typeof import('monaco-editor/editor');
 
 export interface LanguageMonacoSupportModule {
     registerLanguage(monaco: MonacoApi): void;
@@ -27,16 +27,12 @@ function normalizeLanguageId(languageId: string): string {
     return languageId.trim().toLowerCase();
 }
 
-function isLanguageMonacoSupportModule(
-    value: unknown,
-): value is LanguageMonacoSupportModule {
+function isLanguageMonacoSupportModule(value: unknown): value is LanguageMonacoSupportModule {
     return (
-        typeof value === "object" &&
+        typeof value === 'object' &&
         value !== null &&
-        typeof (value as LanguageMonacoSupportModule).registerLanguage ===
-            "function" &&
-        typeof (value as LanguageMonacoSupportModule).ensureTokenizerReady ===
-            "function"
+        typeof (value as LanguageMonacoSupportModule).registerLanguage === 'function' &&
+        typeof (value as LanguageMonacoSupportModule).ensureTokenizerReady === 'function'
     );
 }
 
@@ -50,11 +46,7 @@ function normalizeLanguageMonacoSupportModule(
             return candidate;
         }
 
-        if (
-            typeof candidate !== "object" ||
-            candidate === null ||
-            !("default" in candidate)
-        ) {
+        if (typeof candidate !== 'object' || candidate === null || !('default' in candidate)) {
             return undefined;
         }
 
@@ -64,9 +56,7 @@ function normalizeLanguageMonacoSupportModule(
     return undefined;
 }
 
-export function getLanguageMonacoSupportModuleUrl(
-    languageId: string,
-): string | undefined {
+export function getLanguageMonacoSupportModuleUrl(languageId: string): string | undefined {
     const normalizedLanguageId = normalizeLanguageId(languageId);
     if (!normalizedLanguageId) {
         return undefined;
@@ -103,28 +93,26 @@ export function loadLanguageMonacoSupportModule(
 
     const loadPromise = (async () => {
         const importedModule = await import(/* @vite-ignore */ moduleUrl);
-        const normalizedModule =
-            normalizeLanguageMonacoSupportModule(importedModule);
+        const normalizedModule = normalizeLanguageMonacoSupportModule(importedModule);
 
         if (!normalizedModule) {
             const exportKeys =
-                importedModule &&
-                typeof importedModule === "object"
+                importedModule && typeof importedModule === 'object'
                     ? Object.keys(importedModule)
                     : [];
             throw new Error(
-                `Language Monaco support module '${normalizedLanguageId}' at '${moduleUrl}' did not expose a valid SPI. Export keys: ${exportKeys.join(", ") || "(none)"}`,
+                `Language Monaco support module '${normalizedLanguageId}' at '${moduleUrl}' did not expose a valid SPI. Export keys: ${exportKeys.join(', ') || '(none)'}`,
             );
         }
 
         return normalizedModule;
     })().catch((error) => {
-            const currentEntry = moduleCache.get(normalizedLanguageId);
-            if (currentEntry?.promise === loadPromise) {
-                moduleCache.delete(normalizedLanguageId);
-            }
-            throw error;
-        });
+        const currentEntry = moduleCache.get(normalizedLanguageId);
+        if (currentEntry?.promise === loadPromise) {
+            moduleCache.delete(normalizedLanguageId);
+        }
+        throw error;
+    });
 
     moduleCache.set(normalizedLanguageId, {
         url: moduleUrl,

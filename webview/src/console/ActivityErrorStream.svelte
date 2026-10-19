@@ -5,8 +5,8 @@
     Mirrors: positron/.../components/activityErrorStream.tsx
 -->
 <script lang="ts">
-    import { ActivityItemStream } from "./classes";
-    import ConsoleOutputLines from "./ConsoleOutputLines.svelte";
+    import { ActivityItemStream } from './classes';
+    import ConsoleOutputLines from './ConsoleOutputLines.svelte';
 
     interface Props {
         activityItemStream: ActivityItemStream;
@@ -25,9 +25,6 @@
 
 <style>
     .activity-error-stream {
-        color: var(
-            --vscode-positronConsole-errorForeground,
-            var(--vscode-errorForeground)
-        );
+        color: var(--vscode-positronConsole-errorForeground, var(--vscode-errorForeground));
     }
 </style>

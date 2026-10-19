@@ -1,8 +1,5 @@
 import * as assert from 'assert';
-import {
-    flattenTokenColors,
-    type RawTokenColor,
-} from '../../webview/consoleThemeProvider';
+import { flattenTokenColors, type RawTokenColor } from '../../webview/consoleThemeProvider';
 
 suite('[Unit] Console theme provider', () => {
     test('expands comma-separated TextMate scope selectors for Monaco', () => {

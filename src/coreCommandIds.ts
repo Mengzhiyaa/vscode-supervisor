@@ -25,7 +25,8 @@ export const CoreCommandIds = {
     consoleExecuteCodeAfterCursor: 'supervisor.console.executeCodeAfterCursor',
     consoleNavigateInputHistoryUp: 'supervisor.console.navigateInputHistoryUp',
     consoleNavigateInputHistoryDown: 'supervisor.console.navigateInputHistoryDown',
-    consoleNavigateInputHistoryUpPrefixMatch: 'supervisor.console.navigateInputHistoryUpPrefixMatch',
+    consoleNavigateInputHistoryUpPrefixMatch:
+        'supervisor.console.navigateInputHistoryUpPrefixMatch',
     consoleFind: 'supervisor.console.find',
     consoleFindNext: 'supervisor.console.findNext',
     consoleFindPrevious: 'supervisor.console.findPrevious',

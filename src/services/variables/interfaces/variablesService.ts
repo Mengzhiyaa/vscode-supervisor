@@ -5,10 +5,7 @@
 
 import * as vscode from 'vscode';
 import { RuntimeSession } from '../../../runtime/session';
-import {
-    RuntimeClientState,
-    RuntimeClientStatus,
-} from '../../../internal/runtimeTypes';
+import { RuntimeClientState, RuntimeClientStatus } from '../../../internal/runtimeTypes';
 import type {
     InspectedVariable,
     Variable,
@@ -19,10 +16,7 @@ import type {
     IVariableItem as SharedVariableItem,
     IVariableOverflow as SharedVariableOverflow,
 } from '../../../shared/variables';
-export {
-    RuntimeClientState,
-    RuntimeClientStatus,
-} from '../../../internal/runtimeTypes';
+export { RuntimeClientState, RuntimeClientStatus } from '../../../internal/runtimeTypes';
 export type {
     InspectedVariable,
     Variable,
@@ -32,7 +26,7 @@ export type {
 export const enum PositronVariablesGrouping {
     None = 0,
     Kind = 1,
-    Size = 2
+    Size = 2,
 }
 
 /**
@@ -41,7 +35,7 @@ export const enum PositronVariablesGrouping {
 export const enum PositronVariablesSorting {
     Name = 0,
     Size = 1,
-    Recent = 2
+    Recent = 2,
 }
 
 /**
@@ -70,15 +64,12 @@ export interface VariablesTreeItem extends Omit<
 /**
  * Variable tree overflow marker interface used by the service layer.
  */
-export interface VariablesTreeOverflow extends Omit<SharedVariableOverflow, 'type'> { }
+export interface VariablesTreeOverflow extends Omit<SharedVariableOverflow, 'type'> {}
 
 /**
  * Service-layer variable tree entry.
  */
-export type VariablesTreeEntry =
-    | VariablesTreeGroup
-    | VariablesTreeItem
-    | VariablesTreeOverflow;
+export type VariablesTreeEntry = VariablesTreeGroup | VariablesTreeItem | VariablesTreeOverflow;
 
 export function isVariablesTreeGroup(entry: VariablesTreeEntry): entry is VariablesTreeGroup {
     return 'title' in entry;
@@ -150,7 +141,9 @@ export interface IPositronVariablesService extends vscode.Disposable {
 
     readonly onDidStartPositronVariablesInstance: vscode.Event<IPositronVariablesInstance>;
     readonly onDidStopPositronVariablesInstance: vscode.Event<IPositronVariablesInstance>;
-    readonly onDidChangeActivePositronVariablesInstance: vscode.Event<IPositronVariablesInstance | undefined>;
+    readonly onDidChangeActivePositronVariablesInstance: vscode.Event<
+        IPositronVariablesInstance | undefined
+    >;
 
     initialize(): void;
     setActivePositronVariablesSession(sessionId: string): void;

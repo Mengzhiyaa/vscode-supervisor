@@ -3,11 +3,11 @@
   Port from Positron's dataGridRowHeader.tsx
 -->
 <script lang="ts">
-    import { onDestroy } from "svelte";
-    import VerticalSplitter from "../../dataExplorer/components/splitters/verticalSplitter.svelte";
-    import { getPositronDataGridContext } from "../positronDataGridContext";
-    import { RowSelectionState } from "../classes/dataGridInstance";
-    import { selectionType } from "../utilities/mouseUtilities";
+    import { onDestroy } from 'svelte';
+    import VerticalSplitter from '../../dataExplorer/components/splitters/verticalSplitter.svelte';
+    import { getPositronDataGridContext } from '../positronDataGridContext';
+    import { RowSelectionState } from '../classes/dataGridInstance';
+    import { selectionType } from '../utilities/mouseUtilities';
 
     interface Props {
         rowIndex: number;
@@ -16,12 +16,7 @@
         pinned?: boolean;
     }
 
-    let {
-        rowIndex,
-        top,
-        height,
-        pinned = false,
-    }: Props = $props();
+    let { rowIndex, top, height, pinned = false }: Props = $props();
 
     const { instance } = getPositronDataGridContext();
     const updateTrigger = instance.updateTrigger;
@@ -33,9 +28,7 @@
         return instance.rowSelectionState(rowIndex);
     });
 
-    const selected = $derived(
-        (rowSelectionState & RowSelectionState.Selected) !== 0,
-    );
+    const selected = $derived((rowSelectionState & RowSelectionState.Selected) !== 0);
 
     const focused = $derived.by(() => {
         $updateTrigger;
@@ -95,8 +88,8 @@
         heightStartY = event.clientY;
         heightStartValue = height;
 
-        window.addEventListener("mousemove", onHeightResize);
-        window.addEventListener("mouseup", endHeightResize);
+        window.addEventListener('mousemove', onHeightResize);
+        window.addEventListener('mouseup', endHeightResize);
     }
 
     function onHeightResize(event: MouseEvent) {
@@ -115,8 +108,8 @@
 
     function endHeightResize() {
         resizingHeight = false;
-        window.removeEventListener("mousemove", onHeightResize);
-        window.removeEventListener("mouseup", endHeightResize);
+        window.removeEventListener('mousemove', onHeightResize);
+        window.removeEventListener('mouseup', endHeightResize);
     }
     onDestroy(endHeightResize);
 </script>
@@ -142,12 +135,8 @@
             <div
                 class="selection-overlay"
                 class:focused
-                class:selected-top={
-                    (rowSelectionState & RowSelectionState.SelectedTop) !== 0
-                }
-                class:selected-bottom={
-                    (rowSelectionState & RowSelectionState.SelectedBottom) !== 0
-                }
+                class:selected-top={(rowSelectionState & RowSelectionState.SelectedTop) !== 0}
+                class:selected-bottom={(rowSelectionState & RowSelectionState.SelectedBottom) !== 0}
             ></div>
         {/if}
     {/if}
@@ -164,7 +153,9 @@
                     maximumWidth: maximumRowHeadersWidth,
                     startingWidth: rowHeadersWidth,
                 })}
-                onResize={(width) => { void instance.setRowHeadersWidth(width); }}
+                onResize={(width) => {
+                    void instance.setRowHeadersWidth(width);
+                }}
             />
         </div>
     {/if}
@@ -211,10 +202,7 @@
         left: 0;
         width: 2px;
         height: 100%;
-        background-color: var(
-            --vscode-positronDataGrid-selectionBorder,
-            var(--vscode-focusBorder)
-        );
+        background-color: var(--vscode-positronDataGrid-selectionBorder, var(--vscode-focusBorder));
     }
 
     .data-grid-row-header .border-overlay {
@@ -225,15 +213,9 @@
         position: absolute;
         box-sizing: border-box;
         border-right: 1px solid
-            var(
-                --vscode-positronDataGrid-border,
-                var(--vscode-editorGroup-border)
-            );
+            var(--vscode-positronDataGrid-border, var(--vscode-editorGroup-border));
         border-bottom: 1px solid
-            var(
-                --vscode-positronDataGrid-border,
-                var(--vscode-editorGroup-border)
-            );
+            var(--vscode-positronDataGrid-border, var(--vscode-editorGroup-border));
     }
 
     .data-grid-row-header .selection-overlay {
@@ -248,15 +230,9 @@
             var(--vscode-list-activeSelectionBackground)
         );
         border-left: 1px solid
-            var(
-                --vscode-positronDataGrid-selectionBorder,
-                var(--vscode-focusBorder)
-            );
+            var(--vscode-positronDataGrid-selectionBorder, var(--vscode-focusBorder));
         border-right: 1px solid
-            var(
-                --vscode-positronDataGrid-selectionInnerBorder,
-                var(--vscode-focusBorder)
-            );
+            var(--vscode-positronDataGrid-selectionInnerBorder, var(--vscode-focusBorder));
     }
 
     .data-grid-row-header .selection-overlay:not(.focused) {
@@ -265,26 +241,17 @@
 
     .data-grid-row-header .selection-overlay.selected-top {
         border-top: 1px solid
-            var(
-                --vscode-positronDataGrid-selectionBorder,
-                var(--vscode-focusBorder)
-            );
+            var(--vscode-positronDataGrid-selectionBorder, var(--vscode-focusBorder));
     }
 
     .data-grid-row-header .selection-overlay.selected-bottom {
         border-bottom: 1px solid
-            var(
-                --vscode-positronDataGrid-selectionBorder,
-                var(--vscode-focusBorder)
-            );
+            var(--vscode-positronDataGrid-selectionBorder, var(--vscode-focusBorder));
     }
 
     .data-grid-row-header .selection-overlay:not(.selected-bottom) {
         border-bottom: 1px solid
-            var(
-                --vscode-positronDataGrid-selectionInnerBorder,
-                var(--vscode-focusBorder)
-            );
+            var(--vscode-positronDataGrid-selectionInnerBorder, var(--vscode-focusBorder));
     }
 
     .data-grid-row-header .content {
@@ -324,9 +291,6 @@
 
     .data-grid-row-header .horizontal-splitter:hover,
     .data-grid-row-header .horizontal-splitter.active {
-        background-color: var(
-            --vscode-sash-hoverBorder,
-            var(--vscode-focusBorder)
-        );
+        background-color: var(--vscode-sash-hoverBorder, var(--vscode-focusBorder));
     }
 </style>

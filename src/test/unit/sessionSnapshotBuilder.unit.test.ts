@@ -57,24 +57,22 @@ suite('[Unit] session snapshot builder', () => {
         const restarting = createSession('session-2', RuntimeState.Restarting, 'runtime-session');
         const idle = createSession('session-3', RuntimeState.Idle, 'idle-session');
 
-        const builder = new SessionSnapshotBuilder(
-            {
-                sessions: [idle, restarting],
-                getSession: (sessionId: string) => {
-                    if (sessionId === 'session-2') {
-                        return restarting;
-                    }
-                    if (sessionId === 'session-3') {
-                        return idle;
-                    }
-                    return undefined;
-                },
-            } as any,
-        );
+        const builder = new SessionSnapshotBuilder({
+            sessions: [idle, restarting],
+            getSession: (sessionId: string) => {
+                if (sessionId === 'session-2') {
+                    return restarting;
+                }
+                if (sessionId === 'session-3') {
+                    return idle;
+                }
+                return undefined;
+            },
+        } as any);
 
         const sessions = builder.buildBaseSessions();
         assert.deepStrictEqual(
-            sessions.map(session => ({
+            sessions.map((session) => ({
                 id: session.id,
                 state: session.state,
                 promptActive: session.promptActive,
@@ -113,31 +111,35 @@ suite('[Unit] session snapshot builder', () => {
         const builder = new SessionSnapshotBuilder(
             {
                 sessions: [session],
-                getSession: (sessionId: string) => sessionId === 'session-1' ? session : undefined,
+                getSession: (sessionId: string) =>
+                    sessionId === 'session-1' ? session : undefined,
             } as any,
             {
                 positronConsoleInstances: [instance],
-                getConsoleInstance: (sessionId: string) => sessionId === 'session-1' ? instance : undefined,
+                getConsoleInstance: (sessionId: string) =>
+                    sessionId === 'session-1' ? instance : undefined,
             } as any,
         );
 
         const sessions = builder.buildSessionsWithConsoleOverlay();
-        assert.deepStrictEqual(sessions, [{
-            id: 'session-1',
-            name: 'renamed-session',
-            runtimeName: 'R',
-            sessionMode: 'console',
-            createdTimestamp: 1,
-            state: 'ready',
-            runtimeState: 'starting',
-            runtimePath: '/console/session-1',
-            runtimeVersion: '4.4.1',
-            runtimeSource: 'configured',
-            base64EncodedIconSvg: 'console-icon',
-            promptActive: true,
-            runtimeAttached: true,
-            languageId: 'r',
-        }]);
+        assert.deepStrictEqual(sessions, [
+            {
+                id: 'session-1',
+                name: 'renamed-session',
+                runtimeName: 'R',
+                sessionMode: 'console',
+                createdTimestamp: 1,
+                state: 'ready',
+                runtimeState: 'starting',
+                runtimePath: '/console/session-1',
+                runtimeVersion: '4.4.1',
+                runtimeSource: 'configured',
+                base64EncodedIconSvg: 'console-icon',
+                promptActive: true,
+                runtimeAttached: true,
+                languageId: 'r',
+            },
+        ]);
 
         assert.strictEqual(
             builder.resolveForegroundConsoleSessionId(sessions, ['missing', 'session-1']),
@@ -146,10 +148,14 @@ suite('[Unit] session snapshot builder', () => {
     });
 
     test('buildSessionsWithConsoleOverlay excludes provisional console-only sessions until attached', () => {
-        const provisional = createConsoleInstance('session-restore-1', PositronConsoleState.Uninitialized, {
-            runtimeAttached: false,
-            sessionName: 'restored-r-session',
-        });
+        const provisional = createConsoleInstance(
+            'session-restore-1',
+            PositronConsoleState.Uninitialized,
+            {
+                runtimeAttached: false,
+                sessionName: 'restored-r-session',
+            },
+        );
 
         const builder = new SessionSnapshotBuilder(
             {

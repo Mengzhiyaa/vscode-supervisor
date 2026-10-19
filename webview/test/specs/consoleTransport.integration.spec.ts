@@ -1,5 +1,10 @@
 import { expect, test, type Page } from '@playwright/test';
-import { ConsoleMethods, SessionMethods, createSession, registerConsoleDefaults } from '../harness/domains';
+import {
+    ConsoleMethods,
+    SessionMethods,
+    createSession,
+    registerConsoleDefaults,
+} from '../harness/domains';
 import { MockWebviewBackend } from '../harness/mockWebviewBackend';
 import { TEST_BASE_URL } from '../harness/page';
 
@@ -25,7 +30,9 @@ async function openConsoleInPreloadFrame(page: Page) {
     return { backend, frame };
 }
 
-test('console receives startup notifications and RPC responses from its hidden preload parent', async ({ page }) => {
+test('console receives startup notifications and RPC responses from its hidden preload parent', async ({
+    page,
+}) => {
     const { backend, frame } = await openConsoleInPreloadFrame(page);
     await expect(frame.getByText('Waiting for extensions...')).toBeVisible();
 
@@ -42,7 +49,14 @@ test('console receives startup notifications and RPC responses from its hidden p
         syncSeq: 1,
         state: {
             version: 1,
-            items: [{ type: 'started', id: 'preload-started', when: Date.now(), sessionName: 'Preload Session' }],
+            items: [
+                {
+                    type: 'started',
+                    id: 'preload-started',
+                    when: Date.now(),
+                    sessionName: 'Preload Session',
+                },
+            ],
             inputHistory: [],
             trace: false,
             wordWrap: true,
@@ -56,16 +70,22 @@ test('console receives startup notifications and RPC responses from its hidden p
     await expect(frame.getByText('Start Session')).toHaveCount(0);
 });
 
-test('console rejects RPC messages with a foreign origin even when their source is otherwise trusted', async ({ page }) => {
+test('console rejects RPC messages with a foreign origin even when their source is otherwise trusted', async ({
+    page,
+}) => {
     const { backend, frame } = await openConsoleInPreloadFrame(page);
     await expect(frame.getByText('Waiting for extensions...')).toBeVisible();
     await frame.evaluate(async (method) => {
-        window.dispatchEvent(new MessageEvent('message', {
-            source: window,
-            origin: 'https://untrusted.example',
-            data: { jsonrpc: '2.0', method, params: { phase: 'complete' } },
-        }));
-        await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+        window.dispatchEvent(
+            new MessageEvent('message', {
+                source: window,
+                origin: 'https://untrusted.example',
+                data: { jsonrpc: '2.0', method, params: { phase: 'complete' } },
+            }),
+        );
+        await new Promise<void>((resolve) =>
+            requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+        );
     }, ConsoleMethods.runtimeStartupPhase);
     await expect(frame.getByText('Waiting for extensions...')).toBeVisible();
     await expect(frame.getByText('Start Session')).toHaveCount(0);
@@ -75,34 +95,52 @@ test('console rejects RPC messages with a foreign origin even when their source 
 });
 
 for (const nested of [false, true]) {
-    test(`console rejects same-origin RPC from a ${nested ? 'nested' : 'direct'} preview frame`, async ({ page }) => {
+    test(`console rejects same-origin RPC from a ${nested ? 'nested' : 'direct'} preview frame`, async ({
+        page,
+    }) => {
         const { backend, frame } = await openConsoleInPreloadFrame(page);
         await expect(frame.getByText('Waiting for extensions...')).toBeVisible();
-        const sender = await frame.evaluate(async ({ nested, method }) => {
-            const marker = 'preview-spoof';
-            const payload = JSON.stringify({ jsonrpc: '2.0', method, params: { phase: 'complete' }, marker });
-            const script = `<script>parent${nested ? '.parent' : ''}.postMessage(${payload}, '*')<\/script>`;
-            const child = document.createElement('iframe');
-            const observed = new Promise<{ fromSelf: boolean; fromParent: boolean; sameOrigin: boolean }>(resolve => {
-                const onMessage = (event: MessageEvent) => {
-                    if (event.data?.marker !== marker) {
-                        return;
-                    }
-                    window.removeEventListener('message', onMessage);
-                    resolve({
-                        fromSelf: event.source === window,
-                        fromParent: event.source === window.parent,
-                        sameOrigin: event.origin === window.origin,
-                    });
-                };
-                window.addEventListener('message', onMessage);
-            });
-            child.srcdoc = nested ? `<iframe srcdoc="${script.replaceAll('"', '&quot;')}"></iframe>` : script;
-            document.body.appendChild(child);
-            const result = await observed;
-            await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
-            return result;
-        }, { nested, method: ConsoleMethods.runtimeStartupPhase });
+        const sender = await frame.evaluate(
+            async ({ nested, method }) => {
+                const marker = 'preview-spoof';
+                const payload = JSON.stringify({
+                    jsonrpc: '2.0',
+                    method,
+                    params: { phase: 'complete' },
+                    marker,
+                });
+                const script = `<script>parent${nested ? '.parent' : ''}.postMessage(${payload}, '*')<\/script>`;
+                const child = document.createElement('iframe');
+                const observed = new Promise<{
+                    fromSelf: boolean;
+                    fromParent: boolean;
+                    sameOrigin: boolean;
+                }>((resolve) => {
+                    const onMessage = (event: MessageEvent) => {
+                        if (event.data?.marker !== marker) {
+                            return;
+                        }
+                        window.removeEventListener('message', onMessage);
+                        resolve({
+                            fromSelf: event.source === window,
+                            fromParent: event.source === window.parent,
+                            sameOrigin: event.origin === window.origin,
+                        });
+                    };
+                    window.addEventListener('message', onMessage);
+                });
+                child.srcdoc = nested
+                    ? `<iframe srcdoc="${script.replaceAll('"', '&quot;')}"></iframe>`
+                    : script;
+                document.body.appendChild(child);
+                const result = await observed;
+                await new Promise<void>((resolve) =>
+                    requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+                );
+                return result;
+            },
+            { nested, method: ConsoleMethods.runtimeStartupPhase },
+        );
         expect(sender).toEqual({ fromSelf: false, fromParent: false, sameOrigin: true });
         await expect(frame.getByText('Waiting for extensions...')).toBeVisible();
         await expect(frame.getByText('Start Session')).toHaveCount(0);

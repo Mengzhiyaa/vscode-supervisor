@@ -3,12 +3,9 @@
   Port from Positron's positronDataGrid.tsx
 -->
 <script lang="ts">
-    import type {
-        DataGridInstance,
-        ClipboardData,
-    } from "./classes/dataGridInstance";
-    import { setPositronDataGridContext } from "./positronDataGridContext";
-    import DataGridWaffle from "./components/dataGridWaffle.svelte";
+    import type { DataGridInstance, ClipboardData } from './classes/dataGridInstance';
+    import { setPositronDataGridContext } from './positronDataGridContext';
+    import DataGridWaffle from './components/dataGridWaffle.svelte';
 
     interface Props {
         instance: DataGridInstance;

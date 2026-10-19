@@ -8,12 +8,12 @@
  * received by Positron. Today, Kallichore only sends two kinds of messages.
  */
 export enum SocketMessageKind {
-	/** Jupyter messages are messages conforming to the Jupyter protocol. */
-	Jupyter = 'jupyter',
+    /** Jupyter messages are messages conforming to the Jupyter protocol. */
+    Jupyter = 'jupyter',
 
-	/** Kernel messages are messages sent by Kallichore to deliver kernel status
-	 * and metadata. */
-	Kernel = 'kernel',
+    /** Kernel messages are messages sent by Kallichore to deliver kernel status
+     * and metadata. */
+    Kernel = 'kernel',
 }
 
 /**
@@ -21,6 +21,6 @@ export enum SocketMessageKind {
  * from the server over the WebSocket connection will be a SocketMessage.
  */
 export interface SocketMessage {
-	/** The kind of message */
-	kind: SocketMessageKind;
+    /** The kind of message */
+    kind: SocketMessageKind;
 }

@@ -112,8 +112,8 @@ export class TableSummaryDataGridInstance extends DataGridInstance {
 
         this._summaryCache = new TableSummaryCache(_stores, postMessage);
         this._columnSchemaCache = new ColumnSchemaCache(_schemaClient);
-        const schemaCacheListener = this._columnSchemaCache.onDidUpdateCache(
-            () => this.fireOnDidUpdateEvent(),
+        const schemaCacheListener = this._columnSchemaCache.onDidUpdateCache(() =>
+            this.fireOnDidUpdateEvent(),
         );
         this._disposables.push(() => schemaCacheListener.dispose());
 
@@ -277,9 +277,7 @@ export class TableSummaryDataGridInstance extends DataGridInstance {
         if (!this._visible) {
             return;
         }
-        this._summaryCache.setSchema(
-            this._columnSchemaCache.getColumnSchemas(columnIndices),
-        );
+        this._summaryCache.setSchema(this._columnSchemaCache.getColumnSchemas(columnIndices));
         this.fireOnDidUpdateEvent();
 
         if (!this._supportsColumnProfiles) {
@@ -355,17 +353,13 @@ export class TableSummaryDataGridInstance extends DataGridInstance {
         }
 
         const columnsChanged =
-            previousState.table_shape.num_columns !==
-            nextState.table_shape.num_columns;
-        const rowsChanged =
-            previousState.table_shape.num_rows !== nextState.table_shape.num_rows;
+            previousState.table_shape.num_columns !== nextState.table_shape.num_columns;
+        const rowsChanged = previousState.table_shape.num_rows !== nextState.table_shape.num_rows;
         const rowFiltersChanged =
             JSON.stringify(previousState.row_filters ?? []) !==
             JSON.stringify(nextState.row_filters ?? []);
-        const searchSupportChanged =
-            previousSupportsSearch !== this._supportsSearchSchema;
-        const profileSupportChanged =
-            previousSupportsProfiles !== this._supportsColumnProfiles;
+        const searchSupportChanged = previousSupportsSearch !== this._supportsSearchSchema;
+        const profileSupportChanged = previousSupportsProfiles !== this._supportsColumnProfiles;
 
         if (columnsChanged || searchSupportChanged) {
             this._summaryCache.clear();
@@ -403,11 +397,7 @@ export class TableSummaryDataGridInstance extends DataGridInstance {
         this._columnSchemaCache.setColumnSchema(columns);
         this._summaryCache.setSchema(columns);
 
-        if (
-            this._hasNoSearchOrSort() &&
-            this._rows === 0 &&
-            get(this._stores.numColumns) > 0
-        ) {
+        if (this._hasNoSearchOrSort() && this._rows === 0 && get(this._stores.numColumns) > 0) {
             this._initialSummaryLoaded = true;
             this._pendingSearchRefresh = false;
             this._applyColumnIndices();
@@ -426,13 +416,11 @@ export class TableSummaryDataGridInstance extends DataGridInstance {
         this._queueProfileRefresh();
     }
 
-    handleSummarySchema(
-        params: {
-            columns: SchemaColumn[];
-            columnIndices: number[];
-            requestId?: number;
-        },
-    ): void {
+    handleSummarySchema(params: {
+        columns: SchemaColumn[];
+        columnIndices: number[];
+        requestId?: number;
+    }): void {
         this._columnSchemaCache.setColumnSchema(params.columns);
         this._initialSummaryLoaded = true;
         this._pendingSearchRefresh = false;
@@ -445,12 +433,7 @@ export class TableSummaryDataGridInstance extends DataGridInstance {
         requestId?: number,
         generation?: number,
     ): void {
-        this._summaryCache.handleColumnProfiles(
-            profiles,
-            error,
-            requestId,
-            generation,
-        );
+        this._summaryCache.handleColumnProfiles(profiles, error, requestId, generation);
         if (this._expandedColumns.size > 0) {
             this._applyExpandedRowHeights();
         }
@@ -479,12 +462,8 @@ export class TableSummaryDataGridInstance extends DataGridInstance {
 
         return canExpandSummaryForDisplayType(
             getEffectiveColumnDisplayType(
-                this._summaryCache.getColumnProfile(columnIndex)?.summary_stats
-                    ?.type_display,
-                getEffectiveColumnDisplayType(
-                    schema.type_display,
-                    schema.type_name,
-                ),
+                this._summaryCache.getColumnProfile(columnIndex)?.summary_stats?.type_display,
+                getEffectiveColumnDisplayType(schema.type_display, schema.type_name),
             ),
         );
     }
@@ -586,20 +565,15 @@ export class TableSummaryDataGridInstance extends DataGridInstance {
             state?.supported_features?.get_column_profiles?.support_status,
         );
 
-        const supportedTypes = (
-            state?.supported_features?.get_column_profiles?.supported_types ?? []
-        ) as unknown[];
+        const supportedTypes = (state?.supported_features?.get_column_profiles?.supported_types ??
+            []) as unknown[];
         if (!this._supportsColumnProfiles) {
             this._supportsSummaryStats = false;
             return;
         }
 
         this._supportsSummaryStats = supportedTypes.some((typeSupport) => {
-            if (
-                typeSupport &&
-                typeof typeSupport === 'object' &&
-                'profile_type' in typeSupport
-            ) {
+            if (typeSupport && typeof typeSupport === 'object' && 'profile_type' in typeSupport) {
                 const profileType = String(typeSupport.profile_type);
                 const supportStatus =
                     'support_status' in typeSupport
@@ -607,11 +581,7 @@ export class TableSummaryDataGridInstance extends DataGridInstance {
                         : undefined;
                 return (
                     profileType === 'summary_stats' &&
-                    this._isSupported(
-                        typeof supportStatus === 'string'
-                            ? supportStatus
-                            : undefined,
-                    )
+                    this._isSupported(typeof supportStatus === 'string' ? supportStatus : undefined)
                 );
             }
 
@@ -693,11 +663,7 @@ export class TableSummaryDataGridInstance extends DataGridInstance {
     private _updateLayoutEntries(columnIndices?: number[]): void {
         if (columnIndices) {
             this._rows = columnIndices.length;
-            this._rowLayoutManager.setEntries(
-                this._rows,
-                undefined,
-                columnIndices,
-            );
+            this._rowLayoutManager.setEntries(this._rows, undefined, columnIndices);
         } else {
             this._rows = get(this._stores.numColumns);
             this._rowLayoutManager.setEntries(this._rows);
@@ -730,10 +696,7 @@ export class TableSummaryDataGridInstance extends DataGridInstance {
 
     private _applyExpandedRowHeights(): void {
         for (const index of this._expandedColumns) {
-            this._rowLayoutManager.setSizeOverride(
-                index,
-                this._expandedRowHeight(index),
-            );
+            this._rowLayoutManager.setSizeOverride(index, this._expandedRowHeight(index));
         }
     }
 
@@ -756,10 +719,7 @@ export class TableSummaryDataGridInstance extends DataGridInstance {
 
         const typeDisplay = getEffectiveColumnDisplayType(
             this._summaryCache.getColumnProfile(rowIndex)?.summary_stats?.type_display,
-            getEffectiveColumnDisplayType(
-                columnSchema.type_display,
-                columnSchema.type_name,
-            ),
+            getEffectiveColumnDisplayType(columnSchema.type_display, columnSchema.type_name),
         );
 
         const isNumeric = isNumericDisplayType(typeDisplay);
@@ -816,8 +776,10 @@ export class TableSummaryDataGridInstance extends DataGridInstance {
                 : [],
         );
 
-        const { pinnedRowDescriptors, unpinnedRowDescriptors } =
-            this.getRowDescriptors(this.verticalScrollOffset, this.layoutHeight);
+        const { pinnedRowDescriptors, unpinnedRowDescriptors } = this.getRowDescriptors(
+            this.verticalScrollOffset,
+            this.layoutHeight,
+        );
         const adjustedUnpinned = unpinnedRowDescriptors.map((row) => ({
             ...row,
             top: row.top - this.verticalScrollOffset,

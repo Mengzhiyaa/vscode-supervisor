@@ -32,7 +32,10 @@ function createEventStub<T>(): vscode.Event<T> {
 }
 
 suite('[Unit] console service focus preservation', () => {
-    const originalActiveTextEditor = Object.getOwnPropertyDescriptor(vscode.window, 'activeTextEditor');
+    const originalActiveTextEditor = Object.getOwnPropertyDescriptor(
+        vscode.window,
+        'activeTextEditor',
+    );
     const originalShowTextDocument = vscode.window.showTextDocument.bind(vscode.window);
     const originalExecuteCommand = vscode.commands.executeCommand.bind(vscode.commands);
 
@@ -44,8 +47,12 @@ suite('[Unit] console service focus preservation', () => {
     }
 
     teardown(() => {
-        (vscode.window as { showTextDocument: typeof vscode.window.showTextDocument }).showTextDocument = originalShowTextDocument;
-        (vscode.commands as { executeCommand: typeof vscode.commands.executeCommand }).executeCommand = originalExecuteCommand;
+        (
+            vscode.window as { showTextDocument: typeof vscode.window.showTextDocument }
+        ).showTextDocument = originalShowTextDocument;
+        (
+            vscode.commands as { executeCommand: typeof vscode.commands.executeCommand }
+        ).executeCommand = originalExecuteCommand;
 
         if (originalActiveTextEditor) {
             Object.defineProperty(vscode.window, 'activeTextEditor', originalActiveTextEditor);
@@ -66,12 +73,13 @@ suite('[Unit] console service focus preservation', () => {
         } as vscode.TextEditor;
 
         setActiveTextEditor(editor);
-        (vscode.window as { showTextDocument: typeof vscode.window.showTextDocument }).showTextDocument =
-            (async (target, options) => {
-                void options;
-                restoreCalls.push(target as vscode.TextDocument);
-                return editor;
-            }) as typeof vscode.window.showTextDocument;
+        (
+            vscode.window as { showTextDocument: typeof vscode.window.showTextDocument }
+        ).showTextDocument = (async (target, options) => {
+            void options;
+            restoreCalls.push(target as vscode.TextDocument);
+            return editor;
+        }) as typeof vscode.window.showTextDocument;
 
         service.setConsoleViewProvider({
             view: {
@@ -102,24 +110,28 @@ suite('[Unit] console service focus preservation', () => {
         } as vscode.TextEditor;
 
         setActiveTextEditor(editor);
-        (vscode.commands as { executeCommand: typeof vscode.commands.executeCommand }).executeCommand =
-            (async (command: string, ...args: unknown[]) => {
-                executedCommands.push({ command, args });
-                return undefined;
-            }) as typeof vscode.commands.executeCommand;
-        (vscode.window as { showTextDocument: typeof vscode.window.showTextDocument }).showTextDocument =
-            (async (target, options) => {
-                void options;
-                restoreCalls.push(target as vscode.TextDocument);
-                return editor;
-            }) as typeof vscode.window.showTextDocument;
+        (
+            vscode.commands as { executeCommand: typeof vscode.commands.executeCommand }
+        ).executeCommand = (async (command: string, ...args: unknown[]) => {
+            executedCommands.push({ command, args });
+            return undefined;
+        }) as typeof vscode.commands.executeCommand;
+        (
+            vscode.window as { showTextDocument: typeof vscode.window.showTextDocument }
+        ).showTextDocument = (async (target, options) => {
+            void options;
+            restoreCalls.push(target as vscode.TextDocument);
+            return editor;
+        }) as typeof vscode.window.showTextDocument;
 
         await service.revealConsole(true);
 
-        assert.deepStrictEqual(executedCommands, [{
-            command: `${ViewIds.console}.focus`,
-            args: [{ preserveFocus: true }],
-        }]);
+        assert.deepStrictEqual(executedCommands, [
+            {
+                command: `${ViewIds.console}.focus`,
+                args: [{ preserveFocus: true }],
+            },
+        ]);
         assert.deepStrictEqual(restoreCalls, []);
 
         service.dispose();
@@ -150,7 +162,10 @@ suite('[Unit] console service focus preservation', () => {
         const pythonInstance = {
             sessionId: 'python-session',
             runtimeMetadata: { languageId: 'python' },
-            sessionMetadata: { createdTimestamp: 1, sessionMode: LanguageRuntimeSessionMode.Console },
+            sessionMetadata: {
+                createdTimestamp: 1,
+                sessionMode: LanguageRuntimeSessionMode.Console,
+            },
             attachedRuntimeSession: pythonSession,
             enqueueCode: async () => undefined,
             focusInput: () => undefined,
@@ -159,7 +174,10 @@ suite('[Unit] console service focus preservation', () => {
         const rInstance = {
             sessionId: 'r-session',
             runtimeMetadata: { languageId: 'r' },
-            sessionMetadata: { createdTimestamp: 2, sessionMode: LanguageRuntimeSessionMode.Console },
+            sessionMetadata: {
+                createdTimestamp: 2,
+                sessionMode: LanguageRuntimeSessionMode.Console,
+            },
             attachedRuntimeSession: rSession,
             enqueueCode: async (code: string) => {
                 executionCalls.push(code);
@@ -212,7 +230,10 @@ suite('[Unit] console service focus preservation', () => {
         const notebookInstance = {
             sessionId: 'r-notebook-session',
             runtimeMetadata: { languageId: 'r' },
-            sessionMetadata: { createdTimestamp: 3, sessionMode: LanguageRuntimeSessionMode.Notebook },
+            sessionMetadata: {
+                createdTimestamp: 3,
+                sessionMode: LanguageRuntimeSessionMode.Notebook,
+            },
             attachedRuntimeSession: notebookBackedSession,
             enqueueCode: async () => undefined,
             focusInput: () => undefined,
@@ -221,7 +242,10 @@ suite('[Unit] console service focus preservation', () => {
         const consoleInstance = {
             sessionId: 'r-console-session',
             runtimeMetadata: { languageId: 'r' },
-            sessionMetadata: { createdTimestamp: 2, sessionMode: LanguageRuntimeSessionMode.Console },
+            sessionMetadata: {
+                createdTimestamp: 2,
+                sessionMode: LanguageRuntimeSessionMode.Console,
+            },
             attachedRuntimeSession: consoleSession,
             enqueueCode: async (code: string) => {
                 executionCalls.push(code);
@@ -230,8 +254,14 @@ suite('[Unit] console service focus preservation', () => {
             dispose: () => undefined,
         } as any;
 
-        (service as any)._consoleInstancesBySessionId.set(notebookInstance.sessionId, notebookInstance);
-        (service as any)._consoleInstancesBySessionId.set(consoleInstance.sessionId, consoleInstance);
+        (service as any)._consoleInstancesBySessionId.set(
+            notebookInstance.sessionId,
+            notebookInstance,
+        );
+        (service as any)._consoleInstancesBySessionId.set(
+            consoleInstance.sessionId,
+            consoleInstance,
+        );
         (service as any)._activeConsoleInstance = notebookInstance;
 
         const sessionId = await service.executeCode(
@@ -273,7 +303,10 @@ suite('[Unit] console service focus preservation', () => {
         const failedInstance = {
             sessionId: 'r-failed-session',
             runtimeMetadata: { languageId: 'r' },
-            sessionMetadata: { createdTimestamp: 3, sessionMode: LanguageRuntimeSessionMode.Console },
+            sessionMetadata: {
+                createdTimestamp: 3,
+                sessionMode: LanguageRuntimeSessionMode.Console,
+            },
             attachedRuntimeSession: failedSession,
             runtimeAttached: false,
             state: PositronConsoleState.Exited,
@@ -286,7 +319,10 @@ suite('[Unit] console service focus preservation', () => {
         const healthyInstance = {
             sessionId: 'r-healthy-session',
             runtimeMetadata: { languageId: 'r' },
-            sessionMetadata: { createdTimestamp: 2, sessionMode: LanguageRuntimeSessionMode.Console },
+            sessionMetadata: {
+                createdTimestamp: 2,
+                sessionMode: LanguageRuntimeSessionMode.Console,
+            },
             attachedRuntimeSession: healthySession,
             runtimeAttached: true,
             state: PositronConsoleState.Ready,
@@ -298,7 +334,10 @@ suite('[Unit] console service focus preservation', () => {
         } as any;
 
         (service as any)._consoleInstancesBySessionId.set(failedInstance.sessionId, failedInstance);
-        (service as any)._consoleInstancesBySessionId.set(healthyInstance.sessionId, healthyInstance);
+        (service as any)._consoleInstancesBySessionId.set(
+            healthyInstance.sessionId,
+            healthyInstance,
+        );
         (service as any)._activeConsoleInstance = failedInstance;
 
         const sessionId = await service.executeCode(
@@ -327,7 +366,10 @@ suite('[Unit] console service focus preservation', () => {
         const failedInstance = {
             sessionId: 'r-failed-session',
             runtimeMetadata: { languageId: 'r' },
-            sessionMetadata: { createdTimestamp: 1, sessionMode: LanguageRuntimeSessionMode.Console },
+            sessionMetadata: {
+                createdTimestamp: 1,
+                sessionMode: LanguageRuntimeSessionMode.Console,
+            },
             runtimeAttached: false,
             state: PositronConsoleState.Exited,
             enqueueCode: async () => undefined,
@@ -338,7 +380,14 @@ suite('[Unit] console service focus preservation', () => {
         (service as any)._consoleInstancesBySessionId.set(failedInstance.sessionId, failedInstance);
 
         await assert.rejects(
-            () => service.executeCode('r', failedInstance.sessionId, 'mean(z)', { source: 'editor' }, false),
+            () =>
+                service.executeCode(
+                    'r',
+                    failedInstance.sessionId,
+                    'mean(z)',
+                    { source: 'editor' },
+                    false,
+                ),
             /cannot accept code execution/i,
         );
 
@@ -470,7 +519,10 @@ suite('[Unit] console service focus preservation', () => {
         const instance = {
             sessionId: 'r-session',
             runtimeMetadata: { languageId: 'r' },
-            sessionMetadata: { createdTimestamp: 1, sessionMode: LanguageRuntimeSessionMode.Console },
+            sessionMetadata: {
+                createdTimestamp: 1,
+                sessionMode: LanguageRuntimeSessionMode.Console,
+            },
             revealExecution: () => true,
             dispose: () => undefined,
         } as any;

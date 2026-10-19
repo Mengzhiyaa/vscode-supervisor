@@ -1,10 +1,7 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
 import type { MessageConnection } from 'vscode-jsonrpc/node';
-import {
-    SupportStatus,
-    type ColumnSelection,
-} from '../../runtime/comms/positronDataExplorerComm';
+import { SupportStatus, type ColumnSelection } from '../../runtime/comms/positronDataExplorerComm';
 import {
     DataExplorerWebviewBridge,
     type DataExplorerDataRequest,
@@ -19,7 +16,7 @@ interface SentNotification {
 
 function deferred<T>() {
     let resolve!: (value: T) => void;
-    const promise = new Promise<T>(currentResolve => {
+    const promise = new Promise<T>((currentResolve) => {
         resolve = currentResolve;
     });
     return { promise, resolve };
@@ -41,7 +38,10 @@ function createConnection() {
     const handlers = new Map<string, (params?: any) => Promise<void> | void>();
     const notifications: SentNotification[] = [];
     const connection = {
-        onNotification: (type: { method: string }, handler: (params?: any) => Promise<void> | void) => {
+        onNotification: (
+            type: { method: string },
+            handler: (params?: any) => Promise<void> | void,
+        ) => {
             handlers.set(type.method, handler);
             return { dispose: () => handlers.delete(type.method) };
         },
@@ -71,7 +71,10 @@ function backendState(rows: number, columns: number) {
             },
             get_column_profiles: { support_status: SupportStatus.Unsupported, supported_types: [] },
             set_sort_columns: { support_status: SupportStatus.Unsupported },
-            export_data_selection: { support_status: SupportStatus.Unsupported, supported_formats: [] },
+            export_data_selection: {
+                support_status: SupportStatus.Unsupported,
+                supported_formats: [],
+            },
             convert_to_code: { support_status: SupportStatus.Unsupported, code_syntaxes: [] },
         },
     };
@@ -112,8 +115,12 @@ function createBridge(options: {
         backendState: state,
         supportsFileOptions: false,
         uiState: { layout: 'SummaryOnLeft', summaryCollapsed: false, summaryWidth: 350 },
-        get dataGeneration() { return generation; },
-        get lastDataRequest() { return lastDataRequest; },
+        get dataGeneration() {
+            return generation;
+        },
+        get lastDataRequest() {
+            return lastDataRequest;
+        },
         onDidChangeUiState: noopEvent,
         onDidClose: noopEvent,
         onDidUpdateBackendState: backendStateEvent,
@@ -128,7 +135,10 @@ function createBridge(options: {
                 await task();
             };
             const queued = mutationQueue.then(run, run);
-            mutationQueue = queued.then(() => undefined, () => undefined);
+            mutationQueue = queued.then(
+                () => undefined,
+                () => undefined,
+            );
             return queued;
         },
         invalidateData: () => ++generation,
@@ -140,7 +150,7 @@ function createBridge(options: {
             status: options.status ?? DataExplorerClientStatus.Idle,
             updateBackendState: async () => {
                 await options.updateBackendState?.();
-                backendStateListeners.forEach(listener => listener(state));
+                backendStateListeners.forEach((listener) => listener(state));
                 return state;
             },
             getBackendState: async () => state,
@@ -164,7 +174,7 @@ function createBridge(options: {
             },
         },
         getSchema: async (columnIndices: number[]) => ({
-            columns: columnIndices.map(columnIndex => ({
+            columns: columnIndices.map((columnIndex) => ({
                 column_name: `column_${columnIndex}`,
                 column_index: columnIndex,
                 type_name: 'string',
@@ -179,7 +189,11 @@ function createBridge(options: {
     } as unknown as IPositronDataExplorerInstance;
     const bridge = new DataExplorerWebviewBridge({
         connection: rpc.connection,
-        panel: { active: false, visible: true, dispose: () => undefined } as unknown as vscode.WebviewPanel,
+        panel: {
+            active: false,
+            visible: true,
+            dispose: () => undefined,
+        } as unknown as vscode.WebviewPanel,
         instance,
         logChannel: {
             debug: (message: string) => logs.push({ level: 'debug', message }),
@@ -199,8 +213,12 @@ function createBridge(options: {
         instance,
         ...rpc,
         logs,
-        get dataRequests() { return dataRequests; },
-        get dataSelections() { return dataSelections; },
+        get dataRequests() {
+            return dataRequests;
+        },
+        get dataSelections() {
+            return dataSelections;
+        },
     };
 }
 
@@ -236,11 +254,14 @@ suite('[Unit] Data Explorer webview bridge P0 protocol', () => {
         await fixture.handlers.get('dataExplorer/ready')?.();
 
         assert.strictEqual(attempts, 1);
-        assert.ok(fixture.logs.some(({ level, message }) =>
-            level === 'error' &&
-            message.includes('Backend state update failed: Error: RPC timed out')));
-        assert.ok(fixture.notifications.some(({ method }) =>
-            method === 'dataExplorer/initialize'));
+        assert.ok(
+            fixture.logs.some(
+                ({ level, message }) =>
+                    level === 'error' &&
+                    message.includes('Backend state update failed: Error: RPC timed out'),
+            ),
+        );
+        assert.ok(fixture.notifications.some(({ method }) => method === 'dataExplorer/initialize'));
         fixture.bridge.dispose();
     });
 
@@ -261,8 +282,18 @@ suite('[Unit] Data Explorer webview bridge P0 protocol', () => {
         assert.deepStrictEqual(data?.params, {
             columns: [[], []],
             schema: [
-                { column_name: 'column_0', column_index: 0, type_name: 'string', type_display: 'string' },
-                { column_name: 'column_1', column_index: 1, type_name: 'string', type_display: 'string' },
+                {
+                    column_name: 'column_0',
+                    column_index: 0,
+                    type_name: 'string',
+                    type_display: 'string',
+                },
+                {
+                    column_name: 'column_1',
+                    column_index: 1,
+                    type_name: 'string',
+                    type_display: 'string',
+                },
             ],
             startRow: 0,
             endRow: 0,
@@ -302,9 +333,7 @@ suite('[Unit] Data Explorer webview bridge P0 protocol', () => {
                 spec: { indices: [2, 8, 13] },
             },
         ]);
-        const data = fixture.notifications.find(
-            ({ method }) => method === 'dataExplorer/data',
-        );
+        const data = fixture.notifications.find(({ method }) => method === 'dataExplorer/data');
         assert.deepStrictEqual(data?.params, {
             columns: [['row-2', 'row-8', 'row-13']],
             schema: [
@@ -467,7 +496,9 @@ suite('[Unit] Data Explorer webview bridge P0 protocol', () => {
         const fixture = createBridge({
             rows: 1,
             columns: 1,
-            openAsSpreadsheet: async () => { openCount += 1; },
+            openAsSpreadsheet: async () => {
+                openCount += 1;
+            },
         });
         fixture.bridge.registerNotificationHandlers();
 
@@ -494,9 +525,7 @@ suite('[Unit] Data Explorer webview bridge P0 protocol', () => {
             generation: 0,
         });
 
-        const error = fixture.notifications.find(
-            ({ method }) => method === 'dataExplorer/error',
-        );
+        const error = fixture.notifications.find(({ method }) => method === 'dataExplorer/error');
         assert.deepStrictEqual(error?.params, {
             message: 'Error: request failed',
             operation: 'requestData',
@@ -538,7 +567,7 @@ suite('[Unit] Data Explorer webview bridge P0 protocol', () => {
         ]);
 
         assert.deepStrictEqual(
-            appliedFilters.map(filters => filters.map(filter => filter.filter_id)),
+            appliedFilters.map((filters) => filters.map((filter) => filter.filter_id)),
             [['first'], ['first', 'second']],
         );
         const backendStateUpdates = fixture.notifications.filter(
@@ -550,7 +579,7 @@ suite('[Unit] Data Explorer webview bridge P0 protocol', () => {
                 backendStateUpdates.at(-1)?.params as {
                     state?: { row_filters?: TestRowFilter[] };
                 }
-            ).state?.row_filters?.map(filter => filter.filter_id),
+            ).state?.row_filters?.map((filter) => filter.filter_id),
             ['first', 'second'],
         );
         fixture.bridge.dispose();
@@ -573,10 +602,7 @@ suite('[Unit] Data Explorer webview bridge P0 protocol', () => {
                 state?: { connected?: boolean; error_message?: string };
             }
         )?.state;
-        assert.strictEqual(
-            state?.connected,
-            false,
-        );
+        assert.strictEqual(state?.connected, false);
         assert.strictEqual(state?.error_message, undefined);
         fixture.bridge.dispose();
     });

@@ -1,5 +1,5 @@
 /* tslint:disable */
- 
+
 /**
  * Kallichore API
  * Kallichore is a Jupyter kernel gateway and supervisor
@@ -12,7 +12,5 @@
  * Do not edit the class manually.
  */
 
-
-export * from "./api";
-export * from "./configuration";
-
+export * from './api';
+export * from './configuration';

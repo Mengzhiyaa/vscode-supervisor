@@ -28,7 +28,7 @@ function createMockVscode() {
     }
 
     class Disposable {
-        constructor(private readonly _onDispose?: () => void) { }
+        constructor(private readonly _onDispose?: () => void) {}
 
         dispose(): void {
             this._onDispose?.();
@@ -41,10 +41,12 @@ function createMockVscode() {
     };
 }
 
-function withMockedVscode<T>(callback: (variablesModule: VariablesClientModule) => Promise<T>): Promise<T>;
+function withMockedVscode<T>(
+    callback: (variablesModule: VariablesClientModule) => Promise<T>,
+): Promise<T>;
 function withMockedVscode<T>(callback: (variablesModule: VariablesClientModule) => T): T;
 function withMockedVscode<T>(
-    callback: (variablesModule: VariablesClientModule) => Promise<T> | T
+    callback: (variablesModule: VariablesClientModule) => Promise<T> | T,
 ): Promise<T> | T {
     const originalLoad = (Module as any)._load;
     const mockVscode = createMockVscode();
@@ -60,7 +62,8 @@ function withMockedVscode<T>(
     delete require.cache[modulePath];
 
     try {
-        const variablesModule = require('../../runtime/VariablesClientInstance') as VariablesClientModule;
+        const variablesModule =
+            require('../../runtime/VariablesClientInstance') as VariablesClientModule;
         return callback(variablesModule);
     } finally {
         delete require.cache[modulePath];
@@ -72,7 +75,9 @@ suite('[Unit] variables client view diagnostics', () => {
     test('returns the backend viewer id returned by the view RPC', async () => {
         await withMockedVscode(async ({ VariablesClientInstance }) => {
             const requestedPaths: string[][] = [];
-            const instance = Object.create(VariablesClientInstance.prototype) as InstanceType<typeof VariablesClientInstance>;
+            const instance = Object.create(VariablesClientInstance.prototype) as InstanceType<
+                typeof VariablesClientInstance
+            >;
 
             (instance as any)._comm = {
                 view: async (path: string[]) => {
@@ -81,7 +86,9 @@ suite('[Unit] variables client view diagnostics', () => {
                 },
             };
 
-            const result = await (VariablesClientInstance.prototype.view as any).call(instance, ['db']);
+            const result = await (VariablesClientInstance.prototype.view as any).call(instance, [
+                'db',
+            ]);
 
             assert.deepStrictEqual(requestedPaths, [['db']]);
             assert.strictEqual(result, 'viewer-comm-1');

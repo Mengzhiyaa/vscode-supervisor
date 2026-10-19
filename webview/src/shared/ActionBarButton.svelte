@@ -4,7 +4,6 @@
   Standard toolbar button with icon, tooltip, disabled state.
 -->
 <script lang="ts">
-
     interface Props {
         icon?: string;
         label?: string;
@@ -24,8 +23,8 @@
         tooltip,
         disabled = false,
         fadeIn = false,
-        buttonClass = "",
-        iconClass = "",
+        buttonClass = '',
+        iconClass = '',
         onclick,
     }: Props = $props();
 </script>
@@ -38,16 +37,15 @@
     {disabled}
     title={tooltip || ariaLabel}
     aria-label={ariaLabel}
-    onclick={onclick}
+    {onclick}
 >
     <div aria-hidden="true" class="action-bar-button-face">
         {#if icon}
-            <span
-                class={`action-bar-button-icon codicon codicon-${icon} ${iconClass}`.trim()}
+            <span class={`action-bar-button-icon codicon codicon-${icon} ${iconClass}`.trim()}
             ></span>
         {/if}
         {#if label}
-            <span class="action-bar-button-label" style:margin-left={icon ? "0" : "4px"}>
+            <span class="action-bar-button-label" style:margin-left={icon ? '0' : '4px'}>
                 {label}
             </span>
         {/if}
@@ -60,7 +58,11 @@
     }
 
     @keyframes fadeIn {
-        from { opacity: 0; }
-        to { opacity: 1; }
+        from {
+            opacity: 0;
+        }
+        to {
+            opacity: 1;
+        }
     }
 </style>

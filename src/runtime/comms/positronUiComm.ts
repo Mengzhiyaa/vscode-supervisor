@@ -29,7 +29,7 @@ export interface Range {
  */
 export enum OpenEditorKind {
     Path = 'path',
-    Uri = 'uri'
+    Uri = 'uri',
 }
 
 /**
@@ -38,7 +38,7 @@ export enum OpenEditorKind {
 export enum ShowHtmlFileDestination {
     Plot = 'plot',
     Viewer = 'viewer',
-    Editor = 'editor'
+    Editor = 'editor',
 }
 
 /**
@@ -61,8 +61,7 @@ export interface BusyEvent {
 /**
  * Event: Clear the console.
  */
-export interface ClearConsoleEvent {
-}
+export interface ClearConsoleEvent {}
 
 /**
  * Event: Open an editor.
@@ -146,8 +145,7 @@ export interface OpenWithSystemEvent {
 /**
  * Event: Webview preloads should be flushed.
  */
-export interface ClearWebviewPreloadsEvent {
-}
+export interface ClearWebviewPreloadsEvent {}
 
 /**
  * UI frontend event names.
@@ -164,7 +162,7 @@ export enum UiFrontendEvent {
     ShowUrl = 'show_url',
     ShowHtmlFile = 'show_html_file',
     OpenWithSystem = 'open_with_system',
-    ClearWebviewPreloads = 'clear_webview_preloads'
+    ClearWebviewPreloads = 'clear_webview_preloads',
 }
 
 /**
@@ -176,12 +174,7 @@ export interface IRuntimeClientEvent {
 }
 
 export type UiParam =
-    | null
-    | boolean
-    | number
-    | string
-    | Array<UiParam>
-    | { [key: string]: UiParam };
+    null | boolean | number | string | Array<UiParam> | { [key: string]: UiParam };
 
 /**
  * Result returned by silent code evaluation.
@@ -198,7 +191,7 @@ export enum UiBackendRequest {
     CallMethod = 'call_method',
     DidChangePlotsRenderSettings = 'did_change_plots_render_settings',
     EditorContextChanged = 'editor_context_changed',
-    EvaluateCode = 'evaluate_code'
+    EvaluateCode = 'evaluate_code',
 }
 
 /**
@@ -221,59 +214,51 @@ export class PositronUiComm extends PositronBaseComm {
     readonly onDidOpenWithSystem: vscode.Event<OpenWithSystemEvent>;
     readonly onDidClearWebviewPreloads: vscode.Event<ClearWebviewPreloadsEvent>;
 
-    constructor(
-        client: RuntimeClientInstance,
-        options?: PositronCommOptions<UiBackendRequest>
-    ) {
+    constructor(client: RuntimeClientInstance, options?: PositronCommOptions<UiBackendRequest>) {
         super(client, options);
 
-        this.onDidBusy = this.createEventEmitter<BusyEvent>(
-            'busy',
-            ['busy']
-        );
-        this.onDidClearConsole = this.createEventEmitter<ClearConsoleEvent>(
-            'clear_console',
-            []
-        );
-        this.onDidOpenEditor = this.createEventEmitter<OpenEditorEvent>(
-            'open_editor',
-            ['file', 'line', 'column', 'kind', 'pinned']
-        );
-        this.onDidShowMessage = this.createEventEmitter<ShowMessageEvent>(
-            'show_message',
-            ['message']
-        );
-        this.onDidPromptState = this.createEventEmitter<PromptStateEvent>(
-            'prompt_state',
-            ['input_prompt', 'continuation_prompt']
-        );
+        this.onDidBusy = this.createEventEmitter<BusyEvent>('busy', ['busy']);
+        this.onDidClearConsole = this.createEventEmitter<ClearConsoleEvent>('clear_console', []);
+        this.onDidOpenEditor = this.createEventEmitter<OpenEditorEvent>('open_editor', [
+            'file',
+            'line',
+            'column',
+            'kind',
+            'pinned',
+        ]);
+        this.onDidShowMessage = this.createEventEmitter<ShowMessageEvent>('show_message', [
+            'message',
+        ]);
+        this.onDidPromptState = this.createEventEmitter<PromptStateEvent>('prompt_state', [
+            'input_prompt',
+            'continuation_prompt',
+        ]);
         this.onDidWorkingDirectory = this.createEventEmitter<WorkingDirectoryEvent>(
             'working_directory',
-            ['directory']
+            ['directory'],
         );
-        this.onDidOpenWorkspace = this.createEventEmitter<OpenWorkspaceEvent>(
-            'open_workspace',
-            ['path', 'new_window']
-        );
+        this.onDidOpenWorkspace = this.createEventEmitter<OpenWorkspaceEvent>('open_workspace', [
+            'path',
+            'new_window',
+        ]);
         this.onDidSetEditorSelections = this.createEventEmitter<SetEditorSelectionsEvent>(
             'set_editor_selections',
-            ['selections']
+            ['selections'],
         );
-        this.onDidShowUrl = this.createEventEmitter<ShowUrlEvent>(
-            'show_url',
-            ['url', 'source']
-        );
-        this.onDidShowHtmlFile = this.createEventEmitter<ShowHtmlFileEvent>(
-            'show_html_file',
-            ['path', 'title', 'destination', 'height']
-        );
+        this.onDidShowUrl = this.createEventEmitter<ShowUrlEvent>('show_url', ['url', 'source']);
+        this.onDidShowHtmlFile = this.createEventEmitter<ShowHtmlFileEvent>('show_html_file', [
+            'path',
+            'title',
+            'destination',
+            'height',
+        ]);
         this.onDidOpenWithSystem = this.createEventEmitter<OpenWithSystemEvent>(
             'open_with_system',
-            ['path']
+            ['path'],
         );
         this.onDidClearWebviewPreloads = this.createEventEmitter<ClearWebviewPreloadsEvent>(
             'clear_webview_preloads',
-            []
+            [],
         );
     }
 

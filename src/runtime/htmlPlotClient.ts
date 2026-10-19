@@ -61,7 +61,7 @@ export class HtmlPlotClient implements IPositronPlotClient, vscode.Disposable {
             metadata.session_id,
             { uri, title: metadata.name },
             metadata.execution_id,
-            metadata.code
+            metadata.code,
         );
 
         // Overwrite metadata with persisted values
@@ -97,12 +97,7 @@ export class HtmlPlotClient implements IPositronPlotClient, vscode.Disposable {
      * @param executionId The execution ID (optional)
      * @param code The code that generated this HTML (optional)
      */
-    constructor(
-        sessionId: string,
-        event: IShowHtmlUriEvent,
-        executionId?: string,
-        code?: string
-    ) {
+    constructor(sessionId: string, event: IShowHtmlUriEvent, executionId?: string, code?: string) {
         this._uri = event.uri;
 
         // Create the metadata
@@ -114,10 +109,14 @@ export class HtmlPlotClient implements IPositronPlotClient, vscode.Disposable {
             code: code ?? '',
             name: event.title || `Interactive Plot ${HtmlPlotClient._nextId}`,
             kind: 'html',
-            html_uri: event.uri.toString()
+            html_uri: event.uri.toString(),
         };
 
-        this._disposables.push(this._onDidUpdateMetadata, this._onDidActivate, this._onDidDeactivate);
+        this._disposables.push(
+            this._onDidUpdateMetadata,
+            this._onDidActivate,
+            this._onDidDeactivate,
+        );
         this._disposables.push(this._onDidOpenExternal);
     }
 
@@ -215,6 +214,6 @@ export class HtmlPlotClient implements IPositronPlotClient, vscode.Disposable {
     dispose(): void {
         this._claimants.clear();
         this.deactivate();
-        this._disposables.forEach(d => d.dispose());
+        this._disposables.forEach((d) => d.dispose());
     }
 }

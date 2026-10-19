@@ -33,9 +33,11 @@ suite('[Unit] Runtime quick pick', () => {
         ]);
 
         assert.deepStrictEqual(
-            items.map(item => item.kind === vscode.QuickPickItemKind.Separator
-                ? `[${item.label}]`
-                : `${item.languageId}:${item.label}`),
+            items.map((item) =>
+                item.kind === vscode.QuickPickItemKind.Separator
+                    ? `[${item.label}]`
+                    : `${item.languageId}:${item.label}`,
+            ),
             ['[Suggested]', 'python:Python 3.13', 'r:R 4.5'],
         );
     });
@@ -54,11 +56,11 @@ suite('[Unit] Runtime quick pick', () => {
         ]);
 
         assert.deepStrictEqual(
-            items.map(item => item.kind === vscode.QuickPickItemKind.Separator
-                ? `[${item.label}]`
-                : item.label),
+            items.map((item) =>
+                item.kind === vscode.QuickPickItemKind.Separator ? `[${item.label}]` : item.label,
+            ),
             ['[Suggested]', 'Python 3.13', '[Conda]', 'Python 3.12', 'Python 3.11'],
         );
-        assert.strictEqual(items.filter(item => item.label === 'Python 3.13').length, 1);
+        assert.strictEqual(items.filter((item) => item.label === 'Python 3.13').length, 1);
     });
 });

@@ -66,11 +66,14 @@ function makeNoopLogChannel(): vscode.LogOutputChannel {
 }
 
 function registerNotebookController(service: RuntimeSessionService): vscode.Disposable {
-    return service.registerNotebookController({
-        id: 'r-notebook-controller',
-        notebookType: 'jupyter-notebook',
-        supportedLanguages: ['r'],
-    } as vscode.NotebookController, ['r']);
+    return service.registerNotebookController(
+        {
+            id: 'r-notebook-controller',
+            notebookType: 'jupyter-notebook',
+            supportedLanguages: ['r'],
+        } as vscode.NotebookController,
+        ['r'],
+    );
 }
 
 function makeRuntimeMetadata(runtimeId: string = 'runtime-1'): LanguageRuntimeMetadata {
@@ -209,9 +212,13 @@ function makeAttachableConsoleSession(
         onDidChangeRuntimeState: onDidChangeRuntimeState.event,
         onDidChangeWorkingDirectory: onDidChangeWorkingDirectory.event,
         onDidEndSession: onDidEndSession.event,
-        get isForeground() { return isForeground; },
+        get isForeground() {
+            return isForeground;
+        },
         start: async () => undefined,
-        setForeground: (foreground: boolean) => { isForeground = foreground; },
+        setForeground: (foreground: boolean) => {
+            isForeground = foreground;
+        },
         activateLsp: async () => undefined,
         deactivateLsp: async () => undefined,
         dispose: async () => undefined,
@@ -237,11 +244,13 @@ suite('[Unit] runtime session start semantics', () => {
         const service = new RuntimeSessionService(makeContext(), makeNoopLogChannel());
         const removed: string[] = [];
         const shutdowns: string[] = [];
-        service.onDidDeleteSession(id => removed.push(id));
-        const sessions = ['first', 'second', 'third'].map(id => ({
+        service.onDidDeleteSession((id) => removed.push(id));
+        const sessions = ['first', 'second', 'third'].map((id) => ({
             ...makeConsoleSession(makeRuntimeMetadata(), id),
             setForeground: () => undefined,
-            shutdown: async () => { shutdowns.push(id); },
+            shutdown: async () => {
+                shutdowns.push(id);
+            },
             dispose: async () => {
                 if (id === 'first') {
                     throw new Error('LSP disposal failed');
@@ -279,11 +288,17 @@ suite('[Unit] runtime session start semantics', () => {
                 const service = new RuntimeSessionService(makeContext(), makeNoopLogChannel());
                 const controller = registerNotebookController(service);
                 const metadata = makeRuntimeMetadata();
-                const notebookUri = mode === LanguageRuntimeSessionMode.Notebook
-                    ? vscode.Uri.parse('file:///workspace/retry.ipynb') : undefined;
+                const notebookUri =
+                    mode === LanguageRuntimeSessionMode.Notebook
+                        ? vscode.Uri.parse('file:///workspace/retry.ipynb')
+                        : undefined;
                 let fail = true;
                 let starts = 0;
-                (service as any)._requireRuntimeEntry = () => ({ metadata, installation: {}, provider: {} });
+                (service as any)._requireRuntimeEntry = () => ({
+                    metadata,
+                    installation: {},
+                    provider: {},
+                });
                 (service as any)._getManagerForRuntime = async () => {
                     if (fail && failureStage === 'manager') {
                         throw new Error('injected startup failure');
@@ -297,11 +312,19 @@ suite('[Unit] runtime session start semantics', () => {
                         },
                     };
                 };
-                (service as any).doStartRuntimeSession = async () => { starts++; };
-                const start = () => service.startNewRuntimeSession(
-                    metadata.runtimeId, metadata.runtimeName, mode, notebookUri,
-                    'unit-test', RuntimeStartMode.Starting, false,
-                );
+                (service as any).doStartRuntimeSession = async () => {
+                    starts++;
+                };
+                const start = () =>
+                    service.startNewRuntimeSession(
+                        metadata.runtimeId,
+                        metadata.runtimeName,
+                        mode,
+                        notebookUri,
+                        'unit-test',
+                        RuntimeStartMode.Starting,
+                        false,
+                    );
                 try {
                     await assert.rejects(start(), /injected startup failure/);
                     fail = false;
@@ -469,16 +492,31 @@ suite('[Unit] runtime session start semantics', () => {
         const runtimeMetadata = makeRuntimeMetadata();
         const notebookUri = vscode.Uri.parse('file:///workspace/notebook.ipynb');
         const consoleSession = makeConsoleSession(runtimeMetadata, 'console-session-1');
-        const notebookSession = makeNotebookSession(runtimeMetadata, 'notebook-session-1', notebookUri);
+        const notebookSession = makeNotebookSession(
+            runtimeMetadata,
+            'notebook-session-1',
+            notebookUri,
+        );
 
-        (service as any)._consoleSessionsByRuntimeId.set(runtimeMetadata.runtimeId, [consoleSession]);
-        (service as any)._notebookSessionsByNotebookUri.set(notebookUri.toString(), notebookSession);
+        (service as any)._consoleSessionsByRuntimeId.set(runtimeMetadata.runtimeId, [
+            consoleSession,
+        ]);
+        (service as any)._notebookSessionsByNotebookUri.set(
+            notebookUri.toString(),
+            notebookSession,
+        );
 
         (service as any).updateSessionMapsAfterExit(consoleSession);
         (service as any).updateSessionMapsAfterExit(notebookSession);
 
-        assert.strictEqual((service as any)._consoleSessionsByRuntimeId.has(runtimeMetadata.runtimeId), false);
-        assert.strictEqual((service as any)._notebookSessionsByNotebookUri.has(notebookUri.toString()), false);
+        assert.strictEqual(
+            (service as any)._consoleSessionsByRuntimeId.has(runtimeMetadata.runtimeId),
+            false,
+        );
+        assert.strictEqual(
+            (service as any)._notebookSessionsByNotebookUri.has(notebookUri.toString()),
+            false,
+        );
         service.dispose();
     });
 
@@ -525,7 +563,10 @@ suite('[Unit] runtime session start semantics', () => {
 
     test('a rejected startup cannot succeed just because an early usable state was observed', async () => {
         const service = new RuntimeSessionService(makeContext(), makeNoopLogChannel());
-        const { session, fireRuntimeState, dispose } = makeAttachableConsoleSession(makeRuntimeMetadata(), 'failed-validation');
+        const { session, fireRuntimeState, dispose } = makeAttachableConsoleSession(
+            makeRuntimeMetadata(),
+            'failed-validation',
+        );
         session.state = RuntimeState.Starting;
         session.start = async () => {
             fireRuntimeState(RuntimeState.Ready);
@@ -533,14 +574,24 @@ suite('[Unit] runtime session start semantics', () => {
         };
         const started: string[] = [];
         const failed: string[] = [];
-        service.onDidStartRuntime(value => started.push(value.sessionId));
-        service.onDidFailStartRuntime(value => failed.push(value.sessionId));
+        service.onDidStartRuntime((value) => started.push(value.sessionId));
+        service.onDidFailStartRuntime((value) => failed.push(value.sessionId));
         try {
-            await assert.rejects((service as any).doStartRuntimeSession(session, RuntimeStartMode.Starting, true, true),
-                /kernel validation failed/);
+            await assert.rejects(
+                (service as any).doStartRuntimeSession(
+                    session,
+                    RuntimeStartMode.Starting,
+                    true,
+                    true,
+                ),
+                /kernel validation failed/,
+            );
             assert.deepStrictEqual(started, []);
             assert.deepStrictEqual(failed, [session.sessionId]);
-        } finally { dispose(); service.dispose(); }
+        } finally {
+            dispose();
+            service.dispose();
+        }
     });
 
     test('finalizes a late-ready console and delegates LSP activation to the language contribution', async () => {
@@ -552,7 +603,9 @@ suite('[Unit] runtime session start semantics', () => {
         );
         session.state = RuntimeState.Starting;
         let activateLspCalls = 0;
-        session.activateLsp = async () => { activateLspCalls++; };
+        session.activateLsp = async () => {
+            activateLspCalls++;
+        };
         (service as any)._sessions.set(session.sessionId, session);
         (service as any)._waitForSessionReady = async () => {
             const error = new Error('ready observation timed out');
@@ -561,8 +614,12 @@ suite('[Unit] runtime session start semantics', () => {
         };
         const startedSessionIds: string[] = [];
         const failedSessionIds: string[] = [];
-        service.onDidStartRuntime(startedSession => startedSessionIds.push(startedSession.sessionId));
-        service.onDidFailStartRuntime(failedSession => failedSessionIds.push(failedSession.sessionId));
+        service.onDidStartRuntime((startedSession) =>
+            startedSessionIds.push(startedSession.sessionId),
+        );
+        service.onDidFailStartRuntime((failedSession) =>
+            failedSessionIds.push(failedSession.sessionId),
+        );
 
         await (service as any).doStartRuntimeSession(
             session,
@@ -574,7 +631,7 @@ suite('[Unit] runtime session start semantics', () => {
         assert.deepStrictEqual(failedSessionIds, []);
 
         fireRuntimeState(RuntimeState.Ready);
-        await new Promise(resolve => setTimeout(resolve, 0));
+        await new Promise((resolve) => setTimeout(resolve, 0));
 
         assert.deepStrictEqual(startedSessionIds, [session.sessionId]);
         assert.deepStrictEqual(failedSessionIds, []);
@@ -602,7 +659,9 @@ suite('[Unit] runtime session start semantics', () => {
             deactivate: async () => undefined,
             wait: async () => false,
             showOutput: () => undefined,
-            dispose: () => { disposed++; },
+            dispose: () => {
+                disposed++;
+            },
         };
         const session = new RuntimeSession(
             sessionMetadata.sessionId,
@@ -637,7 +696,9 @@ suite('[Unit] runtime session start semantics', () => {
             deactivate: async () => undefined,
             wait: async () => false,
             showOutput: () => undefined,
-            dispose: () => { disposals[index]++; },
+            dispose: () => {
+                disposals[index]++;
+            },
         });
         const first = makeLsp(0);
         const second = makeLsp(1);
@@ -680,7 +741,7 @@ suite('[Unit] runtime session start semantics', () => {
             sessionMetadata.sessionName,
             undefined,
             {
-                setWorkingDirectory: async directory => {
+                setWorkingDirectory: async (directory) => {
                     requested.push(directory);
                 },
             },
@@ -700,7 +761,9 @@ suite('[Unit] runtime session start semantics', () => {
             sessionId: 'unresponsive-session',
             state: RuntimeState.Interrupting,
             runtimeMetadata: makeRuntimeMetadata(),
-            forceQuit: async () => { forceQuitCalls++; },
+            forceQuit: async () => {
+                forceQuitCalls++;
+            },
         };
         (service as any)._sessions.set(session.sessionId, session);
         (service as any)._startStateWatchdog(session, RuntimeState.Interrupting);

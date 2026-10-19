@@ -85,8 +85,10 @@ function toDisposables(
     return Array.isArray(value) ? [...value] : [value as vscode.Disposable];
 }
 
-function serializeError(error: unknown, kind: SerializedCapabilityError['kind'] = 'internal'):
-    SerializedCapabilityError {
+function serializeError(
+    error: unknown,
+    kind: SerializedCapabilityError['kind'] = 'internal',
+): SerializedCapabilityError {
     if (error instanceof Error) {
         return { kind, message: error.message, stack: error.stack };
     }
@@ -97,18 +99,21 @@ function sameOptionalDescriptor(
     left: ILanguageOptionalCapabilityDescriptor,
     right: ILanguageOptionalCapabilityDescriptor,
 ): boolean {
-    return left.id === right.id &&
+    return (
+        left.id === right.id &&
         left.kind === right.kind &&
         left.revision === right.revision &&
         left.activate === right.activate &&
-        JSON.stringify(left.dependencies ?? []) === JSON.stringify(right.dependencies ?? []);
+        JSON.stringify(left.dependencies ?? []) === JSON.stringify(right.dependencies ?? [])
+    );
 }
 
 function sameSnapshotObjects(
     snapshot: ILanguageCapabilitySnapshot,
     draft: RegistrationDraft,
 ): boolean {
-    return snapshot.runtimeProvider === draft.runtimeProvider &&
+    return (
+        snapshot.runtimeProvider === draft.runtimeProvider &&
         snapshot.logChannel === draft.logChannel &&
         snapshot.lspFactory === draft.lspFactory &&
         snapshot.binaryProvider === draft.binaryProvider &&
@@ -116,13 +121,17 @@ function sameSnapshotObjects(
         snapshot.notebookControllers.length === draft.notebookControllers.length &&
         snapshot.notebookControllers.every((entry, index) => {
             const other = draft.notebookControllers[index];
-            return entry.capabilityId === other.capabilityId &&
+            return (
+                entry.capabilityId === other.capabilityId &&
                 entry.controller === other.controller &&
-                JSON.stringify(entry.languageIds) === JSON.stringify(other.languageIds);
+                JSON.stringify(entry.languageIds) === JSON.stringify(other.languageIds)
+            );
         }) &&
         snapshot.optionalCapabilities.length === draft.optionalCapabilities.length &&
         snapshot.optionalCapabilities.every((entry, index) =>
-            sameOptionalDescriptor(entry, draft.optionalCapabilities[index]));
+            sameOptionalDescriptor(entry, draft.optionalCapabilities[index]),
+        )
+    );
 }
 
 export class LanguageCapabilityRegistry implements ILanguageCapabilityRegistry, vscode.Disposable {
@@ -182,26 +191,26 @@ export class LanguageCapabilityRegistry implements ILanguageCapabilityRegistry, 
             if (currentIdentity.ownerExtensionId !== draft.identity.ownerExtensionId) {
                 throw new Error(
                     `Language '${draft.identity.languageId}' is already owned by ` +
-                    `'${currentIdentity.ownerExtensionId}/${currentIdentity.registrationId}'.`,
+                        `'${currentIdentity.ownerExtensionId}/${currentIdentity.registrationId}'.`,
                 );
             }
             if (currentIdentity.registrationId !== draft.identity.registrationId) {
                 throw new Error(
                     `Language '${draft.identity.languageId}' already uses registration ` +
-                    `'${currentIdentity.registrationId}'.`,
+                        `'${currentIdentity.registrationId}'.`,
                 );
             }
             if (draft.identity.revision < currentIdentity.revision) {
                 throw new Error(
                     `Language registration revision ${draft.identity.revision} is older than ` +
-                    `the active revision ${currentIdentity.revision}.`,
+                        `the active revision ${currentIdentity.revision}.`,
                 );
             }
             if (draft.identity.revision === currentIdentity.revision) {
                 if (!sameSnapshotObjects(existing.snapshot, draft)) {
                     throw new Error(
                         `Language registration '${draft.identity.registrationId}' revision ` +
-                        `${draft.identity.revision} changed capability objects; increase revision.`,
+                            `${draft.identity.revision} changed capability objects; increase revision.`,
                     );
                 }
                 return this._createLease(existing);
@@ -246,7 +255,7 @@ export class LanguageCapabilityRegistry implements ILanguageCapabilityRegistry, 
             return;
         }
         const descriptors = capabilityId
-            ? active.snapshot.optionalCapabilities.filter(entry => entry.id === capabilityId)
+            ? active.snapshot.optionalCapabilities.filter((entry) => entry.id === capabilityId)
             : active.snapshot.optionalCapabilities;
         for (const descriptor of descriptors) {
             const state = this._getState(active, descriptor.id);
@@ -288,11 +297,14 @@ export class LanguageCapabilityRegistry implements ILanguageCapabilityRegistry, 
                 }
                 callback();
             };
-            const onAbort = () => finish(() => reject(new Error('Capability observation aborted.')));
-            const listener = this.onDidChangeCapabilityState(event => {
-                if (capabilityKeyToString(event.current) !== capabilityKeyToString(key) ||
+            const onAbort = () =>
+                finish(() => reject(new Error('Capability observation aborted.')));
+            const listener = this.onDidChangeCapabilityState((event) => {
+                if (
+                    capabilityKeyToString(event.current) !== capabilityKeyToString(key) ||
                     event.current.generation !== snapshot.generation ||
-                    ['registered', 'activating'].includes(event.current.phase)) {
+                    ['registered', 'activating'].includes(event.current.phase)
+                ) {
                     return;
                 }
                 finish(() => resolve(event.current));
@@ -304,9 +316,10 @@ export class LanguageCapabilityRegistry implements ILanguageCapabilityRegistry, 
             }
             if (options?.timeout !== undefined) {
                 timer = setTimeout(
-                    () => finish(() => reject(new Error(
-                        `Timed out observing capability '${capabilityId}'.`,
-                    ))),
+                    () =>
+                        finish(() =>
+                            reject(new Error(`Timed out observing capability '${capabilityId}'.`)),
+                        ),
                     options.timeout,
                 );
             }
@@ -357,14 +370,24 @@ export class LanguageCapabilityRegistry implements ILanguageCapabilityRegistry, 
             lspFactory: draft.lspFactory,
             binaryProvider: draft.binaryProvider,
             sessionManager: draft.sessionManager,
-            notebookControllers: Object.freeze(draft.notebookControllers.map(entry => Object.freeze({
-                ...entry,
-                languageIds: Object.freeze([...entry.languageIds]),
-            }))),
-            optionalCapabilities: Object.freeze(draft.optionalCapabilities.map(entry => Object.freeze({
-                ...entry,
-                dependencies: entry.dependencies ? Object.freeze([...entry.dependencies]) : undefined,
-            }))),
+            notebookControllers: Object.freeze(
+                draft.notebookControllers.map((entry) =>
+                    Object.freeze({
+                        ...entry,
+                        languageIds: Object.freeze([...entry.languageIds]),
+                    }),
+                ),
+            ),
+            optionalCapabilities: Object.freeze(
+                draft.optionalCapabilities.map((entry) =>
+                    Object.freeze({
+                        ...entry,
+                        dependencies: entry.dependencies
+                            ? Object.freeze([...entry.dependencies])
+                            : undefined,
+                    }),
+                ),
+            ),
         });
     }
 
@@ -399,8 +422,10 @@ export class LanguageCapabilityRegistry implements ILanguageCapabilityRegistry, 
             if (!state || state.phase !== 'registered') {
                 continue;
             }
-            const dependencyStates = (descriptor.dependencies ?? []).map(id => this._getState(active, id));
-            if (dependencyStates.some(state => !state)) {
+            const dependencyStates = (descriptor.dependencies ?? []).map((id) =>
+                this._getState(active, id),
+            );
+            if (dependencyStates.some((state) => !state)) {
                 this._setState(
                     active,
                     descriptor.id,
@@ -411,7 +436,11 @@ export class LanguageCapabilityRegistry implements ILanguageCapabilityRegistry, 
                 );
                 continue;
             }
-            if (dependencyStates.some(state => state!.phase === 'failed' || state!.phase === 'degraded')) {
+            if (
+                dependencyStates.some(
+                    (state) => state!.phase === 'failed' || state!.phase === 'degraded',
+                )
+            ) {
                 this._setState(
                     active,
                     descriptor.id,
@@ -422,7 +451,7 @@ export class LanguageCapabilityRegistry implements ILanguageCapabilityRegistry, 
                 );
                 continue;
             }
-            if (dependencyStates.some(state => state!.phase !== 'ready')) {
+            if (dependencyStates.some((state) => state!.phase !== 'ready')) {
                 continue;
             }
             void this._activateOptionalCapability(active, descriptor);
@@ -467,8 +496,8 @@ export class LanguageCapabilityRegistry implements ILanguageCapabilityRegistry, 
             );
             this._options.log?.error(
                 `[LanguageRegistry] owner=${active.snapshot.identity.ownerExtensionId} ` +
-                `language=${active.snapshot.identity.languageId} capability=${descriptor.id} ` +
-                `generation=${active.snapshot.generation} attempt=${attempt} state=failed: ${getErrorMessage(error)}`,
+                    `language=${active.snapshot.identity.languageId} capability=${descriptor.id} ` +
+                    `generation=${active.snapshot.generation} attempt=${attempt} state=failed: ${getErrorMessage(error)}`,
             );
             this._activateReadyOptionalCapabilities(active);
         }
@@ -487,10 +516,12 @@ export class LanguageCapabilityRegistry implements ILanguageCapabilityRegistry, 
             this._setState(active, state.capabilityId, state.capability, 'disposed', state.attempt);
         }
         for (const operation of this._operationStates.values()) {
-            if (operation.key.ownerExtensionId === active.snapshot.identity.ownerExtensionId &&
+            if (
+                operation.key.ownerExtensionId === active.snapshot.identity.ownerExtensionId &&
                 operation.key.languageId === active.snapshot.identity.languageId &&
                 operation.key.generation === active.snapshot.generation &&
-                (operation.phase === 'pending' || operation.phase === 'running')) {
+                (operation.phase === 'pending' || operation.phase === 'running')
+            ) {
                 this.setOperationState({
                     ...operation,
                     phase: 'cancelled',
@@ -505,8 +536,11 @@ export class LanguageCapabilityRegistry implements ILanguageCapabilityRegistry, 
         this._disposeAll(active.installationDisposables);
     }
 
-    private _servicesForSnapshot(snapshot: ILanguageCapabilitySnapshot): ILanguageContributionServices {
-        const languageLogChannel = snapshot.logChannel ??
+    private _servicesForSnapshot(
+        snapshot: ILanguageCapabilitySnapshot,
+    ): ILanguageContributionServices {
+        const languageLogChannel =
+            snapshot.logChannel ??
             this._options.services.languageLogChannel ??
             this._options.services.logChannel;
         return Object.freeze({
@@ -517,20 +551,26 @@ export class LanguageCapabilityRegistry implements ILanguageCapabilityRegistry, 
     }
 
     private _isCurrent(active: ActiveRegistration): boolean {
-        return active.phase === 'active' &&
-            this._registrationsByLanguageId.get(active.snapshot.identity.languageId) === active;
-    }
-
-    private _statesFor(active: ActiveRegistration): ILanguageCapabilityState[] {
-        return Array.from(this._capabilityStates.values()).filter(state =>
-            state.ownerExtensionId === active.snapshot.identity.ownerExtensionId &&
-            state.languageId === active.snapshot.identity.languageId &&
-            state.registrationId === active.snapshot.identity.registrationId &&
-            state.generation === active.snapshot.generation,
+        return (
+            active.phase === 'active' &&
+            this._registrationsByLanguageId.get(active.snapshot.identity.languageId) === active
         );
     }
 
-    private _getState(active: ActiveRegistration, capabilityId: string): ILanguageCapabilityState | undefined {
+    private _statesFor(active: ActiveRegistration): ILanguageCapabilityState[] {
+        return Array.from(this._capabilityStates.values()).filter(
+            (state) =>
+                state.ownerExtensionId === active.snapshot.identity.ownerExtensionId &&
+                state.languageId === active.snapshot.identity.languageId &&
+                state.registrationId === active.snapshot.identity.registrationId &&
+                state.generation === active.snapshot.generation,
+        );
+    }
+
+    private _getState(
+        active: ActiveRegistration,
+        capabilityId: string,
+    ): ILanguageCapabilityState | undefined {
         return this.getCapabilityState({ ...active.snapshot.identity, capabilityId });
     }
 
@@ -566,14 +606,23 @@ export class LanguageCapabilityRegistry implements ILanguageCapabilityRegistry, 
         if (!Number.isSafeInteger(identity.revision) || identity.revision < 0) {
             throw new Error('Language registration revision must be a non-negative integer.');
         }
-        if (this._options.validateOwner && !this._options.validateOwner(identity.ownerExtensionId)) {
-            throw new Error(`Language registration owner '${identity.ownerExtensionId}' is not installed.`);
+        if (
+            this._options.validateOwner &&
+            !this._options.validateOwner(identity.ownerExtensionId)
+        ) {
+            throw new Error(
+                `Language registration owner '${identity.ownerExtensionId}' is not installed.`,
+            );
         }
         if (!!draft.runtimeProvider !== !!draft.sessionManager) {
-            throw new Error('runtimeProvider and sessionManager must be committed as one core bundle.');
+            throw new Error(
+                'runtimeProvider and sessionManager must be committed as one core bundle.',
+            );
         }
         if (draft.runtimeProvider && draft.runtimeProvider.languageId !== identity.languageId) {
-            throw new Error('Runtime provider languageId does not match the registration identity.');
+            throw new Error(
+                'Runtime provider languageId does not match the registration identity.',
+            );
         }
         if (draft.lspFactory && draft.lspFactory.languageId !== identity.languageId) {
             throw new Error('LSP factory languageId does not match the registration identity.');
@@ -602,7 +651,9 @@ export class LanguageCapabilityRegistry implements ILanguageCapabilityRegistry, 
         for (const descriptor of draft.optionalCapabilities) {
             this._assertUniqueCapabilityId(ids, descriptor.id);
             if (!Number.isSafeInteger(descriptor.revision) || descriptor.revision < 0) {
-                throw new Error(`Capability '${descriptor.id}' revision must be a non-negative integer.`);
+                throw new Error(
+                    `Capability '${descriptor.id}' revision must be a non-negative integer.`,
+                );
             }
         }
     }
@@ -626,7 +677,9 @@ export class LanguageCapabilityRegistry implements ILanguageCapabilityRegistry, 
             try {
                 disposable.dispose();
             } catch (error) {
-                this._options.log?.error(`[LanguageRegistry] Failed to dispose registration: ${getErrorMessage(error)}`);
+                this._options.log?.error(
+                    `[LanguageRegistry] Failed to dispose registration: ${getErrorMessage(error)}`,
+                );
             }
         }
     }

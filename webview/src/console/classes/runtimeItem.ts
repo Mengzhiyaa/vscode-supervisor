@@ -26,7 +26,7 @@ export class RuntimeItem {
      * Constructor.
      * @param id The identifier.
      */
-    constructor(readonly id: string) { }
+    constructor(readonly id: string) {}
 
     //#endregion Constructor
 
@@ -116,8 +116,8 @@ export class RuntimeItemStandard extends RuntimeItem {
      * @returns The clipboard representation of the activity item.
      */
     public override getClipboardRepresentation(commentPrefix: string): string[] {
-        return this.outputLines.map(line =>
-            commentPrefix + line.outputRuns.map(run => run.text).join('')
+        return this.outputLines.map(
+            (line) => commentPrefix + line.outputRuns.map((run) => run.text).join(''),
         );
     }
 
@@ -160,9 +160,9 @@ export class RuntimeItemExited extends RuntimeItemStandard {
         id: string,
         public readonly sessionName: string,
         public readonly exitCode: number,
-        public readonly reason: string
+        public readonly reason: string,
     ) {
-        super(id, `${sessionName} exited (code: ${exitCode})${reason ? `\n${reason}` : ""}`);
+        super(id, `${sessionName} exited (code: ${exitCode})${reason ? `\n${reason}` : ''}`);
     }
 }
 
@@ -174,9 +174,9 @@ export class RuntimeItemOffline extends RuntimeItemStandard {
     constructor(
         id: string,
         public readonly sessionName: string,
-        public readonly reason: string
+        public readonly reason: string,
     ) {
-        super(id, `${sessionName} is offline.${reason ? `\n${reason}` : ""}`);
+        super(id, `${sessionName} is offline.${reason ? `\n${reason}` : ''}`);
     }
 }
 
@@ -196,11 +196,7 @@ export class RuntimeItemPendingInput extends RuntimeItemStandard {
 }
 
 export type RuntimeItemStartingAttachMode =
-    | 'starting'
-    | 'restarting'
-    | 'switching'
-    | 'reconnecting'
-    | 'connected';
+    'starting' | 'restarting' | 'switching' | 'reconnecting' | 'connected';
 
 /**
  * RuntimeItemStarting class (1:1 Positron).
@@ -224,7 +220,7 @@ export class RuntimeItemRestartButton extends RuntimeItem {
     constructor(
         id: string,
         public readonly sessionId: string,
-        public readonly onRestart: () => void | Promise<void>
+        public readonly onRestart: () => void | Promise<void>,
     ) {
         super(id);
     }
@@ -238,14 +234,9 @@ export class RuntimeItemTrace extends RuntimeItemStandard {
     constructor(
         id: string,
         public readonly message: string,
-        public readonly timestamp: Date = new Date()
+        public readonly timestamp: Date = new Date(),
     ) {
-        super(
-            id,
-            message
-                .replaceAll('\x1b', 'ESC')
-                .replaceAll('\x9B', 'CSI'),
-        );
+        super(id, message.replaceAll('\x1b', 'ESC').replaceAll('\x9B', 'CSI'));
     }
 }
 
@@ -256,7 +247,7 @@ export class RuntimeItemTrace extends RuntimeItemStandard {
 export class RuntimeItemRestarting extends RuntimeItem {
     constructor(
         id: string,
-        public readonly sessionName: string
+        public readonly sessionName: string,
     ) {
         super(id);
     }

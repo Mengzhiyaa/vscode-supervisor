@@ -23,7 +23,7 @@ export interface ShowHelpTopicParams {
 export enum ShowHelpKind {
     Html = 'html',
     Markdown = 'markdown',
-    Url = 'url'
+    Url = 'url',
 }
 
 /**
@@ -67,11 +67,11 @@ export interface ShowHelpEvent {
 }
 
 export enum HelpFrontendEvent {
-    ShowHelp = 'show_help'
+    ShowHelp = 'show_help',
 }
 
 export enum HelpBackendRequest {
-    ShowHelpTopic = 'show_help_topic'
+    ShowHelpTopic = 'show_help_topic',
 }
 
 /**
@@ -84,16 +84,14 @@ export class PositronHelpComm extends PositronBaseComm {
      */
     readonly onDidShowHelp: vscode.Event<ShowHelpEvent>;
 
-    constructor(
-        client: RuntimeClientInstance,
-        options?: PositronCommOptions<HelpBackendRequest>
-    ) {
+    constructor(client: RuntimeClientInstance, options?: PositronCommOptions<HelpBackendRequest>) {
         super(client, options);
 
-        this.onDidShowHelp = this.createEventEmitter<ShowHelpEvent>(
-            'show_help',
-            ['content', 'kind', 'focus']
-        );
+        this.onDidShowHelp = this.createEventEmitter<ShowHelpEvent>('show_help', [
+            'content',
+            'kind',
+            'focus',
+        ]);
     }
 
     /**

@@ -14,14 +14,26 @@
     let menuButton = $state<HTMLButtonElement | null>(null);
 
     const targets: readonly { target: ViewerOpenTarget; label: string; icon: string }[] = [
-        { target: 'browser', label: localize('common.openInBrowser', 'Open in Browser'), icon: 'link-external' },
-        { target: 'editorTab', label: localize('common.openInEditorTab', 'Open in Editor Tab'), icon: 'positron-open-in-editor' },
-        { target: 'newWindow', label: localize('common.openInNewWindow', 'Open in New Window'), icon: 'positron-open-in-new-window' },
+        {
+            target: 'browser',
+            label: localize('common.openInBrowser', 'Open in Browser'),
+            icon: 'link-external',
+        },
+        {
+            target: 'editorTab',
+            label: localize('common.openInEditorTab', 'Open in Editor Tab'),
+            icon: 'positron-open-in-editor',
+        },
+        {
+            target: 'newWindow',
+            label: localize('common.openInNewWindow', 'Open in New Window'),
+            icon: 'positron-open-in-new-window',
+        },
     ];
-    const selected = $derived(targets.find(item => item.target === defaultTarget) ?? targets[0]);
+    const selected = $derived(targets.find((item) => item.target === defaultTarget) ?? targets[0]);
 
     function entries(): ContextMenuEntry[] {
-        return targets.map(item => ({
+        return targets.map((item) => ({
             id: item.target,
             label: item.label,
             icon: item.icon,
@@ -71,11 +83,24 @@
 {/if}
 
 <style>
-    .viewer-open-button { display: flex; height: 24px; }
-    .primary { width: 24px; border-radius: 4px 0 0 4px; }
-    .menu { width: 16px; border-radius: 0 4px 4px 0; }
-    .menu .codicon { font-size: 12px; }
+    .viewer-open-button {
+        display: flex;
+        height: 24px;
+    }
+    .primary {
+        width: 24px;
+        border-radius: 4px 0 0 4px;
+    }
+    .menu {
+        width: 16px;
+        border-radius: 0 4px 4px 0;
+    }
+    .menu .codicon {
+        font-size: 12px;
+    }
     @media (forced-colors: active) {
-        .viewer-open-button:focus-within { outline: 1px solid Highlight; }
+        .viewer-open-button:focus-within {
+            outline: 1px solid Highlight;
+        }
     }
 </style>

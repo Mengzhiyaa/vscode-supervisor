@@ -1,17 +1,14 @@
 <script lang="ts">
-    import { localize } from "$lib/localization";
+    import { localize } from '$lib/localization';
     interface EmptyConsoleProps {
         readonly onStartSession?: () => void;
     }
 
     let { onStartSession = () => {} }: EmptyConsoleProps = $props();
 
-    const emptyPrefix = localize(
-        "console.emptyPrefix",
-        "There is no session running. Use",
-    );
-    const startSession = localize("console.startSession", "Start Session");
-    const emptySuffix = localize("console.emptySuffix", "to start one.");
+    const emptyPrefix = localize('console.emptyPrefix', 'There is no session running. Use');
+    const startSession = localize('console.startSession', 'Start Session');
+    const emptySuffix = localize('console.emptySuffix', 'to start one.');
 </script>
 
 <div class="empty-console" role="status">
@@ -29,10 +26,7 @@
         opacity: 0.75;
         box-sizing: border-box;
         border-top: 1px solid
-            var(
-                --vscode-positronActionBar-border,
-                var(--vscode-terminal-border, transparent)
-            );
+            var(--vscode-positronActionBar-border, var(--vscode-terminal-border, transparent));
     }
 
     .title {

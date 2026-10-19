@@ -3,9 +3,9 @@
   Port from Positron's positronDataExplorerClosed.tsx
 -->
 <script lang="ts">
-    import { onMount } from "svelte";
+    import { onMount } from 'svelte';
 
-    export type DataExplorerClosedStatus = "unavailable" | "error";
+    export type DataExplorerClosedStatus = 'unavailable' | 'error';
 
     interface Props {
         closedReason: DataExplorerClosedStatus;
@@ -13,23 +13,23 @@
         onClose: () => void;
     }
 
-    let { closedReason, errorMessage = "", onClose }: Props = $props();
+    let { closedReason, errorMessage = '', onClose }: Props = $props();
 
     const message = $derived.by(() => {
-        if (closedReason === "error") {
-            return "Error Opening Data Explorer";
+        if (closedReason === 'error') {
+            return 'Error Opening Data Explorer';
         }
-        return "Connection Closed";
+        return 'Connection Closed';
     });
 
     const detailMessage = $derived.by(() => {
-        if (closedReason === "error") {
+        if (closedReason === 'error') {
             return errorMessage;
         }
-        return "This object is no longer available.";
+        return 'This object is no longer available.';
     });
 
-    const closeLabel = "Close Data Explorer";
+    const closeLabel = 'Close Data Explorer';
     let closeButton = $state<HTMLButtonElement | null>(null);
 
     onMount(() => closeButton?.focus());
@@ -38,7 +38,7 @@
 <div class="positron-data-explorer-closed" role="presentation">
     <div
         class="dialog-box"
-        role={closedReason === "error" ? "alertdialog" : "dialog"}
+        role={closedReason === 'error' ? 'alertdialog' : 'dialog'}
         aria-modal="true"
         aria-labelledby="data-explorer-closed-title"
         aria-describedby="data-explorer-closed-detail"

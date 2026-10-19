@@ -2,7 +2,13 @@ import { getErrorMessage } from '../shared/errors';
 import * as vscode from 'vscode';
 import { createHash, randomUUID } from 'crypto';
 import { MessageConnection } from 'vscode-jsonrpc/node';
-import { ContextKeys, CoreConfigurationKeys, CoreConfigurationSections, ViewCommands, ViewIds } from '../coreCommandIds';
+import {
+    ContextKeys,
+    CoreConfigurationKeys,
+    CoreConfigurationSections,
+    ViewCommands,
+    ViewIds,
+} from '../coreCommandIds';
 import { BaseWebviewProvider } from './baseProvider';
 import * as ConsoleProtocol from '../rpc/webview/console';
 import * as SessionProtocol from '../rpc/webview/session';
@@ -14,12 +20,15 @@ import { RuntimeSession } from '../runtime/session';
 import { RuntimeSessionService } from '../runtime/runtimeSession';
 import { RuntimeStartupService } from '../runtime/runtimeStartup';
 import { RuntimeCodeFragmentStatus } from '../internal/runtimeTypes';
-import {
-    UiFrontendEvent,
-} from '../runtime/comms/positronUiComm';
+import { UiFrontendEvent } from '../runtime/comms/positronUiComm';
 import type { ILanguageRuntimeGlobalEvent } from '../runtime/runtimeEvents';
 import { PositronConsoleService } from '../services/console/consoleService';
-import { IPositronConsoleInstance, RuntimeCodeExecutionMode, RuntimeErrorBehavior, type IConsoleCodeAttribution } from '../services/console/interfaces/consoleService';
+import {
+    IPositronConsoleInstance,
+    RuntimeCodeExecutionMode,
+    RuntimeErrorBehavior,
+    type IConsoleCodeAttribution,
+} from '../services/console/interfaces/consoleService';
 import { ConsoleThemeProvider } from './consoleThemeProvider';
 import { resolveConsoleAppearance } from './consoleSettings';
 import { SessionSnapshotBuilder } from './sessionSnapshotBuilder';
@@ -56,22 +65,21 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
     private readonly _sessionSyncSeq = new Map<string, number>();
     private readonly _publishedSessionIconHashes = new Map<string, string>();
     private _pendingLanguageSupportAssetsRefresh = false;
-    private _pendingFindCommand: ConsoleProtocol.ConsoleFindCommandNotification.Params['command'] | undefined;
+    private _pendingFindCommand:
+        ConsoleProtocol.ConsoleFindCommandNotification.Params['command'] | undefined;
 
     private readonly _missingSessionWarnings = new Set<string>();
     private readonly _lastClearReasons = new Map<string, 'user' | 'runtime' | undefined>();
     private readonly _consoleThemeProvider = new ConsoleThemeProvider();
-    private _runtimeStartupEvent: ConsoleProtocol.RuntimeStartupPhaseNotification.RuntimeStartupEvent | undefined;
+    private _runtimeStartupEvent:
+        ConsoleProtocol.RuntimeStartupPhaseNotification.RuntimeStartupEvent | undefined;
     private _latestDiscoveredRuntimePath: string | undefined;
     private readonly _resourceUsageSurfaceDisposables: vscode.Disposable[] = [];
     private readonly _resourceUsageCoordinator = new ConsoleResourceUsageCoordinator(
-        publication => this._publishResourceUsage(publication),
+        (publication) => this._publishResourceUsage(publication),
     );
-    private readonly _consoleSyncCoordinator = new ConsoleSyncCoordinator(
-        2,
-        1,
-        10_000,
-        chunk => this.log(
+    private readonly _consoleSyncCoordinator = new ConsoleSyncCoordinator(2, 1, 10_000, (chunk) =>
+        this.log(
             `[ConsoleSync] ACK timeout session=${chunk.sessionId} chunk=${chunk.chunkId} bytes=${chunk.bytes}`,
             vscode.LogLevel.Warning,
         ),
@@ -86,15 +94,22 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
         private readonly _consoleService?: PositronConsoleService,
         private readonly _runtimeStartupService?: RuntimeStartupService,
         getAdditionalLocalResourceRoots: () => readonly vscode.Uri[] = () => [],
-        private readonly _getLanguageMonacoSupportModuleUris: (webview: vscode.Webview) => Readonly<Record<string, string>> = () => ({}),
+        private readonly _getLanguageMonacoSupportModuleUris: (
+            webview: vscode.Webview,
+        ) => Readonly<Record<string, string>> = () => ({}),
         private readonly _getLanguageTextMateGrammarDefinitions: (
             webview: vscode.Webview,
         ) => Readonly<Record<string, { scopeName: string; grammarUrl: string }>> = () => ({}),
         private readonly _plotsService?: PositronPlotsService,
-        private readonly _createSessionFromPicker?: (sessionName?: string) => Promise<RuntimeSession | undefined>,
+        private readonly _createSessionFromPicker?: (
+            sessionName?: string,
+        ) => Promise<RuntimeSession | undefined>,
     ) {
         super(extensionUri, outputChannel, getAdditionalLocalResourceRoots);
-        this._sessionSnapshotBuilder = new SessionSnapshotBuilder(this._sessionManager, this._consoleService);
+        this._sessionSnapshotBuilder = new SessionSnapshotBuilder(
+            this._sessionManager,
+            this._consoleService,
+        );
 
         // Subscribe to console service events (Positron 1:1 pattern)
         this._subscribeToConsoleServiceEvents();
@@ -106,7 +121,7 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
         this._consoleServiceDisposables.push(
             vscode.window.onDidChangeActiveColorTheme(() => {
                 void this._sendConsoleThemeChanged();
-            })
+            }),
         );
 
         if (this._runtimeStartupService) {
@@ -129,7 +144,7 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
                         newSession: event.newSession,
                     };
                     this._sendRuntimeStartupPhaseChanged();
-                })
+                }),
             );
         }
 
@@ -137,7 +152,7 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
             this._consoleServiceDisposables.push(
                 this._sessionManager.onDidUpdateSessionName(() => {
                     this._sendSessionInfoUpdate();
-                })
+                }),
             );
         }
     }
@@ -161,7 +176,7 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
                 this._consoleViewVisible = webviewView.visible;
                 this._updateResourceUsagePublishingState();
             }),
-            vscode.window.onDidChangeWindowState(state => {
+            vscode.window.onDidChangeWindowState((state) => {
                 this._windowFocused = state.focused;
                 this._updateResourceUsagePublishingState();
             }),
@@ -183,7 +198,11 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
         this._pendingFindCommand = undefined;
         void vscode.commands.executeCommand('setContext', ContextKeys.consoleFocused, false);
         void vscode.commands.executeCommand('setContext', ContextKeys.consoleFindVisible, false);
-        void vscode.commands.executeCommand('setContext', ContextKeys.consoleFindInputFocused, false);
+        void vscode.commands.executeCommand(
+            'setContext',
+            ContextKeys.consoleFindInputFocused,
+            false,
+        );
     }
 
     async reveal(preserveFocus: boolean): Promise<void> {
@@ -205,10 +224,9 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
             return;
         }
 
-        this._connection.sendNotification(
-            ConsoleProtocol.ConsoleFindCommandNotification.type,
-            { command },
-        );
+        this._connection.sendNotification(ConsoleProtocol.ConsoleFindCommandNotification.type, {
+            command,
+        });
     }
 
     /**
@@ -228,14 +246,13 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
         this._lspTunnelService?.closeSession(sessionId);
         const disposables = this._allSessionSubscriptions.get(sessionId);
         if (disposables) {
-            disposables.forEach(d => d.dispose());
+            disposables.forEach((d) => d.dispose());
             this._allSessionSubscriptions.delete(sessionId);
             this._suppressStartupNotificationOnce.delete(sessionId);
             this.log(`Unsubscribed from session ${sessionId}`, vscode.LogLevel.Debug);
         }
         this._resourceUsageCoordinator.removeSession(sessionId);
     }
-
 
     getLastClearReason(sessionId: string): 'user' | 'runtime' | undefined {
         return this._lastClearReasons.get(sessionId);
@@ -256,11 +273,12 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
         const instance = sessionId
             ? this._consoleService?.getConsoleInstance(sessionId)
             : undefined;
-        const content = typeof code === 'string' && code.trim().length > 0
-            ? code
-            : (sessionId
-                ? this._consoleService?.getClipboardRepresentation(sessionId, '# ')
-                : undefined) ?? '';
+        const content =
+            typeof code === 'string' && code.trim().length > 0
+                ? code
+                : ((sessionId
+                      ? this._consoleService?.getClipboardRepresentation(sessionId, '# ')
+                      : undefined) ?? '');
 
         if (content.trim().length === 0) {
             return false;
@@ -295,44 +313,60 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
             this._suppressStartupNotificationOnce.add(sessionId);
         }
 
-        this.log(`Subscribing to session ${sessionId} events (multi-session)`, vscode.LogLevel.Debug);
+        this.log(
+            `Subscribing to session ${sessionId} events (multi-session)`,
+            vscode.LogLevel.Debug,
+        );
 
         const disposables: vscode.Disposable[] = [];
 
         // Listen for startup complete event (Positron pattern: onDidCompleteStartup)
         disposables.push(
-            session.onDidCompleteStartup(info => {
-                const suppressStartupNotification = this._suppressStartupNotificationOnce.delete(sessionId);
+            session.onDidCompleteStartup((info) => {
+                const suppressStartupNotification =
+                    this._suppressStartupNotificationOnce.delete(sessionId);
                 if (suppressStartupNotification) {
-                    this.log('Suppressing startup banner for restored session ' + sessionId, vscode.LogLevel.Debug);
+                    this.log(
+                        'Suppressing startup banner for restored session ' + sessionId,
+                        vscode.LogLevel.Debug,
+                    );
                 } else {
-                    this.log(`Startup complete for ${sessionId}: info=${JSON.stringify(info)}`, vscode.LogLevel.Debug);
-                    this.log(`Startup complete for ${sessionId}: banner=${info.banner?.substring(0, 100) || 'EMPTY/UNDEFINED'}`, vscode.LogLevel.Info);
+                    this.log(
+                        `Startup complete for ${sessionId}: info=${JSON.stringify(info)}`,
+                        vscode.LogLevel.Debug,
+                    );
+                    this.log(
+                        `Startup complete for ${sessionId}: banner=${info.banner?.substring(0, 100) || 'EMPTY/UNDEFINED'}`,
+                        vscode.LogLevel.Info,
+                    );
                 }
 
                 const instance = this._consoleService?.getConsoleInstance(sessionId);
                 if (!instance) {
-                    this.log(`Startup complete for ${sessionId}: console instance missing`, vscode.LogLevel.Warning);
+                    this.log(
+                        `Startup complete for ${sessionId}: console instance missing`,
+                        vscode.LogLevel.Warning,
+                    );
                 }
 
                 // Store startup banner in console instance so restoreState remains canonical.
                 if (!suppressStartupNotification && instance && info.banner) {
                     instance.addRuntimeStartupBanner(
                         info.banner,
-                        info.implementation_version ?? info.language_version ?? ''
+                        info.implementation_version ?? info.language_version ?? '',
                     );
                 }
 
                 instance?.completeStartup();
-            })
+            }),
         );
 
         // Listen for resource usage updates (Positron pattern)
         if (session.onDidUpdateResourceUsage) {
             disposables.push(
-                session.onDidUpdateResourceUsage(usage => {
+                session.onDidUpdateResourceUsage((usage) => {
                     this._resourceUsageCoordinator.record(sessionId, usage);
-                })
+                }),
             );
         }
 
@@ -355,16 +389,21 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
 
     protected _registerRpcHandlers(connection: MessageConnection): void {
         this._lspTunnelService?.dispose();
-        this._lspTunnelService = new LspTunnelService(connection,
-            id => this._sessionManager?.getSession(id), this._outputChannel);
+        this._lspTunnelService = new LspTunnelService(
+            connection,
+            (id) => this._sessionManager?.getSession(id),
+            this._outputChannel,
+        );
         this._webviewReady = false;
         this._resourceUsageCoordinator.resetPublication();
         this._pendingRestoreStatesForInstances = true;
         // Webview was (re)created — all sessions need restore state on reconnect.
         this._initializedSessions.clear();
         this._publishedSessionIconHashes.clear();
-        connection.onNotification(ConsoleProtocol.InputDraftChangedNotification.type, params => {
-            this._consoleService?.getConsoleInstance(params.sessionId)?.updateInputDraft(params.draft);
+        connection.onNotification(ConsoleProtocol.InputDraftChangedNotification.type, (params) => {
+            this._consoleService
+                ?.getConsoleInstance(params.sessionId)
+                ?.updateInputDraft(params.draft);
         });
 
         // Deterministic readiness signal from webview.
@@ -375,28 +414,26 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
             if (this._pendingFindCommand) {
                 const command = this._pendingFindCommand;
                 this._pendingFindCommand = undefined;
-                connection.sendNotification(
-                    ConsoleProtocol.ConsoleFindCommandNotification.type,
-                    { command },
-                );
+                connection.sendNotification(ConsoleProtocol.ConsoleFindCommandNotification.type, {
+                    command,
+                });
             }
         });
 
-        connection.onNotification(
-            ConsoleProtocol.ConsoleStateChunkAckNotification.type,
-            params => this._consoleSyncCoordinator.acknowledge(params.chunkId),
+        connection.onNotification(ConsoleProtocol.ConsoleStateChunkAckNotification.type, (params) =>
+            this._consoleSyncCoordinator.acknowledge(params.chunkId),
         );
 
         connection.onNotification(
             ConsoleProtocol.ResourceUsageSnapshotAckNotification.type,
-            params => {
+            (params) => {
                 this._resourceUsageCoordinator.acknowledge(params.generation);
             },
         );
 
         connection.onNotification(
             ConsoleProtocol.ConsoleContextKeysChangedNotification.type,
-            params => {
+            (params) => {
                 void vscode.commands.executeCommand(
                     'setContext',
                     ContextKeys.consoleFocused,
@@ -420,34 +457,50 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
             return this._getConsoleSettings();
         });
 
-        connection.onRequest(ConsoleProtocol.SetConsoleShowResourceMonitorRequest.type, async params => {
-            await vscode.workspace.getConfiguration().update(
-                CoreConfigurationKeys.consoleShowResourceMonitor,
-                params.visible,
-                vscode.ConfigurationTarget.Global,
-            );
-        });
+        connection.onRequest(
+            ConsoleProtocol.SetConsoleShowResourceMonitorRequest.type,
+            async (params) => {
+                await vscode.workspace
+                    .getConfiguration()
+                    .update(
+                        CoreConfigurationKeys.consoleShowResourceMonitor,
+                        params.visible,
+                        vscode.ConfigurationTarget.Global,
+                    );
+            },
+        );
 
-        connection.onRequest(ConsoleProtocol.ConsoleRequestFullStateRequest.type, async (params) => {
-            this.log(
-                `[SyncSeq] Full state requested: session=${params.sessionId} reason=${params.reason}`,
-                vscode.LogLevel.Warning,
-            );
-            if (this._sendRestoreStateForInstance(params.sessionId, {
-                useCurrentSyncSeq: true,
-            })) {
-                this._initializedSessions.add(params.sessionId);
-            }
-        });
+        connection.onRequest(
+            ConsoleProtocol.ConsoleRequestFullStateRequest.type,
+            async (params) => {
+                this.log(
+                    `[SyncSeq] Full state requested: session=${params.sessionId} reason=${params.reason}`,
+                    vscode.LogLevel.Warning,
+                );
+                if (
+                    this._sendRestoreStateForInstance(params.sessionId, {
+                        useCurrentSyncSeq: true,
+                    })
+                ) {
+                    this._initializedSessions.add(params.sessionId);
+                }
+            },
+        );
         this._registerExecutionHandlers(connection);
         this._registerConsoleActionHandlers(connection);
         this._registerSessionHandlers(connection);
         this._registerOutputNavigationHandlers(connection);
-        connection.onRequest(PlotsProtocol.SelectPlotRequest.type, async params => {
-            if (!this._plotsService) { return; }
-            const plot = this._plotsService.positronPlotInstances.find(candidate => candidate.id === params.plotId);
+        connection.onRequest(PlotsProtocol.SelectPlotRequest.type, async (params) => {
+            if (!this._plotsService) {
+                return;
+            }
+            const plot = this._plotsService.positronPlotInstances.find(
+                (candidate) => candidate.id === params.plotId,
+            );
             const session = plot && this._sessionManager?.getSession(plot.metadata.session_id);
-            if (session?.sessionMetadata.sessionMode === LanguageRuntimeSessionMode.Notebook) { return; }
+            if (session?.sessionMetadata.sessionMode === LanguageRuntimeSessionMode.Notebook) {
+                return;
+            }
             this._plotsService.selectPlot(params.plotId);
             if (this._plotsService.displayLocation === PlotsDisplayLocation.MainWindow) {
                 await vscode.commands.executeCommand(`${ViewIds.plots}.focus`);
@@ -456,11 +509,13 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
     }
 
     private _registerExecutionHandlers(connection: MessageConnection): void {
-
         // Handle execute request from webview
         connection.onRequest(ConsoleProtocol.ExecuteRequest.type, async (params) => {
             try {
-                this.log(`Execute request: ${params.code.substring(0, 50)}...`, vscode.LogLevel.Debug);
+                this.log(
+                    `Execute request: ${params.code.substring(0, 50)}...`,
+                    vscode.LogLevel.Debug,
+                );
 
                 // Use executionId from frontend if provided, otherwise generate one
                 const executionId = params.executionId || `exec-${Date.now()}`;
@@ -500,13 +555,7 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
                 // submissions back through enqueueCode() can trap invalid code in the
                 // pending queue instead of letting the runtime report the syntax error.
                 this.log(`Executing on session: ${targetSession.sessionId}`, vscode.LogLevel.Debug);
-                instance.executeCode(
-                    params.code,
-                    attribution,
-                    mode,
-                    errorBehavior,
-                    executionId
-                );
+                instance.executeCode(params.code, attribution, mode, errorBehavior, executionId);
                 return { executionId };
             } catch (error) {
                 const message = getErrorMessage(error);
@@ -525,8 +574,8 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
                 return {
                     items: matches.map((m: string) => ({
                         label: m,
-                        kind: 'text'
-                    }))
+                        kind: 'text',
+                    })),
                 };
             }
             return { items: [] };
@@ -535,9 +584,15 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
         // Handle isComplete request (Positron pattern: use runtime isCodeFragmentComplete)
         connection.onRequest(ConsoleProtocol.IsCompleteRequest.type, async (params, token) => {
             try {
-                this.log(`IsComplete request: ${params.code.substring(0, 30)}...`, vscode.LogLevel.Debug);
+                this.log(
+                    `IsComplete request: ${params.code.substring(0, 30)}...`,
+                    vscode.LogLevel.Debug,
+                );
 
-                const targetSession = this._resolveSessionForRequest('isComplete', params.sessionId);
+                const targetSession = this._resolveSessionForRequest(
+                    'isComplete',
+                    params.sessionId,
+                );
                 if (!targetSession) {
                     throw new Error(`Console session '${params.sessionId ?? ''}' is not available`);
                 }
@@ -597,14 +652,21 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
             }
         });
 
-        connection.onRequest(ConsoleProtocol.CancelCompletenessCheckRequest.type, async (params) => {
-            this._resolveConsoleInstance('cancelCompletenessCheck', params.sessionId)
-                ?.cancelCompletenessCheck();
-        });
+        connection.onRequest(
+            ConsoleProtocol.CancelCompletenessCheckRequest.type,
+            async (params) => {
+                this._resolveConsoleInstance(
+                    'cancelCompletenessCheck',
+                    params.sessionId,
+                )?.cancelCompletenessCheck();
+            },
+        );
 
         connection.onRequest(ConsoleProtocol.CancelSubmissionRequest.type, async (params) => {
-            this._resolveConsoleInstance('cancelSubmission', params.sessionId)
-                ?.cancelCodeSubmission();
+            this._resolveConsoleInstance(
+                'cancelSubmission',
+                params.sessionId,
+            )?.cancelCodeSubmission();
         });
 
         // Handle interrupt request
@@ -619,7 +681,6 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
     }
 
     private _registerConsoleActionHandlers(connection: MessageConnection): void {
-
         connection.onRequest(ConsoleProtocol.WorkspaceRequestTrustRequest.type, async () => {
             await vscode.commands.executeCommand('workbench.trust.manage');
         });
@@ -627,7 +688,7 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
         // Clipboard access from a webview is not reliable in every VS Code host
         // (notably remote and browser hosts). Route text writes through VS Code's
         // clipboard service, matching the service-backed path used by Positron.
-        connection.onRequest(ConsoleProtocol.WriteClipboardTextRequest.type, async params => {
+        connection.onRequest(ConsoleProtocol.WriteClipboardTextRequest.type, async (params) => {
             await vscode.env.clipboard.writeText(params.text);
         });
 
@@ -665,13 +726,16 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
             }
         });
 
-        connection.onRequest('console/openInEditor', async (params: { sessionId?: string; code?: string }) => {
-            const code = typeof params?.code === 'string' ? params.code : undefined;
-            const success = await this.openCodeInEditor(params?.sessionId, code);
-            return success
-                ? { success: true }
-                : { success: false, error: 'No code to open in editor' };
-        });
+        connection.onRequest(
+            'console/openInEditor',
+            async (params: { sessionId?: string; code?: string }) => {
+                const code = typeof params?.code === 'string' ? params.code : undefined;
+                const success = await this.openCodeInEditor(params?.sessionId, code);
+                return success
+                    ? { success: true }
+                    : { success: false, error: 'No code to open in editor' };
+            },
+        );
 
         // Handle replyPrompt request (readline response)
         connection.onRequest(ConsoleProtocol.ReplyPromptRequest.type, async (params) => {
@@ -685,7 +749,6 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
     }
 
     private _registerSessionHandlers(connection: MessageConnection): void {
-
         // Handle list sessions request
         connection.onRequest(SessionProtocol.ListSessionsRequest.type, async () => {
             // Backward-compatible fallback: first list request implies webview is ready.
@@ -702,7 +765,10 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
 
         // Handle create session request
         connection.onRequest(SessionProtocol.CreateSessionRequest.type, async (params) => {
-            this.log(`Create session request: ${params.name || '(runtime default)'}`, vscode.LogLevel.Debug);
+            this.log(
+                `Create session request: ${params.name || '(runtime default)'}`,
+                vscode.LogLevel.Debug,
+            );
             if (!this._sessionManager) {
                 throw new Error('Session manager not available');
             }
@@ -715,7 +781,9 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
                     }
                     session = await this._createSessionFromPicker(requestedName || undefined);
                 } else {
-                    session = await this._sessionManager.startConsoleSession(requestedName || undefined);
+                    session = await this._sessionManager.startConsoleSession(
+                        requestedName || undefined,
+                    );
                 }
 
                 if (!session) {
@@ -728,7 +796,7 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
                 this.subscribeToSession(session);
                 const sessions = this._sessionSnapshotBuilder.buildSessionsWithConsoleOverlay();
                 return {
-                    session: sessions.find(candidate => candidate.id === session.sessionId),
+                    session: sessions.find((candidate) => candidate.id === session.sessionId),
                 };
             } catch (error) {
                 const message = getErrorMessage(error);
@@ -753,11 +821,14 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
             // that preceded it. A close initiated in Console must stay here.
             const view = this.view;
             const keepConsoleVisible = view?.visible === true;
-            const visibilityListener = view && keepConsoleVisible ? view.onDidChangeVisibility(() => {
-                if (this.view === view && !view.visible) {
-                    view.show(true);
-                }
-            }) : undefined;
+            const visibilityListener =
+                view && keepConsoleVisible
+                    ? view.onDidChangeVisibility(() => {
+                          if (this.view === view && !view.visible) {
+                              view.show(true);
+                          }
+                      })
+                    : undefined;
             try {
                 if (!this._sessionManager.getSession(params.sessionId)) {
                     this._consoleService?.deletePositronConsoleSession(params.sessionId);
@@ -766,7 +837,9 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
                 }
             } catch (error) {
                 const message = getErrorMessage(error);
-                void vscode.window.showErrorMessage(vscode.l10n.t('Failed to delete session: {0}', message));
+                void vscode.window.showErrorMessage(
+                    vscode.l10n.t('Failed to delete session: {0}', message),
+                );
                 throw error;
             } finally {
                 this._sendSessionInfoUpdate();
@@ -815,7 +888,10 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
 
         // Handle rename session request
         connection.onRequest(SessionProtocol.RenameSessionRequest.type, async (params) => {
-            this.log(`Rename session request: ${params.sessionId} -> ${params.newName}`, vscode.LogLevel.Debug);
+            this.log(
+                `Rename session request: ${params.sessionId} -> ${params.newName}`,
+                vscode.LogLevel.Debug,
+            );
             if (!this._sessionManager) {
                 throw new Error('Session manager not available');
             }
@@ -829,7 +905,6 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
     }
 
     private _registerOutputNavigationHandlers(connection: MessageConnection): void {
-
         connection.onRequest(SessionProtocol.ListOutputChannelsRequest.type, async (params) => {
             if (!this._sessionManager) {
                 return { channels: [] };
@@ -867,37 +942,54 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
             this._consoleService?.setConsoleWidth(params.widthInChars);
         });
 
-        connection.onNotification(ConsoleProtocol.ConsoleOpenFileNotification.type, async (params) => {
-            const instance = params?.sessionId
-                ? this._consoleService?.getConsoleInstance(params.sessionId)
-                : undefined;
-            if (!instance) {
-                return;
-            }
-            try {
-                await openConsoleFile(params, instance.workingDirectory);
-            } catch (error) {
-                this.log(`Failed to open console file: ${getErrorMessage(error)}`, vscode.LogLevel.Warning);
-                void vscode.window.showWarningMessage(vscode.l10n.t('Could not open console file: {0}', params.path));
-            }
-        });
-
-        connection.onNotification(ConsoleProtocol.ConsoleOpenExternalNotification.type, (params) => {
-            if (!params?.url) {
-                return;
-            }
-
-            try {
-                const uri = vscode.Uri.parse(params.url, true);
-                if (uri.scheme !== 'http' && uri.scheme !== 'https') {
-                    this.log(`Blocked non-http(s) external URL from console output: ${params.url}`, vscode.LogLevel.Warning);
+        connection.onNotification(
+            ConsoleProtocol.ConsoleOpenFileNotification.type,
+            async (params) => {
+                const instance = params?.sessionId
+                    ? this._consoleService?.getConsoleInstance(params.sessionId)
+                    : undefined;
+                if (!instance) {
                     return;
                 }
-                void vscode.env.openExternal(uri);
-            } catch (error) {
-                this.log(`Failed to open external URL from console output: ${getErrorMessage(error)}`, vscode.LogLevel.Warning);
-            }
-        });
+                try {
+                    await openConsoleFile(params, instance.workingDirectory);
+                } catch (error) {
+                    this.log(
+                        `Failed to open console file: ${getErrorMessage(error)}`,
+                        vscode.LogLevel.Warning,
+                    );
+                    void vscode.window.showWarningMessage(
+                        vscode.l10n.t('Could not open console file: {0}', params.path),
+                    );
+                }
+            },
+        );
+
+        connection.onNotification(
+            ConsoleProtocol.ConsoleOpenExternalNotification.type,
+            (params) => {
+                if (!params?.url) {
+                    return;
+                }
+
+                try {
+                    const uri = vscode.Uri.parse(params.url, true);
+                    if (uri.scheme !== 'http' && uri.scheme !== 'https') {
+                        this.log(
+                            `Blocked non-http(s) external URL from console output: ${params.url}`,
+                            vscode.LogLevel.Warning,
+                        );
+                        return;
+                    }
+                    void vscode.env.openExternal(uri);
+                } catch (error) {
+                    this.log(
+                        `Failed to open external URL from console output: ${getErrorMessage(error)}`,
+                        vscode.LogLevel.Warning,
+                    );
+                }
+            },
+        );
     }
 
     /**
@@ -923,7 +1015,6 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
             SessionProtocol.SessionInfoNotification.type,
             this._buildSessionInfoSnapshot(),
         );
-
     }
 
     private _flushPendingConsoleSync(): void {
@@ -951,7 +1042,7 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
     private _buildSessionInfoSnapshot(): SessionProtocol.SessionInfoNotification.Params {
         const sessions = this._sessionSnapshotBuilder
             .buildSessionsWithConsoleOverlay()
-            .map(session => {
+            .map((session) => {
                 const icon = session.base64EncodedIconSvg;
                 if (!icon) {
                     this._publishedSessionIconHashes.delete(session.id);
@@ -965,7 +1056,7 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
                 this._publishedSessionIconHashes.set(session.id, hash);
                 return session;
             });
-        const liveSessionIds = new Set(sessions.map(session => session.id));
+        const liveSessionIds = new Set(sessions.map((session) => session.id));
         for (const sessionId of this._publishedSessionIconHashes.keys()) {
             if (!liveSessionIds.has(sessionId)) {
                 this._publishedSessionIconHashes.delete(sessionId);
@@ -974,12 +1065,15 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
 
         return {
             sessions,
-            activeSessionId: this._sessionSnapshotBuilder.resolveForegroundConsoleSessionId(sessions, [
-                // Follow the console service first so provisional sessions created
-                // from onWillStartSession become active before the runtime is ready.
-                this._consoleService?.activePositronConsoleInstance?.sessionId,
-                this._sessionManager?.activeSessionId,
-            ]),
+            activeSessionId: this._sessionSnapshotBuilder.resolveForegroundConsoleSessionId(
+                sessions,
+                [
+                    // Follow the console service first so provisional sessions created
+                    // from onWillStartSession become active before the runtime is ready.
+                    this._consoleService?.activePositronConsoleInstance?.sessionId,
+                    this._sessionManager?.activeSessionId,
+                ],
+            ),
         };
     }
 
@@ -1034,10 +1128,16 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
             return;
         }
         this._missingSessionWarnings.add(action);
-        this.log(`[ConsoleViewProvider] ${action} missing sessionId; dropping`, vscode.LogLevel.Warning);
+        this.log(
+            `[ConsoleViewProvider] ${action} missing sessionId; dropping`,
+            vscode.LogLevel.Warning,
+        );
     }
 
-    private _resolveSessionForRequest(action: string, sessionId?: string): RuntimeSession | undefined {
+    private _resolveSessionForRequest(
+        action: string,
+        sessionId?: string,
+    ): RuntimeSession | undefined {
         if (!sessionId) {
             this._warnMissingSession(action);
             return undefined;
@@ -1046,15 +1146,24 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
         const session = this._sessionManager?.getSession(sessionId);
 
         if (!session) {
-            this.log(`[ConsoleViewProvider] ${action}: session ${sessionId} not found`, vscode.LogLevel.Warning);
+            this.log(
+                `[ConsoleViewProvider] ${action}: session ${sessionId} not found`,
+                vscode.LogLevel.Warning,
+            );
         }
 
         return session;
     }
 
-    private _resolveConsoleInstance(action: string, sessionId?: string): IPositronConsoleInstance | undefined {
+    private _resolveConsoleInstance(
+        action: string,
+        sessionId?: string,
+    ): IPositronConsoleInstance | undefined {
         if (!this._consoleService) {
-            this.log(`[ConsoleViewProvider] ${action}: console service not available`, vscode.LogLevel.Debug);
+            this.log(
+                `[ConsoleViewProvider] ${action}: console service not available`,
+                vscode.LogLevel.Debug,
+            );
             return undefined;
         }
 
@@ -1063,7 +1172,10 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
             : this._consoleService.activePositronConsoleInstance;
 
         if (!instance) {
-            this.log(`[ConsoleViewProvider] ${action}: console instance not found`, vscode.LogLevel.Debug);
+            this.log(
+                `[ConsoleViewProvider] ${action}: console instance not found`,
+                vscode.LogLevel.Debug,
+            );
         }
 
         return instance;
@@ -1071,14 +1183,26 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
 
     protected _getHtmlContent(webview: vscode.Webview): string {
         const scriptUri = this._getWebviewUri(webview, 'webview', 'dist', 'console', 'index.js');
-        const commonStyleUri = this._getWebviewUri(webview, 'webview', 'dist', 'common', 'index.css');
+        const commonStyleUri = this._getWebviewUri(
+            webview,
+            'webview',
+            'dist',
+            'common',
+            'index.css',
+        );
         const styleUri = this._getWebviewUri(webview, 'webview', 'dist', 'console', 'index.css');
-        const monacoStyleUri = this._getWebviewUri(webview, 'webview', 'dist', 'setup', 'index.css');
+        const monacoStyleUri = this._getWebviewUri(
+            webview,
+            'webview',
+            'dist',
+            'setup',
+            'index.css',
+        );
         const languageMonacoSupportModules = this._serializeInlineScriptData(
-            this._getLanguageMonacoSupportModuleUris(webview)
+            this._getLanguageMonacoSupportModuleUris(webview),
         );
         const languageTextMateGrammars = this._serializeInlineScriptData(
-            this._getLanguageTextMateGrammarDefinitions(webview)
+            this._getLanguageTextMateGrammarDefinitions(webview),
         );
         const nonce = this._getNonce();
 
@@ -1141,10 +1265,19 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
             fontFamily: appearance.fontFamily,
             fontSize: appearance.fontSize,
             lineHeight: appearance.lineHeight,
-            fontLigatures: config.get<string>('console.fontLigatures') || editorConfig.get<string>('fontLigatures', 'off'),
-            fontVariations: config.get<string>('console.fontVariations') || editorConfig.get<string>('fontVariations', 'off'),
-            fontWeight: config.get<string>('console.fontWeight') || editorConfig.get<string>('fontWeight', 'normal'),
-            letterSpacing: config.get<number>('console.letterSpacing', editorConfig.get<number>('letterSpacing', 0)),
+            fontLigatures:
+                config.get<string>('console.fontLigatures') ||
+                editorConfig.get<string>('fontLigatures', 'off'),
+            fontVariations:
+                config.get<string>('console.fontVariations') ||
+                editorConfig.get<string>('fontVariations', 'off'),
+            fontWeight:
+                config.get<string>('console.fontWeight') ||
+                editorConfig.get<string>('fontWeight', 'normal'),
+            letterSpacing: config.get<number>(
+                'console.letterSpacing',
+                editorConfig.get<number>('letterSpacing', 0),
+            ),
             showResourceMonitor: config.get<boolean>('console.showResourceMonitor', true),
             promptWhenIncomplete: rootConfig.get<boolean>(
                 CoreConfigurationKeys.consolePromptWhenIncomplete,
@@ -1192,38 +1325,57 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
         }
         this._connection?.sendNotification(ConsoleProtocol.RevealExecutionNotification.type, {
             executionId,
-            sessionId
+            sessionId,
         });
     }
 
     private _sendFocusInput(sessionId: string): void {
-        this._connection?.sendNotification(ConsoleProtocol.FocusInputNotification.type, { sessionId });
-    }
-
-    private _sendPasteText(sessionId: string, text: string): void {
-        this._connection?.sendNotification(ConsoleProtocol.PasteTextNotification.type, { sessionId, text });
-    }
-
-    private _sendSelectAll(sessionId: string): void {
-        this._connection?.sendNotification(ConsoleProtocol.SelectAllNotification.type, { sessionId });
-    }
-
-    private _sendHistoryNavigateUp(sessionId: string, usingPrefixMatch: boolean): void {
-        this._connection?.sendNotification(ConsoleProtocol.NavigateInputHistoryUpNotification.type, {
+        this._connection?.sendNotification(ConsoleProtocol.FocusInputNotification.type, {
             sessionId,
-            usingPrefixMatch
         });
     }
 
+    private _sendPasteText(sessionId: string, text: string): void {
+        this._connection?.sendNotification(ConsoleProtocol.PasteTextNotification.type, {
+            sessionId,
+            text,
+        });
+    }
+
+    private _sendSelectAll(sessionId: string): void {
+        this._connection?.sendNotification(ConsoleProtocol.SelectAllNotification.type, {
+            sessionId,
+        });
+    }
+
+    private _sendHistoryNavigateUp(sessionId: string, usingPrefixMatch: boolean): void {
+        this._connection?.sendNotification(
+            ConsoleProtocol.NavigateInputHistoryUpNotification.type,
+            {
+                sessionId,
+                usingPrefixMatch,
+            },
+        );
+    }
+
     private _sendHistoryNavigateDown(sessionId: string): void {
-        this._connection?.sendNotification(ConsoleProtocol.NavigateInputHistoryDownNotification.type, { sessionId });
+        this._connection?.sendNotification(
+            ConsoleProtocol.NavigateInputHistoryDownNotification.type,
+            { sessionId },
+        );
     }
 
     private _sendHistoryClear(sessionId: string): void {
-        this._connection?.sendNotification(ConsoleProtocol.ClearInputHistoryNotification.type, { sessionId });
+        this._connection?.sendNotification(ConsoleProtocol.ClearInputHistoryNotification.type, {
+            sessionId,
+        });
     }
 
-    private _sendPendingInputChanged(sessionId: string, code: string | undefined, inputPrompt: string): void {
+    private _sendPendingInputChanged(
+        sessionId: string,
+        code: string | undefined,
+        inputPrompt: string,
+    ): void {
         this._connection?.sendNotification(ConsoleProtocol.PendingInputChangedNotification.type, {
             sessionId,
             code,
@@ -1239,13 +1391,11 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
         this._connection?.sendNotification(ConsoleProtocol.HistoryAddNotification.type, {
             sessionId,
             input: trimmed,
-            when: Date.now()
+            when: Date.now(),
         });
     }
 
-    private _publishResourceUsage(
-        publication: ConsoleResourceUsagePublication,
-    ): Promise<void> {
+    private _publishResourceUsage(publication: ConsoleResourceUsagePublication): Promise<void> {
         if (!this._connection || !this._webviewReady) {
             return Promise.reject(new Error('Console webview is not ready'));
         }
@@ -1261,9 +1411,9 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
             .get<boolean>('console.showResourceMonitor', true);
         this._resourceUsageCoordinator.setActive(
             this._webviewReady &&
-            this._consoleViewVisible &&
-            this._windowFocused &&
-            resourceMonitorEnabled,
+                this._consoleViewVisible &&
+                this._windowFocused &&
+                resourceMonitorEnabled,
         );
     }
 
@@ -1281,7 +1431,7 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
             inputPrompt?: string;
             continuationPrompt?: string;
             workingDirectory?: string | null;
-        }
+        },
     ): void {
         if (!this._connection || !this._webviewReady) {
             this._pendingRestoreStatesForInstances = true;
@@ -1324,10 +1474,11 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
         }
 
         const syncSeq = this._nextSyncSeq(sessionId);
-        this._connection.sendNotification(
-            ConsoleProtocol.ConsoleRuntimeChangesNotification.type,
-            { sessionId, syncSeq, changes },
-        );
+        this._connection.sendNotification(ConsoleProtocol.ConsoleRuntimeChangesNotification.type, {
+            sessionId,
+            syncSeq,
+            changes,
+        });
     }
 
     // =========================================================================
@@ -1345,7 +1496,7 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
         this._consoleServiceDisposables.push(
             this._sessionManager.onDidReceiveRuntimeEvent((runtimeEvent) => {
                 this._handleRuntimeEvent(runtimeEvent);
-            })
+            }),
         );
     }
 
@@ -1376,58 +1527,66 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
             return;
         }
 
-        this.log('[ConsoleViewProvider] Subscribing to console service events', vscode.LogLevel.Debug);
+        this.log(
+            '[ConsoleViewProvider] Subscribing to console service events',
+            vscode.LogLevel.Debug,
+        );
 
         // Forward onDidStartPositronConsoleInstance to webview
         this._consoleServiceDisposables.push(
-            this._consoleService.onDidStartPositronConsoleInstance(instance => {
-                this.log(`[ConsoleViewProvider] Console instance started: ${instance.sessionId}`, vscode.LogLevel.Debug);
+            this._consoleService.onDidStartPositronConsoleInstance((instance) => {
+                this.log(
+                    `[ConsoleViewProvider] Console instance started: ${instance.sessionId}`,
+                    vscode.LogLevel.Debug,
+                );
                 this._sendSessionInfoUpdate();
                 this._subscribeToConsoleInstanceEvents(instance);
-            })
+            }),
         );
 
         // Forward onDidDeletePositronConsoleInstance to webview
         this._consoleServiceDisposables.push(
-            this._consoleService.onDidDeletePositronConsoleInstance(instance => {
-                this.log(`[ConsoleViewProvider] Console instance deleted: ${instance.sessionId}`, vscode.LogLevel.Debug);
+            this._consoleService.onDidDeletePositronConsoleInstance((instance) => {
+                this.log(
+                    `[ConsoleViewProvider] Console instance deleted: ${instance.sessionId}`,
+                    vscode.LogLevel.Debug,
+                );
                 this._unsubscribeFromConsoleInstanceEvents(instance.sessionId);
                 this._suppressStartupNotificationOnce.delete(instance.sessionId);
                 this._sendSessionInfoUpdate();
-            })
+            }),
         );
 
         // Forward onDidChangeActivePositronConsoleInstance to webview
         this._consoleServiceDisposables.push(
-            this._consoleService.onDidChangeActivePositronConsoleInstance(instance => {
-                this.log(`[ConsoleViewProvider] Active console instance changed: ${instance?.sessionId || 'none'}`, vscode.LogLevel.Debug);
+            this._consoleService.onDidChangeActivePositronConsoleInstance((instance) => {
+                this.log(
+                    `[ConsoleViewProvider] Active console instance changed: ${instance?.sessionId || 'none'}`,
+                    vscode.LogLevel.Debug,
+                );
                 this._sendSessionInfoUpdate();
                 if (instance) {
                     this._ensureSessionInitialized(instance.sessionId);
                 }
-            })
+            }),
         );
 
         // Forward reveal execution requests to webview
         this._consoleServiceDisposables.push(
-            this._consoleService.onDidRevealExecution(event => {
+            this._consoleService.onDidRevealExecution((event) => {
                 this.sendRevealExecution(event.executionId, event.sessionId);
-            })
+            }),
         );
 
         this._consoleServiceDisposables.push(
-            this._consoleService.onDidChangePendingInput(event => {
-                this._sendPendingInputChanged(
-                    event.sessionId,
-                    event.code,
-                    event.inputPrompt,
-                );
-            })
+            this._consoleService.onDidChangePendingInput((event) => {
+                this._sendPendingInputChanged(event.sessionId, event.code, event.inputPrompt);
+            }),
         );
 
         // Forward console appearance settings changes to the webview.
         this._consoleServiceDisposables.push(
-            vscode.workspace.onDidChangeConfiguration(e => {
+            vscode.workspace.onDidChangeConfiguration((e) => {
                 if (e.affectsConfiguration('workbench.iconTheme')) {
                     void this._sendConsoleThemeChanged();
                 }
@@ -1448,15 +1607,15 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
                     e.affectsConfiguration('workbench.sashSize') ||
                     e.affectsConfiguration('editor.fontFamily') ||
                     e.affectsConfiguration('editor.fontSize') ||
-                    e.affectsConfiguration('editor.lineHeight')
-                    || e.affectsConfiguration('editor.fontLigatures')
-                    || e.affectsConfiguration('editor.fontVariations')
-                    || e.affectsConfiguration('editor.fontWeight')
-                    || e.affectsConfiguration('editor.letterSpacing')
+                    e.affectsConfiguration('editor.lineHeight') ||
+                    e.affectsConfiguration('editor.fontLigatures') ||
+                    e.affectsConfiguration('editor.fontVariations') ||
+                    e.affectsConfiguration('editor.fontWeight') ||
+                    e.affectsConfiguration('editor.letterSpacing')
                 ) {
                     this._sendConsoleSettingsChanged();
                 }
-            })
+            }),
         );
 
         // Seed existing instances (in case provider is created after sessions)
@@ -1473,169 +1632,234 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
 
         const disposables: vscode.Disposable[] = [];
 
-        disposables.push(instance.onFocusInput(() => {
-            this._sendFocusInput(sessionId);
-        }));
+        disposables.push(
+            instance.onFocusInput(() => {
+                this._sendFocusInput(sessionId);
+            }),
+        );
 
-        disposables.push(instance.onDidPasteText(text => {
-            this._sendPasteText(sessionId, text);
-        }));
+        disposables.push(
+            instance.onDidPasteText((text) => {
+                this._sendPasteText(sessionId, text);
+            }),
+        );
 
-        disposables.push(instance.onDidSelectAll(() => {
-            this._sendSelectAll(sessionId);
-        }));
+        disposables.push(
+            instance.onDidSelectAll(() => {
+                this._sendSelectAll(sessionId);
+            }),
+        );
 
-        disposables.push(instance.onDidNavigateInputHistoryUp(e => {
-            this._sendHistoryNavigateUp(sessionId, e.usePrefixMatch ?? false);
-        }));
+        disposables.push(
+            instance.onDidNavigateInputHistoryUp((e) => {
+                this._sendHistoryNavigateUp(sessionId, e.usePrefixMatch ?? false);
+            }),
+        );
 
-        disposables.push(instance.onDidNavigateInputHistoryDown(() => {
-            this._sendHistoryNavigateDown(sessionId);
-        }));
+        disposables.push(
+            instance.onDidNavigateInputHistoryDown(() => {
+                this._sendHistoryNavigateDown(sessionId);
+            }),
+        );
 
-        disposables.push(instance.onDidClearInputHistory(() => {
-            this._sendHistoryClear(sessionId);
-        }));
+        disposables.push(
+            instance.onDidClearInputHistory(() => {
+                this._sendHistoryClear(sessionId);
+            }),
+        );
 
         // Add executed code to webview history (1:1 Positron pattern).
         // In Positron, consoleInput.tsx listens for onDidExecuteCode and adds the
         // code to its local HistoryNavigator2. Here we bridge the same event to
         // the webview via the historyAdd notification so that code executed from
         // the editor (Ctrl+Enter) is available for ArrowUp/Down recall.
-        disposables.push(instance.onDidExecuteCode(({ code, mode }) => {
-            if (mode === RuntimeCodeExecutionMode.Interactive ||
-                mode === RuntimeCodeExecutionMode.NonInteractive) {
-                this._sendHistoryAdd(sessionId, code);
-            }
-        }));
+        disposables.push(
+            instance.onDidExecuteCode(({ code, mode }) => {
+                if (
+                    mode === RuntimeCodeExecutionMode.Interactive ||
+                    mode === RuntimeCodeExecutionMode.NonInteractive
+                ) {
+                    this._sendHistoryAdd(sessionId, code);
+                }
+            }),
+        );
 
-        disposables.push(instance.setInputDraftReader(async token => {
-            const connection = this._connection;
-            if (!connection || !this._webviewReady) { return undefined; }
-            try {
-                return (await connection.sendRequest(ConsoleProtocol.GetInputDraftRequest.type, { sessionId }, token)).draft;
-            } catch (error) {
-                if (token.isCancellationRequested) { throw new vscode.CancellationError(); }
-                this.log(`Console draft unavailable: ${getErrorMessage(error)}`, vscode.LogLevel.Debug);
-                return undefined;
-            }
-        }));
-        disposables.push(instance.onDidRequestInputEdit(edit => {
-            const connection = this._connection;
-            if (!connection || !this._webviewReady) { return; }
-            void connection.sendRequest(ConsoleProtocol.ApplyInputEditRequest.type, { sessionId, ...edit })
-                .catch(error => {
-                    this.log(`Console input edit unavailable: ${getErrorMessage(error)}`, vscode.LogLevel.Debug);
-                    if (this._connection === connection) {
-                        connection.sendNotification(ConsoleProtocol.SetPendingCodeNotification.type, { sessionId, ...edit });
+        disposables.push(
+            instance.setInputDraftReader(async (token) => {
+                const connection = this._connection;
+                if (!connection || !this._webviewReady) {
+                    return undefined;
+                }
+                try {
+                    return (
+                        await connection.sendRequest(
+                            ConsoleProtocol.GetInputDraftRequest.type,
+                            { sessionId },
+                            token,
+                        )
+                    ).draft;
+                } catch (error) {
+                    if (token.isCancellationRequested) {
+                        throw new vscode.CancellationError();
                     }
+                    this.log(
+                        `Console draft unavailable: ${getErrorMessage(error)}`,
+                        vscode.LogLevel.Debug,
+                    );
+                    return undefined;
+                }
+            }),
+        );
+        disposables.push(
+            instance.onDidRequestInputEdit((edit) => {
+                const connection = this._connection;
+                if (!connection || !this._webviewReady) {
+                    return;
+                }
+                void connection
+                    .sendRequest(ConsoleProtocol.ApplyInputEditRequest.type, { sessionId, ...edit })
+                    .catch((error) => {
+                        this.log(
+                            `Console input edit unavailable: ${getErrorMessage(error)}`,
+                            vscode.LogLevel.Debug,
+                        );
+                        if (this._connection === connection) {
+                            connection.sendNotification(
+                                ConsoleProtocol.SetPendingCodeNotification.type,
+                                { sessionId, ...edit },
+                            );
+                        }
+                    });
+            }),
+        );
+        disposables.push(
+            instance.onDidChangeCodeSubmissionInProgress((submitting) => {
+                this._connection?.sendNotification(
+                    ConsoleProtocol.SubmissionStateChangedNotification.type,
+                    {
+                        sessionId,
+                        submitting,
+                        version: instance.submissionStateVersion,
+                    },
+                );
+            }),
+        );
+
+        disposables.push(
+            instance.onDidChangePrompt(() => {
+                this._sendSessionMetadataUpdate(sessionId, {
+                    inputPrompt: instance.inputPrompt,
+                    continuationPrompt: instance.continuationPrompt,
                 });
-        }));
-        disposables.push(instance.onDidChangeCodeSubmissionInProgress(submitting => {
-            this._connection?.sendNotification(ConsoleProtocol.SubmissionStateChangedNotification.type, {
-                sessionId, submitting, version: instance.submissionStateVersion,
-            });
-        }));
-
-        disposables.push(instance.onDidChangePrompt(() => {
-            this._sendSessionMetadataUpdate(sessionId, {
-                inputPrompt: instance.inputPrompt,
-                continuationPrompt: instance.continuationPrompt,
-            });
-            this._sendSessionInfoUpdate();
-        }));
-
-        disposables.push(instance.onDidChangeWorkingDirectory((workingDirectory) => {
-            this._sendSessionMetadataUpdate(sessionId, {
-                workingDirectory: workingDirectory ?? null,
-            });
-        }));
-
-        disposables.push(instance.onDidChangeWordWrap(() => {
-            this._sendSessionMetadataUpdate(sessionId, {
-                wordWrap: instance.wordWrap,
-            });
-        }));
-
-        disposables.push(instance.onDidChangeTrace(() => {
-            this._sendSessionMetadataUpdate(sessionId, {
-                trace: instance.trace,
-            });
-        }));
-
-        disposables.push(instance.onDidAttachSession(() => {
-            this._sendSessionInfoUpdate();
-        }));
-
-        disposables.push(instance.onDidChangeState(() => {
-            this._sendSessionInfoUpdate();
-        }));
-
-        disposables.push(instance.onDidChangeRuntimeItems((events) => {
-            if (events.some((event) => event.kind === 'restore')) {
                 this._sendSessionInfoUpdate();
-                if (this._initializedSessions.has(sessionId)) {
-                    this._sendRestoreStateForInstance(sessionId);
-                }
-                return;
-            }
+            }),
+        );
 
-            if (events.some((event) =>
-                event.kind === 'appendActivityItem' &&
-                event.item.type === 'prompt'
-            )) {
+        disposables.push(
+            instance.onDidChangeWorkingDirectory((workingDirectory) => {
+                this._sendSessionMetadataUpdate(sessionId, {
+                    workingDirectory: workingDirectory ?? null,
+                });
+            }),
+        );
+
+        disposables.push(
+            instance.onDidChangeWordWrap(() => {
+                this._sendSessionMetadataUpdate(sessionId, {
+                    wordWrap: instance.wordWrap,
+                });
+            }),
+        );
+
+        disposables.push(
+            instance.onDidChangeTrace(() => {
+                this._sendSessionMetadataUpdate(sessionId, {
+                    trace: instance.trace,
+                });
+            }),
+        );
+
+        disposables.push(
+            instance.onDidAttachSession(() => {
                 this._sendSessionInfoUpdate();
-            }
+            }),
+        );
 
-            const changes: ConsoleProtocol.ConsoleRuntimeChange[] = [];
-            for (const event of events) {
-                switch (event.kind) {
-                    case 'appendRuntimeItem':
-                        changes.push({
-                            kind: 'appendRuntimeItem',
-                            runtimeItem: event.item,
-                        });
-                        break;
-                    case 'replaceRuntimeItem':
-                        changes.push({
-                            kind: 'replaceRuntimeItem',
-                            targetId: event.targetId,
-                            runtimeItem: event.item,
-                        });
-                        break;
-                    case 'appendActivityItem':
-                        changes.push({
-                            kind: 'appendActivityItem',
-                            parentId: event.parentId,
-                            activityItem: event.item,
-                        });
-                        break;
-                    case 'replaceActivityOutput':
-                        changes.push({
-                            kind: 'replaceActivityOutput',
-                            parentId: event.parentId,
-                            outputId: event.outputId,
-                            activityItem: event.item,
-                        });
-                        break;
-                    case 'clearActivityOutput':
-                        changes.push({
-                            kind: 'clearActivityOutput',
-                            parentId: event.parentId,
-                        });
-                        break;
-                    case 'updateActivityInputState':
-                        changes.push({
-                            kind: 'updateActivityInputState',
-                            parentId: event.parentId,
-                            state: event.state,
-                        });
-                        break;
+        disposables.push(
+            instance.onDidChangeState(() => {
+                this._sendSessionInfoUpdate();
+            }),
+        );
+
+        disposables.push(
+            instance.onDidChangeRuntimeItems((events) => {
+                if (events.some((event) => event.kind === 'restore')) {
+                    this._sendSessionInfoUpdate();
+                    if (this._initializedSessions.has(sessionId)) {
+                        this._sendRestoreStateForInstance(sessionId);
+                    }
+                    return;
                 }
-            }
 
-            this._sendRuntimeChanges(sessionId, changes);
-        }));
+                if (
+                    events.some(
+                        (event) =>
+                            event.kind === 'appendActivityItem' && event.item.type === 'prompt',
+                    )
+                ) {
+                    this._sendSessionInfoUpdate();
+                }
+
+                const changes: ConsoleProtocol.ConsoleRuntimeChange[] = [];
+                for (const event of events) {
+                    switch (event.kind) {
+                        case 'appendRuntimeItem':
+                            changes.push({
+                                kind: 'appendRuntimeItem',
+                                runtimeItem: event.item,
+                            });
+                            break;
+                        case 'replaceRuntimeItem':
+                            changes.push({
+                                kind: 'replaceRuntimeItem',
+                                targetId: event.targetId,
+                                runtimeItem: event.item,
+                            });
+                            break;
+                        case 'appendActivityItem':
+                            changes.push({
+                                kind: 'appendActivityItem',
+                                parentId: event.parentId,
+                                activityItem: event.item,
+                            });
+                            break;
+                        case 'replaceActivityOutput':
+                            changes.push({
+                                kind: 'replaceActivityOutput',
+                                parentId: event.parentId,
+                                outputId: event.outputId,
+                                activityItem: event.item,
+                            });
+                            break;
+                        case 'clearActivityOutput':
+                            changes.push({
+                                kind: 'clearActivityOutput',
+                                parentId: event.parentId,
+                            });
+                            break;
+                        case 'updateActivityInputState':
+                            changes.push({
+                                kind: 'updateActivityInputState',
+                                parentId: event.parentId,
+                                state: event.state,
+                            });
+                            break;
+                    }
+                }
+
+                this._sendRuntimeChanges(sessionId, changes);
+            }),
+        );
 
         // Only send restore state if this session hasn't been initialized
         // in the current webview lifecycle. Afterwards, runtime item updates
@@ -1652,7 +1876,7 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
     private _unsubscribeFromConsoleInstanceEvents(sessionId: string): void {
         const disposables = this._consoleInstanceSubscriptions.get(sessionId);
         if (disposables) {
-            disposables.forEach(d => d.dispose());
+            disposables.forEach((d) => d.dispose());
             this._consoleInstanceSubscriptions.delete(sessionId);
         }
         this._deleteSyncSeq(sessionId);
@@ -1733,11 +1957,14 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
         const serialized = JSON.stringify(state);
         const encodedBytes = Buffer.byteLength(serialized, 'utf8');
         if (encodedBytes <= 60 * 1024) {
-            this._connection.sendNotification(ConsoleProtocol.ConsoleRestoreStateNotification.type, {
-                sessionId,
-                syncSeq,
-                state,
-            });
+            this._connection.sendNotification(
+                ConsoleProtocol.ConsoleRestoreStateNotification.type,
+                {
+                    sessionId,
+                    syncSeq,
+                    state,
+                },
+            );
         } else {
             // Keep every message safely below the Remote Webview transport's
             // 64KB target. Twelve thousand UTF-16 code units fit even when
@@ -1754,19 +1981,19 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
                     chunkId,
                     priority: 3,
                     bytes: Buffer.byteLength(data, 'utf8'),
-                    send: () => this._connection?.sendNotification(
-                        ConsoleProtocol.ConsoleStateChunkNotification.type,
-                        { sessionId, syncSeq, batchId, chunkId, index, total, data },
-                    ),
+                    send: () =>
+                        this._connection?.sendNotification(
+                            ConsoleProtocol.ConsoleStateChunkNotification.type,
+                            { sessionId, syncSeq, batchId, chunkId, index, total, data },
+                        ),
                 });
             }
         }
         this.log(
             `[ConsoleSync] restoreState session=${sessionId} seq=${syncSeq} ` +
-            `bytes=${encodedBytes} items=${state.items.length}`,
+                `bytes=${encodedBytes} items=${state.items.length}`,
             encodedBytes > 64 * 1024 ? vscode.LogLevel.Warning : vscode.LogLevel.Debug,
         );
         return true;
     }
-
 }

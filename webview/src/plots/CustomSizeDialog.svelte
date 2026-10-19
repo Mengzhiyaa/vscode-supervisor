@@ -1,8 +1,8 @@
 <script lang="ts">
-    import { untrack } from "svelte";
-    import { localize } from "$lib/localization";
+    import { untrack } from 'svelte';
+    import { localize } from '$lib/localization';
 
-    type SizeUnit = "px" | "in" | "cm" | "mm";
+    type SizeUnit = 'px' | 'in' | 'cm' | 'mm';
     /**
      * CustomSizeDialog.svelte - Dialog for setting custom plot dimensions
      * Follows Positron's modal dialog pattern for custom size input.
@@ -27,15 +27,19 @@
     let width = $state(initialWidth);
     // svelte-ignore state_referenced_locally
     let height = $state(initialHeight);
-    let unit = $state<SizeUnit>("px");
+    let unit = $state<SizeUnit>('px');
     let pixelsPerInch = $state(96);
 
     function unitScale(value: SizeUnit): number {
         switch (value) {
-            case "in": return pixelsPerInch;
-            case "cm": return pixelsPerInch / 2.54;
-            case "mm": return pixelsPerInch / 25.4;
-            default: return 1;
+            case 'in':
+                return pixelsPerInch;
+            case 'cm':
+                return pixelsPerInch / 2.54;
+            case 'mm':
+                return pixelsPerInch / 25.4;
+            default:
+                return 1;
         }
     }
 
@@ -43,10 +47,14 @@
     const pixelWidth = $derived(Math.round(width * scale));
     const pixelHeight = $derived(Math.round(height * scale));
     const validSize = $derived(
-        Number.isFinite(width) && Number.isFinite(height) &&
-        pixelWidth >= 100 && pixelWidth <= 4096 &&
-        pixelHeight >= 100 && pixelHeight <= 4096 &&
-        (unit === "px" || (Number.isFinite(pixelsPerInch) && pixelsPerInch >= 1 && pixelsPerInch <= 1200)),
+        Number.isFinite(width) &&
+            Number.isFinite(height) &&
+            pixelWidth >= 100 &&
+            pixelWidth <= 4096 &&
+            pixelHeight >= 100 &&
+            pixelHeight <= 4096 &&
+            (unit === 'px' ||
+                (Number.isFinite(pixelsPerInch) && pixelsPerInch >= 1 && pixelsPerInch <= 1200)),
     );
     // svelte-ignore non_reactive_update
     let dialogElement: HTMLDialogElement;
@@ -81,17 +89,17 @@
     }
 
     function handleKeydown(e: KeyboardEvent) {
-        if (e.key === "Escape") {
+        if (e.key === 'Escape') {
             handleCancel();
         }
     }
 
     // Preset sizes
     const presets = [
-        { label: "800 × 600", width: 800, height: 600 },
-        { label: "1024 × 768", width: 1024, height: 768 },
-        { label: "1280 × 720", width: 1280, height: 720 },
-        { label: "1920 × 1080", width: 1920, height: 1080 },
+        { label: '800 × 600', width: 800, height: 600 },
+        { label: '1024 × 768', width: 1024, height: 768 },
+        { label: '1280 × 720', width: 1280, height: 720 },
+        { label: '1920 × 1080', width: 1920, height: 1080 },
     ];
 
     function applyPreset(w: number, h: number) {
@@ -102,9 +110,9 @@
     function changeUnit(event: Event) {
         const nextUnit = (event.currentTarget as HTMLSelectElement).value as SizeUnit;
         const nextScale = unitScale(nextUnit);
-        width = width * scale / nextScale;
-        height = height * scale / nextScale;
-        if (nextUnit === "px") {
+        width = (width * scale) / nextScale;
+        height = (height * scale) / nextScale;
+        if (nextUnit === 'px') {
             width = Math.round(width);
             height = Math.round(height);
         }
@@ -120,10 +128,10 @@
         onclose={handleCancel}
     >
         <form onsubmit={handleSubmit}>
-            <h2>{localize("plots.customSizeTitle", "Custom Plot Size")}</h2>
+            <h2>{localize('plots.customSizeTitle', 'Custom Plot Size')}</h2>
 
             <div class="form-row">
-                <label for="plot-size-unit">{localize("plots.sizeUnit", "Unit")}</label>
+                <label for="plot-size-unit">{localize('plots.sizeUnit', 'Unit')}</label>
                 <select id="plot-size-unit" value={unit} onchange={changeUnit}>
                     <option value="px">px</option>
                     <option value="in">in</option>
@@ -132,9 +140,11 @@
                 </select>
             </div>
 
-            {#if unit !== "px"}
+            {#if unit !== 'px'}
                 <div class="form-row">
-                    <label for="plot-size-resolution">{localize("plots.pixelsPerInch", "Pixels per inch (px/in)")}</label>
+                    <label for="plot-size-resolution"
+                        >{localize('plots.pixelsPerInch', 'Pixels per inch (px/in)')}</label
+                    >
                     <input
                         type="number"
                         id="plot-size-resolution"
@@ -148,39 +158,44 @@
             {/if}
 
             <div class="form-row">
-                <label for="width">{localize("plots.sizeWidth", "Width ({0})", unit)}</label>
+                <label for="width">{localize('plots.sizeWidth', 'Width ({0})', unit)}</label>
                 <input
                     type="number"
                     id="width"
                     bind:value={width}
                     min="0"
-                    step={unit === "px" ? "1" : "any"}
+                    step={unit === 'px' ? '1' : 'any'}
                     required
                 />
             </div>
 
             <div class="form-row">
-                <label for="height">{localize("plots.sizeHeight", "Height ({0})", unit)}</label>
+                <label for="height">{localize('plots.sizeHeight', 'Height ({0})', unit)}</label>
                 <input
                     type="number"
                     id="height"
                     bind:value={height}
                     min="0"
-                    step={unit === "px" ? "1" : "any"}
+                    step={unit === 'px' ? '1' : 'any'}
                     required
                 />
             </div>
 
             <div class="size-preview" aria-live="polite">
                 {#if validSize}
-                    {localize("plots.pixelSizePreview", "Render size: {0} × {1} px", pixelWidth, pixelHeight)}
+                    {localize(
+                        'plots.pixelSizePreview',
+                        'Render size: {0} × {1} px',
+                        pixelWidth,
+                        pixelHeight,
+                    )}
                 {:else}
-                    {localize("plots.sizeRange", "Each dimension must be between 100 and 4096 px.")}
+                    {localize('plots.sizeRange', 'Each dimension must be between 100 and 4096 px.')}
                 {/if}
             </div>
 
             <div class="presets">
-                <span class="presets-label">{localize("plots.sizePresets", "Presets (px):")}</span>
+                <span class="presets-label">{localize('plots.sizePresets', 'Presets (px):')}</span>
                 {#each presets as preset}
                     <button
                         type="button"
@@ -194,9 +209,11 @@
 
             <div class="actions">
                 <button type="button" class="cancel-btn" onclick={handleCancel}>
-                    {localize("plots.sizeCancel", "Cancel")}
+                    {localize('plots.sizeCancel', 'Cancel')}
                 </button>
-                <button type="submit" class="submit-btn" disabled={!validSize}>{localize("plots.sizeApply", "Apply")}</button>
+                <button type="submit" class="submit-btn" disabled={!validSize}
+                    >{localize('plots.sizeApply', 'Apply')}</button
+                >
             </div>
         </form>
     </dialog>
@@ -241,7 +258,8 @@
         color: var(--vscode-descriptionForeground, #8b8b8b);
     }
 
-    input[type="number"], select {
+    input[type='number'],
+    select {
         background: var(--vscode-input-background, #3c3c3c);
         border: 1px solid var(--vscode-input-border, transparent);
         color: var(--vscode-input-foreground, #cccccc);
@@ -250,7 +268,8 @@
         font-size: 13px;
     }
 
-    input[type="number"]:focus, select:focus {
+    input[type='number']:focus,
+    select:focus {
         outline: 1px solid var(--vscode-focusBorder, #007acc);
         border-color: var(--vscode-focusBorder, #007acc);
     }

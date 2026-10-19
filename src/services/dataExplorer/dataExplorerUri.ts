@@ -24,10 +24,7 @@ export function getDataExplorerIdentifier(uri: vscode.Uri): string | undefined {
     }
 }
 
-const PLAINTEXT_BACKING_EXTENSIONS = [
-    '.csv',
-    '.tsv',
-];
+const PLAINTEXT_BACKING_EXTENSIONS = ['.csv', '.tsv'];
 
 /**
  * Parse the backing URI encoded in a DuckDB-backed data explorer identifier.
@@ -59,7 +56,7 @@ export function isPlaintextDataExplorerIdentifier(identifier: string): boolean {
     }
 
     const normalizedPath = backingUri.path.toLowerCase();
-    return PLAINTEXT_BACKING_EXTENSIONS.some(extension => normalizedPath.endsWith(extension));
+    return PLAINTEXT_BACKING_EXTENSIONS.some((extension) => normalizedPath.endsWith(extension));
 }
 
 /** Whether the backing file exposes configurable import options. */

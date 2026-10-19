@@ -9,26 +9,37 @@ import { JupyterMessageType } from './JupyterMessageType';
 import type { JupyterPositronLocation } from './JupyterPositronTypes';
 import { JupyterRequest } from './JupyterRequest';
 
-
 export class ExecuteRequest extends JupyterRequest<JupyterExecuteRequest, JupyterExecuteResult> {
-	private readonly _cellId?: string;
-	private readonly _attributionSource?: string;
+    private readonly _cellId?: string;
+    private readonly _attributionSource?: string;
 
-	constructor(readonly requestId: string, req: JupyterExecuteRequest, cellId?: string, attributionSource?: string) {
-		super(JupyterMessageType.ExecuteRequest, req, JupyterMessageType.ExecuteResult, JupyterChannel.Shell);
-		this._cellId = cellId;
-		this._attributionSource = attributionSource;
-	}
-	protected override createMsgId(): string {
-		return this.requestId;
-	}
-	protected override get metadata(): Record<string, unknown> {
-		return {
-			...(this._cellId ? { cellId: this._cellId } : {}),
-			// Kallichore reads this from the envelope, not content.positron.
-			...(this._attributionSource ? { attribution: { source: this._attributionSource } } : {}),
-		};
-	}
+    constructor(
+        readonly requestId: string,
+        req: JupyterExecuteRequest,
+        cellId?: string,
+        attributionSource?: string,
+    ) {
+        super(
+            JupyterMessageType.ExecuteRequest,
+            req,
+            JupyterMessageType.ExecuteResult,
+            JupyterChannel.Shell,
+        );
+        this._cellId = cellId;
+        this._attributionSource = attributionSource;
+    }
+    protected override createMsgId(): string {
+        return this.requestId;
+    }
+    protected override get metadata(): Record<string, unknown> {
+        return {
+            ...(this._cellId ? { cellId: this._cellId } : {}),
+            // Kallichore reads this from the envelope, not content.positron.
+            ...(this._attributionSource
+                ? { attribution: { source: this._attributionSource } }
+                : {}),
+        };
+    }
 }
 
 /**
@@ -37,31 +48,31 @@ export class ExecuteRequest extends JupyterRequest<JupyterExecuteRequest, Jupyte
  * @link https://jupyter-client.readthedocs.io/en/stable/messaging.html#execute
  */
 export interface JupyterExecuteRequest {
-	/** The code to be executed */
-	code: string;
+    /** The code to be executed */
+    code: string;
 
-	/** Whether the code should be executed silently */
-	silent: boolean;
+    /** Whether the code should be executed silently */
+    silent: boolean;
 
-	/** Whether the code should be stored in history */
-	store_history: boolean;
+    /** Whether the code should be stored in history */
+    store_history: boolean;
 
-	/** A mapping of expressions to be evaluated after the code is executed (TODO: needs to be display_data) */
-	user_expressions: Record<string, unknown>;
+    /** A mapping of expressions to be evaluated after the code is executed (TODO: needs to be display_data) */
+    user_expressions: Record<string, unknown>;
 
-	/** Whether to allow the kernel to send stdin requests */
-	allow_stdin: boolean;
+    /** Whether to allow the kernel to send stdin requests */
+    allow_stdin: boolean;
 
-	/** Whether the kernel should stop the execution queue when an error occurs */
-	stop_on_error: boolean;
+    /** Whether the kernel should stop the execution queue when an error occurs */
+    stop_on_error: boolean;
 
-	/** Positron extension */
-	positron?: JupyterPositronExecuteRequest;
+    /** Positron extension */
+    positron?: JupyterPositronExecuteRequest;
 }
 
 export interface JupyterPositronExecuteRequest {
-	code_location?: JupyterPositronLocation;
-	[key: string]: unknown;
+    code_location?: JupyterPositronLocation;
+    [key: string]: unknown;
 }
 
 /**
@@ -71,7 +82,6 @@ export interface JupyterPositronExecuteRequest {
  * @link https://jupyter-client.readthedocs.io/en/stable/messaging.html#id6
  */
 export interface JupyterExecuteResult extends JupyterDisplayData {
-
-	/** Execution counter, monotonically increasing */
-	execution_count: number;
+    /** Execution counter, monotonically increasing */
+    execution_count: number;
 }

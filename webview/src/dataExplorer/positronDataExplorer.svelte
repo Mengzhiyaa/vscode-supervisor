@@ -2,23 +2,19 @@
   PositronDataExplorer.svelte - Main Data Explorer component
 -->
 <script lang="ts">
-    import { onMount, setContext } from "svelte";
-    import { getRpcConnection } from "$lib/rpc/client";
-    import type { MessageConnection } from "vscode-jsonrpc/browser";
-    import { PositronDataExplorerInstance } from "./positronDataExplorerInstance";
-    import DataExplorerPanel from "./components/dataExplorerPanel/dataExplorerPanel.svelte";
-    import ConvertToCodeModalDialog from "./components/convertToCodeModalDialog.svelte";
+    import { onMount, setContext } from 'svelte';
+    import { getRpcConnection } from '$lib/rpc/client';
+    import type { MessageConnection } from 'vscode-jsonrpc/browser';
+    import { PositronDataExplorerInstance } from './positronDataExplorerInstance';
+    import DataExplorerPanel from './components/dataExplorerPanel/dataExplorerPanel.svelte';
+    import ConvertToCodeModalDialog from './components/convertToCodeModalDialog.svelte';
     import DataExplorerClosed, {
         type DataExplorerClosedStatus,
-    } from "./components/dataExplorerClosed/positronDataExplorerClosed.svelte";
-    import FileOptionsModalDialog from "./components/fileOptionsModalDialog.svelte";
-    import { DATA_EXPLORER_CONTEXT_KEY } from "./positronDataExplorerContext";
-    import {
-        PositronDataExplorerLayout,
-        type ColumnValue,
-        type WebviewMessage,
-    } from "./types";
-    import { localize } from "./nls";
+    } from './components/dataExplorerClosed/positronDataExplorerClosed.svelte';
+    import FileOptionsModalDialog from './components/fileOptionsModalDialog.svelte';
+    import { DATA_EXPLORER_CONTEXT_KEY } from './positronDataExplorerContext';
+    import { PositronDataExplorerLayout, type ColumnValue, type WebviewMessage } from './types';
+    import { localize } from './nls';
 
     let connection = $state<MessageConnection | undefined>(undefined);
     let rootElement = $state<HTMLDivElement | undefined>(undefined);
@@ -26,8 +22,8 @@
     let dataExplorerFocused = $state(false);
     let showConvertToCodeModalDialog = $state(false);
     let convertToCodeSyntaxes = $state<string[]>([]);
-    let selectedConvertToCodeSyntax = $state("");
-    let convertToCodePreview = $state("");
+    let selectedConvertToCodeSyntax = $state('');
+    let convertToCodePreview = $state('');
     let convertToCodePreviewError = $state<string | undefined>(undefined);
     let convertToCodePreviewLoading = $state(false);
     let activeConvertToCodePreviewRequestId = $state(0);
@@ -42,18 +38,9 @@
     const { isLoading } = stores;
     const tableDataDataGridInstance = instance.tableDataDataGridInstance;
     const tableSchemaDataGridInstance = instance.tableSchemaDataGridInstance;
-    const dataExplorerAriaLabel = localize(
-        "dataExplorer.ariaLabel",
-        "Data Explorer",
-    );
-    const loadingDataExplorerLabel = localize(
-        "dataExplorer.loading",
-        "Loading Data Explorer",
-    );
-    const dismissErrorLabel = localize(
-        "dataExplorer.dismissError",
-        "Dismiss error",
-    );
+    const dataExplorerAriaLabel = localize('dataExplorer.ariaLabel', 'Data Explorer');
+    const loadingDataExplorerLabel = localize('dataExplorer.loading', 'Loading Data Explorer');
+    const dismissErrorLabel = localize('dataExplorer.dismissError', 'Dismiss error');
 
     function postMessage(message: WebviewMessage) {
         connection?.sendNotification(`dataExplorer/${message.type}`, message);
@@ -70,13 +57,13 @@
 
         dataExplorerFocused = focused;
         postMessage({
-            type: "focusChanged",
+            type: 'focusChanged',
             focused,
         });
     }
 
     function defer(callback: () => void) {
-        if (typeof queueMicrotask === "function") {
+        if (typeof queueMicrotask === 'function') {
             queueMicrotask(callback);
             return;
         }
@@ -111,10 +98,7 @@
 
         defer(() => {
             const activeElement = document.activeElement;
-            if (
-                activeElement instanceof Node &&
-                rootElement?.contains(activeElement)
-            ) {
+            if (activeElement instanceof Node && rootElement?.contains(activeElement)) {
                 return;
             }
 
@@ -131,7 +115,7 @@
         convertToCodePreviewLoading = true;
         convertToCodePreviewError = undefined;
         postMessage({
-            type: "requestConvertToCodePreview",
+            type: 'requestConvertToCodePreview',
             desiredSyntax: syntax,
             requestId: activeConvertToCodePreviewRequestId,
         });
@@ -146,9 +130,7 @@
     }
 
     function queryDataGridElement(selector: string): HTMLElement | undefined {
-        const element = document.querySelector(
-            `.data-grid[data-grid-role="table"] ${selector}`,
-        );
+        const element = document.querySelector(`.data-grid[data-grid-role="table"] ${selector}`);
         return element instanceof HTMLElement ? element : undefined;
     }
 
@@ -206,35 +188,34 @@
     const closedReason = $derived.by(() => {
         const backendState = $explorerState.backendState;
         if (backendState?.connected === false) {
-            return backendState.error_message ? "error" : "unavailable";
+            return backendState.error_message ? 'error' : 'unavailable';
         }
         return null;
     }) as ClosedReason;
 
     const closedErrorMessage = $derived.by(() => {
-        return $explorerState.backendState?.error_message ?? "";
+        return $explorerState.backendState?.error_message ?? '';
     });
 
     function handleClose() {
-        postMessage({ type: "close" });
+        postMessage({ type: 'close' });
     }
 
     function openConvertToCodeModalDialog(params?: {
         suggestedSyntax?: string;
         availableSyntaxes?: string[];
     }) {
-        const availableSyntaxes =
-            params?.availableSyntaxes?.length
-                ? params.availableSyntaxes
-                : ($explorerState.codeSyntaxes ?? []);
+        const availableSyntaxes = params?.availableSyntaxes?.length
+            ? params.availableSyntaxes
+            : ($explorerState.codeSyntaxes ?? []);
 
         if (availableSyntaxes.length === 0) {
             stores.state.update((state) => ({
                 ...state,
                 error: {
-                    message: "No code syntax is available for this backend.",
-                    operation: "convertToCode",
-                    severity: "warning",
+                    message: 'No code syntax is available for this backend.',
+                    operation: 'convertToCode',
+                    severity: 'warning',
                     recoverable: true,
                 },
             }));
@@ -243,11 +224,10 @@
 
         convertToCodeSyntaxes = availableSyntaxes;
         selectedConvertToCodeSyntax =
-            params?.suggestedSyntax &&
-            availableSyntaxes.includes(params.suggestedSyntax)
+            params?.suggestedSyntax && availableSyntaxes.includes(params.suggestedSyntax)
                 ? params.suggestedSyntax
-                : availableSyntaxes[0] ?? "";
-        convertToCodePreview = "";
+                : (availableSyntaxes[0] ?? '');
+        convertToCodePreview = '';
         convertToCodePreviewError = undefined;
         convertToCodePreviewLoading = false;
         activeConvertToCodePreviewRequestId += 1;
@@ -264,7 +244,7 @@
     function applyConvertToCode(syntax: string) {
         showConvertToCodeModalDialog = false;
         postMessage({
-            type: "runConvertToCode",
+            type: 'runConvertToCode',
             desiredSyntax: syntax,
         });
     }
@@ -276,27 +256,22 @@
         selectedSheet?: string;
     }) {
         const supportsFileOptions =
-            params?.supportsFileOptions ??
-            $explorerState.supportsFileOptions ??
-            false;
+            params?.supportsFileOptions ?? $explorerState.supportsFileOptions ?? false;
 
         if (!supportsFileOptions) {
             stores.state.update((state) => ({
                 ...state,
                 error: {
-                    message: "File options are not supported by this dataset.",
-                    operation: "fileOptions",
-                    severity: "warning",
+                    message: 'File options are not supported by this dataset.',
+                    operation: 'fileOptions',
+                    severity: 'warning',
                     recoverable: true,
                 },
             }));
             return;
         }
 
-        pendingHasHeaderRow =
-            params?.hasHeaderRow ??
-            $explorerState.fileHasHeaderRow ??
-            true;
+        pendingHasHeaderRow = params?.hasHeaderRow ?? $explorerState.fileHasHeaderRow ?? true;
         pendingAvailableSheets =
             params?.availableSheets ?? $explorerState.fileAvailableSheets ?? [];
         pendingSelectedSheet =
@@ -313,7 +288,7 @@
         showFileOptionsModalDialog = false;
         invalidateTableData();
         postMessage({
-            type: "applyFileOptions",
+            type: 'applyFileOptions',
             hasHeaderRow,
             sheetName,
         });
@@ -335,39 +310,39 @@
     onMount(() => {
         connection = getRpcConnection();
 
-        connection.onNotification("dataExplorer/copy", () => {
+        connection.onNotification('dataExplorer/copy', () => {
             tableDataDataGridInstance.copyCurrentSelection();
         });
-        connection.onNotification("dataExplorer/focus", restoreFocus);
-        connection.onNotification("dataExplorer/copyTableData", () => {
-            postMessage({ type: "copyTableData" });
+        connection.onNotification('dataExplorer/focus', restoreFocus);
+        connection.onNotification('dataExplorer/copyTableData', () => {
+            postMessage({ type: 'copyTableData' });
         });
-        connection.onNotification("dataExplorer/clearSort", () => {
+        connection.onNotification('dataExplorer/clearSort', () => {
             void instance.clearColumnSorting();
         });
-        connection.onNotification("dataExplorer/moveToNewWindow", () => {
-            postMessage({ type: "moveToNewWindow" });
+        connection.onNotification('dataExplorer/moveToNewWindow', () => {
+            postMessage({ type: 'moveToNewWindow' });
         });
-        connection.onNotification("dataExplorer/convertToCode", (params?: {
-            suggestedSyntax?: string;
-            availableSyntaxes?: string[];
-        }) => {
-            openConvertToCodeModalDialog(params);
+        connection.onNotification(
+            'dataExplorer/convertToCode',
+            (params?: { suggestedSyntax?: string; availableSyntaxes?: string[] }) => {
+                openConvertToCodeModalDialog(params);
+            },
+        );
+        connection.onNotification('dataExplorer/openAsPlaintext', () => {
+            postMessage({ type: 'openAsPlaintext' });
         });
-        connection.onNotification("dataExplorer/openAsPlaintext", () => {
-            postMessage({ type: "openAsPlaintext" });
-        });
-        connection.onNotification("dataExplorer/showColumnContextMenu", () => {
+        connection.onNotification('dataExplorer/showColumnContextMenu', () => {
             void showColumnContextMenuAtCursor();
         });
-        connection.onNotification("dataExplorer/showRowContextMenu", () => {
+        connection.onNotification('dataExplorer/showRowContextMenu', () => {
             void showRowContextMenuAtCursor();
         });
-        connection.onNotification("dataExplorer/showCellContextMenu", () => {
+        connection.onNotification('dataExplorer/showCellContextMenu', () => {
             void showCellContextMenuAtCursor();
         });
         connection.onNotification(
-            "dataExplorer/convertToCodePreview",
+            'dataExplorer/convertToCodePreview',
             (params: {
                 desiredSyntax: string;
                 requestId: number;
@@ -387,36 +362,39 @@
                 convertToCodePreviewError = params.error;
             },
         );
-        connection.onNotification("dataExplorer/toggleFileOptions", (params?: {
-            hasHeaderRow?: boolean;
-            supportsFileOptions?: boolean;
-            availableSheets?: string[];
-            selectedSheet?: string;
-        }) => {
-            openFileOptionsModalDialog(params);
-        });
         connection.onNotification(
-            "dataExplorer/layoutChanged",
+            'dataExplorer/toggleFileOptions',
+            (params?: {
+                hasHeaderRow?: boolean;
+                supportsFileOptions?: boolean;
+                availableSheets?: string[];
+                selectedSheet?: string;
+            }) => {
+                openFileOptionsModalDialog(params);
+            },
+        );
+        connection.onNotification(
+            'dataExplorer/layoutChanged',
             (params: { layout: PositronDataExplorerLayout }) => {
                 instance.handleLayoutChanged(params.layout);
             },
         );
         connection.onNotification(
-            "dataExplorer/summaryCollapsedChanged",
+            'dataExplorer/summaryCollapsedChanged',
             (params: { collapsed: boolean }) => {
                 instance.handleSummaryCollapsedChanged(params.collapsed);
             },
         );
         connection.onNotification(
-            "dataExplorer/summaryWidthChanged",
+            'dataExplorer/summaryWidthChanged',
             (params: { summaryWidth: number }) => {
                 instance.handleSummaryWidthChanged(params.summaryWidth);
             },
         );
         connection.onNotification(
-            "dataExplorer/selectionChanged",
+            'dataExplorer/selectionChanged',
             (params: {
-                selectionType: "cell" | "cells" | "columns" | "rows";
+                selectionType: 'cell' | 'cells' | 'columns' | 'rows';
                 columnIndex?: number;
                 rowIndex?: number;
                 columnIndexes?: number[];
@@ -426,7 +404,7 @@
             },
         );
         connection.onNotification(
-            "dataExplorer/initialize",
+            'dataExplorer/initialize',
             (params: {
                 identifier: string;
                 displayName: string;
@@ -442,7 +420,7 @@
             },
         );
         connection.onNotification(
-            "dataExplorer/metadata",
+            'dataExplorer/metadata',
             (params: {
                 displayName: string;
                 numRows: number;
@@ -453,7 +431,7 @@
             },
         );
         connection.onNotification(
-            "dataExplorer/schema",
+            'dataExplorer/schema',
             (params: { columns: unknown[]; requestId?: number }) => {
                 instance.handleSchema({
                     columns: params.columns as never[],
@@ -462,12 +440,8 @@
             },
         );
         connection.onNotification(
-            "dataExplorer/summarySchema",
-            (params: {
-                columns: unknown[];
-                columnIndices: number[];
-                requestId?: number;
-            }) => {
+            'dataExplorer/summarySchema',
+            (params: { columns: unknown[]; columnIndices: number[]; requestId?: number }) => {
                 instance.handleSummarySchema({
                     columns: params.columns as never[],
                     columnIndices: params.columnIndices,
@@ -476,7 +450,7 @@
             },
         );
         connection.onNotification(
-            "dataExplorer/columnProfiles",
+            'dataExplorer/columnProfiles',
             (params: {
                 profiles: Array<{ columnIndex: number; profile: unknown }>;
                 error?: string;
@@ -487,13 +461,13 @@
             },
         );
         connection.onNotification(
-            "dataExplorer/dataInvalidated",
+            'dataExplorer/dataInvalidated',
             (params: { generation: number; schemaChanged: boolean }) => {
                 instance.handleDataInvalidated(params);
             },
         );
         connection.onNotification(
-            "dataExplorer/data",
+            'dataExplorer/data',
             (params: {
                 columns: ColumnValue[][];
                 startRow: number;
@@ -511,34 +485,28 @@
                 });
             },
         );
+        connection.onNotification('dataExplorer/backendState', (params: { state: unknown }) => {
+            instance.handleBackendState({
+                state: params.state as never,
+            });
+        });
         connection.onNotification(
-            "dataExplorer/backendState",
-            (params: { state: unknown }) => {
-                instance.handleBackendState({
-                    state: params.state as never,
-                });
-            },
-        );
-        connection.onNotification(
-            "dataExplorer/error",
+            'dataExplorer/error',
             (params: {
                 message: string;
                 operation: string;
-                severity: "error" | "warning";
+                severity: 'error' | 'warning';
                 recoverable: boolean;
                 requestId?: number;
             }) => {
                 instance.handleError(params);
             },
         );
-        connection.onNotification(
-            "dataExplorer/loading",
-            (params: { isLoading: boolean }) => {
-                instance.handleLoading(params);
-            },
-        );
+        connection.onNotification('dataExplorer/loading', (params: { isLoading: boolean }) => {
+            instance.handleLoading(params);
+        });
 
-        connection.sendNotification("dataExplorer/ready");
+        connection.sendNotification('dataExplorer/ready');
 
         return () => {
             notifyFocusChanged(false);
@@ -564,7 +532,7 @@
     {#if $explorerState.error && !closedReason}
         <div
             class="data-explorer-error-banner"
-            class:warning={$explorerState.error.severity === "warning"}
+            class:warning={$explorerState.error.severity === 'warning'}
             role="alert"
             aria-live="assertive"
             data-operation={$explorerState.error.operation}
@@ -585,7 +553,7 @@
     <DataExplorerPanel />
     {#if closedReason}
         <DataExplorerClosed
-            closedReason={closedReason}
+            {closedReason}
             errorMessage={closedErrorMessage}
             onClose={handleClose}
         />
@@ -623,10 +591,7 @@
         min-width: 0;
         min-height: 0;
         position: relative;
-        color: var(
-            --vscode-positronDataExplorer-foreground,
-            var(--vscode-editor-foreground)
-        );
+        color: var(--vscode-positronDataExplorer-foreground, var(--vscode-editor-foreground));
         background-color: var(
             --vscode-positronDataExplorer-background,
             var(--vscode-editor-background)
@@ -657,15 +622,24 @@
         padding: 7px 8px 7px 12px;
         border: 1px solid var(--vscode-inputValidation-errorBorder, var(--vscode-errorForeground));
         border-radius: 4px;
-        background: var(--vscode-inputValidation-errorBackground, var(--vscode-editorWidget-background));
+        background: var(
+            --vscode-inputValidation-errorBackground,
+            var(--vscode-editorWidget-background)
+        );
         color: var(--vscode-inputValidation-errorForeground, var(--vscode-foreground));
         box-shadow: 0 2px 8px var(--vscode-widget-shadow, rgba(0, 0, 0, 0.3));
         transform: translateX(-50%);
     }
 
     .data-explorer-error-banner.warning {
-        border-color: var(--vscode-inputValidation-warningBorder, var(--vscode-editorWarning-foreground));
-        background: var(--vscode-inputValidation-warningBackground, var(--vscode-editorWidget-background));
+        border-color: var(
+            --vscode-inputValidation-warningBorder,
+            var(--vscode-editorWarning-foreground)
+        );
+        background: var(
+            --vscode-inputValidation-warningBackground,
+            var(--vscode-editorWidget-background)
+        );
         color: var(--vscode-inputValidation-warningForeground, var(--vscode-foreground));
     }
 
@@ -697,5 +671,4 @@
         outline: 1px solid var(--vscode-focusBorder);
         outline-offset: 1px;
     }
-
 </style>

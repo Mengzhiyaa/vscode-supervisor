@@ -11,7 +11,7 @@ import {
     DeferredRender,
     IPlotComm,
     PositronPlotRenderQueue,
-    type IRenderedPlot
+    type IRenderedPlot,
 } from '../positronPlotRenderQueue';
 import { RuntimeClientInstance } from '../RuntimeClientInstance';
 import { PositronPlotCommClass } from './positronPlotCommClass';
@@ -89,7 +89,9 @@ export class PositronPlotCommProxy implements vscode.Disposable {
      * Event that fires when the intrinsic size of the plot is set.
      */
     readonly onDidSetIntrinsicSize: vscode.Event<IntrinsicSize | undefined>;
-    private readonly _didSetIntrinsicSizeEmitter = new vscode.EventEmitter<IntrinsicSize | undefined>();
+    private readonly _didSetIntrinsicSizeEmitter = new vscode.EventEmitter<
+        IntrinsicSize | undefined
+    >();
 
     /**
      * Disposables for cleanup.
@@ -108,12 +110,12 @@ export class PositronPlotCommProxy implements vscode.Disposable {
 
     constructor(
         private readonly _client: RuntimeClientInstance,
-        private readonly _sessionRenderQueue: PositronPlotRenderQueue
+        private readonly _sessionRenderQueue: PositronPlotRenderQueue,
     ) {
         // Create the PositronPlotCommClass instance
         this._comm = new PositronPlotCommClass(_client, {
             render: { timeout: 30000 },
-            get_intrinsic_size: { timeout: 30000 }
+            get_intrinsic_size: { timeout: 30000 },
         });
         this._disposables.push(this._comm);
 
@@ -133,7 +135,7 @@ export class PositronPlotCommProxy implements vscode.Disposable {
                 this._closeEmitter.fire();
                 // Silently cancel any pending render requests
                 this._currentRender?.cancel();
-            })
+            }),
         );
 
         // Connect the render update emitter event
@@ -153,22 +155,24 @@ export class PositronPlotCommProxy implements vscode.Disposable {
                     updateEvent.pre_render = {
                         data: evt.pre_render.data,
                         mime_type: evt.pre_render.mime_type,
-                        settings: evt.pre_render.settings ? {
-                            size: evt.pre_render.settings.size,
-                            pixel_ratio: evt.pre_render.settings.pixel_ratio,
-                            format: evt.pre_render.settings.format
-                        } : undefined
+                        settings: evt.pre_render.settings
+                            ? {
+                                  size: evt.pre_render.settings.size,
+                                  pixel_ratio: evt.pre_render.settings.pixel_ratio,
+                                  format: evt.pre_render.settings.format,
+                              }
+                            : undefined,
                     };
                 }
                 this._renderUpdateEmitter.fire(updateEvent);
-            })
+            }),
         );
 
         // Listen for show events from the comm class
         this._disposables.push(
             this._comm.onDidShow((evt) => {
                 this._didShowPlotEmitter.fire(evt);
-            })
+            }),
         );
     }
 
@@ -187,11 +191,15 @@ export class PositronPlotCommProxy implements vscode.Disposable {
             get onDidClose(): vscode.Event<void> {
                 return closeEmitter.event;
             },
-            async render(size: IPlotSize | undefined, pixelRatio: number, format: PlotRenderFormat): Promise<{ data: string; mime_type: string }> {
+            async render(
+                size: IPlotSize | undefined,
+                pixelRatio: number,
+                format: PlotRenderFormat,
+            ): Promise<{ data: string; mime_type: string }> {
                 const result = await comm.render(size, pixelRatio, format);
                 return {
                     data: result.data,
-                    mime_type: result.mime_type
+                    mime_type: result.mime_type,
                 };
             },
             async getIntrinsicSize(): Promise<IntrinsicSize | undefined> {
@@ -199,7 +207,7 @@ export class PositronPlotCommProxy implements vscode.Disposable {
             },
             async getMetadata(): Promise<PlotMetadata> {
                 return comm.getMetadata();
-            }
+            },
         };
     }
 
@@ -241,7 +249,8 @@ export class PositronPlotCommProxy implements vscode.Disposable {
         }
 
         // Use the session render queue to ensure operations don't overlap
-        this._currentIntrinsicSize = this._sessionRenderQueue.queueIntrinsicSizeRequest(this._commAdapter)
+        this._currentIntrinsicSize = this._sessionRenderQueue
+            .queueIntrinsicSizeRequest(this._commAdapter)
             .then((intrinsicSize) => {
                 this._intrinsicSize = intrinsicSize;
                 this._receivedIntrinsicSize = true;
@@ -283,11 +292,15 @@ export class PositronPlotCommProxy implements vscode.Disposable {
      * @param format The render format
      * @returns A promise that resolves to the rendered plot
      */
-    public renderPlot(size: IPlotSize | undefined, pixelRatio: number, format: PlotRenderFormat = PlotRenderFormat.Png): Promise<IRenderedPlot> {
+    public renderPlot(
+        size: IPlotSize | undefined,
+        pixelRatio: number,
+        format: PlotRenderFormat = PlotRenderFormat.Png,
+    ): Promise<IRenderedPlot> {
         const request = new DeferredRender({
             size,
             pixel_ratio: pixelRatio,
-            format
+            format,
         });
         this.render(request);
         return request.promise;
@@ -297,7 +310,9 @@ export class PositronPlotCommProxy implements vscode.Disposable {
      * Dispose the comm proxy and clean up resources.
      */
     dispose(): void {
-        if (this._disposed) { return; }
+        if (this._disposed) {
+            return;
+        }
         this._disposed = true;
         // Notify comm/queue listeners before detaching them. Only the final
         // surface reference disposes this shared owner.
@@ -306,6 +321,6 @@ export class PositronPlotCommProxy implements vscode.Disposable {
         this._currentRender?.cancel();
 
         // Dispose all disposables
-        this._disposables.forEach(d => d.dispose());
+        this._disposables.forEach((d) => d.dispose());
     }
 }

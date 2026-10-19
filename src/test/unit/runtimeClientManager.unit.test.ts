@@ -6,7 +6,9 @@ import type { JupyterLanguageRuntimeSession } from '../../supervisor/positron-su
 
 function deferred<T>() {
     let resolve!: (value: T) => void;
-    const promise = new Promise<T>(done => { resolve = done; });
+    const promise = new Promise<T>((done) => {
+        resolve = done;
+    });
     return { promise, resolve };
 }
 
@@ -25,11 +27,18 @@ function makeManager(
             created.push({ id, type });
             await createClient(id, type);
         },
-        removeClient: (id: string) => { removed.push(id); },
+        removeClient: (id: string) => {
+            removed.push(id);
+        },
         sendClientMessage: () => undefined,
     } as unknown as JupyterLanguageRuntimeSession;
     const noop = () => undefined;
-    const log = { info: noop, debug: noop, warn: noop, error: noop } as unknown as vscode.LogOutputChannel;
+    const log = {
+        info: noop,
+        debug: noop,
+        warn: noop,
+        error: noop,
+    } as unknown as vscode.LogOutputChannel;
     const manager = new RuntimeClientManager(session, log);
     return { manager, states, created, removed };
 }
@@ -61,16 +70,23 @@ suite('[Unit] RuntimeClientManager lifecycle', () => {
         states.dispose();
     });
 
-    for (const type of [RuntimeClientType.Variables, RuntimeClientType.Ui, RuntimeClientType.Help]) {
+    for (const type of [
+        RuntimeClientType.Variables,
+        RuntimeClientType.Ui,
+        RuntimeClientType.Help,
+    ]) {
         test(`removes a late ${type} creation after disposal`, async () => {
             const entered = deferred<void>();
             const creation = deferred<void>();
-            const { manager, states, created, removed } = makeManager(undefined, async (_id, creatingType) => {
-                if (creatingType === type) {
-                    entered.resolve();
-                    await creation.promise;
-                }
-            });
+            const { manager, states, created, removed } = makeManager(
+                undefined,
+                async (_id, creatingType) => {
+                    if (creatingType === type) {
+                        entered.resolve();
+                        await creation.promise;
+                    }
+                },
+            );
             const initializing = manager.initializeClients();
             await entered.promise;
             manager.dispose();
@@ -78,7 +94,10 @@ suite('[Unit] RuntimeClientManager lifecycle', () => {
             await initializing;
             manager.dispose();
             assert.strictEqual(created[created.length - 1].type, type);
-            assert.deepStrictEqual(removed.slice().sort(), created.map(client => client.id).sort());
+            assert.deepStrictEqual(
+                removed.slice().sort(),
+                created.map((client) => client.id).sort(),
+            );
             assert.deepStrictEqual(manager.clientInstances, []);
             assert.strictEqual(manager.variablesClientId, undefined);
             assert.strictEqual(manager.uiClientId, undefined);
@@ -90,7 +109,7 @@ suite('[Unit] RuntimeClientManager lifecycle', () => {
     test('does not create Help after its availability reply arrives late', async () => {
         const entered = deferred<void>();
         const reply = deferred<Record<string, string>>();
-        const { manager, states, created } = makeManager(async type => {
+        const { manager, states, created } = makeManager(async (type) => {
             if (type === RuntimeClientType.Help) {
                 entered.resolve();
                 return reply.promise;
@@ -102,7 +121,10 @@ suite('[Unit] RuntimeClientManager lifecycle', () => {
         manager.dispose();
         reply.resolve({});
         await initializing;
-        assert.deepStrictEqual(created.map(client => client.type), [RuntimeClientType.Variables, RuntimeClientType.Ui]);
+        assert.deepStrictEqual(
+            created.map((client) => client.type),
+            [RuntimeClientType.Variables, RuntimeClientType.Ui],
+        );
         states.dispose();
     });
 
@@ -110,8 +132,10 @@ suite('[Unit] RuntimeClientManager lifecycle', () => {
         const oldReply = deferred<Record<string, string>>();
         const newReply = deferred<Record<string, string>>();
         let queries = 0;
-        const { manager, states, created } = makeManager(async type => {
-            if (type) { return {}; }
+        const { manager, states, created } = makeManager(async (type) => {
+            if (type) {
+                return {};
+            }
             queries++;
             return queries === 1 ? oldReply.promise : newReply.promise;
         });

@@ -1,15 +1,12 @@
 <script lang="ts">
-    import { tick } from "svelte";
-    import type {
-        MemorySessionUsage,
-        MemoryUsageSnapshot,
-    } from "../types/memory";
-    import { localize } from "$lib/localization";
+    import { tick } from 'svelte';
+    import type { MemorySessionUsage, MemoryUsageSnapshot } from '../types/memory';
+    import { localize } from '$lib/localization';
     import {
         formatMemoryBytes as formatBytes,
         getMemoryMeterLabelWidth,
         getMemoryMeterSizing,
-    } from "./memoryUsageLayout";
+    } from './memoryUsageLayout';
 
     interface Segment {
         id: string;
@@ -35,7 +32,7 @@
     let expanded = $state(false);
     let anchorEl = $state<HTMLButtonElement | null>(null);
     let dropdownEl = $state<HTMLDivElement | null>(null);
-    let dropdownStyle = $state("");
+    let dropdownStyle = $state('');
     let highlightedSegmentId = $state<string | null>(null);
     let meterWidth = $state(0);
 
@@ -49,26 +46,17 @@
             : 0,
     );
     const sizeLabel = $derived(
-        loading ? localize("memory.mem", "Mem") : formatBytes(supervisorBytes),
+        loading ? localize('memory.mem', 'Mem') : formatBytes(supervisorBytes),
     );
     const meterSizing = $derived(
-        getMemoryMeterSizing(
-            meterWidth,
-            !!lowMemory,
-            getMemoryMeterLabelWidth(sizeLabel),
-        ),
+        getMemoryMeterSizing(meterWidth, !!lowMemory, getMemoryMeterLabelWidth(sizeLabel)),
     );
     const usedSystemBytes = $derived(
-        snapshot
-            ? Math.max(0, snapshot.totalSystemMemory - snapshot.freeSystemMemory)
-            : 0,
+        snapshot ? Math.max(0, snapshot.totalSystemMemory - snapshot.freeSystemMemory) : 0,
     );
     const usedPercent = $derived(
         snapshot?.totalSystemMemory
-            ? Math.min(
-                  100,
-                  Math.round((usedSystemBytes / snapshot.totalSystemMemory) * 100),
-              )
+            ? Math.min(100, Math.round((usedSystemBytes / snapshot.totalSystemMemory) * 100))
             : 0,
     );
     const tooltip = $derived.by(() => {
@@ -77,12 +65,14 @@
         }
 
         return [
-            `${snapshot.applicationOverheadBytes !== undefined
-                ? localize('memory.applicationAndKernels', 'Application + kernels')
-                : localize('memory.extensionHostAndKernels', 'Extension Host + kernels')}: ${formatBytes(supervisorBytes)}`,
+            `${
+                snapshot.applicationOverheadBytes !== undefined
+                    ? localize('memory.applicationAndKernels', 'Application + kernels')
+                    : localize('memory.extensionHostAndKernels', 'Extension Host + kernels')
+            }: ${formatBytes(supervisorBytes)}`,
             `${localize('memory.other', 'Other')}: ${formatBytes(snapshot.otherProcessesBytes)}`,
             `${localize('memory.free', 'Free')}: ${formatBytes(snapshot.freeSystemMemory)}`,
-        ].join(" | ");
+        ].join(' | ');
     });
     const segments = $derived.by(() => {
         if (!snapshot) {
@@ -95,41 +85,42 @@
                 nextSegments.push({
                     id: `session:${index}`,
                     bytes: session.memoryBytes,
-                    className: "kernel",
+                    className: 'kernel',
                 });
             }
         });
 
         if ((snapshot.supervisorOverheadBytes ?? 0) > 0) {
             nextSegments.push({
-                id: "overhead:platform",
+                id: 'overhead:platform',
                 bytes: snapshot.supervisorOverheadBytes ?? 0,
-                className: "overhead",
+                className: 'overhead',
             });
         }
 
-        const applicationBytes = snapshot.applicationOverheadBytes ?? snapshot.extensionHostOverheadBytes;
+        const applicationBytes =
+            snapshot.applicationOverheadBytes ?? snapshot.extensionHostOverheadBytes;
         if (applicationBytes > 0) {
             nextSegments.push({
-                id: "overhead:extension-host",
+                id: 'overhead:extension-host',
                 bytes: applicationBytes,
-                className: "overhead",
+                className: 'overhead',
             });
         }
 
         if (snapshot.otherProcessesBytes > 0) {
             nextSegments.push({
-                id: "system:other",
+                id: 'system:other',
                 bytes: snapshot.otherProcessesBytes,
-                className: "other",
+                className: 'other',
             });
         }
 
         if (snapshot.freeSystemMemory > 0) {
             nextSegments.push({
-                id: "system:free",
+                id: 'system:free',
                 bytes: snapshot.freeSystemMemory,
-                className: "free",
+                className: 'free',
             });
         }
 
@@ -141,7 +132,7 @@
                   id: `session:${index}`,
                   name: getSessionLabel(session),
                   bytes: session.memoryBytes,
-                  className: "kernel",
+                  className: 'kernel',
               }))
             : [],
     );
@@ -149,19 +140,24 @@
         snapshot
             ? [
                   ...(snapshot.supervisorOverheadBytes !== undefined
-                      ? [{
-                      id: "overhead:platform",
-                      name: localize('memory.platform', 'Platform'),
-                      bytes: snapshot.supervisorOverheadBytes,
-                      className: "overhead",
-                  }]
+                      ? [
+                            {
+                                id: 'overhead:platform',
+                                name: localize('memory.platform', 'Platform'),
+                                bytes: snapshot.supervisorOverheadBytes,
+                                className: 'overhead',
+                            },
+                        ]
                       : []),
                   {
-                      id: "overhead:extension-host",
-                      name: snapshot.applicationOverheadBytes !== undefined
-                          ? localize('memory.application', 'Application') : localize('memory.extensionHost', 'Extension Host'),
-                      bytes: snapshot.applicationOverheadBytes ?? snapshot.extensionHostOverheadBytes,
-                      className: "overhead",
+                      id: 'overhead:extension-host',
+                      name:
+                          snapshot.applicationOverheadBytes !== undefined
+                              ? localize('memory.application', 'Application')
+                              : localize('memory.extensionHost', 'Extension Host'),
+                      bytes:
+                          snapshot.applicationOverheadBytes ?? snapshot.extensionHostOverheadBytes,
+                      className: 'overhead',
                   },
               ]
             : [],
@@ -170,16 +166,16 @@
         snapshot
             ? [
                   {
-                      id: "system:other",
+                      id: 'system:other',
                       name: localize('memory.other', 'Other'),
                       bytes: snapshot.otherProcessesBytes,
-                      className: "other",
+                      className: 'other',
                   },
                   {
-                      id: "system:free",
+                      id: 'system:free',
                       name: localize('memory.free', 'Free'),
                       bytes: snapshot.freeSystemMemory,
-                      className: "free",
+                      className: 'free',
                   },
               ]
             : [],
@@ -220,25 +216,27 @@
 
     function pctLabel(bytes: number): string {
         if (!snapshot?.totalSystemMemory || bytes <= 0) {
-            return "0%";
+            return '0%';
         }
 
         const pct = (bytes / snapshot.totalSystemMemory) * 100;
-        return pct > 0 && pct < 1 ? "<1%" : `${Math.round(pct)}%`;
+        return pct > 0 && pct < 1 ? '<1%' : `${Math.round(pct)}%`;
     }
 
     function isSupervisorSegment(id: string): boolean {
-        return id.startsWith("session:") || id.startsWith("overhead:");
+        return id.startsWith('session:') || id.startsWith('overhead:');
     }
 
     function isSegmentHighlighted(id: string): boolean {
-        return highlightedSegmentId === id ||
-            (highlightedSegmentId === "summary:supervisor" && isSupervisorSegment(id));
+        return (
+            highlightedSegmentId === id ||
+            (highlightedSegmentId === 'summary:supervisor' && isSupervisorSegment(id))
+        );
     }
 
     function isSegmentDimmed(id: string): boolean {
         if (!highlightedSegmentId) return false;
-        if (highlightedSegmentId === "summary:supervisor") {
+        if (highlightedSegmentId === 'summary:supervisor') {
             return !isSupervisorSegment(id);
         }
         return highlightedSegmentId !== id;
@@ -246,20 +244,20 @@
 
     function lowMemoryLabel(): string {
         if (!lowMemory) {
-            return "";
+            return '';
         }
 
-        if (lowMemory.unit === "percent") {
+        if (lowMemory.unit === 'percent') {
             return localize(
-                "memory.lessThanPercentRemaining",
-                "Less than {0}% memory remaining",
+                'memory.lessThanPercentRemaining',
+                'Less than {0}% memory remaining',
                 lowMemory.threshold,
             );
         }
 
         return localize(
-            "memory.lessThanMegabytesRemaining",
-            "Less than {0} MB memory remaining",
+            'memory.lessThanMegabytesRemaining',
+            'Less than {0} MB memory remaining',
             lowMemory.threshold,
         );
     }
@@ -279,10 +277,7 @@
         );
         const top = Math.min(
             Math.max(anchorRect.bottom + 4, viewportPadding),
-            Math.max(
-                viewportPadding,
-                window.innerHeight - dropdownRect.height - viewportPadding,
-            ),
+            Math.max(viewportPadding, window.innerHeight - dropdownRect.height - viewportPadding),
         );
 
         dropdownStyle = `left: ${Math.round(left)}px; top: ${Math.round(top)}px; width: ${Math.round(width)}px;`;
@@ -313,13 +308,13 @@
 
     function handleKeyDown(event: KeyboardEvent) {
         switch (event.key) {
-            case "Enter":
-            case " ":
-            case "ArrowDown":
+            case 'Enter':
+            case ' ':
+            case 'ArrowDown':
                 event.preventDefault();
                 expanded = true;
                 break;
-            case "Escape":
+            case 'Escape':
                 if (expanded) {
                     event.preventDefault();
                     closeDropdown();
@@ -338,27 +333,25 @@
             dropdownEl?.focus();
         });
     });
-
 </script>
 
 <svelte:document onmousedowncapture={handleDocumentMouseDown} />
-<svelte:window
-    onresize={updateDropdownPosition}
-    onscrollcapture={updateDropdownPosition}
-/>
+<svelte:window onresize={updateDropdownPosition} onscrollcapture={updateDropdownPosition} />
 
 {#snippet memoryBar(compact = false)}
     <div
         class:compact
         class:low-memory={!!lowMemory}
         class="memory-bar"
-        style:width={compact && meterSizing.barWidth !== undefined ? `${meterSizing.barWidth}px` : undefined}
-        role={compact ? "meter" : undefined}
+        style:width={compact && meterSizing.barWidth !== undefined
+            ? `${meterSizing.barWidth}px`
+            : undefined}
+        role={compact ? 'meter' : undefined}
         aria-label={compact ? localize('memory.memoryUsage', 'Memory usage') : undefined}
         aria-valuemin={compact ? 0 : undefined}
         aria-valuemax={compact ? 100 : undefined}
         aria-valuenow={compact && snapshot ? usedPercent : undefined}
-        aria-hidden={compact ? undefined : "true"}
+        aria-hidden={compact ? undefined : 'true'}
     >
         {#if snapshot}
             {#each segments as segment (segment.id)}
@@ -392,8 +385,7 @@
             <div
                 class={`usage-bar ${row.className}`}
                 class:highlighted={highlightedSegmentId === row.id}
-                class:dimmed={!!highlightedSegmentId &&
-                    highlightedSegmentId !== row.id}
+                class:dimmed={!!highlightedSegmentId && highlightedSegmentId !== row.id}
                 style:flex-basis={`${rowWidth(row.bytes)}%`}
             ></div>
             <span class="usage-percent">{pctLabel(row.bytes)}</span>
@@ -425,14 +417,11 @@
         {#if meterSizing.barWidth !== undefined}
             {@render memoryBar(true)}
         {/if}
-        {#if meterSizing.layout !== "hidden"}
-            <span
-                class="memory-label"
-                class:low-memory={!!lowMemory && !meterSizing.showWarning}
-            >{sizeLabel}</span>
-            <span
-                class="memory-arrow codicon codicon-positron-drop-down-arrow"
-                aria-hidden="true"
+        {#if meterSizing.layout !== 'hidden'}
+            <span class="memory-label" class:low-memory={!!lowMemory && !meterSizing.showWarning}
+                >{sizeLabel}</span
+            >
+            <span class="memory-arrow codicon codicon-positron-drop-down-arrow" aria-hidden="true"
             ></span>
         {/if}
     </button>
@@ -449,12 +438,20 @@
             onkeydown={handleKeyDown}
         >
             {#if loading || !snapshot}
-                <div class="memory-loading">{localize('memory.computing', 'Computing memory usage...')}</div>
+                <div class="memory-loading">
+                    {localize('memory.computing', 'Computing memory usage...')}
+                </div>
             {:else}
                 <div class="memory-summary">
                     <div class="summary-title">
                         <span>{usedPercent}% of {formatBytes(snapshot.totalSystemMemory)}</span>
-                        <span>{localize('memory.used', '{0} used', formatBytes(usedSystemBytes))}</span>
+                        <span
+                            >{localize(
+                                'memory.used',
+                                '{0} used',
+                                formatBytes(usedSystemBytes),
+                            )}</span
+                        >
                     </div>
                     {@render memoryBar(false)}
                     {#if lowMemory}
@@ -467,8 +464,8 @@
                                 onclick={() => {
                                     closeDropdown();
                                     onconfigure?.();
-                                }}
-                            >{localize('memory.configure', 'Configure')}</button>
+                                }}>{localize('memory.configure', 'Configure')}</button
+                            >
                         </div>
                     {/if}
                 </div>
@@ -476,7 +473,9 @@
                 <div class="memory-breakdown">
                     {#if sessionRows.length > 0}
                         <div class="section-header">
-                            {localize('memory.sessions', 'Sessions')} ({formatBytes(snapshot.kernelTotalBytes)})
+                            {localize('memory.sessions', 'Sessions')} ({formatBytes(
+                                snapshot.kernelTotalBytes,
+                            )})
                         </div>
                         {#each sessionRows as row (row.id)}
                             {@render usageRow(row)}
@@ -484,7 +483,11 @@
                     {/if}
 
                     <div class="section-header">
-                        {localize('memory.overhead', 'Overhead')} ({formatBytes((snapshot.supervisorOverheadBytes ?? 0) + (snapshot.applicationOverheadBytes ?? snapshot.extensionHostOverheadBytes))})
+                        {localize('memory.overhead', 'Overhead')} ({formatBytes(
+                            (snapshot.supervisorOverheadBytes ?? 0) +
+                                (snapshot.applicationOverheadBytes ??
+                                    snapshot.extensionHostOverheadBytes),
+                        )})
                     </div>
                     {#each overheadRows as row (row.id)}
                         {@render usageRow(row)}
@@ -492,12 +495,16 @@
 
                     <div class="section-header">{localize('memory.summary', 'Summary')}</div>
                     {@render usageRow({
-                        id: "summary:supervisor",
-                        name: snapshot.applicationOverheadBytes !== undefined
-                            ? localize('memory.applicationAndKernels', 'Application + kernels')
-                            : localize('memory.extensionHostAndKernels', 'Extension Host + kernels'),
+                        id: 'summary:supervisor',
+                        name:
+                            snapshot.applicationOverheadBytes !== undefined
+                                ? localize('memory.applicationAndKernels', 'Application + kernels')
+                                : localize(
+                                      'memory.extensionHostAndKernels',
+                                      'Extension Host + kernels',
+                                  ),
                         bytes: supervisorBytes,
-                        className: "supervisor",
+                        className: 'supervisor',
                     })}
 
                     {#each systemRows as row (row.id)}
@@ -530,7 +537,10 @@
     }
 
     .memory-usage-meter:hover {
-        background: var(--vscode-positronActionBar-hoverBackground, var(--vscode-toolbar-hoverBackground));
+        background: var(
+            --vscode-positronActionBar-hoverBackground,
+            var(--vscode-toolbar-hoverBackground)
+        );
     }
 
     .memory-usage-meter:focus {
@@ -542,7 +552,10 @@
     }
 
     .memory-warning {
-        color: var(--vscode-editorWarning-foreground, var(--vscode-notificationsWarningIcon-foreground));
+        color: var(
+            --vscode-editorWarning-foreground,
+            var(--vscode-notificationsWarningIcon-foreground)
+        );
         font-size: 14px;
         flex: 0 0 auto;
     }
@@ -579,11 +592,17 @@
 
     .memory-segment.overhead,
     .memory-segment.supervisor {
-        background: var(--vscode-positronMemoryUsageBar-overheadForeground, var(--memory-usage-overhead-default));
+        background: var(
+            --vscode-positronMemoryUsageBar-overheadForeground,
+            var(--memory-usage-overhead-default)
+        );
     }
 
     .memory-segment.other {
-        background: var(--vscode-positronMemoryUsageBar-otherForeground, var(--memory-usage-other-default));
+        background: var(
+            --vscode-positronMemoryUsageBar-otherForeground,
+            var(--memory-usage-other-default)
+        );
     }
 
     .memory-segment.free {
@@ -620,7 +639,10 @@
     }
 
     .memory-label.low-memory {
-        color: var(--vscode-editorWarning-foreground, var(--vscode-notificationsWarningIcon-foreground));
+        color: var(
+            --vscode-editorWarning-foreground,
+            var(--vscode-notificationsWarningIcon-foreground)
+        );
     }
 
     .memory-arrow {
@@ -672,7 +694,10 @@
     }
 
     .low-memory-message .codicon {
-        color: var(--vscode-editorWarning-foreground, var(--vscode-notificationsWarningIcon-foreground));
+        color: var(
+            --vscode-editorWarning-foreground,
+            var(--vscode-notificationsWarningIcon-foreground)
+        );
     }
 
     .configure-memory {
@@ -748,11 +773,17 @@
 
     .usage-bar.overhead,
     .usage-bar.supervisor {
-        background: var(--vscode-positronMemoryUsageBar-overheadForeground, var(--memory-usage-overhead-default));
+        background: var(
+            --vscode-positronMemoryUsageBar-overheadForeground,
+            var(--memory-usage-overhead-default)
+        );
     }
 
     .usage-bar.other {
-        background: var(--vscode-positronMemoryUsageBar-otherForeground, var(--memory-usage-other-default));
+        background: var(
+            --vscode-positronMemoryUsageBar-otherForeground,
+            var(--memory-usage-other-default)
+        );
     }
 
     .usage-bar.free {
@@ -773,5 +804,4 @@
         white-space: nowrap;
         user-select: none;
     }
-
 </style>

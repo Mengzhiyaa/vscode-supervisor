@@ -8,7 +8,7 @@
     let { label, initialChecked = false, onChanged }: Props = $props();
 
     const checkboxId =
-        typeof crypto !== "undefined" && crypto.randomUUID
+        typeof crypto !== 'undefined' && crypto.randomUUID
             ? crypto.randomUUID()
             : `checkbox-${Math.random().toString(36).slice(2)}`;
 

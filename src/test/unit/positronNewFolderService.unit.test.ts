@@ -1,10 +1,7 @@
 import * as assert from 'assert';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import {
-    LanguageRuntimeStartupBehavior,
-    type LanguageRuntimeMetadata,
-} from '../../api';
+import { LanguageRuntimeStartupBehavior, type LanguageRuntimeMetadata } from '../../api';
 import { NewFolderStartupPhase } from '../../newFolder/positronNewFolder';
 import { PositronNewFolderService } from '../../newFolder/positronNewFolderService';
 

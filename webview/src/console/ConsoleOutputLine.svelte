@@ -1,8 +1,8 @@
 <script lang="ts">
-    import type { ANSIOutputLine } from "$lib/ansi/ansiOutput";
-    import { localize } from "$lib/localization";
-    import OutputRun from "./OutputRun.svelte";
-    import { splitOutputLine } from "./utils/fileLinkDetector";
+    import type { ANSIOutputLine } from '$lib/ansi/ansiOutput';
+    import { localize } from '$lib/localization';
+    import OutputRun from './OutputRun.svelte';
+    import { splitOutputLine } from './utils/fileLinkDetector';
 
     let { line }: { line: ANSIOutputLine } = $props();
     const segments = $derived(splitOutputLine(line));
@@ -15,8 +15,12 @@
             data-console-file-path={segment.location.path}
             data-console-file-line={segment.location.line}
             data-console-file-column={segment.location.column}
-            title={localize("console.openFileLink", "Ctrl/Cmd+click to open file")}
-        >{#each segment.runs as run (run.id)}<OutputRun outputRun={run} detectLinks={false} />{/each}</span>
+            title={localize('console.openFileLink', 'Ctrl/Cmd+click to open file')}
+            >{#each segment.runs as run (run.id)}<OutputRun
+                    outputRun={run}
+                    detectLinks={false}
+                />{/each}</span
+        >
     {:else}
         {#each segment.runs as run (run.id)}<OutputRun outputRun={run} />{/each}
     {/if}

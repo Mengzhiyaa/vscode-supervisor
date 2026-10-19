@@ -14,11 +14,7 @@ import * as https from 'https';
 import * as http from 'http';
 import { execFileSync } from 'child_process';
 import * as vscode from 'vscode';
-import {
-    type BinaryArchiveType,
-    type BinaryDefinition,
-    type IBinaryProvider,
-} from './api';
+import { type BinaryArchiveType, type BinaryDefinition, type IBinaryProvider } from './api';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -53,13 +49,8 @@ interface ResolvedBinaryDefinition {
     version?: string;
 }
 
-function resolveInstallDir(
-    extensionPath: string,
-    installDir: string,
-): string {
-    return path.isAbsolute(installDir)
-        ? installDir
-        : path.join(extensionPath, installDir);
+function resolveInstallDir(extensionPath: string, installDir: string): string {
+    return path.isAbsolute(installDir) ? installDir : path.join(extensionPath, installDir);
 }
 
 function getBundledBinaryVersions(extensionPath: string): Record<string, string> {
@@ -204,7 +195,12 @@ function download(
             currentUrl = nextUrl;
             const proto = nextUrl.startsWith('https') ? https : http;
             const requestRef = proto.get(nextUrl, (response) => {
-                if (response.statusCode && response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
+                if (
+                    response.statusCode &&
+                    response.statusCode >= 300 &&
+                    response.statusCode < 400 &&
+                    response.headers.location
+                ) {
                     response.resume();
                     request(response.headers.location, redirectCount + 1);
                     return;
@@ -212,7 +208,9 @@ function download(
 
                 if (response.statusCode && response.statusCode !== 200) {
                     response.resume();
-                    fail(new Error(`Download failed: HTTP ${response.statusCode} for ${currentUrl}`));
+                    fail(
+                        new Error(`Download failed: HTTP ${response.statusCode} for ${currentUrl}`),
+                    );
                     return;
                 }
 
@@ -270,18 +268,10 @@ function extractArchive(
                 return;
             }
 
-            execFileSync(
-                'unzip',
-                ['-o', '-q', archivePath, '-d', destDir],
-                { stdio: 'pipe' },
-            );
+            execFileSync('unzip', ['-o', '-q', archivePath, '-d', destDir], { stdio: 'pipe' });
             return;
         case 'tar.gz':
-            execFileSync(
-                'tar',
-                ['-xzf', archivePath, '-C', destDir],
-                { stdio: 'pipe' },
-            );
+            execFileSync('tar', ['-xzf', archivePath, '-C', destDir], { stdio: 'pipe' });
             return;
     }
 }
@@ -300,7 +290,9 @@ function findBinary(dir: string, binaryName: string): string | null {
         }
         if (entry.isDirectory()) {
             const found = findBinary(fullPath, binaryName);
-            if (found) { return found; }
+            if (found) {
+                return found;
+            }
         }
     }
 
@@ -329,10 +321,7 @@ function resolveInstalledVersion(binaryPath: string): string | undefined {
     }
 }
 
-export function getExpectedBinaryVersion(
-    def: BinaryDefinition,
-    releaseVersion: string,
-): string {
+export function getExpectedBinaryVersion(def: BinaryDefinition, releaseVersion: string): string {
     return def.reportedVersion ?? releaseVersion;
 }
 
@@ -373,7 +362,9 @@ async function installBinary(
 
         // Download
         await download(downloadUrl, archivePath, DOWNLOAD_TIMEOUT_MS, (bytes) => {
-            progress.report({ message: `Downloading ${name}... ${(bytes / 1024 / 1024).toFixed(1)} MB` });
+            progress.report({
+                message: `Downloading ${name}... ${(bytes / 1024 / 1024).toFixed(1)} MB`,
+            });
         });
 
         // Extract
@@ -387,39 +378,38 @@ async function installBinary(
             throw new Error(`Could not find ${def.binaryName} in downloaded archive for ${name}`);
         }
 
-		// Stage and verify the new executable before replacing the active one.
-		// The staged filename keeps the .exe suffix on Windows.
-		const stagedPath = path.join(
-			installDir,
-			`.install-${process.pid}-${Date.now()}-${def.binaryName}`,
-		);
-		try {
-			fs.copyFileSync(binaryPath, stagedPath);
-			if (!isWindows) {
-				fs.chmodSync(stagedPath, 0o755);
-			}
+        // Stage and verify the new executable before replacing the active one.
+        // The staged filename keeps the .exe suffix on Windows.
+        const stagedPath = path.join(
+            installDir,
+            `.install-${process.pid}-${Date.now()}-${def.binaryName}`,
+        );
+        try {
+            fs.copyFileSync(binaryPath, stagedPath);
+            if (!isWindows) {
+                fs.chmodSync(stagedPath, 0o755);
+            }
 
-			const installedVersion = resolveInstalledVersion(stagedPath);
-			if (!isBinaryVersionCompatible(def, installedVersion, version)) {
-				throw new Error(
-					`Downloaded ${name} reported version ${installedVersion ?? 'unknown'}; ` +
-                    `expected ${expectedBinaryVersion} (release ${version})`,
-				);
-			}
+            const installedVersion = resolveInstalledVersion(stagedPath);
+            if (!isBinaryVersionCompatible(def, installedVersion, version)) {
+                throw new Error(
+                    `Downloaded ${name} reported version ${installedVersion ?? 'unknown'}; ` +
+                        `expected ${expectedBinaryVersion} (release ${version})`,
+                );
+            }
 
-			// rename is atomic on Unix. Windows cannot replace an existing file with
-			// renameSync, so remove it only after the staged executable is verified.
-			if (isWindows && fs.existsSync(destPath)) {
-				fs.unlinkSync(destPath);
-			}
-			fs.renameSync(stagedPath, destPath);
-		} finally {
-			fs.rmSync(stagedPath, { force: true });
-		}
+            // rename is atomic on Unix. Windows cannot replace an existing file with
+            // renameSync, so remove it only after the staged executable is verified.
+            if (isWindows && fs.existsSync(destPath)) {
+                fs.unlinkSync(destPath);
+            }
+            fs.renameSync(stagedPath, destPath);
+        } finally {
+            fs.rmSync(stagedPath, { force: true });
+        }
 
         const size = (fs.statSync(destPath).size / 1024 / 1024).toFixed(2);
         log.info(`[BinaryManager] ✅ Installed ${name} ${version} (${size} MB) → ${destPath}`);
-
     } finally {
         fs.rmSync(tmpDir, { recursive: true, force: true });
     }
@@ -449,7 +439,10 @@ export async function ensureBinaries(
 
     // Check which binaries are missing or incompatible with package.json.
     const needsInstall: string[] = [];
-    const installedVersions = context.globalState.get<Record<string, string>>(BINARY_VERSION_STATE_KEY, {});
+    const installedVersions = context.globalState.get<Record<string, string>>(
+        BINARY_VERSION_STATE_KEY,
+        {},
+    );
     let installedVersionsChanged = false;
 
     for (const [name, resolvedDef] of Object.entries(defs)) {
@@ -483,18 +476,17 @@ export async function ensureBinaries(
             installedVersion = expectedBinaryVersion;
             installedVersions[name] = expectedBinaryVersion;
             installedVersionsChanged = true;
-            log.debug(`[BinaryManager] ${name} version probe failed; assuming expected=${expectedBinaryVersion}`);
+            log.debug(
+                `[BinaryManager] ${name} version probe failed; assuming expected=${expectedBinaryVersion}`,
+            );
         }
 
-        if (
-            expectedVersion &&
-            !isBinaryVersionCompatible(def, installedVersion, expectedVersion)
-        ) {
-			needsInstall.push(name);
-			log.warn(
+        if (expectedVersion && !isBinaryVersionCompatible(def, installedVersion, expectedVersion)) {
+            needsInstall.push(name);
+            log.warn(
                 `[BinaryManager] ${name} version mismatch: ` +
-                `installed=${installedVersion ?? 'unknown'}, ` +
-                `expected=${expectedBinaryVersion} (release ${expectedVersion}); upgrading`,
+                    `installed=${installedVersion ?? 'unknown'}, ` +
+                    `expected=${expectedBinaryVersion} (release ${expectedVersion}); upgrading`,
             );
         }
     }
@@ -507,7 +499,9 @@ export async function ensureBinaries(
         return;
     }
 
-    log.info(`[BinaryManager] Binaries requiring installation: ${needsInstall.join(', ')}. Starting download...`);
+    log.info(
+        `[BinaryManager] Binaries requiring installation: ${needsInstall.join(', ')}. Starting download...`,
+    );
 
     // Download with progress notification
     await vscode.window.withProgress(
@@ -529,7 +523,15 @@ export async function ensureBinaries(
                 const downloadInfo = getDownloadInfo(def, version, platform, context.extensionPath);
 
                 try {
-                    await installBinary(name, def, version, platform, context.extensionPath, log, progress);
+                    await installBinary(
+                        name,
+                        def,
+                        version,
+                        platform,
+                        context.extensionPath,
+                        log,
+                        progress,
+                    );
 
                     // Update version cache
                     installedVersions[name] = getExpectedBinaryVersion(def, version);
@@ -551,14 +553,14 @@ export async function ensureBinaries(
 
                         void vscode.window.showErrorMessage(
                             `${name} download timed out after ${timeoutSeconds}s. ` +
-                            `Download from ${downloadInfo.downloadUrl}, extract ${def.binaryName}, and place it at ${downloadInfo.destPath}.`
+                                `Download from ${downloadInfo.downloadUrl}, extract ${def.binaryName}, and place it at ${downloadInfo.destPath}.`,
                         );
                         continue;
                     }
 
                     void vscode.window.showErrorMessage(
                         `Failed to download ${name} binary: ${message}. ` +
-                        `You can set the binary path manually in settings or run 'npm run install:binaries'.`
+                            `You can set the binary path manually in settings or run 'npm run install:binaries'.`,
                     );
                 }
             }
@@ -569,6 +571,6 @@ export async function ensureBinaries(
             }
 
             progress.report({ message: 'Done!' });
-        }
+        },
     );
 }

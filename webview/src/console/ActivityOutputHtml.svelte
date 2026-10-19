@@ -5,7 +5,7 @@
     Mirrors: positron/.../components/activityOutputHtml.tsx
 -->
 <script lang="ts">
-    import type { ActivityItemOutputHtml } from "./classes";
+    import type { ActivityItemOutputHtml } from './classes';
 
     interface Props {
         activityItemOutputHtml: ActivityItemOutputHtml;

@@ -67,7 +67,7 @@ export class HtmlProxyService implements vscode.Disposable {
     private readonly _resources = new Map<http.Server, ProxyResource>();
     private _disposed = false;
 
-    constructor(private readonly _outputChannel: vscode.LogOutputChannel) { }
+    constructor(private readonly _outputChannel: vscode.LogOutputChannel) {}
 
     /**
      * Resolves a file path or URL to a proxied HTTP URI.
@@ -161,7 +161,7 @@ export class HtmlProxyService implements vscode.Disposable {
         this._fileServers.set(normalizedRoot, info);
         this._registerResource(info, () => this._fileServers.delete(normalizedRoot));
         this._outputChannel.debug(
-            `[HtmlProxyService] Started HTML file proxy for ${normalizedRoot} on ${info.baseUrl}`
+            `[HtmlProxyService] Started HTML file proxy for ${normalizedRoot} on ${info.baseUrl}`,
         );
         return info;
     }
@@ -204,8 +204,10 @@ export class HtmlProxyService implements vscode.Disposable {
                 socket.destroy();
                 return;
             }
-            void this._handleHttpUpgrade(info, req, socket, head).catch(error => {
-                this._outputChannel.debug(`[HtmlProxyService] Websocket upgrade failed: ${getErrorMessage(error)}`);
+            void this._handleHttpUpgrade(info, req, socket, head).catch((error) => {
+                this._outputChannel.debug(
+                    `[HtmlProxyService] Websocket upgrade failed: ${getErrorMessage(error)}`,
+                );
                 socket.destroy();
             });
         });
@@ -225,7 +227,7 @@ export class HtmlProxyService implements vscode.Disposable {
         this._httpServers.set(targetOrigin, info);
         this._registerResource(info, () => this._httpServers.delete(targetOrigin));
         this._outputChannel.debug(
-            `[HtmlProxyService] Started HTTP proxy for ${targetOrigin} on ${info.baseUrl}`
+            `[HtmlProxyService] Started HTTP proxy for ${targetOrigin} on ${info.baseUrl}`,
         );
         return info;
     }
@@ -241,7 +243,7 @@ export class HtmlProxyService implements vscode.Disposable {
         this._servers.add(server);
         const sockets = new Set<Duplex>();
         this._serverSockets.set(server, sockets);
-        server.on('connection', socket => {
+        server.on('connection', (socket) => {
             sockets.add(socket);
             this._sockets.add(socket);
             socket.once('close', () => {
@@ -253,7 +255,7 @@ export class HtmlProxyService implements vscode.Disposable {
             this._servers.delete(server);
             this._serverSockets.delete(server);
         });
-        server.on('error', error => {
+        server.on('error', (error) => {
             this._outputChannel.debug(`[HtmlProxyService] Server error: ${getErrorMessage(error)}`);
         });
         try {
@@ -297,7 +299,9 @@ export class HtmlProxyService implements vscode.Disposable {
 
     private _isWithinRoot(root: string, filePath: string): boolean {
         const relative = path.relative(root, filePath);
-        return relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
+        return (
+            relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative)
+        );
     }
 
     private _registerResource(info: BaseProxyServerInfo, remove: () => void): void {
@@ -344,12 +348,16 @@ export class HtmlProxyService implements vscode.Disposable {
         const prefix = info.externalBaseUri.path.replace(/\/$/, '');
         const resourcePath = uri.path.slice(prefix.length) || '/';
         if ('root' in info && typeof info.root === 'string') {
-            return vscode.Uri.file(path.join(info.root, decodeURIComponent(resourcePath)))
-                .with({ query: uri.query, fragment: uri.fragment });
+            return vscode.Uri.file(path.join(info.root, decodeURIComponent(resourcePath))).with({
+                query: uri.query,
+                fragment: uri.fragment,
+            });
         }
         if ('targetOrigin' in info && typeof info.targetOrigin === 'string') {
             return vscode.Uri.parse(info.targetOrigin).with({
-                path: resourcePath, query: uri.query, fragment: uri.fragment,
+                path: resourcePath,
+                query: uri.query,
+                fragment: uri.fragment,
             });
         }
         return undefined;
@@ -364,8 +372,11 @@ export class HtmlProxyService implements vscode.Disposable {
         return [...this._resources.values()].find(({ info }) => {
             const base = info.externalBaseUri;
             const prefix = base.path.replace(/\/$/, '');
-            return uri.scheme === base.scheme && uri.authority === base.authority &&
-                (uri.path === prefix || uri.path.startsWith(`${prefix}/`));
+            return (
+                uri.scheme === base.scheme &&
+                uri.authority === base.authority &&
+                (uri.path === prefix || uri.path.startsWith(`${prefix}/`))
+            );
         });
     }
 
@@ -374,17 +385,20 @@ export class HtmlProxyService implements vscode.Disposable {
         if (this._disposed || resource.references > 0) {
             return;
         }
-        resource.timer = setTimeout(() => {
-            if (resource.references > 0) {
-                return;
-            }
-            resource.remove();
-            this._resources.delete(resource.info.server);
-            for (const socket of this._serverSockets.get(resource.info.server) ?? []) {
-                socket.destroy();
-            }
-            resource.info.server.close();
-        }, resource.external ? ExternalProxyTimeoutMs : timeout);
+        resource.timer = setTimeout(
+            () => {
+                if (resource.references > 0) {
+                    return;
+                }
+                resource.remove();
+                this._resources.delete(resource.info.server);
+                for (const socket of this._serverSockets.get(resource.info.server) ?? []) {
+                    socket.destroy();
+                }
+                resource.info.server.close();
+            },
+            resource.external ? ExternalProxyTimeoutMs : timeout,
+        );
         resource.timer.unref();
     }
 
@@ -397,7 +411,7 @@ export class HtmlProxyService implements vscode.Disposable {
     private async _handleFileRequest(
         info: FileProxyServerInfo,
         req: http.IncomingMessage,
-        res: http.ServerResponse
+        res: http.ServerResponse,
     ): Promise<void> {
         this._retainRequest(info, res);
         try {
@@ -480,20 +494,22 @@ export class HtmlProxyService implements vscode.Disposable {
             }
 
             const stream = createReadStream(filePath);
-            stream.on('error', error => res.destroy(error));
+            stream.on('error', (error) => res.destroy(error));
             res.once('close', () => stream.destroy());
             stream.pipe(res);
         } catch (error) {
             res.writeHead(404);
             res.end('Not found');
-            this._outputChannel.debug(`[HtmlProxyService] Failed to serve file request: ${getErrorMessage(error)}`);
+            this._outputChannel.debug(
+                `[HtmlProxyService] Failed to serve file request: ${getErrorMessage(error)}`,
+            );
         }
     }
 
     private async _handleHttpRequest(
         info: HttpProxyServerInfo,
         req: http.IncomingMessage,
-        res: http.ServerResponse
+        res: http.ServerResponse,
     ): Promise<void> {
         this._retainRequest(info, res);
         try {
@@ -528,12 +544,12 @@ export class HtmlProxyService implements vscode.Disposable {
                 },
                 (upstreamResponse) => {
                     void this._handleHttpResponse(info, req, res, upstreamResponse);
-                }
+                },
             );
 
             upstream.on('error', (error) => {
                 this._outputChannel.debug(
-                    `[HtmlProxyService] Failed to proxy ${requestUrl.toString()}: ${getErrorMessage(error)}`
+                    `[HtmlProxyService] Failed to proxy ${requestUrl.toString()}: ${getErrorMessage(error)}`,
                 );
                 if (!res.headersSent) {
                     res.writeHead(502);
@@ -552,7 +568,9 @@ export class HtmlProxyService implements vscode.Disposable {
                 req.pipe(upstream);
             }
         } catch (error) {
-            this._outputChannel.debug(`[HtmlProxyService] Failed to prepare HTTP proxy request: ${getErrorMessage(error)}`);
+            this._outputChannel.debug(
+                `[HtmlProxyService] Failed to prepare HTTP proxy request: ${getErrorMessage(error)}`,
+            );
             if (!res.headersSent) {
                 res.writeHead(502);
                 res.end('Bad gateway');
@@ -564,7 +582,7 @@ export class HtmlProxyService implements vscode.Disposable {
         info: HttpProxyServerInfo,
         req: http.IncomingMessage,
         res: http.ServerResponse,
-        upstreamResponse: http.IncomingMessage
+        upstreamResponse: http.IncomingMessage,
     ): Promise<void> {
         const headers = this._cloneResponseHeaders(upstreamResponse.headers);
         headers['cache-control'] = 'no-cache';
@@ -597,10 +615,7 @@ export class HtmlProxyService implements vscode.Disposable {
 
         upstreamResponse.on('end', () => {
             const rewritten = injectViewerBridge(
-                rewriteRootRelativeUrls(
-                    Buffer.concat(chunks).toString('utf8'),
-                    info.proxyPath,
-                ),
+                rewriteRootRelativeUrls(Buffer.concat(chunks).toString('utf8'), info.proxyPath),
                 info.proxyPath,
             );
             const body = Buffer.from(rewritten, 'utf8');
@@ -616,7 +631,9 @@ export class HtmlProxyService implements vscode.Disposable {
         });
 
         upstreamResponse.on('error', (error) => {
-            this._outputChannel.debug(`[HtmlProxyService] Failed to read proxied response: ${getErrorMessage(error)}`);
+            this._outputChannel.debug(
+                `[HtmlProxyService] Failed to read proxied response: ${getErrorMessage(error)}`,
+            );
             if (!res.headersSent) {
                 res.writeHead(502);
                 res.end('Bad gateway');
@@ -630,7 +647,7 @@ export class HtmlProxyService implements vscode.Disposable {
         info: HttpProxyServerInfo,
         req: http.IncomingMessage,
         socket: Duplex,
-        head: Buffer
+        head: Buffer,
     ): Promise<void> {
         const lease = this.retainUri(info.externalBaseUri);
         socket.once('close', () => lease.dispose());
@@ -642,7 +659,9 @@ export class HtmlProxyService implements vscode.Disposable {
             socket.end('HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n');
             return;
         }
-        const requestedProtocols = this._parseWebSocketProtocols(req.headers['sec-websocket-protocol']);
+        const requestedProtocols = this._parseWebSocketProtocols(
+            req.headers['sec-websocket-protocol'],
+        );
         const headers: Record<string, string> = {};
         for (const [key, value] of Object.entries(req.headers)) {
             if (typeof value === 'string') {
@@ -661,7 +680,7 @@ export class HtmlProxyService implements vscode.Disposable {
         const upstream = new WebSocket(
             targetUrl,
             requestedProtocols.length > 0 ? requestedProtocols : undefined,
-            { headers }
+            { headers },
         );
 
         let downstreamUpgraded = false;
@@ -675,11 +694,10 @@ export class HtmlProxyService implements vscode.Disposable {
             const selectedProtocol = upstream.protocol;
             const wss = selectedProtocol
                 ? new WebSocketServer({
-                    noServer: true,
-                    handleProtocols: (protocols) => (
-                        protocols.has(selectedProtocol) ? selectedProtocol : false
-                    ),
-                })
+                      noServer: true,
+                      handleProtocols: (protocols) =>
+                          protocols.has(selectedProtocol) ? selectedProtocol : false,
+                  })
                 : new WebSocketServer({ noServer: true });
 
             wss.handleUpgrade(req, socket, head, (downstream) => {
@@ -690,7 +708,7 @@ export class HtmlProxyService implements vscode.Disposable {
 
         upstream.once('error', (error) => {
             this._outputChannel.debug(
-                `[HtmlProxyService] Failed to proxy websocket ${targetUrl}: ${getErrorMessage(error)}`
+                `[HtmlProxyService] Failed to proxy websocket ${targetUrl}: ${getErrorMessage(error)}`,
             );
             if (!downstreamUpgraded && !socket.destroyed) {
                 socket.write('HTTP/1.1 502 Bad Gateway\r\n\r\n');
@@ -711,7 +729,10 @@ export class HtmlProxyService implements vscode.Disposable {
 
     private _bridgeWebSockets(upstream: WebSocket, downstream: WebSocket): void {
         const closePeer = (source: WebSocket, target: WebSocket, code: number, reason: Buffer) => {
-            if (target.readyState === WebSocket.OPEN || target.readyState === WebSocket.CONNECTING) {
+            if (
+                target.readyState === WebSocket.OPEN ||
+                target.readyState === WebSocket.CONNECTING
+            ) {
                 const normalizedCode = this._normalizeWebSocketCloseCode(code);
                 if (normalizedCode === undefined) {
                     target.close();
@@ -743,11 +764,15 @@ export class HtmlProxyService implements vscode.Disposable {
         });
 
         upstream.once('error', (error) => {
-            this._outputChannel.debug(`[HtmlProxyService] Upstream websocket error: ${getErrorMessage(error)}`);
+            this._outputChannel.debug(
+                `[HtmlProxyService] Upstream websocket error: ${getErrorMessage(error)}`,
+            );
             downstream.terminate();
         });
         downstream.once('error', (error) => {
-            this._outputChannel.debug(`[HtmlProxyService] Downstream websocket error: ${getErrorMessage(error)}`);
+            this._outputChannel.debug(
+                `[HtmlProxyService] Downstream websocket error: ${getErrorMessage(error)}`,
+            );
             upstream.terminate();
         });
     }
@@ -756,8 +781,8 @@ export class HtmlProxyService implements vscode.Disposable {
         const raw = Array.isArray(header) ? header.join(',') : (header ?? '');
         return raw
             .split(',')
-            .map(value => value.trim())
-            .filter(value => value.length > 0);
+            .map((value) => value.trim())
+            .filter((value) => value.length > 0);
     }
 
     private _normalizeWebSocketCloseCode(code: number): number | undefined {
@@ -781,10 +806,7 @@ export class HtmlProxyService implements vscode.Disposable {
         });
     }
 
-    private _writeViewerBridge(
-        req: http.IncomingMessage,
-        res: http.ServerResponse,
-    ): void {
+    private _writeViewerBridge(req: http.IncomingMessage, res: http.ServerResponse): void {
         const body = Buffer.from(VIEWER_BRIDGE_SCRIPT, 'utf8');
         res.writeHead(200, {
             'Content-Type': 'text/javascript; charset=utf-8',
@@ -800,7 +822,7 @@ export class HtmlProxyService implements vscode.Disposable {
 
     private _rewriteLocationHeader(
         headers: http.OutgoingHttpHeaders,
-        info: HttpProxyServerInfo
+        info: HttpProxyServerInfo,
     ): void {
         const location = headers.location;
         if (Array.isArray(location)) {
@@ -813,9 +835,7 @@ export class HtmlProxyService implements vscode.Disposable {
         }
     }
 
-    private _getHeaderValue(
-        value: string | string[] | number | undefined
-    ): string | undefined {
+    private _getHeaderValue(value: string | string[] | number | undefined): string | undefined {
         if (Array.isArray(value)) {
             return value[0];
         }
@@ -832,7 +852,7 @@ export class HtmlProxyService implements vscode.Disposable {
 
         return `/${filePath
             .split(path.sep)
-            .map(segment => encodeURIComponent(segment))
+            .map((segment) => encodeURIComponent(segment))
             .join('/')}`;
     }
 

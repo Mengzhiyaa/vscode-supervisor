@@ -1,15 +1,9 @@
 import { getErrorMessage } from '../shared/errors';
 import * as vscode from 'vscode';
-import {
-    type ILanguageStatementRangeProvider,
-    LanguageLspState,
-} from '../api';
+import { type ILanguageStatementRangeProvider, LanguageLspState } from '../api';
 import type { RuntimeSession } from './session';
 
-type StatementRangeSession = Pick<
-    RuntimeSession,
-    'lsp' | 'waitLsp'
->;
+type StatementRangeSession = Pick<RuntimeSession, 'lsp' | 'waitLsp'>;
 
 /**
  * Resolves the provider owned by the session's active language client.

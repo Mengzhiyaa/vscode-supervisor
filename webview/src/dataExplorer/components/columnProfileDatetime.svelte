@@ -3,10 +3,10 @@
   Port from Positron's columnProfileDatetime.tsx
 -->
 <script lang="ts">
-    import { localize } from "../nls";
-    import type { TableSummaryDataGridInstance } from "../tableSummaryDataGridInstance";
-    import ColumnProfileNullCountValue from "./columnProfileNullCountValue.svelte";
-    import StatsValue from "./statsValue.svelte";
+    import { localize } from '../nls';
+    import type { TableSummaryDataGridInstance } from '../tableSummaryDataGridInstance';
+    import ColumnProfileNullCountValue from './columnProfileNullCountValue.svelte';
+    import StatsValue from './statsValue.svelte';
 
     interface Props {
         instance: TableSummaryDataGridInstance;
@@ -16,15 +16,13 @@
     let { instance, columnIndex }: Props = $props();
 
     const columnProfiles = $derived(instance.columnProfiles);
-    const stats = $derived(
-        $columnProfiles.get(columnIndex)?.summary_stats?.datetime_stats,
-    );
+    const stats = $derived($columnProfiles.get(columnIndex)?.summary_stats?.datetime_stats);
 
-    const missingLabel = localize("positronMissing", "Missing");
-    const minLabel = localize("positronMin", "Min");
-    const medianLabel = localize("positronMedian", "Median");
-    const maxLabel = localize("positronMax", "Max");
-    const timezoneLabel = localize("positronTimezone", "Timezone");
+    const missingLabel = localize('positronMissing', 'Missing');
+    const minLabel = localize('positronMin', 'Min');
+    const medianLabel = localize('positronMedian', 'Median');
+    const maxLabel = localize('positronMax', 'Max');
+    const timezoneLabel = localize('positronTimezone', 'Timezone');
 </script>
 
 <div class="column-profile-expanded column-profile-info">

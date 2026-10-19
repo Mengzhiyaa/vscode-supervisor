@@ -9,7 +9,7 @@
  */
 export enum PlotUnit {
     Pixels = 'pixels',
-    Inches = 'inches'
+    Inches = 'inches',
 }
 
 /**
@@ -21,7 +21,7 @@ export enum PlotRenderFormat {
     Jpeg = 'jpeg',
     Svg = 'svg',
     Pdf = 'pdf',
-    Tiff = 'tiff'
+    Tiff = 'tiff',
 }
 
 /**
@@ -122,7 +122,7 @@ export interface ShowEvent {
  */
 export enum PlotFrontendEvent {
     Update = 'update',
-    Show = 'show'
+    Show = 'show',
 }
 
 /**
@@ -131,7 +131,7 @@ export enum PlotFrontendEvent {
 export enum PlotBackendRequest {
     GetIntrinsicSize = 'get_intrinsic_size',
     GetMetadata = 'get_metadata',
-    Render = 'render'
+    Render = 'render',
 }
 
 /**

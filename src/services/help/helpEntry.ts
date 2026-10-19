@@ -20,8 +20,8 @@ export class HelpEntry implements IHelpEntry {
         public readonly targetUrl: string,
         public readonly languageId: string,
         public readonly sessionId: string,
-        public readonly languageName: string
-    ) { }
+        public readonly languageName: string,
+    ) {}
 
     get title(): string | undefined {
         return this._title;

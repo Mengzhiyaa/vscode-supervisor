@@ -27,26 +27,25 @@ suite('[Unit] memory info provider', () => {
         assert.ok(info.totalSystemMemory > 0);
         assert.ok(info.freeSystemMemory >= 0);
         assert.ok(info.extensionHostOverheadBytes > 0);
-        assert.ok(info.collectionMethod === 'process-tree' || info.collectionMethod === 'process-api');
+        assert.ok(
+            info.collectionMethod === 'process-tree' || info.collectionMethod === 'process-api',
+        );
     });
 
     test('parses RSS and excludes complete kernel subtrees from supervisor totals', () => {
-        const snapshot = parsePsProcessSnapshot([
-            '  10  1  100 supervisor',
-            '  11 10   25 kernel',
-            '  12 11   10 kernel-child',
-            '  13 10    5 helper',
-        ].join('\n'));
-
-        assert.deepStrictEqual(snapshot.map(process => process.residentBytes), [
-            100 * 1024,
-            25 * 1024,
-            10 * 1024,
-            5 * 1024,
-        ]);
-        assert.strictEqual(
-            sumProcessTreeMemory(snapshot, 10, [11]),
-            105 * 1024,
+        const snapshot = parsePsProcessSnapshot(
+            [
+                '  10  1  100 supervisor',
+                '  11 10   25 kernel',
+                '  12 11   10 kernel-child',
+                '  13 10    5 helper',
+            ].join('\n'),
         );
+
+        assert.deepStrictEqual(
+            snapshot.map((process) => process.residentBytes),
+            [100 * 1024, 25 * 1024, 10 * 1024, 5 * 1024],
+        );
+        assert.strictEqual(sumProcessTreeMemory(snapshot, 10, [11]), 105 * 1024);
     });
 });

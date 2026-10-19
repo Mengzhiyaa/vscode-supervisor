@@ -8,8 +8,16 @@ import { JupyterRequest } from './JupyterRequest';
 import { JupyterChannel } from './JupyterChannel';
 import { JupyterMessageType } from './JupyterMessageType';
 
-export class DebugRequest extends JupyterRequest<positron.DebugProtocolRequest, positron.DebugProtocolResponse> {
-	constructor(req: positron.DebugProtocolRequest) {
-		super(JupyterMessageType.DebugRequest, req, JupyterMessageType.DebugReply, JupyterChannel.Control);
-	}
+export class DebugRequest extends JupyterRequest<
+    positron.DebugProtocolRequest,
+    positron.DebugProtocolResponse
+> {
+    constructor(req: positron.DebugProtocolRequest) {
+        super(
+            JupyterMessageType.DebugRequest,
+            req,
+            JupyterMessageType.DebugReply,
+            JupyterChannel.Control,
+        );
+    }
 }

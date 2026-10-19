@@ -3,7 +3,7 @@
   Port from Positron's dataGridWaffle.tsx (Svelte 5 runes mode)
 -->
 <script lang="ts">
-    import { getPositronDataGridContext } from "../positronDataGridContext";
+    import { getPositronDataGridContext } from '../positronDataGridContext';
     import {
         ExtendColumnSelectionBy,
         ExtendRowSelectionBy,
@@ -11,14 +11,14 @@
         type DataGridContextMenuAnchorPoint,
         type DataGridContextMenuRequest,
         type RowDescriptors,
-    } from "../classes/dataGridInstance";
-    import DataGridColumnHeaders from "./dataGridColumnHeaders.svelte";
-    import DataGridRowHeaders from "./dataGridRowHeaders.svelte";
-    import DataGridRow from "./dataGridRow.svelte";
-    import DataGridScrollbar from "./dataGridScrollbar.svelte";
-    import DataGridCornerTopLeft from "./dataGridCornerTopLeft.svelte";
-    import DataGridScrollbarCorner from "./dataGridScrollbarCorner.svelte";
-    import ContextMenu, { type ContextMenuItem } from "./ContextMenu.svelte";
+    } from '../classes/dataGridInstance';
+    import DataGridColumnHeaders from './dataGridColumnHeaders.svelte';
+    import DataGridRowHeaders from './dataGridRowHeaders.svelte';
+    import DataGridRow from './dataGridRow.svelte';
+    import DataGridScrollbar from './dataGridScrollbar.svelte';
+    import DataGridCornerTopLeft from './dataGridCornerTopLeft.svelte';
+    import DataGridScrollbarCorner from './dataGridScrollbarCorner.svelte';
+    import ContextMenu, { type ContextMenuItem } from './ContextMenu.svelte';
 
     interface Props {
         onFocusChange?: (focused: boolean) => void;
@@ -111,10 +111,7 @@
     }
 
     function showContextMenu(request: DataGridContextMenuRequest) {
-        const anchorPoint = resolveAnchorPoint(
-            request.anchorElement,
-            request.anchorPoint,
-        );
+        const anchorPoint = resolveAnchorPoint(request.anchorElement, request.anchorPoint);
         contextMenuAnchorElement = request.anchorElement;
         contextMenuX = anchorPoint.clientX;
         contextMenuY = anchorPoint.clientY;
@@ -144,8 +141,8 @@
         };
     }
 
-    async function showContextMenuForCursor(kind: "column" | "row" | "cell") {
-        if (kind === "column") {
+    async function showContextMenuForCursor(kind: 'column' | 'row' | 'cell') {
+        if (kind === 'column') {
             const anchorElement = findAnchorElement(
                 `.data-grid-column-header[data-column-index="${instance.cursorColumnIndex}"]`,
             );
@@ -161,7 +158,7 @@
             return;
         }
 
-        if (kind === "row") {
+        if (kind === 'row') {
             const anchorElement = findAnchorElement(
                 `.data-grid-row-header[data-row-index="${instance.cursorRowIndex}"]`,
             );
@@ -211,20 +208,16 @@
         };
 
         return (
-            typeof candidate?.canToggleColumnExpansion === "function" &&
-            typeof candidate?.toggleExpandColumn === "function"
+            typeof candidate?.canToggleColumnExpansion === 'function' &&
+            typeof candidate?.toggleExpandColumn === 'function'
         );
     }
 
     const isMacintosh =
-        typeof navigator !== "undefined" &&
-        navigator.platform.toLowerCase().includes("mac");
+        typeof navigator !== 'undefined' && navigator.platform.toLowerCase().includes('mac');
 
     async function handleKeyDown(event: KeyboardEvent) {
-        if (
-            (event.ctrlKey || event.metaKey) &&
-            event.key.toLowerCase() === "c"
-        ) {
+        if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'c') {
             event.preventDefault();
             event.stopPropagation();
             onCopy?.();
@@ -241,7 +234,7 @@
         };
 
         switch (event.code) {
-            case "F10": {
+            case 'F10': {
                 if (!event.shiftKey) {
                     break;
                 }
@@ -249,17 +242,17 @@
                 consumeEvent();
 
                 if (event.altKey) {
-                    await showContextMenuForCursor("row");
+                    await showContextMenuForCursor('row');
                 } else if (event.ctrlKey || event.metaKey) {
-                    await showContextMenuForCursor("column");
+                    await showContextMenuForCursor('column');
                 } else {
-                    await showContextMenuForCursor("cell");
+                    await showContextMenuForCursor('cell');
                 }
 
                 break;
             }
 
-            case "Tab": {
+            case 'Tab': {
                 const isSummaryPanel = isSummaryPanelInstance(instance);
 
                 if (isSummaryPanel) {
@@ -279,7 +272,7 @@
                 break;
             }
 
-            case "Space": {
+            case 'Space': {
                 if (instance.showCursor()) {
                     return;
                 }
@@ -299,7 +292,7 @@
                 break;
             }
 
-            case "Enter": {
+            case 'Enter': {
                 const isSummaryPanel = isSummaryPanelInstance(instance);
 
                 if (isSummaryPanel) {
@@ -309,21 +302,15 @@
                         return;
                     }
 
-                    if (
-                        instance.canToggleColumnExpansion(
-                            instance.cursorRowIndex,
-                        )
-                    ) {
-                        await instance.toggleExpandColumn(
-                            instance.cursorRowIndex,
-                        );
+                    if (instance.canToggleColumnExpansion(instance.cursorRowIndex)) {
+                        await instance.toggleExpandColumn(instance.cursorRowIndex);
                     }
                 }
 
                 break;
             }
 
-            case "Home": {
+            case 'Home': {
                 consumeEvent();
 
                 if (instance.showCursor()) {
@@ -342,10 +329,7 @@
                 if (isMacintosh ? event.metaKey : event.ctrlKey) {
                     instance.clearSelection();
                     await instance.setScrollOffsets(0, 0);
-                    instance.setCursorPosition(
-                        instance.firstColumnIndex,
-                        instance.firstRowIndex,
-                    );
+                    instance.setCursorPosition(instance.firstColumnIndex, instance.firstRowIndex);
                     return;
                 }
 
@@ -355,7 +339,7 @@
                 break;
             }
 
-            case "End": {
+            case 'End': {
                 consumeEvent();
 
                 if (instance.showCursor()) {
@@ -363,9 +347,7 @@
                 }
 
                 if (event.shiftKey) {
-                    instance.extendRowSelectionDown(
-                        ExtendRowSelectionBy.Screen,
-                    );
+                    instance.extendRowSelectionDown(ExtendRowSelectionBy.Screen);
                     return;
                 }
 
@@ -379,22 +361,17 @@
                         instance.maximumHorizontalScrollOffset,
                         instance.maximumVerticalScrollOffset,
                     );
-                    instance.setCursorPosition(
-                        instance.lastColummIndex,
-                        instance.lastRowIndex,
-                    );
+                    instance.setCursorPosition(instance.lastColummIndex, instance.lastRowIndex);
                     return;
                 }
 
                 instance.clearSelection();
-                await instance.setHorizontalScrollOffset(
-                    instance.maximumHorizontalScrollOffset,
-                );
+                await instance.setHorizontalScrollOffset(instance.maximumHorizontalScrollOffset);
                 instance.setCursorColumn(instance.lastColummIndex);
                 break;
             }
 
-            case "PageUp": {
+            case 'PageUp': {
                 consumeEvent();
 
                 if (instance.showCursor()) {
@@ -415,7 +392,7 @@
                 break;
             }
 
-            case "PageDown": {
+            case 'PageDown': {
                 consumeEvent();
 
                 if (instance.showCursor()) {
@@ -427,9 +404,7 @@
                 }
 
                 if (event.shiftKey) {
-                    instance.extendRowSelectionDown(
-                        ExtendRowSelectionBy.Page,
-                    );
+                    instance.extendRowSelectionDown(ExtendRowSelectionBy.Page);
                     return;
                 }
 
@@ -438,7 +413,7 @@
                 break;
             }
 
-            case "ArrowUp": {
+            case 'ArrowUp': {
                 consumeEvent();
 
                 if (instance.showCursor()) {
@@ -462,7 +437,7 @@
                 break;
             }
 
-            case "ArrowDown": {
+            case 'ArrowDown': {
                 consumeEvent();
 
                 if (instance.showCursor()) {
@@ -475,9 +450,7 @@
 
                 if (instance.selection) {
                     if (event.shiftKey) {
-                        instance.extendRowSelectionDown(
-                            ExtendRowSelectionBy.Row,
-                        );
+                        instance.extendRowSelectionDown(ExtendRowSelectionBy.Row);
                         return;
                     }
 
@@ -488,7 +461,7 @@
                 break;
             }
 
-            case "ArrowLeft": {
+            case 'ArrowLeft': {
                 consumeEvent();
 
                 if (instance.showCursor()) {
@@ -501,9 +474,7 @@
 
                 if (instance.selection) {
                     if (event.shiftKey) {
-                        instance.extendColumnSelectionLeft(
-                            ExtendColumnSelectionBy.Column,
-                        );
+                        instance.extendColumnSelectionLeft(ExtendColumnSelectionBy.Column);
                         return;
                     }
 
@@ -514,7 +485,7 @@
                 break;
             }
 
-            case "ArrowRight": {
+            case 'ArrowRight': {
                 consumeEvent();
 
                 if (instance.showCursor()) {
@@ -527,9 +498,7 @@
 
                 if (instance.selection) {
                     if (event.shiftKey) {
-                        instance.extendColumnSelectionRight(
-                            ExtendColumnSelectionBy.Column,
-                        );
+                        instance.extendColumnSelectionRight(ExtendColumnSelectionBy.Column);
                         return;
                     }
 
@@ -610,10 +579,7 @@
     {/if}
 
     {#if instance.rowHeaders}
-        <DataGridRowHeaders
-            height={height - instance.columnHeadersHeight}
-            {rowDescriptors}
-        />
+        <DataGridRowHeaders height={height - instance.columnHeadersHeight} {rowDescriptors} />
     {/if}
 
     {#if instance.horizontalScrollbar}
@@ -661,9 +627,7 @@
         style:height="{height - instance.columnHeadersHeight}px"
     >
         <div class="data-grid-rows" style:margin="{instance.rowsMargin}px">
-            {#each rowDescriptors.pinnedRowDescriptors as row (
-                `pinned-row-${row.rowIndex}`
-            )}
+            {#each rowDescriptors.pinnedRowDescriptors as row (`pinned-row-${row.rowIndex}`)}
                 <DataGridRow
                     {columnDescriptors}
                     height={row.height}
@@ -674,9 +638,7 @@
                 />
             {/each}
 
-            {#each rowDescriptors.unpinnedRowDescriptors as row (
-                `unpinned-row-${row.rowIndex}`
-            )}
+            {#each rowDescriptors.unpinnedRowDescriptors as row (`unpinned-row-${row.rowIndex}`)}
                 <DataGridRow
                     {columnDescriptors}
                     height={row.height}

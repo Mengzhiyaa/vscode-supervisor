@@ -3,7 +3,7 @@
   Port from Positron's columnSearch.tsx
 -->
 <script lang="ts">
-    import { localize } from "../../../../../nls";
+    import { localize } from '../../../../../nls';
 
     interface Props {
         initialSearchText?: string;
@@ -23,10 +23,10 @@
 
     let inputRef = $state<HTMLInputElement | null>(null);
     let focused = $state(false);
-    let searchText = $state("");
+    let searchText = $state('');
 
     $effect(() => {
-        searchText = initialSearchText ?? "";
+        searchText = initialSearchText ?? '';
     });
 
     $effect(() => {
@@ -39,14 +39,14 @@
 
     function handleKeyDown(event: KeyboardEvent) {
         switch (event.code) {
-            case "ArrowDown":
-            case "Tab":
+            case 'ArrowDown':
+            case 'Tab':
                 if (!onNavigateOut) break;
                 event.stopPropagation();
                 event.preventDefault();
                 onNavigateOut(searchText);
                 break;
-            case "Enter":
+            case 'Enter':
                 if (!onConfirmSearch) break;
                 event.stopPropagation();
                 event.preventDefault();
@@ -62,8 +62,8 @@
     }
 
     function handleClear() {
-        searchText = "";
-        onSearchTextChanged("");
+        searchText = '';
+        onSearchTextChanged('');
         inputRef?.focus();
     }
 </script>
@@ -73,7 +73,7 @@
         <input
             bind:this={inputRef}
             class="text-input"
-            placeholder={localize("positron.searchPlacehold", "search")}
+            placeholder={localize('positron.searchPlacehold', 'search')}
             type="text"
             value={searchText}
             onblur={() => (focused = false)}
@@ -81,14 +81,11 @@
             onfocus={() => (focused = true)}
             onkeydown={handleKeyDown}
         />
-        {#if searchText !== ""}
+        {#if searchText !== ''}
             <button
                 class="clear-button"
                 onclick={handleClear}
-                aria-label={localize(
-                    "positron.clearSearch",
-                    "Clear search",
-                )}
+                aria-label={localize('positron.clearSearch', 'Clear search')}
                 type="button"
             >
                 <div class="codicon codicon-positron-search-cancel"></div>
@@ -148,9 +145,7 @@
 
     .column-search-input .text-input::selection {
         color: var(--vscode-positronActionBar-textInputSelectionForeground);
-        background: var(
-            --vscode-positronActionBar-textInputSelectionBackground
-        );
+        background: var(--vscode-positronActionBar-textInputSelectionBackground);
     }
 
     .column-search-input .clear-button {

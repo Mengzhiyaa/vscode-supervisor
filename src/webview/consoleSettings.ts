@@ -101,10 +101,7 @@ function deriveEditorLineHeightRatio(
 export function resolveConsoleAppearance(
     options: ResolveConsoleAppearanceOptions,
 ): ResolvedConsoleAppearance {
-    const fontFamily = normalizeFontFamily(
-        options.configuredFontFamily,
-        options.editorFontFamily,
-    );
+    const fontFamily = normalizeFontFamily(options.configuredFontFamily, options.editorFontFamily);
 
     // The package.json defaults are static. Only explicit user/workspace values
     // should override the editor's font settings.
@@ -119,12 +116,22 @@ export function resolveConsoleAppearance(
     );
 
     const configuredLineHeight = options.configuredLineHeight ?? 0;
-    const lineHeight = hasExplicitConfigValue(options.configuredLineHeightInspection) &&
-        configuredLineHeight > 0
-        ? configuredLineHeight < 8
-            ? clampFiniteNumber(configuredLineHeight, DEFAULT_CONSOLE_LINE_HEIGHT, MIN_CONSOLE_LINE_HEIGHT, MAX_CONSOLE_LINE_HEIGHT)
-            : clampFiniteNumber(configuredLineHeight / fontSize, DEFAULT_CONSOLE_LINE_HEIGHT, MIN_CONSOLE_LINE_HEIGHT, MAX_CONSOLE_LINE_HEIGHT)
-        : deriveEditorLineHeightRatio(options.editorLineHeight, fontSize);
+    const lineHeight =
+        hasExplicitConfigValue(options.configuredLineHeightInspection) && configuredLineHeight > 0
+            ? configuredLineHeight < 8
+                ? clampFiniteNumber(
+                      configuredLineHeight,
+                      DEFAULT_CONSOLE_LINE_HEIGHT,
+                      MIN_CONSOLE_LINE_HEIGHT,
+                      MAX_CONSOLE_LINE_HEIGHT,
+                  )
+                : clampFiniteNumber(
+                      configuredLineHeight / fontSize,
+                      DEFAULT_CONSOLE_LINE_HEIGHT,
+                      MIN_CONSOLE_LINE_HEIGHT,
+                      MAX_CONSOLE_LINE_HEIGHT,
+                  )
+            : deriveEditorLineHeightRatio(options.editorLineHeight, fontSize);
 
     return {
         fontFamily,

@@ -47,15 +47,22 @@ export class InlineDataExplorerNotebookService implements vscode.Disposable {
     ) {
         this._messaging = vscode.notebooks.createRendererMessaging(InlineDataExplorerRendererId);
         this._disposables.push(
-            this._messaging.onDidReceiveMessage(event => {
+            this._messaging.onDidReceiveMessage((event) => {
                 void this._handleMessage(event.editor, event.message as RendererMessage);
             }),
-            vscode.workspace.onDidCloseNotebookDocument(document => this._detachNotebook(document.uri)),
-            this._dataExplorerService.onDidCloseInstance(identifier => this._detachInstance(identifier)),
+            vscode.workspace.onDidCloseNotebookDocument((document) =>
+                this._detachNotebook(document.uri),
+            ),
+            this._dataExplorerService.onDidCloseInstance((identifier) =>
+                this._detachInstance(identifier),
+            ),
         );
     }
 
-    private async _handleMessage(editor: vscode.NotebookEditor, message: RendererMessage): Promise<void> {
+    private async _handleMessage(
+        editor: vscode.NotebookEditor,
+        message: RendererMessage,
+    ): Promise<void> {
         if (!message.type || !message.outputId) {
             return;
         }
@@ -71,7 +78,10 @@ export class InlineDataExplorerNotebookService implements vscode.Disposable {
             return;
         }
         if (message.type === 'inlineDataExplorer/open') {
-            await vscode.commands.executeCommand(CoreCommandIds.dataExplorerOpenInline, message.commId);
+            await vscode.commands.executeCommand(
+                CoreCommandIds.dataExplorerOpenInline,
+                message.commId,
+            );
             return;
         }
         if (
@@ -90,7 +100,7 @@ export class InlineDataExplorerNotebookService implements vscode.Disposable {
             this._attach(instance.identifier, notebookUri, message.outputId);
             if (message.type === 'inlineDataExplorer/sort') {
                 await instance.setSortColumns(
-                    (message.sortKeys ?? []).map(sortKey => ({
+                    (message.sortKeys ?? []).map((sortKey) => ({
                         column_index: sortKey.columnIndex,
                         ascending: sortKey.ascending,
                     })),
@@ -99,10 +109,7 @@ export class InlineDataExplorerNotebookService implements vscode.Disposable {
             const backend = await instance.clientInstance.getBackendState(true);
             const firstColumn = Math.max(
                 0,
-                Math.min(
-                    Math.trunc(message.firstColumn ?? 0),
-                    backend.table_shape.num_columns,
-                ),
+                Math.min(Math.trunc(message.firstColumn ?? 0), backend.table_shape.num_columns),
             );
             const columnCount = Math.min(
                 Math.max(0, Math.trunc(message.numColumns ?? 12)),
@@ -111,10 +118,7 @@ export class InlineDataExplorerNotebookService implements vscode.Disposable {
             );
             const firstRow = Math.max(
                 0,
-                Math.min(
-                    Math.trunc(message.firstRow ?? 0),
-                    backend.table_shape.num_rows,
-                ),
+                Math.min(Math.trunc(message.firstRow ?? 0), backend.table_shape.num_rows),
             );
             const rowCount = Math.min(
                 Math.max(0, Math.trunc(message.numRows ?? 60)),
@@ -126,15 +130,18 @@ export class InlineDataExplorerNotebookService implements vscode.Disposable {
                 (_, index) => firstColumn + index,
             );
             const schema = await instance.getSchema(columnIndices);
-            const values = rowCount > 0
-                ? await instance.clientInstance.getDataValues(columnIndices.map(columnIndex => ({
-                    column_index: columnIndex,
-                    spec: {
-                        first_index: firstRow,
-                        last_index: firstRow + rowCount - 1,
-                    },
-                })))
-                : { columns: columnIndices.map(() => []) };
+            const values =
+                rowCount > 0
+                    ? await instance.clientInstance.getDataValues(
+                          columnIndices.map((columnIndex) => ({
+                              column_index: columnIndex,
+                              spec: {
+                                  first_index: firstRow,
+                                  last_index: firstRow + rowCount - 1,
+                              },
+                          })),
+                      )
+                    : { columns: columnIndices.map(() => []) };
             const rowLabels =
                 backend.has_row_labels && rowCount > 0
                     ? await instance.clientInstance.getRowLabels({
@@ -143,37 +150,43 @@ export class InlineDataExplorerNotebookService implements vscode.Disposable {
                       })
                     : undefined;
 
-            await this._messaging.postMessage({
-                type: 'inlineDataExplorer/data',
-                requestId: message.requestId,
-                commId: message.commId,
-                title: backend.display_name,
-                shape: {
-                    rows: backend.table_shape.num_rows,
-                    columns: backend.table_shape.num_columns,
+            await this._messaging.postMessage(
+                {
+                    type: 'inlineDataExplorer/data',
+                    requestId: message.requestId,
+                    commId: message.commId,
+                    title: backend.display_name,
+                    shape: {
+                        rows: backend.table_shape.num_rows,
+                        columns: backend.table_shape.num_columns,
+                    },
+                    firstRow,
+                    firstColumn,
+                    columnIndices,
+                    columns: schema.columns.map((column) => ({
+                        name: column.column_label || column.column_name,
+                        type: column.type_name,
+                    })),
+                    values: values.columns,
+                    rowLabels: rowLabels?.row_labels[0],
+                    sortKeys: backend.sort_keys.map((sortKey) => ({
+                        columnIndex: sortKey.column_index,
+                        ascending: sortKey.ascending,
+                    })),
                 },
-                firstRow,
-                firstColumn,
-                columnIndices,
-                columns: schema.columns.map(column => ({
-                    name: column.column_label || column.column_name,
-                    type: column.type_name,
-                })),
-                values: values.columns,
-                rowLabels: rowLabels?.row_labels[0],
-                sortKeys: backend.sort_keys.map(sortKey => ({
-                    columnIndex: sortKey.column_index,
-                    ascending: sortKey.ascending,
-                })),
-            }, editor);
+                editor,
+            );
         } catch (error) {
             const detail = getErrorMessage(error);
             this._outputChannel.warn(`[InlineDataExplorer] ${detail}`);
-            await this._messaging.postMessage({
-                type: 'inlineDataExplorer/error',
-                requestId: message.requestId,
-                message: detail,
-            }, editor);
+            await this._messaging.postMessage(
+                {
+                    type: 'inlineDataExplorer/error',
+                    requestId: message.requestId,
+                    message: detail,
+                },
+                editor,
+            );
         }
     }
 
@@ -220,8 +233,8 @@ export class InlineDataExplorerNotebookService implements vscode.Disposable {
     }
 
     dispose(): void {
-        this._attachments.forEach(attachment => attachment.lease.dispose());
+        this._attachments.forEach((attachment) => attachment.lease.dispose());
         this._attachments.clear();
-        this._disposables.forEach(disposable => disposable.dispose());
+        this._disposables.forEach((disposable) => disposable.dispose());
     }
 }

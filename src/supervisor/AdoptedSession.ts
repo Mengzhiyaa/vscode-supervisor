@@ -19,59 +19,59 @@ import { isAxiosError } from './httpClient';
  * This mechanism is generic and may be used by runtimes adopted after launch.
  */
 export class AdoptedSession implements JupyterKernel {
-	private _runtimeInfo: KernelInfoReply | undefined;
+    private _runtimeInfo: KernelInfoReply | undefined;
 
-	/// Whether the session is connected (or the connection has failed)
-	public connected = new Barrier();
+    /// Whether the session is connected (or the connection has failed)
+    public connected = new Barrier();
 
-	/**
-	 * Create a new adopted session.
-	 *
-	 * @param _session The Kallichore session
-	 * @param _connectionInfo The connection information for the adopted session
-	 * @param _api The Kallichore API instance
-	 */
-	constructor(
-		private readonly _session: KallichoreSession,
-		private readonly _connectionInfo: ConnectionInfo,
-		private readonly _api: DefaultApi
-	) {
+    /**
+     * Create a new adopted session.
+     *
+     * @param _session The Kallichore session
+     * @param _connectionInfo The connection information for the adopted session
+     * @param _api The Kallichore API instance
+     */
+    constructor(
+        private readonly _session: KallichoreSession,
+        private readonly _connectionInfo: ConnectionInfo,
+        private readonly _api: DefaultApi,
+    ) {}
 
-	}
+    /**
+     * Connect to (adopt) the given session.
+     *
+     * @param session The session to connect to
+     */
+    async connectToSession(session: JupyterSession): Promise<void> {
+        try {
+            // Adopt the session via the API, using the connection information
+            this._runtimeInfo = (
+                await this._api.adoptSession(session.state.sessionId, this._connectionInfo)
+            ).data;
+        } catch (err) {
+            const message = isAxiosError(err) ? summarizeAxiosError(err) : err.message;
+            throw new Error(`Failed to adopt session: ${message}`);
+        } finally {
+            // Open the connected barrier to indicate we've finished connecting
+            // (or failed to)
+            this.connected.open();
+        }
+    }
 
-	/**
-	 * Connect to (adopt) the given session.
-	 *
-	 * @param session The session to connect to
-	 */
-	async connectToSession(session: JupyterSession): Promise<void> {
-		try {
-			// Adopt the session via the API, using the connection information
-			this._runtimeInfo = (await this._api.adoptSession(session.state.sessionId, this._connectionInfo)).data;
-		} catch (err) {
-			const message = isAxiosError(err) ? summarizeAxiosError(err) : err.message;
-			throw new Error(`Failed to adopt session: ${message}`);
-		} finally {
-			// Open the connected barrier to indicate we've finished connecting
-			// (or failed to)
-			this.connected.open();
-		}
-	}
+    /**
+     * Get the runtime information for the kernel. We know this information
+     * only if the session is connected.
+     */
+    get runtimeInfo(): KernelInfoReply | undefined {
+        return this._runtimeInfo;
+    }
 
-	/**
-	 * Get the runtime information for the kernel. We know this information
-	 * only if the session is connected.
-	 */
-	get runtimeInfo(): KernelInfoReply | undefined {
-		return this._runtimeInfo;
-	}
-
-	/**
-	 * Log a message to the session's output log.
-	 *
-	 * @param msg The message to log
-	 */
-	log(msg: string): void {
-		this._session.log(msg);
-	}
+    /**
+     * Log a message to the session's output log.
+     *
+     * @param msg The message to log
+     */
+    log(msg: string): void {
+        this._session.log(msg);
+    }
 }

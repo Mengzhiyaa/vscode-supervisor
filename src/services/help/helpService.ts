@@ -36,12 +36,14 @@ export class PositronHelpService implements IPositronHelpService {
     private readonly _instancesBySessionId = new Map<string, PositronHelpInstance>();
     private readonly _proxyService: HelpProxyService;
 
-    private readonly _onDidChangeCurrentHelpEntryEmitter = new vscode.EventEmitter<IHelpEntry | undefined>();
+    private readonly _onDidChangeCurrentHelpEntryEmitter = new vscode.EventEmitter<
+        IHelpEntry | undefined
+    >();
 
     constructor(
         private readonly _sessionManager: RuntimeSessionService,
         private readonly _outputChannel: vscode.LogOutputChannel,
-        extensionUri: vscode.Uri
+        extensionUri: vscode.Uri,
     ) {
         this._proxyService = new HelpProxyService(extensionUri, _outputChannel);
     }
@@ -71,11 +73,11 @@ export class PositronHelpService implements IPositronHelpService {
     initialize(): void {
         this._outputChannel.debug('[PositronHelpService] Initializing...');
 
-        this._sessionManager.onWillStartSession(e => {
+        this._sessionManager.onWillStartSession((e) => {
             this._ensureInstance(e.session);
         });
 
-        this._sessionManager.onDidDeleteRuntimeSession(sessionId => {
+        this._sessionManager.onDidDeleteRuntimeSession((sessionId) => {
             this._disposeInstance(sessionId);
             this.deleteHelpEntriesForSession(sessionId);
         });
@@ -89,7 +91,9 @@ export class PositronHelpService implements IPositronHelpService {
 
     openHelpEntryIndex(helpEntryIndex: number): void {
         if (helpEntryIndex < 0 || helpEntryIndex > this._helpEntries.length - 1) {
-            this._outputChannel.error(`[PositronHelpService] Help entry index ${helpEntryIndex} is out of range.`);
+            this._outputChannel.error(
+                `[PositronHelpService] Help entry index ${helpEntryIndex} is out of range.`,
+            );
             return;
         }
 
@@ -105,7 +109,7 @@ export class PositronHelpService implements IPositronHelpService {
         }
 
         this._outputChannel.warn(
-            `[PositronHelpService] Can't show help for ${topic}: no runtime for language ${languageId} is active.`
+            `[PositronHelpService] Can't show help for ${topic}: no runtime for language ${languageId} is active.`,
         );
         return false;
     }
@@ -147,13 +151,7 @@ export class PositronHelpService implements IPositronHelpService {
             return;
         }
 
-        const helpEntry = new HelpEntry(
-            this._welcomeUrl,
-            this._welcomeUrl,
-            '',
-            '',
-            ''
-        );
+        const helpEntry = new HelpEntry(this._welcomeUrl, this._welcomeUrl, '', '', '');
         helpEntry.setTitle('Welcome');
         this._addHelpEntry(helpEntry);
     }
@@ -206,18 +204,25 @@ export class PositronHelpService implements IPositronHelpService {
         }
         try {
             const proxyInfo = await this._proxyService.startProxyServer(targetUrl.origin);
-            const storedEntry = this._helpEntries.find(candidate => candidate === entry);
+            const storedEntry = this._helpEntries.find((candidate) => candidate === entry);
             if (storedEntry) {
                 storedEntry.sourceUrl = this._proxyService.buildProxyUrl(targetUrl, proxyInfo);
             }
         } catch (error) {
-            this._outputChannel.error(`[PositronHelpService] Failed to refresh help proxy for ${targetUrl.origin}: ${getErrorMessage(error)}`);
+            this._outputChannel.error(
+                `[PositronHelpService] Failed to refresh help proxy for ${targetUrl.origin}: ${getErrorMessage(error)}`,
+            );
         }
     }
 
-    async handleShowHelpEvent(session: RuntimeSession, showHelpEvent: ShowHelpEvent): Promise<void> {
+    async handleShowHelpEvent(
+        session: RuntimeSession,
+        showHelpEvent: ShowHelpEvent,
+    ): Promise<void> {
         if (showHelpEvent.kind !== ShowHelpKind.Url) {
-            this._outputChannel.error(`[PositronHelpService] Unsupported help event kind: ${showHelpEvent.kind}`);
+            this._outputChannel.error(
+                `[PositronHelpService] Unsupported help event kind: ${showHelpEvent.kind}`,
+            );
             return;
         }
 
@@ -225,7 +230,9 @@ export class PositronHelpService implements IPositronHelpService {
         try {
             targetUrl = new URL(showHelpEvent.content);
         } catch (error) {
-            this._outputChannel.error(`[PositronHelpService] Invalid help URL: ${showHelpEvent.content}`);
+            this._outputChannel.error(
+                `[PositronHelpService] Invalid help URL: ${showHelpEvent.content}`,
+            );
             return;
         }
 
@@ -244,7 +251,9 @@ export class PositronHelpService implements IPositronHelpService {
         try {
             proxyInfo = await this._proxyService.startProxyServer(targetUrl.origin);
         } catch (error) {
-            this._outputChannel.error(`[PositronHelpService] Failed to start help proxy for ${targetUrl.origin}: ${getErrorMessage(error)}`);
+            this._outputChannel.error(
+                `[PositronHelpService] Failed to start help proxy for ${targetUrl.origin}: ${getErrorMessage(error)}`,
+            );
         }
 
         if (!proxyInfo) {
@@ -259,7 +268,7 @@ export class PositronHelpService implements IPositronHelpService {
             targetUrl.toString(),
             session.runtimeMetadata.languageId,
             session.sessionId,
-            session.runtimeMetadata.languageName
+            session.runtimeMetadata.languageName,
         );
 
         this._addHelpEntry(helpEntry);
@@ -271,17 +280,23 @@ export class PositronHelpService implements IPositronHelpService {
     }
 
     deleteHelpEntriesForSession(sessionId: string): void {
-        const toDelete = this._helpEntries.filter(entry => entry.sessionId === sessionId);
+        const toDelete = this._helpEntries.filter((entry) => entry.sessionId === sessionId);
         if (!toDelete.length) {
             return;
         }
 
         const current = this.currentHelpEntry as HelpEntry | undefined;
-        this._helpEntries.splice(0, this._helpEntries.length, ...this._helpEntries.filter(e => e.sessionId !== sessionId));
+        this._helpEntries.splice(
+            0,
+            this._helpEntries.length,
+            ...this._helpEntries.filter((e) => e.sessionId !== sessionId),
+        );
 
         if (current) {
             if (current.sessionId === sessionId) {
-                this._helpEntryIndex = this._helpEntries.length ? Math.min(this._helpEntryIndex, this._helpEntries.length - 1) : -1;
+                this._helpEntryIndex = this._helpEntries.length
+                    ? Math.min(this._helpEntryIndex, this._helpEntries.length - 1)
+                    : -1;
             } else {
                 this._helpEntryIndex = this._helpEntries.indexOf(current);
             }
@@ -291,12 +306,14 @@ export class PositronHelpService implements IPositronHelpService {
             this._onDidChangeCurrentHelpEntryEmitter.fire(this.currentHelpEntry);
         }
 
-        toDelete.forEach(entry => entry.dispose());
+        toDelete.forEach((entry) => entry.dispose());
 
-        const cleanupOrigins = new Set(toDelete.map(entry => new URL(entry.targetUrl).origin));
-        const activeOrigins = new Set(this._helpEntries.map(entry => new URL(entry.targetUrl).origin));
+        const cleanupOrigins = new Set(toDelete.map((entry) => new URL(entry.targetUrl).origin));
+        const activeOrigins = new Set(
+            this._helpEntries.map((entry) => new URL(entry.targetUrl).origin),
+        );
 
-        cleanupOrigins.forEach(origin => {
+        cleanupOrigins.forEach((origin) => {
             if (!activeOrigins.has(origin)) {
                 this._proxyService.stopProxyServer(origin);
             }
@@ -367,7 +384,9 @@ export class PositronHelpService implements IPositronHelpService {
         try {
             proxyInfo = await this._proxyService.startProxyServer(targetUrl.origin);
         } catch (error) {
-            this._outputChannel.error(`[PositronHelpService] Failed to start help proxy for ${targetUrl.origin}: ${getErrorMessage(error)}`);
+            this._outputChannel.error(
+                `[PositronHelpService] Failed to start help proxy for ${targetUrl.origin}: ${getErrorMessage(error)}`,
+            );
         }
 
         if (!proxyInfo) {
@@ -382,7 +401,7 @@ export class PositronHelpService implements IPositronHelpService {
             targetUrl.toString(),
             current.languageId,
             current.sessionId,
-            current.languageName
+            current.languageName,
         );
 
         this._addHelpEntry(helpEntry);
@@ -390,7 +409,10 @@ export class PositronHelpService implements IPositronHelpService {
 
     private _addHelpEntry(helpEntry: HelpEntry): void {
         const current = this._helpEntries[this._helpEntryIndex];
-        if (current?.targetUrl === helpEntry.targetUrl && current.sessionId === helpEntry.sessionId) {
+        if (
+            current?.targetUrl === helpEntry.targetUrl &&
+            current.sessionId === helpEntry.sessionId
+        ) {
             current.sourceUrl = helpEntry.sourceUrl;
             helpEntry.dispose();
             // History deduplication must not suppress restoring the visible state.
@@ -399,18 +421,11 @@ export class PositronHelpService implements IPositronHelpService {
         }
 
         const deletedHelpEntries = [
-            ...this._helpEntries.splice(
-                this._helpEntryIndex + 1,
-                Infinity,
-                helpEntry
-            ),
-            ...this._helpEntries.splice(
-                0,
-                Math.max(0, this._helpEntries.length - 10)
-            )
+            ...this._helpEntries.splice(this._helpEntryIndex + 1, Infinity, helpEntry),
+            ...this._helpEntries.splice(0, Math.max(0, this._helpEntries.length - 10)),
         ];
 
-        deletedHelpEntries.forEach(entry => entry.dispose());
+        deletedHelpEntries.forEach((entry) => entry.dispose());
 
         this._helpEntryIndex = this._helpEntries.length - 1;
         this._onDidChangeCurrentHelpEntryEmitter.fire(this.currentHelpEntry);
@@ -429,7 +444,7 @@ export class PositronHelpService implements IPositronHelpService {
             }
             await vscode.window.showTextDocument(editorToRestore.document, {
                 viewColumn: editorToRestore.viewColumn,
-                preserveFocus: false
+                preserveFocus: false,
             });
         };
 

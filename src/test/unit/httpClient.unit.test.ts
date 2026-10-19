@@ -8,15 +8,17 @@ suite('[Unit] supervisor HTTP client', () => {
         const server = http.createServer((_request, response) => {
             response.statusCode = 500;
             response.statusMessage = 'Internal Server Error';
-            response.end(JSON.stringify({
-                error: {
-                    code: 'KERNEL_START_FAILED',
-                    message: 'The kernel process exited during startup.',
-                    details: 'Failed to load libR.so.',
-                },
-                exit_code: 127,
-                output: 'libR.so: cannot open shared object file',
-            }));
+            response.end(
+                JSON.stringify({
+                    error: {
+                        code: 'KERNEL_START_FAILED',
+                        message: 'The kernel process exited during startup.',
+                        details: 'Failed to load libR.so.',
+                    },
+                    exit_code: 127,
+                    output: 'libR.so: cannot open shared object file',
+                }),
+            );
         });
 
         try {
@@ -47,8 +49,12 @@ suite('[Unit] supervisor HTTP client', () => {
                 {
                     summary: diagnostics.summary,
                     exitCode: diagnostics.exitCode,
-                    hasServerDetails: diagnostics.details.includes('Server details: Failed to load libR.so.'),
-                    hasKernelOutput: diagnostics.details.includes('libR.so: cannot open shared object file'),
+                    hasServerDetails: diagnostics.details.includes(
+                        'Server details: Failed to load libR.so.',
+                    ),
+                    hasKernelOutput: diagnostics.details.includes(
+                        'libR.so: cannot open shared object file',
+                    ),
                 },
                 {
                     summary:
@@ -83,6 +89,6 @@ function listen(server: http.Server): Promise<number> {
 
 function close(server: http.Server): Promise<void> {
     return new Promise((resolve, reject) => {
-        server.close(error => error ? reject(error) : resolve());
+        server.close((error) => (error ? reject(error) : resolve()));
     });
 }

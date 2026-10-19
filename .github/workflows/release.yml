@@ -29,6 +29,9 @@ jobs:
       - name: Test binary installer
         run: npm run test:binaries
 
+      - name: Test Monaco import contracts
+        run: npm run test:monaco-contracts
+
       - name: Run tests
         run: npm run test:unit:ext
 

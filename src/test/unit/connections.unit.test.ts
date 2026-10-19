@@ -22,21 +22,30 @@ import {
 
 class MemoryMemento implements vscode.Memento {
     readonly values = new Map<string, unknown>();
-    keys(): readonly string[] { return [...this.values.keys()]; }
+    keys(): readonly string[] {
+        return [...this.values.keys()];
+    }
     get<T>(key: string): T | undefined;
     get<T>(key: string, defaultValue: T): T;
     get<T>(key: string, defaultValue?: T): T | undefined {
         return (this.values.has(key) ? this.values.get(key) : defaultValue) as T | undefined;
     }
-    update(key: string, value: unknown): Thenable<void> { this.values.set(key, value); return Promise.resolve(); }
+    update(key: string, value: unknown): Thenable<void> {
+        this.values.set(key, value);
+        return Promise.resolve();
+    }
 }
 
 class MemorySecretStorage implements vscode.SecretStorage {
     readonly values = new Map<string, string>();
     private readonly _onDidChange = new vscode.EventEmitter<vscode.SecretStorageChangeEvent>();
     readonly onDidChange = this._onDidChange.event;
-    keys(): Thenable<string[]> { return Promise.resolve([...this.values.keys()]); }
-    get(key: string): Thenable<string | undefined> { return Promise.resolve(this.values.get(key)); }
+    keys(): Thenable<string[]> {
+        return Promise.resolve([...this.values.keys()]);
+    }
+    get(key: string): Thenable<string | undefined> {
+        return Promise.resolve(this.values.get(key));
+    }
     store(key: string, value: string): Thenable<void> {
         this.values.set(key, value);
         this._onDidChange.fire({ key });
@@ -47,43 +56,87 @@ class MemorySecretStorage implements vscode.SecretStorage {
         this._onDidChange.fire({ key });
         return Promise.resolve();
     }
-    dispose(): void { this._onDidChange.dispose(); }
+    dispose(): void {
+        this._onDidChange.dispose();
+    }
 }
 
 function deferred<T>() {
     let resolve!: (value: T) => void;
-    const promise = new Promise<T>(complete => { resolve = complete; });
+    const promise = new Promise<T>((complete) => {
+        resolve = complete;
+    });
     return { promise, resolve };
 }
 
-async function createProfileHarness(connect: DataConnectionDriver['connect'], state = new MemoryMemento()) {
+async function createProfileHarness(
+    connect: DataConnectionDriver['connect'],
+    state = new MemoryMemento(),
+) {
     const secrets = new MemorySecretStorage();
     const output = vscode.window.createOutputChannel('connections-lifecycle-test', { log: true });
     const lifecycle = new SurfaceLifecycleService(new MemoryMemento(), output);
     await lifecycle.initialize();
-    const service = new PositronConnectionsService({ sessions: [] } as any, lifecycle, output, state, secrets);
+    const service = new PositronConnectionsService(
+        { sessions: [] } as any,
+        lifecycle,
+        output,
+        state,
+        secrets,
+    );
     service.registerDriver({
-        id: 'test-driver', name: 'Test', description: '', iconSvg: '', supportedLanguageIds: ['python'],
-        mechanisms: [{ id: 'host', label: 'Host', description: '', parameters: [{
-            id: 'password', label: 'Password', type: DataConnectionParameterType.Password, secret: true,
-        }] }],
+        id: 'test-driver',
+        name: 'Test',
+        description: '',
+        iconSvg: '',
+        supportedLanguageIds: ['python'],
+        mechanisms: [
+            {
+                id: 'host',
+                label: 'Host',
+                description: '',
+                parameters: [
+                    {
+                        id: 'password',
+                        label: 'Password',
+                        type: DataConnectionParameterType.Password,
+                        secret: true,
+                    },
+                ],
+            },
+        ],
         connect,
     });
     const profile = {
-        id: 'test-profile', createdAt: 1, driverId: 'test-driver', connectionName: 'Test',
-        mechanismId: 'host', parameterValues: { password: 'secret' },
+        id: 'test-profile',
+        createdAt: 1,
+        driverId: 'test-driver',
+        connectionName: 'Test',
+        mechanismId: 'host',
+        parameterValues: { password: 'secret' },
     };
     await service.addUpdateProfile(profile, false);
     return {
-        service, secrets, profile, state, lifecycle,
-        dispose: () => { service.dispose(); lifecycle.dispose(); secrets.dispose(); output.dispose(); },
+        service,
+        secrets,
+        profile,
+        state,
+        lifecycle,
+        dispose: () => {
+            service.dispose();
+            lifecycle.dispose();
+            secrets.dispose();
+            output.dispose();
+        },
     };
 }
 
 function createConnection(disconnect: () => Promise<void> = async () => undefined): DataConnection {
     return {
-        isReadOnly: async () => true, isConnected: async () => true,
-        getChildren: async () => [], disconnect,
+        isReadOnly: async () => true,
+        isConnected: async () => true,
+        getChildren: async () => [],
+        disconnect,
     };
 }
 
@@ -93,28 +146,45 @@ suite('[Unit] Connections surface', () => {
         let disconnects = 0;
         const harness = await createProfileHarness(async (_mechanism, parameters) => {
             received.push({ ...parameters });
-            return createConnection(async () => { disconnects++; });
+            return createConnection(async () => {
+                disconnects++;
+            });
         });
         try {
-            await harness.service.addUpdateProfile({ ...harness.profile,
-                parameterValues: { host: 'old', readOnly: false } }, false);
+            await harness.service.addUpdateProfile(
+                { ...harness.profile, parameterValues: { host: 'old', readOnly: false } },
+                false,
+            );
             const old = await harness.service.connectProfile(harness.profile.id);
-            await harness.service.addUpdateProfile({ ...harness.profile,
-                parameterValues: { host: 'new', readOnly: true } }, false);
+            await harness.service.addUpdateProfile(
+                { ...harness.profile, parameterValues: { host: 'new', readOnly: true } },
+                false,
+            );
             assert.strictEqual(old.active, false);
             assert.strictEqual(disconnects, 1);
             assert.strictEqual(harness.service.connections[0].active, false);
             const current = await harness.service.connectProfile(harness.profile.id);
             assert.notStrictEqual(current, old);
-            assert.deepStrictEqual(received[1], { host: 'new', readOnly: true, password: 'secret' });
+            assert.deepStrictEqual(received[1], {
+                host: 'new',
+                readOnly: true,
+                password: 'secret',
+            });
 
-            await harness.service.addUpdateProfile({ ...harness.profile,
-                parameterValues: { host: 'new', readOnly: true, password: 'rotated' } }, false);
+            await harness.service.addUpdateProfile(
+                {
+                    ...harness.profile,
+                    parameterValues: { host: 'new', readOnly: true, password: 'rotated' },
+                },
+                false,
+            );
             assert.strictEqual(current.active, false);
             assert.strictEqual(disconnects, 2);
             await harness.service.connectProfile(harness.profile.id);
             assert.strictEqual(received[2].password, 'rotated');
-        } finally { harness.dispose(); }
+        } finally {
+            harness.dispose();
+        }
     });
 
     test('renaming a connected profile preserves its channel and updates its displayed name', async () => {
@@ -122,17 +192,26 @@ suite('[Unit] Connections surface', () => {
         let disconnects = 0;
         const harness = await createProfileHarness(async () => {
             connects++;
-            return createConnection(async () => { disconnects++; });
+            return createConnection(async () => {
+                disconnects++;
+            });
         });
         try {
             const instance = await harness.service.connectProfile(harness.profile.id);
-            await harness.service.addUpdateProfile({ ...harness.service.profileStore.getProfile(harness.profile.id)!,
-                connectionName: 'Renamed' }, false);
+            await harness.service.addUpdateProfile(
+                {
+                    ...harness.service.profileStore.getProfile(harness.profile.id)!,
+                    connectionName: 'Renamed',
+                },
+                false,
+            );
             assert.strictEqual(await harness.service.connectProfile(harness.profile.id), instance);
             assert.strictEqual(instance.metadata.name, 'Renamed');
             assert.strictEqual(connects, 1);
             assert.strictEqual(disconnects, 0);
-        } finally { harness.dispose(); }
+        } finally {
+            harness.dispose();
+        }
     });
 
     test('editing parameters cancels an older in-flight connection before it can publish', async () => {
@@ -142,32 +221,53 @@ suite('[Unit] Connections surface', () => {
         let disconnects = 0;
         const harness = await createProfileHarness(async (_mechanism, parameters) => {
             values.push(String(parameters.host));
-            if (values.length === 1) { connecting.resolve(); return firstHandle.promise; }
+            if (values.length === 1) {
+                connecting.resolve();
+                return firstHandle.promise;
+            }
             return createConnection();
         });
         try {
-            await harness.service.addUpdateProfile({ ...harness.profile, parameterValues: { host: 'old' } }, false);
+            await harness.service.addUpdateProfile(
+                { ...harness.profile, parameterValues: { host: 'old' } },
+                false,
+            );
             const first = harness.service.connectProfile(harness.profile.id);
             const rejected = assert.rejects(first, /cancelled/);
             await connecting.promise;
-            await harness.service.addUpdateProfile({ ...harness.profile, parameterValues: { host: 'new' } }, false);
+            await harness.service.addUpdateProfile(
+                { ...harness.profile, parameterValues: { host: 'new' } },
+                false,
+            );
             const replacement = await harness.service.connectProfile(harness.profile.id);
-            firstHandle.resolve(createConnection(async () => { disconnects++; }));
+            firstHandle.resolve(
+                createConnection(async () => {
+                    disconnects++;
+                }),
+            );
             await rejected;
             assert.deepStrictEqual(values, ['old', 'new']);
             assert.strictEqual(disconnects, 1);
             assert.strictEqual(harness.service.connections[0], replacement);
-        } finally { firstHandle.resolve(createConnection()); harness.dispose(); }
+        } finally {
+            firstHandle.resolve(createConnection());
+            harness.dispose();
+        }
     });
 
     test('saved profiles connect on expansion and reconnect from their context command', async () => {
         let connects = 0;
         const harness = await createProfileHarness(async () => {
             connects++;
-            return { ...createConnection(), getChildren: async () => [{ name: 'sales', kind: DataConnectionNodeKind.Table }] };
+            return {
+                ...createConnection(),
+                getChildren: async () => [{ name: 'sales', kind: DataConnectionNodeKind.Table }],
+            };
         });
         const registeredCommands = new Map<string, (...args: any[]) => unknown>();
-        const commands = vscode.commands as { registerCommand: typeof vscode.commands.registerCommand };
+        const commands = vscode.commands as {
+            registerCommand: typeof vscode.commands.registerCommand;
+        };
         const originalRegisterCommand = commands.registerCommand;
         let tree: ConnectionsTreeProvider | undefined;
         try {
@@ -175,7 +275,9 @@ suite('[Unit] Connections surface', () => {
             // Capture this instance's handlers without replacing its commands.
             commands.registerCommand = (command, callback, thisArg) => {
                 registeredCommands.set(command, callback.bind(thisArg));
-                return new vscode.Disposable(() => { registeredCommands.delete(command); });
+                return new vscode.Disposable(() => {
+                    registeredCommands.delete(command);
+                });
             };
             try {
                 tree = new ConnectionsTreeProvider(harness.service, harness.lifecycle);
@@ -183,14 +285,24 @@ suite('[Unit] Connections surface', () => {
                 commands.registerCommand = originalRegisterCommand;
             }
             const [root] = await tree.getChildren();
-            assert.strictEqual(tree.getTreeItem(root).collapsibleState, vscode.TreeItemCollapsibleState.Collapsed);
-            assert.strictEqual(tree.getTreeItem(root).contextValue, 'supervisor.connection.profile.inactive');
+            assert.strictEqual(
+                tree.getTreeItem(root).collapsibleState,
+                vscode.TreeItemCollapsibleState.Collapsed,
+            );
+            assert.strictEqual(
+                tree.getTreeItem(root).contextValue,
+                'supervisor.connection.profile.inactive',
+            );
             const children = await tree.getChildren(root);
             assert.strictEqual(children.length, 1);
             assert.strictEqual(children[0].kind, 'object');
             const instance = harness.service.connections[0];
-            const disconnected = new Promise<void>(resolve => {
-                instance.onDidChange(() => { if (!instance.active) { resolve(); } });
+            const disconnected = new Promise<void>((resolve) => {
+                instance.onDidChange(() => {
+                    if (!instance.active) {
+                        resolve();
+                    }
+                });
             });
             instance.disconnect();
             await disconnected;
@@ -201,15 +313,24 @@ suite('[Unit] Connections surface', () => {
             assert.strictEqual(harness.service.connections[0].active, true);
             // A root captured before connection still resolves to the current handle.
             assert.strictEqual((await tree.getChildren(root)).length, 1);
-        } finally { tree?.dispose(); harness.dispose(); }
+        } finally {
+            tree?.dispose();
+            harness.dispose();
+        }
     });
 
     test('coalesces profile connections before asynchronous secret reads', async () => {
         let connects = 0;
-        const harness = await createProfileHarness(async () => { connects++; return createConnection(); });
+        const harness = await createProfileHarness(async () => {
+            connects++;
+            return createConnection();
+        });
         const secret = deferred<string>();
         const readingSecret = deferred<void>();
-        harness.secrets.get = async () => { readingSecret.resolve(); return secret.promise; };
+        harness.secrets.get = async () => {
+            readingSecret.resolve();
+            return secret.promise;
+        };
         try {
             const first = harness.service.connectProfile(harness.profile.id);
             await readingSecret.promise;
@@ -235,8 +356,14 @@ suite('[Unit] Connections surface', () => {
             return createConnection();
         });
         try {
-            await assert.rejects(harness.service.connectProfile(harness.profile.id), /injected connection failure/);
-            assert.strictEqual((await harness.service.connectProfile(harness.profile.id)).active, true);
+            await assert.rejects(
+                harness.service.connectProfile(harness.profile.id),
+                /injected connection failure/,
+            );
+            assert.strictEqual(
+                (await harness.service.connectProfile(harness.profile.id)).active,
+                true,
+            );
             assert.strictEqual(attempts, 2);
             await harness.service.removeProfile(harness.profile.id);
         } finally {
@@ -246,7 +373,11 @@ suite('[Unit] Connections surface', () => {
 
     test('disconnects a modern connection exactly once when removing its profile', async () => {
         let disconnects = 0;
-        const harness = await createProfileHarness(async () => createConnection(async () => { disconnects++; }));
+        const harness = await createProfileHarness(async () =>
+            createConnection(async () => {
+                disconnects++;
+            }),
+        );
         try {
             const instance = await harness.service.connectProfile(harness.profile.id);
             assert.strictEqual(await harness.service.removeProfile(harness.profile.id), true);
@@ -262,8 +393,12 @@ suite('[Unit] Connections surface', () => {
     test('retains legacy disposal after disconnecting a profile', async () => {
         const cleanup: string[] = [];
         const handle = {
-            ...createConnection(async () => { cleanup.push('disconnect'); }),
-            dispose: () => { cleanup.push('dispose'); },
+            ...createConnection(async () => {
+                cleanup.push('disconnect');
+            }),
+            dispose: () => {
+                cleanup.push('dispose');
+            },
         };
         const harness = await createProfileHarness(async () => handle);
         try {
@@ -280,7 +415,10 @@ suite('[Unit] Connections surface', () => {
             const connection = deferred<DataConnection>();
             const started = deferred<void>();
             let disconnects = 0;
-            const harness = await createProfileHarness(async () => { started.resolve(); return connection.promise; });
+            const harness = await createProfileHarness(async () => {
+                started.resolve();
+                return connection.promise;
+            });
             try {
                 const pending = harness.service.connectProfile(harness.profile.id);
                 const rejected = assert.rejects(pending, /cancelled/);
@@ -290,11 +428,18 @@ suite('[Unit] Connections surface', () => {
                 } else {
                     harness.service.dispose();
                 }
-                connection.resolve(createConnection(async () => { disconnects++; }));
+                connection.resolve(
+                    createConnection(async () => {
+                        disconnects++;
+                    }),
+                );
                 await rejected;
                 assert.strictEqual(disconnects, 1);
                 assert.strictEqual(harness.service.connections.length, 0);
-                assert.strictEqual(harness.service.profileStore.getProfile(harness.profile.id), undefined);
+                assert.strictEqual(
+                    harness.service.profileStore.getProfile(harness.profile.id),
+                    undefined,
+                );
                 const persisted = new DataConnectionProfileStore(harness.state, harness.secrets);
                 if (action === 'remove') {
                     assert.strictEqual(persisted.getProfile(harness.profile.id), undefined);
@@ -325,14 +470,23 @@ suite('[Unit] Connections surface', () => {
             const rejected = assert.rejects(oldPending, /cancelled/);
             await oldStarted.promise;
             await harness.service.removeProfile(harness.profile.id);
-            await harness.service.addUpdateProfile({ ...harness.profile, connectionName: 'Replacement' }, false);
+            await harness.service.addUpdateProfile(
+                { ...harness.profile, connectionName: 'Replacement' },
+                false,
+            );
             const replacement = await harness.service.connectProfile(harness.profile.id);
-            oldConnection.resolve(createConnection(async () => { oldDisconnects++; }));
+            oldConnection.resolve(
+                createConnection(async () => {
+                    oldDisconnects++;
+                }),
+            );
             await rejected;
             assert.strictEqual(oldDisconnects, 1);
             assert.strictEqual(harness.service.getConnection(replacement.id), replacement);
-            assert.strictEqual(harness.service.profileStore.getProfile(harness.profile.id)?.connectionName,
-                'Replacement');
+            assert.strictEqual(
+                harness.service.profileStore.getProfile(harness.profile.id)?.connectionName,
+                'Replacement',
+            );
             await harness.service.removeProfile(harness.profile.id);
         } finally {
             harness.dispose();
@@ -352,7 +506,13 @@ suite('[Unit] Connections surface', () => {
             }
         };
         let disconnects = 0;
-        const harness = await createProfileHarness(async () => createConnection(async () => { disconnects++; }), state);
+        const harness = await createProfileHarness(
+            async () =>
+                createConnection(async () => {
+                    disconnects++;
+                }),
+            state,
+        );
         try {
             const pending = harness.service.connectProfile(harness.profile.id);
             const rejected = assert.rejects(pending, /cancelled/);
@@ -382,16 +542,22 @@ suite('[Unit] Connections surface', () => {
             onDidUpdate: updateEmitter.event,
             onDidClose: closeEmitter.event,
             onDidFocus: focusEmitter.event,
-            listObjects: async (path: Array<{ name: string }>) => path.length === 0
-                ? [{ name: 'sales', kind: 'table' }, { name: 'analytics', kind: 'schema' }]
-                : [],
+            listObjects: async (path: Array<{ name: string }>) =>
+                path.length === 0
+                    ? [
+                          { name: 'sales', kind: 'table' },
+                          { name: 'analytics', kind: 'schema' },
+                      ]
+                    : [],
             listFields: async () => [{ name: 'amount', dtype: 'double' }],
             containsData: async (path: Array<{ name: string }>) => path.at(-1)?.name === 'sales',
             previewObject: async (path: Array<{ name: string }>) => {
-                previews.push(path.map(entry => entry.name));
+                previews.push(path.map((entry) => entry.name));
                 return null;
             },
-            dispose: () => { disposed = true; },
+            dispose: () => {
+                disposed = true;
+            },
         } as unknown as PositronConnectionsComm;
         const client = {
             onDidChangeClientState: stateEmitter.event,
@@ -406,14 +572,18 @@ suite('[Unit] Connections surface', () => {
         );
 
         const roots = await connection.getChildren();
-        assert.deepStrictEqual(roots.map(node => [node.name, node.containsData]), [
-            ['sales', true],
-            ['analytics', false],
-        ]);
+        assert.deepStrictEqual(
+            roots.map((node) => [node.name, node.containsData]),
+            [
+                ['sales', true],
+                ['analytics', false],
+            ],
+        );
         const fields = await connection.getChildren(roots[0].path);
-        assert.deepStrictEqual(fields.map(node => [node.name, node.kind, node.dtype]), [
-            ['amount', 'field', 'double'],
-        ]);
+        assert.deepStrictEqual(
+            fields.map((node) => [node.name, node.kind, node.dtype]),
+            [['amount', 'field', 'double']],
+        );
         await connection.preview(roots[0].path);
         assert.deepStrictEqual(previews, [['sales']]);
 
@@ -429,26 +599,34 @@ suite('[Unit] Connections surface', () => {
         const state = new MemoryMemento();
         const secrets = new MemorySecretStorage();
         const store = new DataConnectionProfileStore(state, secrets);
-        await store.addUpdateProfile({
-            id: 'warehouse',
-            createdAt: 1,
-            driverId: 'postgres',
-            connectionName: 'Warehouse',
-            mechanismId: 'host',
-            parameterValues: { host: 'db.example.test', password: 'cleartext' },
-            autoConnect: true,
-        }, ['password']);
+        await store.addUpdateProfile(
+            {
+                id: 'warehouse',
+                createdAt: 1,
+                driverId: 'postgres',
+                connectionName: 'Warehouse',
+                mechanismId: 'host',
+                parameterValues: { host: 'db.example.test', password: 'cleartext' },
+                autoConnect: true,
+            },
+            ['password'],
+        );
 
         const serialized = JSON.stringify([...state.values.values()]);
         assert.ok(!serialized.includes('cleartext'));
         assert.ok([...secrets.values.values()].includes('cleartext'));
-        assert.deepStrictEqual(store.getProfile('warehouse')?.parameterValues, { host: 'db.example.test' });
+        assert.deepStrictEqual(store.getProfile('warehouse')?.parameterValues, {
+            host: 'db.example.test',
+        });
 
         const restored = new DataConnectionProfileStore(state, secrets);
-        assert.deepStrictEqual((await restored.getProfileWithSecrets('warehouse'))?.parameterValues, {
-            host: 'db.example.test',
-            password: 'cleartext',
-        });
+        assert.deepStrictEqual(
+            (await restored.getProfileWithSecrets('warehouse'))?.parameterValues,
+            {
+                host: 'db.example.test',
+                password: 'cleartext',
+            },
+        );
         restored.dispose();
         store.dispose();
         secrets.dispose();
@@ -459,7 +637,9 @@ suite('[Unit] Connections surface', () => {
         const driver = {
             id: 'duckdb',
             metadata: { id: 'duckdb', name: 'DuckDB', mechanisms: [] },
-            connect: async () => { throw new Error('not used'); },
+            connect: async () => {
+                throw new Error('not used');
+            },
         };
         const registration = manager.registerDriver(driver);
         assert.strictEqual(manager.getDriver('duckdb')?.name, 'DuckDB');
@@ -477,31 +657,42 @@ suite('[Unit] Connections surface', () => {
             description: 'Current Positron API',
             iconSvg: '<svg/>',
             supportedLanguageIds: ['python'],
-            mechanisms: [{
-                id: 'file',
-                label: 'File',
-                description: 'Open a database file',
-                parameters: [{
-                    id: 'path',
-                    label: 'Path',
-                    type: DataConnectionParameterType.File,
-                    required: true,
-                }],
-            }],
+            mechanisms: [
+                {
+                    id: 'file',
+                    label: 'File',
+                    description: 'Open a database file',
+                    parameters: [
+                        {
+                            id: 'path',
+                            label: 'Path',
+                            type: DataConnectionParameterType.File,
+                            required: true,
+                        },
+                    ],
+                },
+            ],
             connect: async () => ({
                 isReadOnly: async () => true,
                 isConnected: async () => true,
                 disconnect: async () => undefined,
-                getChildren: async () => [{
-                    name: 'sales',
-                    kind: DataConnectionNodeKind.Table,
-                    preview: async () => { previewed = true; },
-                }],
+                getChildren: async () => [
+                    {
+                        name: 'sales',
+                        kind: DataConnectionNodeKind.Table,
+                        preview: async () => {
+                            previewed = true;
+                        },
+                    },
+                ],
             }),
         });
 
         const summaries = manager.getDriverSummaries();
-        assert.deepStrictEqual(summaries.map(driver => driver.id), ['current-driver']);
+        assert.deepStrictEqual(
+            summaries.map((driver) => driver.id),
+            ['current-driver'],
+        );
         const connection = await manager.connect('current-driver', 'file', { path: '/tmp/db' });
         assert.strictEqual(await connection.isReadOnly(), true);
         const nodes = await connection.getChildren();
@@ -529,16 +720,26 @@ suite('[Unit] Connections surface', () => {
             metadata: {
                 id: 'warehouse-driver',
                 name: 'Warehouse',
-                mechanisms: [{
-                    id: 'host',
-                    label: 'Host',
-                    parameters: [
-                        { id: 'host', label: 'Host', type: 'string' as const, required: true },
-                        { id: 'password', label: 'Password', type: 'password' as const, secret: true },
-                    ],
-                }],
+                mechanisms: [
+                    {
+                        id: 'host',
+                        label: 'Host',
+                        parameters: [
+                            { id: 'host', label: 'Host', type: 'string' as const, required: true },
+                            {
+                                id: 'password',
+                                label: 'Password',
+                                type: 'password' as const,
+                                secret: true,
+                            },
+                        ],
+                    },
+                ],
             },
-            connect: async (_mechanismId: string, values: Record<string, boolean | number | string>) => {
+            connect: async (
+                _mechanismId: string,
+                values: Record<string, boolean | number | string>,
+            ) => {
                 passwords.push(String(values.password));
                 return {
                     isConnected: async () => true,
@@ -551,10 +752,18 @@ suite('[Unit] Connections surface', () => {
             },
         };
 
-        const firstLifecycle = new SurfaceLifecycleService(lifecycleState, output, 'connections.models');
+        const firstLifecycle = new SurfaceLifecycleService(
+            lifecycleState,
+            output,
+            'connections.models',
+        );
         await firstLifecycle.initialize();
         const first = new PositronConnectionsService(
-            sessionManager, firstLifecycle, output, profileState, secrets,
+            sessionManager,
+            firstLifecycle,
+            output,
+            profileState,
+            secrets,
         );
         first.initialize();
         first.registerDriver(driver);
@@ -571,20 +780,33 @@ suite('[Unit] Connections surface', () => {
         first.dispose();
         firstLifecycle.dispose();
 
-        const secondLifecycle = new SurfaceLifecycleService(lifecycleState, output, 'connections.models');
+        const secondLifecycle = new SurfaceLifecycleService(
+            lifecycleState,
+            output,
+            'connections.models',
+        );
         await secondLifecycle.initialize();
-        const modelId = createSurfaceModelId(SurfaceModelKind.Connection, 'profile', 'warehouse-profile');
+        const modelId = createSurfaceModelId(
+            SurfaceModelKind.Connection,
+            'profile',
+            'warehouse-profile',
+        );
         assert.strictEqual(secondLifecycle.getModel(modelId)?.restore.backend, 'pending');
 
         const second = new PositronConnectionsService(
-            sessionManager, secondLifecycle, output, profileState, secrets,
+            sessionManager,
+            secondLifecycle,
+            output,
+            profileState,
+            secrets,
         );
         second.initialize();
         second.registerDriver(driver);
 
         assert.deepStrictEqual(passwords, ['secret']);
         assert.strictEqual(
-            second.connections.find(connection => connection.id === 'profile:warehouse-profile')?.active,
+            second.connections.find((connection) => connection.id === 'profile:warehouse-profile')
+                ?.active,
             false,
         );
         assert.strictEqual(secondLifecycle.getModel(modelId)?.restore.backend, 'ready');
@@ -593,7 +815,8 @@ suite('[Unit] Connections surface', () => {
         await second.connectProfile('warehouse-profile');
         assert.deepStrictEqual(passwords, ['secret', 'secret']);
         assert.strictEqual(
-            second.connections.find(connection => connection.id === 'profile:warehouse-profile')?.active,
+            second.connections.find((connection) => connection.id === 'profile:warehouse-profile')
+                ?.active,
             true,
         );
         second.dispose();

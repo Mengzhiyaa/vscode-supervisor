@@ -130,7 +130,6 @@ function makeTraceItem(sizeChars: number): any {
 }
 
 suite('[Unit] ConsoleStateStore — progressive truncation', () => {
-
     test('small state passes through unchanged', () => {
         const memento = createMemento();
         const store = new ConsoleStateStore(memento, makeNoopLogChannel());
@@ -169,8 +168,11 @@ suite('[Unit] ConsoleStateStore — progressive truncation', () => {
         // The retained items should be the newest (highest index)
         const lastOriginalParentId = items[items.length - 1].parentId;
         const lastPreparedParentId = prepared.items[prepared.items.length - 1].parentId;
-        assert.strictEqual(lastPreparedParentId, lastOriginalParentId,
-            'newest item should be preserved');
+        assert.strictEqual(
+            lastPreparedParentId,
+            lastOriginalParentId,
+            'newest item should be preserved',
+        );
 
         // Total size should be within budget
         const sizeBytes = Buffer.byteLength(JSON.stringify(prepared), 'utf8');
@@ -193,8 +195,10 @@ suite('[Unit] ConsoleStateStore — progressive truncation', () => {
 
         const streamItem = prepared.items[0].items.find((i: any) => i.type === 'stream');
         assert.ok(streamItem, 'stream child should exist');
-        assert.ok(streamItem.text.length <= 4096 + 20, // MaxStringFieldChars + suffix
-            `stream text should be truncated, got ${streamItem.text.length}`);
+        assert.ok(
+            streamItem.text.length <= 4096 + 20, // MaxStringFieldChars + suffix
+            `stream text should be truncated, got ${streamItem.text.length}`,
+        );
 
         store.dispose();
     });
@@ -213,8 +217,10 @@ suite('[Unit] ConsoleStateStore — progressive truncation', () => {
 
         const outputChild = prepared.items[0].items.find((i: any) => i.type === 'output');
         assert.ok(outputChild, 'output child should exist');
-        assert.ok(outputChild.data['text/plain'].length <= 4096 + 20,
-            `output data should be truncated, got ${outputChild.data['text/plain'].length}`);
+        assert.ok(
+            outputChild.data['text/plain'].length <= 4096 + 20,
+            `output data should be truncated, got ${outputChild.data['text/plain'].length}`,
+        );
 
         store.dispose();
     });
@@ -229,8 +235,10 @@ suite('[Unit] ConsoleStateStore — progressive truncation', () => {
 
         const prepared = (store as any)._prepareStateForStorage(state);
         assert.strictEqual(prepared.items.length, 1, 'trace item should be retained');
-        assert.ok(prepared.items[0].trace.length <= 4096 + 20,
-            `trace string should be truncated, got ${prepared.items[0].trace.length}`);
+        assert.ok(
+            prepared.items[0].trace.length <= 4096 + 20,
+            `trace string should be truncated, got ${prepared.items[0].trace.length}`,
+        );
 
         store.dispose();
     });
@@ -264,17 +272,22 @@ suite('[Unit] ConsoleStateStore — progressive truncation', () => {
         }
 
         const state = makeState({
-            items: [{
-                type: 'activity',
-                parentId: 'exec-many',
-                items: children,
-            }],
+            items: [
+                {
+                    type: 'activity',
+                    parentId: 'exec-many',
+                    items: children,
+                },
+            ],
         });
 
         const prepared = (store as any)._prepareStateForStorage(state);
         assert.strictEqual(prepared.items.length, 1, 'activity should be retained');
-        assert.strictEqual(prepared.items[0].items.length, 30,
-            'all 30 activity children should be preserved (structural array not truncated)');
+        assert.strictEqual(
+            prepared.items[0].items.length,
+            30,
+            'all 30 activity children should be preserved (structural array not truncated)',
+        );
 
         store.dispose();
     });
@@ -300,7 +313,7 @@ suite('[Unit] ConsoleStateStore — progressive truncation', () => {
         assert.strictEqual(
             prepared.inputHistory[prepared.inputHistory.length - 1],
             bigHistory[bigHistory.length - 1],
-            'newest history entry should be preserved'
+            'newest history entry should be preserved',
         );
 
         store.dispose();
@@ -317,26 +330,31 @@ suite('[Unit] ConsoleStateStore — progressive truncation', () => {
         }
 
         const state = makeState({
-            items: [{
-                type: 'activity',
-                parentId: 'exec-huge',
-                items: [{
-                    type: 'input',
-                    id: 'input-huge',
+            items: [
+                {
+                    type: 'activity',
                     parentId: 'exec-huge',
-                    when: Date.now(),
-                    state: ActivityItemInputState.Completed,
-                    inputPrompt: '>',
-                    continuationPrompt: '+',
-                    code: 'result',
-                }, {
-                    type: 'output',
-                    id: 'output-huge',
-                    parentId: 'exec-huge',
-                    when: Date.now(),
-                    data: mimeData,
-                }],
-            }],
+                    items: [
+                        {
+                            type: 'input',
+                            id: 'input-huge',
+                            parentId: 'exec-huge',
+                            when: Date.now(),
+                            state: ActivityItemInputState.Completed,
+                            inputPrompt: '>',
+                            continuationPrompt: '+',
+                            code: 'result',
+                        },
+                        {
+                            type: 'output',
+                            id: 'output-huge',
+                            parentId: 'exec-huge',
+                            when: Date.now(),
+                            data: mimeData,
+                        },
+                    ],
+                },
+            ],
             inputHistory: ['1 + 1'],
         });
 
@@ -357,11 +375,12 @@ suite('[Unit] ConsoleStateStore — progressive truncation', () => {
 });
 
 suite('[Unit] ConsoleStateStore — version-based flush', () => {
-
     test('delete returns a barrier for the underlying storage update', async () => {
         let release!: () => void;
         let removed = false;
-        const gate = new Promise<void>(resolve => { release = resolve; });
+        const gate = new Promise<void>((resolve) => {
+            release = resolve;
+        });
         const memento: vscode.Memento = {
             get: <T>(_key: string, defaultValue?: T) => defaultValue as T,
             update: async (_key: string, value: unknown) => {
@@ -374,7 +393,11 @@ suite('[Unit] ConsoleStateStore — version-based flush', () => {
 
         const deletion = store.delete('session-1');
         await Promise.resolve();
-        assert.strictEqual(removed, false, 'delete must not report completion before storage commits');
+        assert.strictEqual(
+            removed,
+            false,
+            'delete must not report completion before storage commits',
+        );
 
         release();
         await deletion;
@@ -392,10 +415,16 @@ suite('[Unit] ConsoleStateStore — version-based flush', () => {
 
         store.delete('session-1');
 
-        assert.strictEqual((store as any)._dirtyVersion.has('session-1'), false,
-            'dirtyVersion should be cleaned up');
-        assert.strictEqual((store as any)._flushedVersion.has('session-1'), false,
-            'flushedVersion should be cleaned up');
+        assert.strictEqual(
+            (store as any)._dirtyVersion.has('session-1'),
+            false,
+            'dirtyVersion should be cleaned up',
+        );
+        assert.strictEqual(
+            (store as any)._flushedVersion.has('session-1'),
+            false,
+            'flushedVersion should be cleaned up',
+        );
     });
 
     test('dispose() cleans up timer and version maps', () => {
@@ -407,11 +436,16 @@ suite('[Unit] ConsoleStateStore — version-based flush', () => {
 
         store.dispose();
 
-        assert.strictEqual((store as any)._autoFlushTimer, undefined,
-            'auto-flush timer should be cleared');
-        assert.strictEqual((store as any)._dirtyVersion.size, 0,
-            'dirtyVersion should be cleared');
-        assert.strictEqual((store as any)._flushedVersion.size, 0,
-            'flushedVersion should be cleared');
+        assert.strictEqual(
+            (store as any)._autoFlushTimer,
+            undefined,
+            'auto-flush timer should be cleared',
+        );
+        assert.strictEqual((store as any)._dirtyVersion.size, 0, 'dirtyVersion should be cleared');
+        assert.strictEqual(
+            (store as any)._flushedVersion.size,
+            0,
+            'flushedVersion should be cleared',
+        );
     });
 });

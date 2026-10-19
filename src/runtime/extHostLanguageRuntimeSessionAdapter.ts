@@ -28,40 +28,38 @@ export class ExtHostLanguageRuntimeSessionAdapter implements vscode.Disposable {
         this._disposables.push(
             kernel.onDidReceiveRuntimeMessage((message) => {
                 this.handleRuntimeMessage(message as LanguageRuntimeMessage);
-            })
+            }),
         );
     }
 
     handleRuntimeMessage(message: LanguageRuntimeMessage): boolean {
         const runtimeMessage: LanguageRuntimeMessage = {
             ...message,
-            event_clock: message.event_clock > 0
-                ? message.event_clock
-                : this._nextEventClock(),
+            event_clock: message.event_clock > 0 ? message.event_clock : this._nextEventClock(),
         };
 
         this._session.log(
             `<<< RECV ${runtimeMessage.type}: ${this._stringifyMessageContent(runtimeMessage)}`,
-            vscode.LogLevel.Debug
+            vscode.LogLevel.Debug,
         );
 
         let handled = false;
         switch (runtimeMessage.type) {
             case LanguageRuntimeMessageType.CommOpen:
                 handled = this._clientManager.handleCommOpen(
-                    runtimeMessage as LanguageRuntimeMessageCommOpen
+                    runtimeMessage as LanguageRuntimeMessageCommOpen,
                 );
                 break;
 
             case LanguageRuntimeMessageType.CommData:
                 handled = this._clientManager.handleCommData(
-                    runtimeMessage as LanguageRuntimeMessageCommData
+                    runtimeMessage as LanguageRuntimeMessageCommData,
                 );
                 break;
 
             case LanguageRuntimeMessageType.CommClosed:
                 handled = this._clientManager.handleCommClosed(
-                    (runtimeMessage as LanguageRuntimeMessageCommClosed).comm_id
+                    (runtimeMessage as LanguageRuntimeMessageCommClosed).comm_id,
                 );
                 break;
         }

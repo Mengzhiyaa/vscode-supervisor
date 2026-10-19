@@ -1,10 +1,10 @@
 <script lang="ts">
-    import { onMount } from "svelte";
-    import { localize } from "../nls";
-    import PositronModalDialog from "./positronModalDialog/positronModalDialog.svelte";
-    import Checkbox from "./positronModalDialog/components/checkbox.svelte";
-    import ContentArea from "./positronModalDialog/components/contentArea.svelte";
-    import PlatformNativeDialogActionBar from "./positronModalDialog/components/platformNativeDialogActionBar.svelte";
+    import { onMount } from 'svelte';
+    import { localize } from '../nls';
+    import PositronModalDialog from './positronModalDialog/positronModalDialog.svelte';
+    import Checkbox from './positronModalDialog/components/checkbox.svelte';
+    import ContentArea from './positronModalDialog/components/contentArea.svelte';
+    import PlatformNativeDialogActionBar from './positronModalDialog/components/platformNativeDialogActionBar.svelte';
 
     interface Props {
         hasHeaderRow: boolean;
@@ -46,18 +46,18 @@
 </script>
 
 <PositronModalDialog
-    title={localize("positron.fileOptionsModalDialogTitle", "File Options")}
+    title={localize('positron.fileOptionsModalDialogTitle', 'File Options')}
     width={350}
     height={200}
-    onCancel={onCancel}
+    {onCancel}
 >
     <ContentArea>
         <div class="file-options-content">
             <Checkbox
                 initialChecked={hasHeaderRow}
                 label={localize(
-                    "positron.fileOptions.hasHeaderRow",
-                    "First row contains column names",
+                    'positron.fileOptions.hasHeaderRow',
+                    'First row contains column names',
                 )}
                 onChanged={(checked) => {
                     nextHasHeaderRow = checked;
@@ -65,7 +65,7 @@
             />
             {#if availableSheets.length > 0}
                 <label class="worksheet-field">
-                    <span>{localize("positron.fileOptions.worksheet", "Worksheet")}</span>
+                    <span>{localize('positron.fileOptions.worksheet', 'Worksheet')}</span>
                     <select bind:value={nextSelectedSheet}>
                         {#each availableSheets as sheet}
                             <option value={sheet}>{sheet}</option>
@@ -80,7 +80,7 @@
         <PlatformNativeDialogActionBar>
             {#snippet secondaryButton()}
                 <button class="action-bar-button" type="button" onclick={onCancel}>
-                    {localize("positronCancel", "Cancel")}
+                    {localize('positronCancel', 'Cancel')}
                 </button>
             {/snippet}
             {#snippet primaryButton()}
@@ -90,7 +90,7 @@
                     type="button"
                     onclick={handleApply}
                 >
-                    {localize("positron.fileOptions.apply", "Apply")}
+                    {localize('positron.fileOptions.apply', 'Apply')}
                 </button>
             {/snippet}
         </PlatformNativeDialogActionBar>

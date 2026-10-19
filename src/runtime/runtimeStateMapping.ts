@@ -29,9 +29,7 @@ export function runtimeStateToConsoleState(state: RuntimeState): ConsoleState {
     }
 }
 
-export function runtimeStateToPositronConsoleState(
-    state: RuntimeState,
-): PositronConsoleState {
+export function runtimeStateToPositronConsoleState(state: RuntimeState): PositronConsoleState {
     switch (state) {
         case RuntimeState.Uninitialized:
             return PositronConsoleState.Uninitialized;
@@ -57,9 +55,7 @@ export function runtimeStateToPositronConsoleState(
     }
 }
 
-export function positronConsoleStateToConsoleState(
-    state: PositronConsoleState,
-): ConsoleState {
+export function positronConsoleStateToConsoleState(state: PositronConsoleState): ConsoleState {
     switch (state) {
         case PositronConsoleState.Uninitialized:
             return 'uninitialized';

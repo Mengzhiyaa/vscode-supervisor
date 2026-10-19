@@ -7,19 +7,14 @@ import type { SchemaColumn } from '../../dataGrid/types';
 import type { ColumnProfileViewResult } from '../columnProfileTypes';
 import type { DataExplorerStores } from '../stores';
 import type { WebviewMessage } from '../types';
-import {
-    mergeColumnProfiles,
-    simplifyColumnProfile,
-} from '../profileUtils';
+import { mergeColumnProfiles, simplifyColumnProfile } from '../profileUtils';
 
 const BASIC_PROFILE_COVERAGE = 1;
 const EXPANDED_PROFILE_COVERAGE = 2;
 const PROFILE_CHUNK_SIZE = 8;
 const TRIM_CACHE_TIMEOUT = 3_000;
 
-type ProfileCoverage =
-    | typeof BASIC_PROFILE_COVERAGE
-    | typeof EXPANDED_PROFILE_COVERAGE;
+type ProfileCoverage = typeof BASIC_PROFILE_COVERAGE | typeof EXPANDED_PROFILE_COVERAGE;
 
 interface ProfileRequestChunk {
     readonly columnIndices: number[];
@@ -35,10 +30,7 @@ export class TableSummaryCache {
     private readonly _profiles = new Map<number, ColumnProfileViewResult>();
     private readonly _profileCoverage = new Map<number, ProfileCoverage>();
     private readonly _pendingCoverage = new Map<number, ProfileCoverage>();
-    private readonly _pendingRequests = new Map<
-        number,
-        Map<number, ProfileCoverage>
-    >();
+    private readonly _pendingRequests = new Map<number, Map<number, ProfileCoverage>>();
     private readonly _pendingRequestGenerations = new Map<number, number>();
     private _profileRequestQueue: ProfileRequestChunk[] = [];
     private _activeProfileRequestId: number | undefined;
@@ -128,9 +120,7 @@ export class TableSummaryCache {
 
         const requestsToCancel = [...this._pendingRequests]
             .filter(([, coverageByColumn]) =>
-                [...coverageByColumn.keys()].some(
-                    (columnIndex) => !keepColumns.has(columnIndex),
-                ),
+                [...coverageByColumn.keys()].some((columnIndex) => !keepColumns.has(columnIndex)),
             )
             .map(([requestId]) => requestId);
         if (requestsToCancel.length > 0) {
@@ -147,10 +137,7 @@ export class TableSummaryCache {
         return this._profiles.get(columnIndex);
     }
 
-    invalidateProfiles(
-        generation?: number,
-        columnIndices?: Iterable<number>,
-    ): void {
+    invalidateProfiles(generation?: number, columnIndices?: Iterable<number>): void {
         this._synchronizeGeneration(generation);
         if (!columnIndices) {
             this._clearTrimCacheTimeout();
@@ -178,7 +165,6 @@ export class TableSummaryCache {
         // against the previous row/filter state.
         this._cancelPendingRequests([...this._pendingRequests.keys()]);
         this._stores.columnProfiles.set(nextProfiles);
-
     }
 
     private _synchronizeGeneration(generation?: number): void {
@@ -237,10 +223,7 @@ export class TableSummaryCache {
                 requestCoverage.get(entry.columnIndex) ??
                 this._pendingCoverage.get(entry.columnIndex);
             const simplified = simplifyColumnProfile(entry.profile);
-            const merged = mergeColumnProfiles(
-                nextProfiles.get(entry.columnIndex),
-                simplified,
-            );
+            const merged = mergeColumnProfiles(nextProfiles.get(entry.columnIndex), simplified);
 
             if (merged) {
                 nextProfiles.set(entry.columnIndex, merged);
@@ -248,8 +231,7 @@ export class TableSummaryCache {
             }
 
             if (!error && pendingCoverage !== undefined) {
-                const currentCoverage =
-                    this._profileCoverage.get(entry.columnIndex) ?? 0;
+                const currentCoverage = this._profileCoverage.get(entry.columnIndex) ?? 0;
                 this._profileCoverage.set(
                     entry.columnIndex,
                     Math.max(currentCoverage, pendingCoverage) as ProfileCoverage,
@@ -301,10 +283,7 @@ export class TableSummaryCache {
         if (this._activeProfilePassSignature === passSignature) {
             return;
         }
-        if (
-            this._activeProfileRequestId !== undefined ||
-            this._profileRequestQueue.length > 0
-        ) {
+        if (this._activeProfileRequestId !== undefined || this._profileRequestQueue.length > 0) {
             this._cancelPendingRequests([...this._pendingRequests.keys()]);
             this._profileRequestQueue = [];
             this._activeProfileRequestId = undefined;
@@ -329,15 +308,10 @@ export class TableSummaryCache {
             const requiredCoverage = expandedColumns.has(columnIndex)
                 ? EXPANDED_PROFILE_COVERAGE
                 : BASIC_PROFILE_COVERAGE;
-            const currentCoverage =
-                this._profileCoverage.get(columnIndex) ?? 0;
-            const pendingCoverage =
-                this._pendingCoverage.get(columnIndex) ?? 0;
+            const currentCoverage = this._profileCoverage.get(columnIndex) ?? 0;
+            const pendingCoverage = this._pendingCoverage.get(columnIndex) ?? 0;
 
-            if (
-                currentCoverage >= requiredCoverage ||
-                pendingCoverage >= requiredCoverage
-            ) {
+            if (currentCoverage >= requiredCoverage || pendingCoverage >= requiredCoverage) {
                 continue;
             }
 
@@ -353,11 +327,7 @@ export class TableSummaryCache {
         }
 
         const chunks: ProfileRequestChunk[] = [];
-        for (
-            let offset = 0;
-            offset < requestColumnIndices.length;
-            offset += PROFILE_CHUNK_SIZE
-        ) {
+        for (let offset = 0; offset < requestColumnIndices.length; offset += PROFILE_CHUNK_SIZE) {
             const chunkColumnIndices = requestColumnIndices.slice(
                 offset,
                 offset + PROFILE_CHUNK_SIZE,
@@ -372,8 +342,8 @@ export class TableSummaryCache {
 
             chunks.push({
                 columnIndices: chunkColumnIndices,
-                expandedColumnIndices: expandedColumnIndices.filter(
-                    (columnIndex) => chunkCoverage.has(columnIndex),
+                expandedColumnIndices: expandedColumnIndices.filter((columnIndex) =>
+                    chunkCoverage.has(columnIndex),
                 ),
                 coverage: chunkCoverage,
             });
@@ -423,10 +393,7 @@ export class TableSummaryCache {
             }
 
             if (nextCoverage > 0) {
-                this._pendingCoverage.set(
-                    columnIndex,
-                    nextCoverage as ProfileCoverage,
-                );
+                this._pendingCoverage.set(columnIndex, nextCoverage as ProfileCoverage);
             } else {
                 this._pendingCoverage.delete(columnIndex);
             }
@@ -465,9 +432,7 @@ export class TableSummaryCache {
 
         const requestsToCancel = [...this._pendingRequests]
             .filter(([, coverageByColumn]) =>
-                [...coverageByColumn.keys()].some(
-                    (columnIndex) => !columnIndices.has(columnIndex),
-                ),
+                [...coverageByColumn.keys()].some((columnIndex) => !columnIndices.has(columnIndex)),
             )
             .map(([requestId]) => requestId);
         if (requestsToCancel.length > 0) {

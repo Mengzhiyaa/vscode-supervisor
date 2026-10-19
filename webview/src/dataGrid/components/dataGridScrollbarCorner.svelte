@@ -3,11 +3,11 @@
   Port from Positron's dataGridScrollbarCorner.tsx
 -->
 <script lang="ts">
-    import { getPositronDataGridContext } from "../positronDataGridContext";
+    import { getPositronDataGridContext } from '../positronDataGridContext';
 
     const { instance } = getPositronDataGridContext();
 
-    const tooltipText = "Scroll to bottom-right";
+    const tooltipText = 'Scroll to bottom-right';
 
     async function handleClick() {
         await instance.setScrollOffsets(
@@ -41,7 +41,7 @@
     role="button"
     tabindex="0"
     onkeydown={(event) => {
-        if (event.key === "Enter" || event.key === " ") {
+        if (event.key === 'Enter' || event.key === ' ') {
             event.preventDefault();
             void handleClick();
         }
@@ -61,14 +61,8 @@
             var(--vscode-editorWidget-background)
         );
         border-top: 1px solid
-            var(
-                --vscode-positronDataGrid-border,
-                var(--vscode-editorGroup-border)
-            );
+            var(--vscode-positronDataGrid-border, var(--vscode-editorGroup-border));
         border-left: 1px solid
-            var(
-                --vscode-positronDataGrid-border,
-                var(--vscode-editorGroup-border)
-            );
+            var(--vscode-positronDataGrid-border, var(--vscode-editorGroup-border));
     }
 </style>

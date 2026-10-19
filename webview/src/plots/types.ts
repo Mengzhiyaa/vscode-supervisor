@@ -6,7 +6,7 @@ export {
     ZoomLevel,
     type IntrinsicSize,
     type SizingPolicyInfo,
-} from "@shared/plots";
+} from '@shared/plots';
 
 /**
  * IPositronPlotSizingPolicy interface for UI components.
@@ -14,9 +14,10 @@ export {
 export interface IPositronPlotSizingPolicy {
     id: string;
     getName(plot?: any): string;
-    getPlotSize(viewportSize: { width: number; height: number }):
-        | { width: number; height: number }
-        | undefined;
+    getPlotSize(viewportSize: {
+        width: number;
+        height: number;
+    }): { width: number; height: number } | undefined;
 }
 
 /**

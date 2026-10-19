@@ -41,7 +41,11 @@ interface Waiter<TMessage extends JsonRpcRequest | JsonRpcNotification> {
 }
 
 function isJsonRpcMessage(message: unknown): message is JsonRpcMessage {
-    return typeof message === 'object' && message !== null && (message as { jsonrpc?: unknown }).jsonrpc === '2.0';
+    return (
+        typeof message === 'object' &&
+        message !== null &&
+        (message as { jsonrpc?: unknown }).jsonrpc === '2.0'
+    );
 }
 
 function isRequest(message: JsonRpcMessage): message is JsonRpcRequest {
@@ -62,11 +66,12 @@ export class MockWebviewBackend {
     private _preloadFrameSelector: string | undefined;
     private readonly _bindingName = `__arkSendToMockBackend_${Math.random().toString(16).slice(2)}`;
 
-    private constructor(
-        private readonly _page: Page,
-    ) { }
+    private constructor(private readonly _page: Page) {}
 
-    static async attach(page: Page, initialState: unknown = undefined): Promise<MockWebviewBackend> {
+    static async attach(
+        page: Page,
+        initialState: unknown = undefined,
+    ): Promise<MockWebviewBackend> {
         const backend = new MockWebviewBackend(page);
 
         await page.exposeBinding(backend._bindingName, async (_source, message: unknown) => {
@@ -76,7 +81,9 @@ export class MockWebviewBackend {
         await page.addInitScript(
             ({ bindingName, state }) => {
                 let persistedState = state;
-                const dispatch = (globalThis as Record<string, (message: unknown) => void>)[bindingName];
+                const dispatch = (globalThis as Record<string, (message: unknown) => void>)[
+                    bindingName
+                ];
 
                 const api = {
                     postMessage(message: unknown): void {
@@ -95,20 +102,24 @@ export class MockWebviewBackend {
                     value: () => api,
                 });
 
-                (globalThis as typeof globalThis & {
-                    __arkVsCodeApi?: typeof api;
-                    __arkVsCodeTestHost?: {
-                        getState: () => unknown;
-                        setState: (nextState: unknown) => void;
-                    };
-                }).__arkVsCodeApi = api;
+                (
+                    globalThis as typeof globalThis & {
+                        __arkVsCodeApi?: typeof api;
+                        __arkVsCodeTestHost?: {
+                            getState: () => unknown;
+                            setState: (nextState: unknown) => void;
+                        };
+                    }
+                ).__arkVsCodeApi = api;
 
-                (globalThis as typeof globalThis & {
-                    __arkVsCodeTestHost?: {
-                        getState: () => unknown;
-                        setState: (nextState: unknown) => void;
-                    };
-                }).__arkVsCodeTestHost = {
+                (
+                    globalThis as typeof globalThis & {
+                        __arkVsCodeTestHost?: {
+                            getState: () => unknown;
+                            setState: (nextState: unknown) => void;
+                        };
+                    }
+                ).__arkVsCodeTestHost = {
                     getState: () => persistedState,
                     setState: (nextState: unknown) => {
                         persistedState = nextState;
@@ -157,21 +168,25 @@ export class MockWebviewBackend {
 
     async setState(state: unknown): Promise<void> {
         await this._page.evaluate((nextState) => {
-            (globalThis as typeof globalThis & {
-                __arkVsCodeTestHost?: {
-                    setState: (value: unknown) => void;
-                };
-            }).__arkVsCodeTestHost?.setState(nextState);
+            (
+                globalThis as typeof globalThis & {
+                    __arkVsCodeTestHost?: {
+                        setState: (value: unknown) => void;
+                    };
+                }
+            ).__arkVsCodeTestHost?.setState(nextState);
         }, state);
     }
 
     async getState<T = unknown>(): Promise<T | undefined> {
         return this._page.evaluate(() => {
-            return (globalThis as typeof globalThis & {
-                __arkVsCodeTestHost?: {
-                    getState: () => unknown;
-                };
-            }).__arkVsCodeTestHost?.getState() as T | undefined;
+            return (
+                globalThis as typeof globalThis & {
+                    __arkVsCodeTestHost?: {
+                        getState: () => unknown;
+                    };
+                }
+            ).__arkVsCodeTestHost?.getState() as T | undefined;
         });
     }
 
@@ -201,11 +216,21 @@ export class MockWebviewBackend {
     }
 
     waitForNextRequest(method: string, timeoutMs = 5_000): Promise<JsonRpcRequest> {
-        return this._waitForNext(this._requestWaiters, this.requestCount(method), method, timeoutMs);
+        return this._waitForNext(
+            this._requestWaiters,
+            this.requestCount(method),
+            method,
+            timeoutMs,
+        );
     }
 
     waitForNextNotification(method: string, timeoutMs = 5_000): Promise<JsonRpcNotification> {
-        return this._waitForNext(this._notificationWaiters, this.notificationCount(method), method, timeoutMs);
+        return this._waitForNext(
+            this._notificationWaiters,
+            this.notificationCount(method),
+            method,
+            timeoutMs,
+        );
     }
 
     private _waitForNext<TMessage extends JsonRpcRequest | JsonRpcNotification>(
@@ -241,17 +266,21 @@ export class MockWebviewBackend {
     }
 
     private async _dispatchToPage(message: JsonRpcMessage): Promise<void> {
-        await this._page.evaluate(({ nextMessage, frameSelector }) => {
-            if (frameSelector) {
-                const target = document.querySelector<HTMLIFrameElement>(frameSelector)?.contentWindow;
-                if (!target) {
-                    throw new Error(`Missing preload content frame: ${frameSelector}`);
+        await this._page.evaluate(
+            ({ nextMessage, frameSelector }) => {
+                if (frameSelector) {
+                    const target =
+                        document.querySelector<HTMLIFrameElement>(frameSelector)?.contentWindow;
+                    if (!target) {
+                        throw new Error(`Missing preload content frame: ${frameSelector}`);
+                    }
+                    target.postMessage(nextMessage, window.origin);
+                    return;
                 }
-                target.postMessage(nextMessage, window.origin);
-                return;
-            }
-            window.dispatchEvent(new MessageEvent('message', { data: nextMessage }));
-        }, { nextMessage: message, frameSelector: this._preloadFrameSelector });
+                window.dispatchEvent(new MessageEvent('message', { data: nextMessage }));
+            },
+            { nextMessage: message, frameSelector: this._preloadFrameSelector },
+        );
     }
 
     private async _handleOutgoingMessage(message: unknown): Promise<void> {

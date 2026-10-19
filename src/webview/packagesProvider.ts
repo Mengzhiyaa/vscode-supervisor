@@ -42,14 +42,13 @@ function toPackageSpecs(value: unknown): PackageSpec[] {
         if (typeof candidate.name !== 'string' || candidate.name.trim().length === 0) {
             continue;
         }
-        specs.push(
-            {
-                name: candidate.name.trim(),
-                version: typeof candidate.version === 'string' && candidate.version.trim().length > 0
+        specs.push({
+            name: candidate.name.trim(),
+            version:
+                typeof candidate.version === 'string' && candidate.version.trim().length > 0
                     ? candidate.version.trim()
                     : undefined,
-            }
-        );
+        });
     }
 
     return specs;
@@ -61,14 +60,17 @@ function toPackageNames(value: unknown): string[] {
     }
     return value
         .filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
-        .map(entry => entry.trim());
+        .map((entry) => entry.trim());
 }
 
 export class PackagesViewProvider extends BaseWebviewProvider implements vscode.Disposable {
     private readonly _disposables: vscode.Disposable[] = [];
     private readonly _activeInstanceDisposables: vscode.Disposable[] = [];
     private _revision = 0;
-    private readonly _detailEditors = new Map<string, { provider: PackageDetailProvider; pinned: boolean }>();
+    private readonly _detailEditors = new Map<
+        string,
+        { provider: PackageDetailProvider; pinned: boolean }
+    >();
     private readonly _searchResults = new Map<string, LanguageRuntimePackage>();
 
     constructor(
@@ -76,7 +78,10 @@ export class PackagesViewProvider extends BaseWebviewProvider implements vscode.
         outputChannel: vscode.LogOutputChannel,
         private readonly _packagesService: PositronPackagesService,
         getAdditionalLocalResourceRoots: () => readonly vscode.Uri[] = () => [],
-        private readonly _showPackageHelp?: (session: ILanguageRuntimeSession, name: string) => Promise<void>,
+        private readonly _showPackageHelp?: (
+            session: ILanguageRuntimeSession,
+            name: string,
+        ) => Promise<void>,
     ) {
         super(extensionUri, outputChannel, getAdditionalLocalResourceRoots);
         this._bindActiveInstance();
@@ -109,136 +114,199 @@ export class PackagesViewProvider extends BaseWebviewProvider implements vscode.
 
         connection.onRequest('packages/refresh', async (params: { sessionId?: unknown }) => {
             this._getInstance(params?.sessionId);
-            const completed = await this._runOperation(vscode.l10n.t('Refreshing Packages...'),
-                async token => {
+            const completed = await this._runOperation(
+                vscode.l10n.t('Refreshing Packages...'),
+                async (token) => {
                     await this._packagesService.refreshPackages(token, true);
-                });
+                },
+            );
             this._sendState();
             return { ...this._buildState(), cancelled: !completed };
         });
 
-        connection.onRequest('packages/refreshMetadata', async (params: { sessionId?: unknown }) => {
-            const instance = this._getInstance(params?.sessionId);
-            await instance.refreshMetadata();
-            this._sendState();
-            return this._buildState();
-        });
+        connection.onRequest(
+            'packages/refreshMetadata',
+            async (params: { sessionId?: unknown }) => {
+                const instance = this._getInstance(params?.sessionId);
+                await instance.refreshMetadata();
+                this._sendState();
+                return this._buildState();
+            },
+        );
 
-        connection.onRequest('packages/install', async (params: { packages?: unknown; sessionId?: unknown; chooseVersion?: boolean }) => {
-            const instance = this._getInstance(params?.sessionId);
-            const session = instance.session;
-            const packages = toPackageSpecs(params?.packages);
-            if (params?.chooseVersion && packages.length === 1) {
-                const choice = await this._pickVersion(instance, packages[0].name, true);
-                if (!choice || instance.session !== session || this._packagesService.activePackagesInstance !== instance) {
-                    return { ...this._buildState(), cancelled: true };
+        connection.onRequest(
+            'packages/install',
+            async (params: {
+                packages?: unknown;
+                sessionId?: unknown;
+                chooseVersion?: boolean;
+            }) => {
+                const instance = this._getInstance(params?.sessionId);
+                const session = instance.session;
+                const packages = toPackageSpecs(params?.packages);
+                if (params?.chooseVersion && packages.length === 1) {
+                    const choice = await this._pickVersion(instance, packages[0].name, true);
+                    if (
+                        !choice ||
+                        instance.session !== session ||
+                        this._packagesService.activePackagesInstance !== instance
+                    ) {
+                        return { ...this._buildState(), cancelled: true };
+                    }
+                    packages[0].version = choice.version;
                 }
-                packages[0].version = choice.version;
-            }
-            let completed = false;
-            if (packages.length > 0) {
-                completed = await this._runOperation(vscode.l10n.t('Installing Packages...'),
-                    token => instance.installPackages(packages, token));
-            }
-            this._sendState();
-            return { ...this._buildState(), cancelled: !completed };
-        });
-
-        connection.onRequest('packages/uninstall', async (params: { packageNames?: unknown; sessionId?: unknown }) => {
-            const instance = this._getInstance(params?.sessionId);
-            const session = instance.session;
-            const packageNames = toPackageNames(params?.packageNames);
-            let completed = false;
-            if (packageNames.length > 0) {
-                const uninstall = vscode.l10n.t('Uninstall');
-                const choice = await vscode.window.showWarningMessage(
-                    vscode.l10n.t('Uninstall {0}?', packageNames.join(', ')),
-                    { modal: true }, uninstall,
-                );
-                if (choice === uninstall && instance.session === session && this._packagesService.activePackagesInstance === instance) {
-                    completed = await this._runOperation(vscode.l10n.t('Uninstalling Packages...'),
-                        token => instance.uninstallPackages(packageNames, token));
+                let completed = false;
+                if (packages.length > 0) {
+                    completed = await this._runOperation(
+                        vscode.l10n.t('Installing Packages...'),
+                        (token) => instance.installPackages(packages, token),
+                    );
                 }
-            }
-            this._sendState();
-            return { ...this._buildState(), cancelled: !completed };
-        });
+                this._sendState();
+                return { ...this._buildState(), cancelled: !completed };
+            },
+        );
 
-        connection.onRequest('packages/update', async (params: { packages?: unknown; sessionId?: unknown; chooseVersion?: boolean }) => {
-            const instance = this._getInstance(params?.sessionId);
-            const session = instance.session;
-            const packages = toPackageSpecs(params?.packages);
-            if (params?.chooseVersion && packages.length === 1) {
-                const choice = await this._pickVersion(instance, packages[0].name, false);
-                if (!choice || instance.session !== session || this._packagesService.activePackagesInstance !== instance) {
-                    return { ...this._buildState(), cancelled: true };
+        connection.onRequest(
+            'packages/uninstall',
+            async (params: { packageNames?: unknown; sessionId?: unknown }) => {
+                const instance = this._getInstance(params?.sessionId);
+                const session = instance.session;
+                const packageNames = toPackageNames(params?.packageNames);
+                let completed = false;
+                if (packageNames.length > 0) {
+                    const uninstall = vscode.l10n.t('Uninstall');
+                    const choice = await vscode.window.showWarningMessage(
+                        vscode.l10n.t('Uninstall {0}?', packageNames.join(', ')),
+                        { modal: true },
+                        uninstall,
+                    );
+                    if (
+                        choice === uninstall &&
+                        instance.session === session &&
+                        this._packagesService.activePackagesInstance === instance
+                    ) {
+                        completed = await this._runOperation(
+                            vscode.l10n.t('Uninstalling Packages...'),
+                            (token) => instance.uninstallPackages(packageNames, token),
+                        );
+                    }
                 }
-                packages[0].version = choice.version;
-            }
-            let completed = false;
-            if (packages.length > 0) {
-                completed = await this._runOperation(vscode.l10n.t('Updating Packages...'),
-                    token => instance.updatePackages(packages, token));
-            }
-            this._sendState();
-            return { ...this._buildState(), cancelled: !completed };
-        });
+                this._sendState();
+                return { ...this._buildState(), cancelled: !completed };
+            },
+        );
+
+        connection.onRequest(
+            'packages/update',
+            async (params: {
+                packages?: unknown;
+                sessionId?: unknown;
+                chooseVersion?: boolean;
+            }) => {
+                const instance = this._getInstance(params?.sessionId);
+                const session = instance.session;
+                const packages = toPackageSpecs(params?.packages);
+                if (params?.chooseVersion && packages.length === 1) {
+                    const choice = await this._pickVersion(instance, packages[0].name, false);
+                    if (
+                        !choice ||
+                        instance.session !== session ||
+                        this._packagesService.activePackagesInstance !== instance
+                    ) {
+                        return { ...this._buildState(), cancelled: true };
+                    }
+                    packages[0].version = choice.version;
+                }
+                let completed = false;
+                if (packages.length > 0) {
+                    completed = await this._runOperation(
+                        vscode.l10n.t('Updating Packages...'),
+                        (token) => instance.updatePackages(packages, token),
+                    );
+                }
+                this._sendState();
+                return { ...this._buildState(), cancelled: !completed };
+            },
+        );
 
         connection.onRequest('packages/updateAll', async (params: { sessionId?: unknown }) => {
             const instance = this._getInstance(params?.sessionId);
-            const completed = await this._runOperation(vscode.l10n.t('Updating Packages...'),
-                token => instance.updateAllPackages(token));
+            const completed = await this._runOperation(
+                vscode.l10n.t('Updating Packages...'),
+                (token) => instance.updateAllPackages(token),
+            );
             this._sendState();
             return { ...this._buildState(), cancelled: !completed };
         });
 
-        connection.onRequest('packages/search', async (params: { query?: unknown; sessionId?: unknown }) => {
-            const instance = this._getInstance(params?.sessionId);
-            const query = typeof params?.query === 'string' ? params.query.trim() : '';
-            if (!query) {
-                return [];
-            }
-            const session = instance.session;
-            const results = await instance.searchPackages(query);
-            if (this._packagesService.activePackagesInstance === instance && instance.session === session) {
-                for (const pkg of results) {
-                    this._searchResults.set(pkg.name.toLowerCase(), pkg);
+        connection.onRequest(
+            'packages/search',
+            async (params: { query?: unknown; sessionId?: unknown }) => {
+                const instance = this._getInstance(params?.sessionId);
+                const query = typeof params?.query === 'string' ? params.query.trim() : '';
+                if (!query) {
+                    return [];
                 }
-            }
-            return results;
-        });
+                const session = instance.session;
+                const results = await instance.searchPackages(query);
+                if (
+                    this._packagesService.activePackagesInstance === instance &&
+                    instance.session === session
+                ) {
+                    for (const pkg of results) {
+                        this._searchResults.set(pkg.name.toLowerCase(), pkg);
+                    }
+                }
+                return results;
+            },
+        );
 
-        connection.onRequest('packages/openPackage', (params: { name?: unknown; sessionId?: unknown; pinned?: unknown }) => {
-            const instance = this._getInstance(params?.sessionId);
-            const name = typeof params?.name === 'string' ? params.name.trim() : '';
-            if (!name) {
-                return;
-            }
-            this._packagesService.setSelectedPackage(name);
-            this._openPackage(instance, name, params?.pinned === true);
-            this._sendState();
-        });
+        connection.onRequest(
+            'packages/openPackage',
+            (params: { name?: unknown; sessionId?: unknown; pinned?: unknown }) => {
+                const instance = this._getInstance(params?.sessionId);
+                const name = typeof params?.name === 'string' ? params.name.trim() : '';
+                if (!name) {
+                    return;
+                }
+                this._packagesService.setSelectedPackage(name);
+                this._openPackage(instance, name, params?.pinned === true);
+                this._sendState();
+            },
+        );
 
-        connection.onRequest('packages/searchVersions', async (params: { name?: unknown; sessionId?: unknown }) => {
-            const instance = this._getInstance(params?.sessionId);
-            const name = typeof params?.name === 'string' ? params.name.trim() : '';
-            if (!name) {
-                return [];
-            }
-            return instance.searchPackageVersions(name);
-        });
+        connection.onRequest(
+            'packages/searchVersions',
+            async (params: { name?: unknown; sessionId?: unknown }) => {
+                const instance = this._getInstance(params?.sessionId);
+                const name = typeof params?.name === 'string' ? params.name.trim() : '';
+                if (!name) {
+                    return [];
+                }
+                return instance.searchPackageVersions(name);
+            },
+        );
 
-        connection.onNotification('packages/setSelected', (params: { name?: unknown; sessionId?: unknown }) => {
-            const instance = this._packagesService.activePackagesInstance;
-            if (!instance || (params?.sessionId !== undefined && params.sessionId !== instance.session.sessionId)) {
-                return;
-            }
-            const name = typeof params?.name === 'string' && params.name.trim().length > 0
-                ? params.name.trim()
-                : undefined;
-            this._packagesService.setSelectedPackage(name);
-            this._sendState();
-        });
+        connection.onNotification(
+            'packages/setSelected',
+            (params: { name?: unknown; sessionId?: unknown }) => {
+                const instance = this._packagesService.activePackagesInstance;
+                if (
+                    !instance ||
+                    (params?.sessionId !== undefined &&
+                        params.sessionId !== instance.session.sessionId)
+                ) {
+                    return;
+                }
+                const name =
+                    typeof params?.name === 'string' && params.name.trim().length > 0
+                        ? params.name.trim()
+                        : undefined;
+                this._packagesService.setSelectedPackage(name);
+                this._sendState();
+            },
+        );
 
         connection.onNotification('packages/setItemSize', (params: { itemSize?: unknown }) => {
             if (params?.itemSize === 'card' || params?.itemSize === 'row') {
@@ -251,7 +319,13 @@ export class PackagesViewProvider extends BaseWebviewProvider implements vscode.
 
     protected _getHtmlContent(webview: vscode.Webview): string {
         const scriptUri = this._getWebviewUri(webview, 'webview', 'dist', 'packages', 'index.js');
-        const commonStyleUri = this._getWebviewUri(webview, 'webview', 'dist', 'common', 'index.css');
+        const commonStyleUri = this._getWebviewUri(
+            webview,
+            'webview',
+            'dist',
+            'common',
+            'index.css',
+        );
         const styleUri = this._getWebviewUri(webview, 'webview', 'dist', 'packages', 'index.css');
         const nonce = this._getNonce();
 
@@ -315,15 +389,18 @@ export class PackagesViewProvider extends BaseWebviewProvider implements vscode.
         return {
             revision: this._revision,
             packages: instance?.packages ?? [],
-            activeSession: session ? {
-                id: session.sessionId,
-                name: session.dynState.sessionName ||
-                    session.sessionMetadata.sessionName ||
-                    session.runtimeMetadata.runtimeName,
-                runtimeName: session.runtimeMetadata.runtimeName,
-                languageId: session.runtimeMetadata.languageId,
-                state: session.state,
-            } : undefined,
+            activeSession: session
+                ? {
+                      id: session.sessionId,
+                      name:
+                          session.dynState.sessionName ||
+                          session.sessionMetadata.sessionName ||
+                          session.runtimeMetadata.runtimeName,
+                      runtimeName: session.runtimeMetadata.runtimeName,
+                      languageId: session.runtimeMetadata.languageId,
+                      state: session.state,
+                  }
+                : undefined,
             busy: this._packagesService.isBusy,
             selectedPackage: this._packagesService.selectedPackage,
             itemSize: this._packagesService.itemSize,
@@ -361,14 +438,25 @@ export class PackagesViewProvider extends BaseWebviewProvider implements vscode.
                 editor.provider.dispose();
             }
         }
-        const pkg = instance.packages.find(item => item.name.toLowerCase() === name.toLowerCase()) ??
+        const pkg =
+            instance.packages.find((item) => item.name.toLowerCase() === name.toLowerCase()) ??
             this._searchResults.get(name.toLowerCase());
         const provider = new PackageDetailProvider(
-            this._extensionUri, this._outputChannel, this._packagesService, instance, name, pkg,
+            this._extensionUri,
+            this._outputChannel,
+            this._packagesService,
+            instance,
+            name,
+            pkg,
             async (action, detail) => {
                 const assertSession = () => {
-                    if (this._getInstance(session.sessionId) !== instance || instance.session !== session) {
-                        throw new Error(vscode.l10n.t('The package session changed. Please try again.'));
+                    if (
+                        this._getInstance(session.sessionId) !== instance ||
+                        instance.session !== session
+                    ) {
+                        throw new Error(
+                            vscode.l10n.t('The package session changed. Please try again.'),
+                        );
                     }
                 };
                 assertSession();
@@ -379,14 +467,17 @@ export class PackagesViewProvider extends BaseWebviewProvider implements vscode.
                 if (action === 'uninstall') {
                     const uninstall = vscode.l10n.t('Uninstall');
                     const choice = await vscode.window.showWarningMessage(
-                        vscode.l10n.t('Uninstall {0}?', name), { modal: true }, uninstall,
+                        vscode.l10n.t('Uninstall {0}?', name),
+                        { modal: true },
+                        uninstall,
                     );
                     if (choice !== uninstall) {
                         return;
                     }
                     assertSession();
-                    await this._runOperation(vscode.l10n.t('Uninstalling Packages...'),
-                        token => instance.uninstallPackages([name], token));
+                    await this._runOperation(vscode.l10n.t('Uninstalling Packages...'), (token) =>
+                        instance.uninstallPackages([name], token),
+                    );
                     return;
                 }
                 let version = action === 'update' ? detail?.latestVersion : detail?.version;
@@ -399,10 +490,15 @@ export class PackagesViewProvider extends BaseWebviewProvider implements vscode.
                     assertSession();
                 }
                 const specs = [{ name, version }];
-                const title = action === 'install' ? vscode.l10n.t('Installing Packages...') : vscode.l10n.t('Updating Packages...');
-                await this._runOperation(title, token => action === 'install'
-                    ? instance.installPackages(specs, token)
-                    : instance.updatePackages(specs, token));
+                const title =
+                    action === 'install'
+                        ? vscode.l10n.t('Installing Packages...')
+                        : vscode.l10n.t('Updating Packages...');
+                await this._runOperation(title, (token) =>
+                    action === 'install'
+                        ? instance.installPackages(specs, token)
+                        : instance.updatePackages(specs, token),
+                );
             },
         );
         this._detailEditors.set(key, { provider, pinned });
@@ -417,39 +513,62 @@ export class PackagesViewProvider extends BaseWebviewProvider implements vscode.
         }
     }
 
-    private async _pickVersion(instance: IPositronPackagesInstance, name: string, install: boolean): Promise<{ version?: string } | undefined> {
+    private async _pickVersion(
+        instance: IPositronPackagesInstance,
+        name: string,
+        install: boolean,
+    ): Promise<{ version?: string } | undefined> {
         const tokenSource = new vscode.CancellationTokenSource();
         try {
-            const items = instance.searchPackageVersions(name, tokenSource.token).then(versions => {
-                const choices: (vscode.QuickPickItem & { version?: string })[] = [...new Set(versions)]
-                    .sort((a, b) => b.localeCompare(a, undefined, { numeric: true }))
-                    .map(version => ({ label: version, version }));
-                if (install) {
-                    // Only the package manager decides what "latest" means for this environment.
-                    choices.unshift({ label: vscode.l10n.t('Latest available version') });
-                }
-                return choices;
-            });
-            return await vscode.window.showQuickPick(items, {
-                title: vscode.l10n.t('Select a version of {0}', name),
-                placeHolder: vscode.l10n.t('Select a package version'),
-            }, tokenSource.token);
+            const items = instance
+                .searchPackageVersions(name, tokenSource.token)
+                .then((versions) => {
+                    const choices: (vscode.QuickPickItem & { version?: string })[] = [
+                        ...new Set(versions),
+                    ]
+                        .sort((a, b) => b.localeCompare(a, undefined, { numeric: true }))
+                        .map((version) => ({ label: version, version }));
+                    if (install) {
+                        // Only the package manager decides what "latest" means for this environment.
+                        choices.unshift({ label: vscode.l10n.t('Latest available version') });
+                    }
+                    return choices;
+                });
+            return await vscode.window.showQuickPick(
+                items,
+                {
+                    title: vscode.l10n.t('Select a version of {0}', name),
+                    placeHolder: vscode.l10n.t('Select a package version'),
+                },
+                tokenSource.token,
+            );
         } finally {
             tokenSource.cancel();
             tokenSource.dispose();
         }
     }
 
-    private async _runOperation(title: string, operation: (token: vscode.CancellationToken) => Promise<void>): Promise<boolean> {
+    private async _runOperation(
+        title: string,
+        operation: (token: vscode.CancellationToken) => Promise<void>,
+    ): Promise<boolean> {
         try {
-            return await vscode.window.withProgress({
-                title, location: vscode.ProgressLocation.Notification, cancellable: true,
-            }, async (_progress, token) => {
-                await operation(token);
-                return !token.isCancellationRequested;
-            });
+            return await vscode.window.withProgress(
+                {
+                    title,
+                    location: vscode.ProgressLocation.Notification,
+                    cancellable: true,
+                },
+                async (_progress, token) => {
+                    await operation(token);
+                    return !token.isCancellationRequested;
+                },
+            );
         } catch (error) {
-            if (error instanceof vscode.CancellationError || (error instanceof Error && error.name === 'Canceled')) {
+            if (
+                error instanceof vscode.CancellationError ||
+                (error instanceof Error && error.name === 'Canceled')
+            ) {
                 return false;
             }
             throw error;

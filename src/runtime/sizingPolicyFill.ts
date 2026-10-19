@@ -24,7 +24,7 @@ export class PlotSizingPolicyFill implements IPositronPlotSizingPolicy {
     public getPlotSize(viewportSize: IPlotSize): IPlotSize | undefined {
         return {
             width: Math.floor(viewportSize.width),
-            height: Math.floor(viewportSize.height)
+            height: Math.floor(viewportSize.height),
         };
     }
 }

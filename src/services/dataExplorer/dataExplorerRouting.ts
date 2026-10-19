@@ -5,7 +5,7 @@
  */
 export function shouldKeepDataExplorerInline(
     sessionMode: string | undefined,
-    inlineOnly: boolean
+    inlineOnly: boolean,
 ): boolean {
     return inlineOnly && sessionMode === 'notebook';
 }

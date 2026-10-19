@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { localize } from "$lib/localization";
+    import { localize } from '$lib/localization';
     let {
         sashSize = 4,
         onBeginResize,
@@ -56,10 +56,10 @@
         minWidth = params.minimumWidth;
         maxWidth = params.maximumWidth;
         let nextWidth = params.startingWidth;
-        if (event.key === "ArrowLeft") nextWidth -= event.shiftKey ? 20 : 4;
-        else if (event.key === "ArrowRight") nextWidth += event.shiftKey ? 20 : 4;
-        else if (event.key === "Home") nextWidth = minWidth;
-        else if (event.key === "End") nextWidth = maxWidth;
+        if (event.key === 'ArrowLeft') nextWidth -= event.shiftKey ? 20 : 4;
+        else if (event.key === 'ArrowRight') nextWidth += event.shiftKey ? 20 : 4;
+        else if (event.key === 'Home') nextWidth = minWidth;
+        else if (event.key === 'End') nextWidth = maxWidth;
         else return;
         event.preventDefault();
         onResize(clampWidth(nextWidth));
@@ -72,7 +72,7 @@
     class="vertical-splitter"
     class:dragging={isDragging}
     class:hovered
-    aria-label={localize("console.resizeSessionList", "Resize console session list")}
+    aria-label={localize('console.resizeSessionList', 'Resize console session list')}
     style:width={`${Math.max(1, Math.min(20, sashSize))}px`}
     onpointerdown={handlePointerDown}
     onpointermove={handlePointerMove}
@@ -103,7 +103,9 @@
         width: 1px;
         transform: translateX(-50%);
         background: var(--vscode-terminal-border, var(--vscode-panel-border));
-        transition: width 80ms, background-color 80ms 300ms;
+        transition:
+            width 80ms,
+            background-color 80ms 300ms;
     }
 
     .vertical-splitter.hovered .divider,

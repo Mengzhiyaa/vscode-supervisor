@@ -3,7 +3,11 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { writable, derived } from 'svelte/store';
-import { PositronDataExplorerLayout, type DataExplorerState, type SearchSchemaSortOrder } from './types';
+import {
+    PositronDataExplorerLayout,
+    type DataExplorerState,
+    type SearchSchemaSortOrder,
+} from './types';
 import type { SchemaColumn } from '../dataGrid/types';
 import type { ColumnProfileViewResult } from './columnProfileTypes';
 
@@ -35,18 +39,24 @@ export function createDataExplorerStores() {
     });
 
     // Derived stores for common properties
-    const numRows = derived(state, $state => $state.backendState?.table_shape.num_rows ?? 0);
-    const numColumns = derived(state, $state => $state.backendState?.table_shape.num_columns ?? 0);
-    const numUnfilteredRows = derived(state, $state => $state.backendState?.table_unfiltered_shape.num_rows ?? 0);
-    const rowFilters = derived(state, $state => $state.backendState?.row_filters ?? []);
-    const columns = derived(state, $state => $state.schema);
-    const status = derived(state, $state => {
+    const numRows = derived(state, ($state) => $state.backendState?.table_shape.num_rows ?? 0);
+    const numColumns = derived(
+        state,
+        ($state) => $state.backendState?.table_shape.num_columns ?? 0,
+    );
+    const numUnfilteredRows = derived(
+        state,
+        ($state) => $state.backendState?.table_unfiltered_shape.num_rows ?? 0,
+    );
+    const rowFilters = derived(state, ($state) => $state.backendState?.row_filters ?? []);
+    const columns = derived(state, ($state) => $state.schema);
+    const status = derived(state, ($state) => {
         if ($state.error?.severity === 'error') return 'error';
         if ($state.backendState?.connected === false) return 'disconnected';
         return $state.isLoading ? 'computing' : 'idle';
     });
-    const isLoading = derived(state, $state => $state.isLoading);
-    const errorMessage = derived(state, $state => $state.error?.message ?? null);
+    const isLoading = derived(state, ($state) => $state.isLoading);
+    const errorMessage = derived(state, ($state) => $state.error?.message ?? null);
 
     return {
         state,

@@ -15,11 +15,7 @@ export type {
     VariablesInstanceStatus,
     VariablesSorting,
 } from '@shared/variables';
-export {
-    isVariableGroup,
-    isVariableItem,
-    isVariableOverflow,
-} from '@shared/variables';
+export { isVariableGroup, isVariableItem, isVariableOverflow } from '@shared/variables';
 
 /**
  * Variables instance information for session selection.

@@ -4,11 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
-import {
-    ColumnProfileType,
-    ExportFormat,
-    SearchSchemaSortOrder,
-} from '../../shared/dataExplorer';
+import { ColumnProfileType, ExportFormat, SearchSchemaSortOrder } from '../../shared/dataExplorer';
 import type {
     BackendState,
     CodeSyntaxName,
@@ -85,7 +81,7 @@ export enum ColumnHistogramParamsMethod {
     Sturges = 'sturges',
     FreedmanDiaconis = 'freedman_diaconis',
     Scott = 'scott',
-    Fixed = 'fixed'
+    Fixed = 'fixed',
 }
 
 /**
@@ -98,13 +94,13 @@ export enum TableSelectionKind {
     RowRange = 'row_range',
     ColumnIndices = 'column_indices',
     RowIndices = 'row_indices',
-    CellIndices = 'cell_indices'
+    CellIndices = 'cell_indices',
 }
 
 export enum DataExplorerFrontendEvent {
     SchemaUpdate = 'schema_update',
     DataUpdate = 'data_update',
-    ReturnColumnProfiles = 'return_column_profiles'
+    ReturnColumnProfiles = 'return_column_profiles',
 }
 
 export enum DataExplorerBackendRequest {
@@ -122,7 +118,7 @@ export enum DataExplorerBackendRequest {
     SetSortColumns = 'set_sort_columns',
     GetColumnProfiles = 'get_column_profiles',
     SetDatasetImportOptions = 'set_dataset_import_options',
-    GetState = 'get_state'
+    GetState = 'get_state',
 }
 
 // ============================================================================
@@ -286,7 +282,12 @@ export interface ColumnSelection {
 
 export type ColumnValue = number | string;
 export type ColumnProfileParams = ColumnHistogramParams | ColumnFrequencyTableParams;
-export type Selection = DataSelectionSingleCell | DataSelectionCellRange | DataSelectionCellIndices | DataSelectionRange | DataSelectionIndices;
+export type Selection =
+    | DataSelectionSingleCell
+    | DataSelectionCellRange
+    | DataSelectionCellIndices
+    | DataSelectionRange
+    | DataSelectionIndices;
 export type ArraySelection = DataSelectionRange | DataSelectionIndices;
 
 // ============================================================================
@@ -296,14 +297,12 @@ export type ArraySelection = DataSelectionRange | DataSelectionIndices;
 /**
  * Event: Request to sync after a schema change
  */
-export interface SchemaUpdateEvent {
-}
+export interface SchemaUpdateEvent {}
 
 /**
  * Event: Clear cache and request fresh data
  */
-export interface DataUpdateEvent {
-}
+export interface DataUpdateEvent {}
 
 /**
  * Event: Return async result of get_column_profiles request
@@ -331,15 +330,21 @@ export interface IDataExplorerComm extends vscode.Disposable {
     // --- RPC Methods ---
     getState(): Promise<BackendState>;
     getSchema(columnIndices: Array<number>): Promise<TableSchema>;
-    searchSchema(filters: Array<ColumnFilter>, sortOrder: SearchSchemaSortOrder): Promise<SearchSchemaResult>;
-    getDataValues(columns: Array<ColumnSelection>, formatOptions: FormatOptions): Promise<TableData>;
+    searchSchema(
+        filters: Array<ColumnFilter>,
+        sortOrder: SearchSchemaSortOrder,
+    ): Promise<SearchSchemaResult>;
+    getDataValues(
+        columns: Array<ColumnSelection>,
+        formatOptions: FormatOptions,
+    ): Promise<TableData>;
     getRowLabels(selection: ArraySelection, formatOptions: FormatOptions): Promise<TableRowLabels>;
     exportDataSelection(selection: TableSelection, format: ExportFormat): Promise<ExportedData>;
     convertToCode(
         columnFilters: Array<ColumnFilter>,
         rowFilters: Array<RowFilter>,
         sortKeys: Array<ColumnSortKey>,
-        codeSyntaxName: CodeSyntaxName
+        codeSyntaxName: CodeSyntaxName,
     ): Promise<ConvertedCode>;
     suggestCodeSyntax(): Promise<CodeSyntaxName | undefined>;
     openDataExplorer(): Promise<void>;
@@ -349,7 +354,7 @@ export interface IDataExplorerComm extends vscode.Disposable {
     getColumnProfiles(
         callbackId: string,
         profiles: Array<ColumnProfileRequest>,
-        formatOptions: FormatOptions
+        formatOptions: FormatOptions,
     ): Promise<void>;
     setDatasetImportOptions(options: DatasetImportOptions): Promise<SetDatasetImportOptionsResult>;
 
@@ -367,47 +372,66 @@ export class PositronDataExplorerComm extends PositronBaseComm implements IDataE
 
     constructor(
         client: RuntimeClientInstance,
-        options?: PositronCommOptions<DataExplorerBackendRequest>
+        options?: PositronCommOptions<DataExplorerBackendRequest>,
     ) {
         super(client, options);
         this.onDidSchemaUpdate = this.createEventEmitter('schema_update', []);
         this.onDidDataUpdate = this.createEventEmitter('data_update', []);
-        this.onDidReturnColumnProfiles = this.createEventEmitter(
-            'return_column_profiles',
-            ['callback_id', 'profiles', 'error_message']
-        );
+        this.onDidReturnColumnProfiles = this.createEventEmitter('return_column_profiles', [
+            'callback_id',
+            'profiles',
+            'error_message',
+        ]);
     }
 
     getSchema(columnIndices: Array<number>): Promise<TableSchema> {
         return this.performRpc('get_schema', ['column_indices'], [columnIndices]);
     }
 
-    searchSchema(filters: Array<ColumnFilter>, sortOrder: SearchSchemaSortOrder): Promise<SearchSchemaResult> {
+    searchSchema(
+        filters: Array<ColumnFilter>,
+        sortOrder: SearchSchemaSortOrder,
+    ): Promise<SearchSchemaResult> {
         return this.performRpc('search_schema', ['filters', 'sort_order'], [filters, sortOrder]);
     }
 
-    getDataValues(columns: Array<ColumnSelection>, formatOptions: FormatOptions): Promise<TableData> {
-        return this.performRpc('get_data_values', ['columns', 'format_options'], [columns, formatOptions]);
+    getDataValues(
+        columns: Array<ColumnSelection>,
+        formatOptions: FormatOptions,
+    ): Promise<TableData> {
+        return this.performRpc(
+            'get_data_values',
+            ['columns', 'format_options'],
+            [columns, formatOptions],
+        );
     }
 
     getRowLabels(selection: ArraySelection, formatOptions: FormatOptions): Promise<TableRowLabels> {
-        return this.performRpc('get_row_labels', ['selection', 'format_options'], [selection, formatOptions]);
+        return this.performRpc(
+            'get_row_labels',
+            ['selection', 'format_options'],
+            [selection, formatOptions],
+        );
     }
 
     exportDataSelection(selection: TableSelection, format: ExportFormat): Promise<ExportedData> {
-        return this.performRpc('export_data_selection', ['selection', 'format'], [selection, format]);
+        return this.performRpc(
+            'export_data_selection',
+            ['selection', 'format'],
+            [selection, format],
+        );
     }
 
     convertToCode(
         columnFilters: Array<ColumnFilter>,
         rowFilters: Array<RowFilter>,
         sortKeys: Array<ColumnSortKey>,
-        codeSyntaxName: CodeSyntaxName
+        codeSyntaxName: CodeSyntaxName,
     ): Promise<ConvertedCode> {
         return this.performRpc(
             'convert_to_code',
             ['column_filters', 'row_filters', 'sort_keys', 'code_syntax_name'],
-            [columnFilters, rowFilters, sortKeys, codeSyntaxName]
+            [columnFilters, rowFilters, sortKeys, codeSyntaxName],
         );
     }
 
@@ -434,12 +458,12 @@ export class PositronDataExplorerComm extends PositronBaseComm implements IDataE
     getColumnProfiles(
         callbackId: string,
         profiles: Array<ColumnProfileRequest>,
-        formatOptions: FormatOptions
+        formatOptions: FormatOptions,
     ): Promise<void> {
         return this.performRpc(
             'get_column_profiles',
             ['callback_id', 'profiles', 'format_options'],
-            [callbackId, profiles, formatOptions]
+            [callbackId, profiles, formatOptions],
         );
     }
 

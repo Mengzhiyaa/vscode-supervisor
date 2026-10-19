@@ -31,21 +31,27 @@ function formatColumnValue(value: ColumnValue): string {
         return value;
     }
     switch (value) {
-        case 0: return 'NULL';
-        case 1: return 'NA';
-        case 2: return 'NaN';
-        case 3: return 'NaT';
-        case 4: return 'None';
-        case 10: return 'INF';
-        case 11: return '-INF';
-        default: return 'UNKNOWN';
+        case 0:
+            return 'NULL';
+        case 1:
+            return 'NA';
+        case 2:
+            return 'NaN';
+        case 3:
+            return 'NaT';
+        case 4:
+            return 'None';
+        case 10:
+            return 'INF';
+        case 11:
+            return '-INF';
+        default:
+            return 'UNKNOWN';
     }
 }
 
 function escapeTsv(value: string): string {
-    return /[\t\r\n"]/.test(value)
-        ? `"${value.replace(/"/g, '""')}"`
-        : value;
+    return /[\t\r\n"]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
 }
 
 export class TableDataCache {
@@ -92,7 +98,9 @@ export class TableDataCache {
         const overlapping = new Set<Promise<void>>();
         for (const selection of columns) {
             for (const rowIndex of selectionIndices(selection)) {
-                const pending = this._pendingRows.get(this._rowKey(selection.column_index, rowIndex));
+                const pending = this._pendingRows.get(
+                    this._rowKey(selection.column_index, rowIndex),
+                );
                 if (pending) {
                     overlapping.add(pending);
                 }
@@ -107,15 +115,18 @@ export class TableDataCache {
 
         const missingSelections = this._createMissingSelections(columns);
         if (missingSelections.length > 0) {
-            const rowsBySelection = missingSelections.map(selection => selectionIndices(selection));
-            const request = this._clientInstance.getDataValues(missingSelections).then(result => {
+            const rowsBySelection = missingSelections.map((selection) =>
+                selectionIndices(selection),
+            );
+            const request = this._clientInstance.getDataValues(missingSelections).then((result) => {
                 if (generation !== this._generation) {
                     return;
                 }
                 missingSelections.forEach((selection, columnOffset) => {
-                    const column = this._values.get(selection.column_index) ??
-                        new Map<number, ColumnValue>();
-                    const loaded = this._loadedRows.get(selection.column_index) ?? new Set<number>();
+                    const column =
+                        this._values.get(selection.column_index) ?? new Map<number, ColumnValue>();
+                    const loaded =
+                        this._loadedRows.get(selection.column_index) ?? new Set<number>();
                     rowsBySelection[columnOffset].forEach((rowIndex, rowOffset) => {
                         // Mark even a short backend response as loaded. Empty and
                         // out-of-range cells are represented by an empty string and
@@ -151,11 +162,9 @@ export class TableDataCache {
 
         this._scheduleTrim();
         return {
-            columns: columns.map(selection => {
+            columns: columns.map((selection) => {
                 const column = this._values.get(selection.column_index);
-                return selectionIndices(selection).map(
-                    rowIndex => column?.get(rowIndex) ?? '',
-                );
+                return selectionIndices(selection).map((rowIndex) => column?.get(rowIndex) ?? '');
             }),
         };
     }
@@ -193,7 +202,11 @@ export class TableDataCache {
             const endRow = Math.min(numRows, startRow + TABLE_DATA_CHUNK_SIZE);
             const rows = Array.from({ length: endRow - startRow }, () => [] as string[]);
             const rowChunkSelections: ColumnSelection[] = [];
-            for (let startColumn = 0; startColumn < numColumns; startColumn += TABLE_DATA_CHUNK_SIZE) {
+            for (
+                let startColumn = 0;
+                startColumn < numColumns;
+                startColumn += TABLE_DATA_CHUNK_SIZE
+            ) {
                 if (token?.isCancellationRequested) {
                     throw new vscode.CancellationError();
                 }
@@ -215,9 +228,9 @@ export class TableDataCache {
                     }
                 });
             }
-            chunks.push(rows.map(row => row.join('\t')).join('\n'));
+            chunks.push(rows.map((row) => row.join('\t')).join('\n'));
             onProgress?.(endRow, numRows);
-            if (numRows > TABLE_DATA_PAGE_SIZE * ((TABLE_DATA_RETAIN_PAGES * 2) + 1)) {
+            if (numRows > TABLE_DATA_PAGE_SIZE * (TABLE_DATA_RETAIN_PAGES * 2 + 1)) {
                 // A full-table clipboard operation must not turn the viewport
                 // cache into a second full copy of a large dataset.
                 this.invalidateRange(rowChunkSelections);
@@ -230,7 +243,7 @@ export class TableDataCache {
         const selections: ColumnSelection[] = [];
         for (const selection of columns) {
             const loaded = this._loadedRows.get(selection.column_index);
-            const missingRows = selectionIndices(selection).filter(row => !loaded?.has(row));
+            const missingRows = selectionIndices(selection).filter((row) => !loaded?.has(row));
             if (missingRows.length === 0) {
                 continue;
             }
@@ -266,7 +279,7 @@ export class TableDataCache {
             const lastPage = Math.floor(rows[rows.length - 1] / TABLE_DATA_PAGE_SIZE);
             this._retainedRanges.set(selection.column_index, {
                 first: Math.max(0, (firstPage - TABLE_DATA_RETAIN_PAGES) * TABLE_DATA_PAGE_SIZE),
-                last: ((lastPage + TABLE_DATA_RETAIN_PAGES + 1) * TABLE_DATA_PAGE_SIZE) - 1,
+                last: (lastPage + TABLE_DATA_RETAIN_PAGES + 1) * TABLE_DATA_PAGE_SIZE - 1,
             });
         }
     }

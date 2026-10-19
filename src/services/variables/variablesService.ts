@@ -27,14 +27,18 @@ export class PositronVariablesService implements IPositronVariablesService {
     private readonly _disposables: vscode.Disposable[] = [];
 
     // Event emitters (1:1 Positron naming)
-    private readonly _onDidStartPositronVariablesInstanceEmitter = new vscode.EventEmitter<IPositronVariablesInstance>();
-    private readonly _onDidStopPositronVariablesInstanceEmitter = new vscode.EventEmitter<IPositronVariablesInstance>();
-    private readonly _onDidChangeActivePositronVariablesInstanceEmitter = new vscode.EventEmitter<IPositronVariablesInstance | undefined>();
+    private readonly _onDidStartPositronVariablesInstanceEmitter =
+        new vscode.EventEmitter<IPositronVariablesInstance>();
+    private readonly _onDidStopPositronVariablesInstanceEmitter =
+        new vscode.EventEmitter<IPositronVariablesInstance>();
+    private readonly _onDidChangeActivePositronVariablesInstanceEmitter = new vscode.EventEmitter<
+        IPositronVariablesInstance | undefined
+    >();
     //#endregion
 
     constructor(
         private readonly _sessionManager: RuntimeSessionService,
-        private readonly _outputChannel: vscode.LogOutputChannel
+        private readonly _outputChannel: vscode.LogOutputChannel,
     ) {
         this._outputChannel.debug('[PositronVariablesService] Created');
     }
@@ -48,9 +52,12 @@ export class PositronVariablesService implements IPositronVariablesService {
         return this._activeVariablesInstance;
     }
 
-    readonly onDidStartPositronVariablesInstance = this._onDidStartPositronVariablesInstanceEmitter.event;
-    readonly onDidStopPositronVariablesInstance = this._onDidStopPositronVariablesInstanceEmitter.event;
-    readonly onDidChangeActivePositronVariablesInstance = this._onDidChangeActivePositronVariablesInstanceEmitter.event;
+    readonly onDidStartPositronVariablesInstance =
+        this._onDidStartPositronVariablesInstanceEmitter.event;
+    readonly onDidStopPositronVariablesInstance =
+        this._onDidStopPositronVariablesInstanceEmitter.event;
+    readonly onDidChangeActivePositronVariablesInstance =
+        this._onDidChangeActivePositronVariablesInstanceEmitter.event;
 
     initialize(): void {
         this._outputChannel.debug('[PositronVariablesService] Initializing...');
@@ -58,29 +65,37 @@ export class PositronVariablesService implements IPositronVariablesService {
         // Listen for session starts BEFORE kernel starts (Positron pattern)
         this._disposables.push(
             this._sessionManager.onWillStartSession((e) => {
-                this._outputChannel.debug(`[PositronVariablesService] Session will start: ${e.session.sessionId}, activate: ${e.activate}`);
+                this._outputChannel.debug(
+                    `[PositronVariablesService] Session will start: ${e.session.sessionId}, activate: ${e.activate}`,
+                );
                 this.createOrAssignPositronVariablesInstance(e.session, e.activate);
-            })
+            }),
         );
 
         // Follow foreground changes immediately; the service handoff can lag behind.
         this._disposables.push(
-            this._sessionManager.onDidChangeForegroundSession((session: RuntimeSession | undefined) => {
-                if (session) {
-                    this._outputChannel.debug(`[PositronVariablesService] Active session changed: ${session.sessionId}`);
-                    this.createOrAssignPositronVariablesInstance(session, true);
-                } else {
-                    this._setActivePositronVariablesInstance(undefined);
-                }
-            })
+            this._sessionManager.onDidChangeForegroundSession(
+                (session: RuntimeSession | undefined) => {
+                    if (session) {
+                        this._outputChannel.debug(
+                            `[PositronVariablesService] Active session changed: ${session.sessionId}`,
+                        );
+                        this.createOrAssignPositronVariablesInstance(session, true);
+                    } else {
+                        this._setActivePositronVariablesInstance(undefined);
+                    }
+                },
+            ),
         );
 
         // Listen for session deletions
         this._disposables.push(
             this._sessionManager.onDidDeleteRuntimeSession((sessionId: string) => {
-                this._outputChannel.debug(`[PositronVariablesService] Session deleted: ${sessionId}`);
+                this._outputChannel.debug(
+                    `[PositronVariablesService] Session deleted: ${sessionId}`,
+                );
                 this.cleanupSession(sessionId);
-            })
+            }),
         );
 
         this._outputChannel.debug('[PositronVariablesService] Initialized');
@@ -89,7 +104,9 @@ export class PositronVariablesService implements IPositronVariablesService {
     setActivePositronVariablesSession(sessionId: string): void {
         const instance = this._variablesInstancesBySessionId.get(sessionId);
         if (instance && instance !== this._activeVariablesInstance) {
-            this._outputChannel.debug(`[PositronVariablesService] Setting active variables: ${sessionId}`);
+            this._outputChannel.debug(
+                `[PositronVariablesService] Setting active variables: ${sessionId}`,
+            );
             this._setActivePositronVariablesInstance(instance);
         }
     }
@@ -139,12 +156,15 @@ export class PositronVariablesService implements IPositronVariablesService {
         this._onDidChangeActivePositronVariablesInstanceEmitter.dispose();
 
         // Dispose subscriptions
-        this._disposables.forEach(d => d.dispose());
+        this._disposables.forEach((d) => d.dispose());
     }
     //#endregion
 
     //#region Private Methods
-    private createOrAssignPositronVariablesInstance(session: RuntimeSession, activate: boolean): void {
+    private createOrAssignPositronVariablesInstance(
+        session: RuntimeSession,
+        activate: boolean,
+    ): void {
         if (
             !this._viewVisible ||
             session.sessionMetadata.sessionMode === LanguageRuntimeSessionMode.Background
@@ -156,7 +176,9 @@ export class PositronVariablesService implements IPositronVariablesService {
         let instance = this._variablesInstancesBySessionId.get(session.sessionId);
 
         if (!instance) {
-            this._outputChannel.debug(`[PositronVariablesService] Creating variables instance for: ${session.sessionId}`);
+            this._outputChannel.debug(
+                `[PositronVariablesService] Creating variables instance for: ${session.sessionId}`,
+            );
             instance = this.startPositronVariablesInstance(session, activate);
             return;
         }
@@ -174,10 +196,13 @@ export class PositronVariablesService implements IPositronVariablesService {
         }
     }
 
-    private startPositronVariablesInstance(session: RuntimeSession, activate: boolean): PositronVariablesInstance {
+    private startPositronVariablesInstance(
+        session: RuntimeSession,
+        activate: boolean,
+    ): PositronVariablesInstance {
         const instance = new PositronVariablesInstance(
             session, // RuntimeSession itself is the runtime session
-            this._outputChannel
+            this._outputChannel,
         );
 
         // Track instance
@@ -220,14 +245,18 @@ export class PositronVariablesService implements IPositronVariablesService {
         this._setActivePositronVariablesInstance(undefined);
     }
 
-    private _setActivePositronVariablesInstance(instance: PositronVariablesInstance | undefined): void {
+    private _setActivePositronVariablesInstance(
+        instance: PositronVariablesInstance | undefined,
+    ): void {
         if (this._activeVariablesInstance === instance) {
             return;
         }
         this._activeVariablesInstance = instance;
         if (instance) {
-            void instance.requestRefresh().catch(error => {
-                this._outputChannel.warn(`[VariablesService] Failed to refresh active variables: ${getErrorMessage(error)}`);
+            void instance.requestRefresh().catch((error) => {
+                this._outputChannel.warn(
+                    `[VariablesService] Failed to refresh active variables: ${getErrorMessage(error)}`,
+                );
             });
         }
         this._onDidChangeActivePositronVariablesInstanceEmitter.fire(instance);

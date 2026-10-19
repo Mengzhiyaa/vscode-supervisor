@@ -26,9 +26,7 @@ function normalizeHistogram(histogram: any): HistogramData | undefined {
 
     return {
         bin_edges: histogram.bin_edges.map((edge: unknown) => String(edge ?? '')),
-        bin_counts: histogram.bin_counts.map(
-            (count: unknown) => Number(count) || 0,
-        ),
+        bin_counts: histogram.bin_counts.map((count: unknown) => Number(count) || 0),
     };
 }
 
@@ -36,9 +34,7 @@ function normalizeFrequencyTable(frequencyTable: any): FrequencyTableData | unde
     if (frequencyTable?.values && frequencyTable?.counts) {
         return {
             values: frequencyTable.values.map((value: unknown) => String(value)),
-            counts: frequencyTable.counts.map(
-                (count: unknown) => Number(count) || 0,
-            ),
+            counts: frequencyTable.counts.map((count: unknown) => Number(count) || 0),
             other_count:
                 frequencyTable.other_count === undefined
                     ? undefined
@@ -49,9 +45,7 @@ function normalizeFrequencyTable(frequencyTable: any): FrequencyTableData | unde
     if (Array.isArray(frequencyTable)) {
         return {
             values: frequencyTable.map((entry) => String(entry?.value ?? '')),
-            counts: frequencyTable.map(
-                (entry) => Number(entry?.count) || 0,
-            ),
+            counts: frequencyTable.map((entry) => Number(entry?.count) || 0),
         };
     }
 
@@ -86,18 +80,10 @@ function normalizeNumericSummaryStats(value: unknown): NumericSummaryStats | und
             value.max_value === undefined || value.max_value === null
                 ? undefined
                 : String(value.max_value),
-        mean:
-            value.mean === undefined || value.mean === null
-                ? undefined
-                : String(value.mean),
+        mean: value.mean === undefined || value.mean === null ? undefined : String(value.mean),
         median:
-            value.median === undefined || value.median === null
-                ? undefined
-                : String(value.median),
-        stdev:
-            value.stdev === undefined || value.stdev === null
-                ? undefined
-                : String(value.stdev),
+            value.median === undefined || value.median === null ? undefined : String(value.median),
+        stdev: value.stdev === undefined || value.stdev === null ? undefined : String(value.stdev),
     };
 }
 
@@ -118,9 +104,7 @@ function normalizeStringSummaryStats(value: unknown): StringSummaryStats | undef
     };
 }
 
-function normalizeBooleanSummaryStats(
-    value: unknown,
-): BooleanSummaryStats | undefined {
+function normalizeBooleanSummaryStats(value: unknown): BooleanSummaryStats | undefined {
     if (!isRecord(value)) {
         return undefined;
     }
@@ -153,10 +137,7 @@ function normalizeDateSummaryStats(value: unknown): DateSummaryStats | undefined
     }
 
     return {
-        num_unique:
-            value.num_unique === undefined
-                ? undefined
-                : Number(value.num_unique) || 0,
+        num_unique: value.num_unique === undefined ? undefined : Number(value.num_unique) || 0,
         min_date:
             value.min_date === undefined || value.min_date === null
                 ? undefined
@@ -176,9 +157,7 @@ function normalizeDateSummaryStats(value: unknown): DateSummaryStats | undefined
     };
 }
 
-function normalizeDatetimeSummaryStats(
-    value: unknown,
-): DatetimeSummaryStats | undefined {
+function normalizeDatetimeSummaryStats(value: unknown): DatetimeSummaryStats | undefined {
     const dateStats = normalizeDateSummaryStats(value);
     if (!dateStats && (!isRecord(value) || value.timezone === undefined)) {
         return undefined;
@@ -210,10 +189,9 @@ function normalizeSummaryStats(summaryStats: unknown): ColumnSummaryStats | unde
 
     const nestedStats: ColumnSummaryStats = {
         type_display:
-            summaryStats.type_display === undefined ||
-            summaryStats.type_display === null
+            summaryStats.type_display === undefined || summaryStats.type_display === null
                 ? undefined
-                : String(summaryStats.type_display) as ColumnSummaryStats['type_display'],
+                : (String(summaryStats.type_display) as ColumnSummaryStats['type_display']),
         number_stats: normalizeNumericSummaryStats(summaryStats.number_stats),
         string_stats: normalizeStringSummaryStats(summaryStats.string_stats),
         boolean_stats: normalizeBooleanSummaryStats(summaryStats.boolean_stats),
@@ -253,12 +231,9 @@ export function simplifyColumnProfile(profile: any): ColumnProfileViewResult | u
     }
 
     const smallHistogram = normalizeHistogram(profile.small_histogram);
-    const largeHistogram =
-        normalizeHistogram(profile.large_histogram) ?? smallHistogram;
+    const largeHistogram = normalizeHistogram(profile.large_histogram) ?? smallHistogram;
     const histogramData = smallHistogram ?? largeHistogram;
-    let histogram:
-        | Array<{ bin_start: string; bin_end: string; count: number }>
-        | undefined;
+    let histogram: Array<{ bin_start: string; bin_end: string; count: number }> | undefined;
     if (
         histogramData?.bin_counts &&
         histogramData?.bin_edges &&
@@ -273,16 +248,11 @@ export function simplifyColumnProfile(profile: any): ColumnProfileViewResult | u
         });
     }
 
-    const smallFrequencyTable = normalizeFrequencyTable(
-        profile.small_frequency_table,
-    );
+    const smallFrequencyTable = normalizeFrequencyTable(profile.small_frequency_table);
     const largeFrequencyTable =
-        normalizeFrequencyTable(profile.large_frequency_table) ??
-        smallFrequencyTable;
+        normalizeFrequencyTable(profile.large_frequency_table) ?? smallFrequencyTable;
     const frequencyTableData = smallFrequencyTable ?? largeFrequencyTable;
-    let frequencyTable:
-        | Array<{ value: string; count: number }>
-        | undefined;
+    let frequencyTable: Array<{ value: string; count: number }> | undefined;
     if (frequencyTableData?.values && frequencyTableData?.counts) {
         frequencyTable = frequencyTableData.values.map((value, index) => ({
             value,
@@ -297,10 +267,7 @@ export function simplifyColumnProfile(profile: any): ColumnProfileViewResult | u
     }
 
     return {
-        null_count:
-            profile.null_count === undefined
-                ? undefined
-                : Number(profile.null_count) || 0,
+        null_count: profile.null_count === undefined ? undefined : Number(profile.null_count) || 0,
         summary_stats: normalizeSummaryStats(profile.summary_stats),
         small_histogram: smallHistogram,
         large_histogram: largeHistogram,
@@ -328,10 +295,8 @@ export function mergeColumnProfiles(
         summary_stats: incoming.summary_stats ?? existing.summary_stats,
         small_histogram: incoming.small_histogram ?? existing.small_histogram,
         large_histogram: incoming.large_histogram ?? existing.large_histogram,
-        small_frequency_table:
-            incoming.small_frequency_table ?? existing.small_frequency_table,
-        large_frequency_table:
-            incoming.large_frequency_table ?? existing.large_frequency_table,
+        small_frequency_table: incoming.small_frequency_table ?? existing.small_frequency_table,
+        large_frequency_table: incoming.large_frequency_table ?? existing.large_frequency_table,
         histogram: incoming.histogram ?? existing.histogram,
         frequency_table: incoming.frequency_table ?? existing.frequency_table,
     };

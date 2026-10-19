@@ -12,13 +12,10 @@
     - Current code fragment preservation
 -->
 <script lang="ts">
-    import { getContext, onMount, onDestroy, tick } from "svelte";
-    import {
-        CancellationTokenSource,
-        type MessageConnection,
-    } from "vscode-jsonrpc/browser";
-    import { monaco, ensureMonacoRuntime } from "$lib/monaco/setup";
-    import { lspClientManagerContext, type LspClientManager } from "$lib/lsp/lspClientManager";
+    import { getContext, onMount, onDestroy, tick } from 'svelte';
+    import { CancellationTokenSource, type MessageConnection } from 'vscode-jsonrpc/browser';
+    import { monaco, ensureMonacoRuntime } from '$lib/monaco/setup';
+    import { lspClientManagerContext, type LspClientManager } from '$lib/lsp/lspClientManager';
     import {
         ensureLanguageTextMateTokenizerReady,
         getLanguageMonacoSupportModuleUrl,
@@ -26,26 +23,26 @@
         loadLanguageMonacoSupportModule,
         type ConsoleThemeData,
         type LanguageMonacoSupportModule,
-    } from "$lib/monaco/languageSupport";
-    import type { ConsoleSettings, ConsoleState } from "../types/console";
-    import { createEditorHost } from "./services/editorHost";
+    } from '$lib/monaco/languageSupport';
+    import type { ConsoleSettings, ConsoleState } from '../types/console';
+    import { createEditorHost } from './services/editorHost';
     import {
         createSessionModelManager,
         type ConsoleInputCommand,
         type KnownSessionInfo,
         type SessionHistoryState,
-    } from "./services/sessionModelManager";
-    import HistoryBrowserPopup from "./HistoryBrowserPopup.svelte";
+    } from './services/sessionModelManager';
+    import HistoryBrowserPopup from './HistoryBrowserPopup.svelte';
     import {
         type HistoryMatch,
         type IInputHistoryEntry,
         HistoryPrefixMatchStrategy,
         HistoryInfixMatchStrategy,
-    } from "./history";
-    import { copyScopedSelection } from "./utils/selectionUtils";
-    import { copyEditorSelection } from "./utils/editorClipboard";
-    import { isTabSuggestContext } from "./tabSuggest";
-    import { localize } from "$lib/localization";
+    } from './history';
+    import { copyScopedSelection } from './utils/selectionUtils';
+    import { copyEditorSelection } from './utils/editorClipboard';
+    import { isTabSuggestContext } from './tabSuggest';
+    import { localize } from '$lib/localization';
 
     // Position constants (Positron pattern - using const instead of enum for Svelte compatibility)
     const Position = {
@@ -53,8 +50,7 @@
         Last: 1,
     } as const;
     const isMacintosh =
-        typeof navigator !== "undefined" &&
-        navigator.platform.toLowerCase().includes("mac");
+        typeof navigator !== 'undefined' && navigator.platform.toLowerCase().includes('mac');
 
     // ConsoleInputProps interface (Positron pattern)
     interface ConsoleInputProps {
@@ -74,10 +70,7 @@
         readonly onActivate: (sessionId: string) => void;
         readonly onSelectAll: () => void;
         readonly onCodeExecuted: (sessionId: string) => void;
-        readonly onSubmittingChanged?: (
-            sessionId: string,
-            submitting: boolean,
-        ) => void;
+        readonly onSubmittingChanged?: (sessionId: string, submitting: boolean) => void;
         readonly onOpenSearch?: (sessionId: string) => void;
         readonly onOpenInEditor?: (sessionId: string, code: string) => void;
         readonly onClearConsole?: (sessionId: string) => void;
@@ -102,11 +95,11 @@
         active = true,
         scrollLocked = false,
         sessionId,
-        languageId = "plaintext",
+        languageId = 'plaintext',
         knownSessions = [],
         state: consoleState,
-        inputPrompt = ">",
-        continuationPrompt = "+",
+        inputPrompt = '>',
+        continuationPrompt = '+',
         onExecute,
         onInterrupt,
         onActivate,
@@ -155,7 +148,7 @@
 
     function updateInterruptContext(): void {
         interruptContext?.set(
-            stateRef.current === "busy" || submissionInFlightRef.current || hostSubmitting,
+            stateRef.current === 'busy' || submissionInFlightRef.current || hostSubmitting,
         );
     }
 
@@ -164,7 +157,7 @@
     let destroyed = false;
     let inputVisibilityAnimationFrame: number | undefined;
     let activationEpoch = 0;
-    let activationState = $state<"idle" | "switching">("idle");
+    let activationState = $state<'idle' | 'switching'>('idle');
     let activatingSessionId = $state<string | undefined>(undefined);
     let committedSessionId = $state<string | undefined>(undefined);
 
@@ -174,7 +167,7 @@
         monaco,
         getConnection: () => connection,
         lspClientManager: getContext<LspClientManager | undefined>(lspClientManagerContext),
-        onDidEditInput: editedSessionId => {
+        onDidEditInput: (editedSessionId) => {
             if (committedSessionId === editedSessionId && codeEditorWidget) {
                 updateCodeEditorWidgetPosition(Position.Last, Position.Last);
                 void maybeExecuteDeferredCode();
@@ -206,7 +199,7 @@
 
     function normalizeLanguageId(value: string | undefined): string {
         const normalizedLanguageId = value?.trim().toLowerCase();
-        return normalizedLanguageId || "plaintext";
+        return normalizedLanguageId || 'plaintext';
     }
 
     function currentLanguageId(): string {
@@ -235,22 +228,19 @@
         const normalizedLanguageId = normalizeLanguageId(targetLanguageId);
         const assetsVersion = languageAssetsVersion;
         const moduleUrl = getLanguageMonacoSupportModuleUrl(normalizedLanguageId);
-        const isCurrent = () => !destroyed &&
+        const isCurrent = () =>
+            !destroyed &&
             assetsVersion === languageAssetsVersion &&
             normalizedLanguageId === currentLanguageId() &&
             moduleUrl === getLanguageMonacoSupportModuleUrl(normalizedLanguageId);
-        const languageMonacoSupport =
-            await ensureLanguageMonacoSupportModule(normalizedLanguageId);
+        const languageMonacoSupport = await ensureLanguageMonacoSupportModule(normalizedLanguageId);
 
         if (!isCurrent()) {
             return undefined;
         }
 
         languageMonacoSupport?.registerLanguage(monaco);
-        await ensureLanguageTextMateTokenizerReady(
-            monaco,
-            normalizedLanguageId,
-        );
+        await ensureLanguageTextMateTokenizerReady(monaco, normalizedLanguageId);
         if (!isCurrent()) {
             return undefined;
         }
@@ -264,112 +254,97 @@
         function cssVar(name: string): string | undefined {
             const val = cs.getPropertyValue(name).trim();
             if (!val) return undefined;
-            if (val.startsWith("#")) return val;
+            if (val.startsWith('#')) return val;
             const m = val.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
             if (m) {
-                const r = parseInt(m[1]).toString(16).padStart(2, "0");
-                const g = parseInt(m[2]).toString(16).padStart(2, "0");
-                const b = parseInt(m[3]).toString(16).padStart(2, "0");
+                const r = parseInt(m[1]).toString(16).padStart(2, '0');
+                const g = parseInt(m[2]).toString(16).padStart(2, '0');
+                const b = parseInt(m[3]).toString(16).padStart(2, '0');
                 return `#${r}${g}${b}`;
             }
             return undefined;
         }
 
         const editorBg =
-            cssVar("--vscode-editor-background") ||
-            cssVar("--vscode-input-background");
-        const editorFg = cssVar("--vscode-editor-foreground");
-        const widgetBg = cssVar("--vscode-editorWidget-background");
-        const widgetFg = cssVar("--vscode-editorWidget-foreground");
-        const widgetBorder = cssVar("--vscode-editorWidget-border");
-        const hoverBg =
-            cssVar("--vscode-editorHoverWidget-background") || widgetBg;
-        const hoverFg =
-            cssVar("--vscode-editorHoverWidget-foreground") || widgetFg;
-        const hoverBorder =
-            cssVar("--vscode-editorHoverWidget-border") || widgetBorder;
-        const suggestBg =
-            cssVar("--vscode-editorSuggestWidget-background") || widgetBg;
-        const suggestFg =
-            cssVar("--vscode-editorSuggestWidget-foreground") || widgetFg;
-        const suggestBorder =
-            cssVar("--vscode-editorSuggestWidget-border") || widgetBorder;
-        const suggestHighlight = cssVar(
-            "--vscode-editorSuggestWidget-highlightForeground",
-        );
+            cssVar('--vscode-editor-background') || cssVar('--vscode-input-background');
+        const editorFg = cssVar('--vscode-editor-foreground');
+        const widgetBg = cssVar('--vscode-editorWidget-background');
+        const widgetFg = cssVar('--vscode-editorWidget-foreground');
+        const widgetBorder = cssVar('--vscode-editorWidget-border');
+        const hoverBg = cssVar('--vscode-editorHoverWidget-background') || widgetBg;
+        const hoverFg = cssVar('--vscode-editorHoverWidget-foreground') || widgetFg;
+        const hoverBorder = cssVar('--vscode-editorHoverWidget-border') || widgetBorder;
+        const suggestBg = cssVar('--vscode-editorSuggestWidget-background') || widgetBg;
+        const suggestFg = cssVar('--vscode-editorSuggestWidget-foreground') || widgetFg;
+        const suggestBorder = cssVar('--vscode-editorSuggestWidget-border') || widgetBorder;
+        const suggestHighlight = cssVar('--vscode-editorSuggestWidget-highlightForeground');
         const suggestSelected =
-            cssVar("--vscode-editorSuggestWidget-selectedBackground") ||
-            cssVar("--vscode-list-activeSelectionBackground");
+            cssVar('--vscode-editorSuggestWidget-selectedBackground') ||
+            cssVar('--vscode-list-activeSelectionBackground');
         const suggestSelectedFg =
-            cssVar("--vscode-editorSuggestWidget-selectedForeground") ||
-            cssVar("--vscode-list-activeSelectionForeground");
+            cssVar('--vscode-editorSuggestWidget-selectedForeground') ||
+            cssVar('--vscode-list-activeSelectionForeground');
         const suggestSelectedIcon =
-            cssVar("--vscode-editorSuggestWidget-selectedIconForeground") ||
-            suggestSelectedFg;
+            cssVar('--vscode-editorSuggestWidget-selectedIconForeground') || suggestSelectedFg;
         const suggestFocusHighlight =
-            cssVar("--vscode-editorSuggestWidget-focusHighlightForeground") ||
-            suggestHighlight;
-        const listHoverBg = cssVar("--vscode-list-hoverBackground");
+            cssVar('--vscode-editorSuggestWidget-focusHighlightForeground') || suggestHighlight;
+        const listHoverBg = cssVar('--vscode-list-hoverBackground');
 
         const colors: Record<string, string> = {};
         if (editorBg) {
-            colors["editor.background"] = editorBg;
+            colors['editor.background'] = editorBg;
         }
         if (editorFg) {
-            colors["editor.foreground"] = editorFg;
+            colors['editor.foreground'] = editorFg;
         }
         if (hoverBg) {
-            colors["editorHoverWidget.background"] = hoverBg;
+            colors['editorHoverWidget.background'] = hoverBg;
         }
         if (hoverFg) {
-            colors["editorHoverWidget.foreground"] = hoverFg;
+            colors['editorHoverWidget.foreground'] = hoverFg;
         }
         if (hoverBorder) {
-            colors["editorHoverWidget.border"] = hoverBorder;
+            colors['editorHoverWidget.border'] = hoverBorder;
         }
         if (suggestBg) {
-            colors["editorSuggestWidget.background"] = suggestBg;
+            colors['editorSuggestWidget.background'] = suggestBg;
         }
         if (suggestFg) {
-            colors["editorSuggestWidget.foreground"] = suggestFg;
+            colors['editorSuggestWidget.foreground'] = suggestFg;
         }
         if (suggestBorder) {
-            colors["editorSuggestWidget.border"] = suggestBorder;
+            colors['editorSuggestWidget.border'] = suggestBorder;
         }
         if (suggestHighlight) {
-            colors["editorSuggestWidget.highlightForeground"] =
-                suggestHighlight;
+            colors['editorSuggestWidget.highlightForeground'] = suggestHighlight;
         }
         if (suggestSelected) {
-            colors["editorSuggestWidget.selectedBackground"] = suggestSelected;
+            colors['editorSuggestWidget.selectedBackground'] = suggestSelected;
         }
         if (suggestSelectedFg) {
-            colors["editorSuggestWidget.selectedForeground"] =
-                suggestSelectedFg;
+            colors['editorSuggestWidget.selectedForeground'] = suggestSelectedFg;
         }
         if (suggestSelectedIcon) {
-            colors["editorSuggestWidget.selectedIconForeground"] =
-                suggestSelectedIcon;
+            colors['editorSuggestWidget.selectedIconForeground'] = suggestSelectedIcon;
         }
         if (suggestFocusHighlight) {
-            colors["editorSuggestWidget.focusHighlightForeground"] =
-                suggestFocusHighlight;
+            colors['editorSuggestWidget.focusHighlightForeground'] = suggestFocusHighlight;
         }
         if (widgetBg) {
-            colors["editorWidget.background"] = widgetBg;
-            colors["peekViewEditor.background"] = widgetBg;
+            colors['editorWidget.background'] = widgetBg;
+            colors['peekViewEditor.background'] = widgetBg;
         }
         if (widgetFg) {
-            colors["editorWidget.foreground"] = widgetFg;
+            colors['editorWidget.foreground'] = widgetFg;
         }
         if (widgetBorder) {
-            colors["editorWidget.border"] = widgetBorder;
+            colors['editorWidget.border'] = widgetBorder;
         }
         if (listHoverBg) {
-            colors["list.hoverBackground"] = listHoverBg;
+            colors['list.hoverBackground'] = listHoverBg;
         }
 
-        const themeName = "vscode-console-theme";
+        const themeName = 'vscode-console-theme';
         monaco.editor.defineTheme(themeName, {
             base: theme.base,
             inherit: true,
@@ -399,8 +374,7 @@
             letterSpacing: settings.letterSpacing,
         });
 
-        const layoutWidth =
-            codeEditorWidgetContainerRef?.clientWidth || codeEditorWidth;
+        const layoutWidth = codeEditorWidgetContainerRef?.clientWidth || codeEditorWidth;
         codeEditorWidth = layoutWidth;
         codeEditorWidget.layout({
             width: layoutWidth,
@@ -409,9 +383,7 @@
     }
 
     function currentSessionId(): string {
-        return (
-            committedSessionId || editorHost.getActiveSessionId() || sessionId
-        );
+        return committedSessionId || editorHost.getActiveSessionId() || sessionId;
     }
 
     function waitForAnimationFrame(): Promise<void> {
@@ -429,19 +401,11 @@
 
         const lineNumber = model.getLineCount();
         const column = model.getLineMaxColumn(lineNumber);
-        const selection = new monaco.Selection(
-            lineNumber,
-            column,
-            lineNumber,
-            column,
-        );
+        const selection = new monaco.Selection(lineNumber, column, lineNumber, column);
 
         codeEditorWidget.setSelections([selection]);
         codeEditorWidget.setPosition({ lineNumber, column });
-        codeEditorWidget.revealPosition(
-            { lineNumber, column },
-            monaco.editor.ScrollType.Immediate,
-        );
+        codeEditorWidget.revealPosition({ lineNumber, column }, monaco.editor.ScrollType.Immediate);
     }
 
     function resetEditorTransientState(): void {
@@ -450,14 +414,14 @@
         }
 
         const commands = [
-            "hideSuggestWidget",
-            "closeParameterHints",
-            "editor.action.hideHover",
-            "leaveSnippet",
+            'hideSuggestWidget',
+            'closeParameterHints',
+            'editor.action.hideHover',
+            'leaveSnippet',
         ];
 
         for (const command of commands) {
-            codeEditorWidget.trigger("console", command, null);
+            codeEditorWidget.trigger('console', command, null);
         }
     }
 
@@ -480,7 +444,7 @@
             codeEditorWidget.updateOptions(createLineNumbersOptions());
         }
 
-        if (previousState !== "ready" && consoleState === "ready") {
+        if (previousState !== 'ready' && consoleState === 'ready') {
             void maybeExecuteDeferredCode();
         }
     });
@@ -498,23 +462,20 @@
      * Note: lineDecorationsWidth provides the space after the prompt.
      */
     function createLineNumbersOptions(): monaco.editor.IEditorOptions {
-        const promptWidth = Math.max(
-            inputPrompt.length,
-            continuationPrompt.length,
-        );
+        const promptWidth = Math.max(inputPrompt.length, continuationPrompt.length);
 
         // Keep the prompt visible while a restart is reconnecting so the input
         // area does not visually disappear between banner restore and ready.
         const showPrompt =
-            stateRef.current === "ready" ||
-            stateRef.current === "starting" ||
-            stateRef.current === "restarting" ||
-            stateRef.current === "uninitialized";
+            stateRef.current === 'ready' ||
+            stateRef.current === 'starting' ||
+            stateRef.current === 'restarting' ||
+            stateRef.current === 'uninitialized';
 
         return {
             lineNumbers: (lineNumber: number) => {
                 if (!showPrompt) {
-                    return ""; // Hide prompt during busy/offline/etc states
+                    return ''; // Hide prompt during busy/offline/etc states
                 }
                 return lineNumber < 2 ? inputPrompt : continuationPrompt;
             },
@@ -532,8 +493,7 @@
     }
 
     function resolveConsoleInstance(): HTMLElement | undefined {
-        const candidate =
-            codeEditorWidgetContainerRef?.closest(".console-instance");
+        const candidate = codeEditorWidgetContainerRef?.closest('.console-instance');
         return candidate instanceof HTMLElement ? candidate : undefined;
     }
 
@@ -571,18 +531,12 @@
      * @param linePosition The line position.
      * @param columnPosition The column position.
      */
-    function updateCodeEditorWidgetPosition(
-        linePosition: number,
-        columnPosition: number,
-    ) {
+    function updateCodeEditorWidgetPosition(linePosition: number, columnPosition: number) {
         const textModel = codeEditorWidget?.getModel();
         if (textModel) {
-            const lineNumber =
-                linePosition === Position.First ? 1 : textModel.getLineCount();
+            const lineNumber = linePosition === Position.First ? 1 : textModel.getLineCount();
             const column =
-                columnPosition === Position.First
-                    ? 1
-                    : textModel.getLineMaxColumn(lineNumber);
+                columnPosition === Position.First ? 1 : textModel.getLineMaxColumn(lineNumber);
 
             codeEditorWidget.setPosition({ lineNumber, column });
 
@@ -594,18 +548,13 @@
     /**
      * Engages the history browser with the given match strategy (Positron pattern).
      */
-    function engageHistoryBrowser(strategy: {
-        getMatches: (input: string) => HistoryMatch[];
-    }) {
+    function engageHistoryBrowser(strategy: { getMatches: (input: string) => HistoryMatch[] }) {
         cancelSuggestWidget();
 
         // Look for the text to match against
         const value = codeEditorWidget.getValue();
         const position = codeEditorWidget.getSelection()?.getStartPosition();
-        const matchText = value.substring(
-            0,
-            (position?.column || value.length) - 1,
-        );
+        const matchText = value.substring(0, (position?.column || value.length) - 1);
 
         // Get the initial set of matches
         const matches = strategy.getMatches(matchText);
@@ -649,7 +598,7 @@
         const position = codeEditorWidget.getPosition();
         if (position?.lineNumber !== 1) {
             // Not at first line, let default cursor movement happen
-            codeEditorWidget.trigger("keyboard", "cursorUp", null);
+            codeEditorWidget.trigger('keyboard', 'cursorUp', null);
             return;
         }
 
@@ -681,7 +630,7 @@
 
         if (position?.lineNumber !== textModel?.getLineCount()) {
             // Not at last line, let default cursor movement happen
-            codeEditorWidget.trigger("keyboard", "cursorDown", null);
+            codeEditorWidget.trigger('keyboard', 'cursorDown', null);
             return;
         }
 
@@ -727,9 +676,7 @@
         historyIndex = -1;
     }
 
-    function setHistoryEntries(
-        entries: { input: string; when?: number }[],
-    ): void {
+    function setHistoryEntries(entries: { input: string; when?: number }[]): void {
         const normalized: IInputHistoryEntry[] = [];
         let lastInput: string | undefined;
 
@@ -762,7 +709,7 @@
 
     function applyPasteText(text: string) {
         // Let Monaco place each caret after its pasted text and manage undo.
-        codeEditorWidget.trigger("console", "paste", { text });
+        codeEditorWidget.trigger('console', 'paste', { text });
         scheduleScrollInputIntoView();
     }
 
@@ -800,40 +747,32 @@
             return;
         }
 
-        sessionModelManager.setViewState(
-            sessionIdToSave,
-            editorHost.saveViewState(),
-        );
-        sessionModelManager.setHistoryState(
-            sessionIdToSave,
-            captureHistoryState(),
-        );
+        sessionModelManager.setViewState(sessionIdToSave, editorHost.saveViewState());
+        sessionModelManager.setHistoryState(sessionIdToSave, captureHistoryState());
     }
 
     function applyCommandToActiveSession(command: ConsoleInputCommand): void {
         switch (command.kind) {
-            case "focus":
+            case 'focus':
                 codeEditorWidget?.focus();
                 break;
-            case "insertText":
+            case 'insertText':
                 if (codeEditorWidget) {
                     codeEditorWidget.focus();
-                    codeEditorWidget.trigger("keyboard", "type", {
+                    codeEditorWidget.trigger('keyboard', 'type', {
                         text: command.text,
                     });
                 }
                 break;
-            case "paste":
+            case 'paste':
                 if (codeEditorWidget) {
                     applyPasteText(command.text);
                 }
                 break;
-            case "historyUp":
+            case 'historyUp':
                 if (command.usingPrefixMatch) {
                     if (!historyBrowserActive) {
-                        engageHistoryBrowser(
-                            new HistoryPrefixMatchStrategy(historyEntries),
-                        );
+                        engageHistoryBrowser(new HistoryPrefixMatchStrategy(historyEntries));
                     } else {
                         navigateHistoryUp();
                     }
@@ -842,30 +781,27 @@
                 }
                 codeEditorWidget?.focus();
                 break;
-            case "historyDown":
+            case 'historyDown':
                 navigateHistoryDown();
                 codeEditorWidget?.focus();
                 break;
-            case "historyClear":
+            case 'historyClear':
                 clearHistory();
                 codeEditorWidget?.focus();
                 break;
-            case "openInEditor":
-                onOpenInEditor?.(
-                    currentSessionId(),
-                    codeEditorWidget?.getValue() ?? "",
-                );
+            case 'openInEditor':
+                onOpenInEditor?.(currentSessionId(), codeEditorWidget?.getValue() ?? '');
                 break;
-            case "cancelSubmission":
+            case 'cancelSubmission':
                 cancelCodeSubmission();
                 break;
-            case "setPendingCode":
+            case 'setPendingCode':
                 sessionModelManager.applyInputEdit(currentSessionId(), command);
                 break;
-            case "historyAdd":
+            case 'historyAdd':
                 addHistoryEntry(command.input, command.when);
                 break;
-            case "historySet":
+            case 'historySet':
                 setHistoryEntries(command.entries);
                 break;
         }
@@ -873,12 +809,12 @@
 
     function needsActiveEditorContext(command: ConsoleInputCommand): boolean {
         return (
-            command.kind === "focus" ||
-            command.kind === "insertText" ||
-            command.kind === "paste" ||
-            command.kind === "historyUp" ||
-            command.kind === "historyDown" ||
-            command.kind === "openInEditor"
+            command.kind === 'focus' ||
+            command.kind === 'insertText' ||
+            command.kind === 'paste' ||
+            command.kind === 'historyUp' ||
+            command.kind === 'historyDown' ||
+            command.kind === 'openInEditor'
         );
     }
 
@@ -906,10 +842,7 @@
             saveSessionState(previousSessionId);
         }
 
-        const nextState = sessionModelManager.ensureSession(
-            nextSessionId,
-            nextLanguageId,
-        );
+        const nextState = sessionModelManager.ensureSession(nextSessionId, nextLanguageId);
         const epoch = ++activationEpoch;
 
         if (
@@ -920,14 +853,10 @@
             flushPendingCommands(nextSessionId);
             return;
         }
-        activationState = "switching";
+        activationState = 'switching';
         activatingSessionId = nextSessionId;
         resetEditorTransientState();
-        editorHost.activateSession(
-            nextSessionId,
-            nextState.model,
-            nextState.viewState,
-        );
+        editorHost.activateSession(nextSessionId, nextState.model, nextState.viewState);
 
         if (destroyed || epoch !== activationEpoch) {
             return;
@@ -942,10 +871,7 @@
             return;
         }
 
-        const currentWidth =
-            codeEditorWidgetContainerRef?.clientWidth ||
-            codeEditorWidth ||
-            width;
+        const currentWidth = codeEditorWidgetContainerRef?.clientWidth || codeEditorWidth || width;
         codeEditorWidth = currentWidth;
         codeEditorWidget.layout({
             width: currentWidth,
@@ -957,17 +883,14 @@
         }
 
         committedSessionId = nextSessionId;
-        activationState = "idle";
+        activationState = 'idle';
         activatingSessionId = undefined;
         flushPendingCommands(nextSessionId);
         scheduleScrollInputIntoView();
         void maybeExecuteDeferredCode();
     }
 
-    function enqueuePendingCommand(
-        sessionIdToQueue: string,
-        command: ConsoleInputCommand,
-    ): void {
+    function enqueuePendingCommand(sessionIdToQueue: string, command: ConsoleInputCommand): void {
         sessionModelManager.enqueuePending(sessionIdToQueue, command);
     }
 
@@ -1001,13 +924,10 @@
             deferredExecuteSessionIdRef.current = undefined;
         }
 
-        const promptWidth = Math.max(
-            inputPrompt.length,
-            continuationPrompt.length,
-        );
+        const promptWidth = Math.max(inputPrompt.length, continuationPrompt.length);
         if (codeEditorWidget.getModel() === model) {
             codeEditorWidget.updateOptions({
-                lineNumbers: (_: number) => " ".repeat(promptWidth),
+                lineNumbers: (_: number) => ' '.repeat(promptWidth),
                 lineNumbersMinChars: promptWidth,
             });
         }
@@ -1016,7 +936,7 @@
             await onExecute(submittedSessionId, code);
         } catch (error) {
             restoreSubmittedCodeWithTypeAhead(model, code);
-            console.error("Execute error:", error);
+            console.error('Execute error:', error);
             return true;
         }
 
@@ -1040,7 +960,7 @@
                 // Follow-up Enter may cancel a check, but must preserve an
                 // accepted execution and its authoritative submit response.
                 if (connection) {
-                    void connection.sendRequest("console/cancelCompletenessCheck", {
+                    void connection.sendRequest('console/cancelCompletenessCheck', {
                         sessionId: requestedSessionId,
                     });
                 }
@@ -1051,17 +971,14 @@
             }
             submissionCancellationSourceRef.current?.cancel();
             if (connection && submissionSessionIdRef.current) {
-                void connection.sendRequest("console/cancelSubmission", {
+                void connection.sendRequest('console/cancelSubmission', {
                     sessionId: submissionSessionIdRef.current,
                 });
             }
             return true;
         }
 
-        if (
-            !codeEditorWidget.getValue().trim() ||
-            stateRef.current !== "ready"
-        ) {
+        if (!codeEditorWidget.getValue().trim() || stateRef.current !== 'ready') {
             return false;
         }
 
@@ -1084,22 +1001,21 @@
                 }
 
                 currentCodeFragment = undefined;
-                submissionModel.setValue("");
+                submissionModel.setValue('');
                 resubmitQueuedRef.current = false;
 
-                let status = "executed";
+                let status = 'executed';
 
                 if (connection) {
                     const cancellationSource = new CancellationTokenSource();
                     submissionCancellationSourceRef.current = cancellationSource;
                     try {
                         const result = (await connection.sendRequest(
-                            "console/submitCode",
+                            'console/submitCode',
                             {
                                 code: submittedCode,
                                 sessionId: submittedSessionId,
-                                checkCompleteness:
-                                    consoleSettings.promptWhenIncomplete,
+                                checkCompleteness: consoleSettings.promptWhenIncomplete,
                             },
                             cancellationSource.token,
                         )) as { status: string };
@@ -1111,17 +1027,11 @@
                         // A transport error leaves execution status unknown.
                         // Preserve the input for manual recovery, but do not
                         // automatically retry it even if Enter was queued.
-                        console.error("Cannot execute code:", error);
-                        restoreSubmittedCodeWithTypeAhead(
-                            submissionModel,
-                            submittedCode,
-                        );
+                        console.error('Cannot execute code:', error);
+                        restoreSubmittedCodeWithTypeAhead(submissionModel, submittedCode);
                         return true;
                     } finally {
-                        if (
-                            submissionCancellationSourceRef.current ===
-                            cancellationSource
-                        ) {
+                        if (submissionCancellationSourceRef.current === cancellationSource) {
                             submissionCancellationSourceRef.current = undefined;
                         }
                         cancellationSource.dispose();
@@ -1132,64 +1042,40 @@
                         submissionModel,
                         submittedCode,
                     );
-                    if (
-                        resubmitQueuedRef.current &&
-                        submissionModel.getValue().trim()
-                    ) {
+                    if (resubmitQueuedRef.current && submissionModel.getValue().trim()) {
                         continue;
                     }
                     return true;
                 }
 
                 switch (status) {
-                    case "executed":
+                    case 'executed':
                         if (codeEditorWidget.getModel() === submissionModel) {
                             codeEditorWidget.render(true);
                         }
                         onCodeExecuted(submittedSessionId);
                         break;
-                    case "incomplete":
-                        restoreSubmittedCodeWithTypeAhead(
-                            submissionModel,
-                            submittedCode,
-                        );
-                        if (
-                            resubmitQueuedRef.current &&
-                            submissionModel.getValue().trim()
-                        ) {
+                    case 'incomplete':
+                        restoreSubmittedCodeWithTypeAhead(submissionModel, submittedCode);
+                        if (resubmitQueuedRef.current && submissionModel.getValue().trim()) {
                             continue;
                         }
                         return false;
-                    case "cancelled":
-                        restoreSubmittedCodeWithTypeAhead(
-                            submissionModel,
-                            submittedCode,
-                        );
-                        if (
-                            resubmitQueuedRef.current &&
-                            submissionModel.getValue().trim()
-                        ) {
+                    case 'cancelled':
+                        restoreSubmittedCodeWithTypeAhead(submissionModel, submittedCode);
+                        if (resubmitQueuedRef.current && submissionModel.getValue().trim()) {
                             continue;
                         }
                         return true;
-                    case "failed":
-                        restoreSubmittedCodeWithTypeAhead(
-                            submissionModel,
-                            submittedCode,
-                        );
+                    case 'failed':
+                        restoreSubmittedCodeWithTypeAhead(submissionModel, submittedCode);
                         return true;
                     default:
                         console.warn(`Unknown submit status: ${status}`);
-                        restoreSubmittedCodeWithTypeAhead(
-                            submissionModel,
-                            submittedCode,
-                        );
+                        restoreSubmittedCodeWithTypeAhead(submissionModel, submittedCode);
                         return true;
                 }
-                if (
-                    resubmitQueuedRef.current &&
-                    submissionModel.getValue().trim()
-                ) {
+                if (resubmitQueuedRef.current && submissionModel.getValue().trim()) {
                     continue;
                 }
                 return true;
@@ -1210,17 +1096,14 @@
         sessionIdToCancel?: string,
         skipHostRequest: boolean = false,
     ): void {
-        if (
-            sessionIdToCancel &&
-            submissionSessionIdRef.current !== sessionIdToCancel
-        ) {
+        if (sessionIdToCancel && submissionSessionIdRef.current !== sessionIdToCancel) {
             return;
         }
         resubmitQueuedRef.current = false;
         submissionCancellationSourceRef.current?.cancel();
         const submittingSessionId = submissionSessionIdRef.current;
         if (connection && submittingSessionId && !skipHostRequest) {
-            void connection.sendRequest("console/cancelSubmission", {
+            void connection.sendRequest('console/cancelSubmission', {
                 sessionId: submittingSessionId,
             });
         }
@@ -1248,7 +1131,7 @@
     }
 
     async function maybeExecuteDeferredCode(): Promise<void> {
-        if (!codeEditorWidget || stateRef.current !== "ready") {
+        if (!codeEditorWidget || stateRef.current !== 'ready') {
             return;
         }
 
@@ -1282,65 +1165,60 @@
                 return;
             }
 
-            const fontFamily = consoleSettings.fontFamily || "monospace";
+            const fontFamily = consoleSettings.fontFamily || 'monospace';
             const fontSize = consoleSettings.fontSize;
             const lineHeight = getConsoleLineHeightPx(consoleSettings);
 
             // Create Monaco editor (Positron CodeEditorWidget pattern)
-            codeEditorWidget = monaco.editor.create(
-                codeEditorWidgetContainerRef,
-                {
-                    value: "",
-                    language: initialLanguageId,
-                    theme: themeData
-                        ? applyMonacoTheme(themeData)
-                        : getVSCodeTheme(),
-                    minimap: { enabled: false },
-                    scrollBeyondLastLine: false,
-                    automaticLayout: false, // We handle layout manually
-                    wordWrap: "bounded",
-                    wordWrapColumn: 2048,
-                    glyphMargin: false,
-                    folding: false,
-                    fixedOverflowWidgets: true,
-                    lineDecorationsWidth: "1.0ch",
-                    renderLineHighlight: "none",
-                    renderFinalNewline: "on",
-                    overviewRulerLanes: 0,
-                    rulers: [],
-                    renderValidationDecorations: "off",
-                    scrollbar: {
-                        vertical: "hidden",
-                        useShadows: false,
-                        handleMouseWheel: false,
-                        alwaysConsumeMouseWheel: false,
-                    },
-                    fontFamily,
-                    fontSize,
-                    lineHeight,
-                    padding: { top: 4, bottom: 4 },
-                    // Enable suggestions/completions
-                    quickSuggestions: true,
-                    suggestOnTriggerCharacters: true,
-                    acceptSuggestionOnEnter: "on",
-                    tabCompletion: "on",
-                    // Also delete empty pairs restored from history or pasted in.
-                    autoClosingDelete: "always",
-                    emptySelectionClipboard: false,
-                    // Hover support
-                    hover: {
-                        enabled: "on",
-                        delay: 300,
-                    },
-                    // Parameter hints (signature help)
-                    parameterHints: {
-                        enabled: true,
-                        cycle: true,
-                    },
-                    // Line numbers options
-                    ...createLineNumbersOptions(),
+            codeEditorWidget = monaco.editor.create(codeEditorWidgetContainerRef, {
+                value: '',
+                language: initialLanguageId,
+                theme: themeData ? applyMonacoTheme(themeData) : getVSCodeTheme(),
+                minimap: { enabled: false },
+                scrollBeyondLastLine: false,
+                automaticLayout: false, // We handle layout manually
+                wordWrap: 'bounded',
+                wordWrapColumn: 2048,
+                glyphMargin: false,
+                folding: false,
+                fixedOverflowWidgets: true,
+                lineDecorationsWidth: '1.0ch',
+                renderLineHighlight: 'none',
+                renderFinalNewline: 'on',
+                overviewRulerLanes: 0,
+                rulers: [],
+                renderValidationDecorations: 'off',
+                scrollbar: {
+                    vertical: 'hidden',
+                    useShadows: false,
+                    handleMouseWheel: false,
+                    alwaysConsumeMouseWheel: false,
                 },
-            );
+                fontFamily,
+                fontSize,
+                lineHeight,
+                padding: { top: 4, bottom: 4 },
+                // Enable suggestions/completions
+                quickSuggestions: true,
+                suggestOnTriggerCharacters: true,
+                acceptSuggestionOnEnter: 'on',
+                tabCompletion: 'on',
+                // Also delete empty pairs restored from history or pasted in.
+                autoClosingDelete: 'always',
+                emptySelectionClipboard: false,
+                // Hover support
+                hover: {
+                    enabled: 'on',
+                    delay: 300,
+                },
+                // Parameter hints (signature help)
+                parameterHints: {
+                    enabled: true,
+                    cycle: true,
+                },
+                // Line numbers options
+                ...createLineNumbersOptions(),
+            });
 
             editorHost.setEditor(codeEditorWidget);
 
@@ -1357,8 +1235,7 @@
 
                     // Get current container width directly to avoid stale closure
                     const currentWidth =
-                        codeEditorWidgetContainerRef?.clientWidth ||
-                        codeEditorWidth;
+                        codeEditorWidgetContainerRef?.clientWidth || codeEditorWidth;
 
                     // Update editor layout
                     codeEditorWidget.layout({
@@ -1406,26 +1283,18 @@
                     consoleInstance.scrollBy(event.deltaX, event.deltaY);
                 };
 
-                editorDomNode.addEventListener(
-                    "wheel",
-                    forwardConsumedWheelToConsole,
-                    true,
-                );
-                editorDomNode.addEventListener(
-                    "wheel",
-                    forwardWheelToConsoleOnWeb,
-                    false,
-                );
+                editorDomNode.addEventListener('wheel', forwardConsumedWheelToConsole, true);
+                editorDomNode.addEventListener('wheel', forwardWheelToConsoleOnWeb, false);
 
                 disposables.push({
                     dispose: () => {
                         editorDomNode.removeEventListener(
-                            "wheel",
+                            'wheel',
                             forwardConsumedWheelToConsole,
                             true,
                         );
                         editorDomNode.removeEventListener(
-                            "wheel",
+                            'wheel',
                             forwardWheelToConsoleOnWeb,
                             false,
                         );
@@ -1437,10 +1306,7 @@
             disposables.push(
                 codeEditorWidget.onDidFocusEditorText(() => {
                     if (!activeRef.current) {
-                        onActivate(
-                            editorHost.getActiveSessionId() ||
-                                currentSessionId(),
-                        );
+                        onActivate(editorHost.getActiveSessionId() || currentSessionId());
                     }
                     scheduleScrollInputIntoView();
                 }),
@@ -1465,8 +1331,7 @@
             });
 
             // Initial layout using container width
-            const initialWidth =
-                codeEditorWidgetContainerRef.clientWidth || width;
+            const initialWidth = codeEditorWidgetContainerRef.clientWidth || width;
             codeEditorWidth = initialWidth;
             codeEditorWidget.layout({
                 width: initialWidth,
@@ -1475,9 +1340,7 @@
 
             // Get font info from Monaco and notify parent of character width (Positron pattern)
             // This uses Monaco's built-in font measurement which is more accurate than manual DOM measurement
-            const fontInfo = codeEditorWidget.getOption(
-                monaco.editor.EditorOption.fontInfo,
-            );
+            const fontInfo = codeEditorWidget.getOption(monaco.editor.EditorOption.fontInfo);
             const charWidth = fontInfo.spaceWidth;
             if (charWidth > 0) {
                 updateLineDecorationsWidthPx(charWidth);
@@ -1518,7 +1381,7 @@
             onSubmittingChanged?.(submittingSessionId, false);
         }
         activationEpoch += 1;
-        activationState = "idle";
+        activationState = 'idle';
         activatingSessionId = undefined;
 
         if (codeEditorWidget) {
@@ -1548,14 +1411,11 @@
 
         const targetSessionId = inputCommand.sessionId;
         const activeCommittedSessionId = committedSessionId;
-        const isActivationPending = activationState === "switching";
+        const isActivationPending = activationState === 'switching';
         handledCommandNonces.add(inputCommand.nonce);
 
-        if (inputCommand.command.kind === "cancelSubmission") {
-            cancelCodeSubmission(
-                targetSessionId,
-                inputCommand.command.skipHostRequest ?? false,
-            );
+        if (inputCommand.command.kind === 'cancelSubmission') {
+            cancelCodeSubmission(targetSessionId, inputCommand.command.skipHostRequest ?? false);
             return;
         }
 
@@ -1616,7 +1476,8 @@
 
         void ensureLanguageSupportRegistered(targetLanguageId).then(() => {
             if (
-                destroyed || !codeEditorWidget ||
+                destroyed ||
+                !codeEditorWidget ||
                 sessionId !== targetSessionId ||
                 currentLanguageId() !== targetLanguageId ||
                 languageAssetsVersion !== assetsVersion
@@ -1630,7 +1491,7 @@
 
     function getVSCodeTheme(): string {
         const fallbackTheme: ConsoleThemeData = {
-            base: "vs-dark",
+            base: 'vs-dark',
             rules: [],
         };
         return applyMonacoTheme(fallbackTheme);
@@ -1665,15 +1526,11 @@
         if (!model || !position) return false;
 
         const line = model.getLineContent(position.lineNumber);
-        return isTabSuggestContext(
-            line,
-            position.column,
-            !!selection && !selection.isEmpty(),
-        );
+        return isTabSuggestContext(line, position.column, !!selection && !selection.isEmpty());
     }
 
     function cancelSuggestWidget(): void {
-        codeEditorWidget.trigger("console", "hideSuggestWidget", null);
+        codeEditorWidget.trigger('console', 'hideSuggestWidget', null);
     }
 
     function moveHistoryBrowserSelection(delta: number): void {
@@ -1698,40 +1555,33 @@
         }
 
         const key = event.key.toLowerCase();
-        if (key !== "c" && key !== "x") {
+        if (key !== 'c' && key !== 'x') {
             return;
         }
 
         const isInterruptChord =
-            event.ctrlKey &&
-            !event.metaKey &&
-            !event.getModifierState("AltGraph");
-        if (key === "c" && isMacintosh && isInterruptChord) {
+            event.ctrlKey && !event.metaKey && !event.getModifierState('AltGraph');
+        if (key === 'c' && isMacintosh && isInterruptChord) {
             event.preventDefault();
             event.stopPropagation();
             interruptOrCancelSubmission();
             return;
         }
 
-        if (copyEditorSelection(codeEditorWidget, key === "x")) {
+        if (copyEditorSelection(codeEditorWidget, key === 'x')) {
             event.preventDefault();
             event.stopPropagation();
             return;
         }
 
-        if (key === "x") {
+        if (key === 'x') {
             // Console output is read-only, and an empty editor selection has
             // nothing to cut. Leave the event alone for any nested widget.
             return;
         }
 
-        const consoleInstance = codeEditorWidgetContainerRef?.closest(
-            ".console-instance",
-        );
-        if (
-            consoleInstance instanceof HTMLElement &&
-            copyScopedSelection(consoleInstance)
-        ) {
+        const consoleInstance = codeEditorWidgetContainerRef?.closest('.console-instance');
+        if (consoleInstance instanceof HTMLElement && copyScopedSelection(consoleInstance)) {
             event.preventDefault();
             event.stopPropagation();
             return;
@@ -1757,25 +1607,28 @@
         if (!activeRef.current) {
             onActivate(currentSessionId());
         }
-        if (stateRef.current !== "ready") {
+        if (stateRef.current !== 'ready') {
             if (!deferCodeEditorWidgetCodeUntilReady()) {
-                codeEditorWidget.trigger("keyboard", "type", { text: "\n" });
+                codeEditorWidget.trigger('keyboard', 'type', { text: '\n' });
             }
             return;
         }
         if (!(await executeCodeEditorWidgetCodeIfPossible())) {
-            codeEditorWidget.trigger("keyboard", "type", { text: "\n" });
+            codeEditorWidget.trigger('keyboard', 'type', { text: '\n' });
         }
     }
 
     function setupKeyBindings() {
         const editor = codeEditorWidget;
-        historyBrowserContext = editor.createContextKey<boolean>("consoleHistoryVisible", historyBrowserActive);
-        interruptContext = editor.createContextKey<boolean>("consoleCanInterrupt", false);
-        const firstLine = editor.createContextKey<boolean>("consoleInputFirstLine", false);
-        const lastLine = editor.createContextKey<boolean>("consoleInputLastLine", false);
-        const emptyInput = editor.createContextKey<boolean>("consoleInputEmpty", true);
-        const tabSuggest = editor.createContextKey<boolean>("consoleTabSuggest", false);
+        historyBrowserContext = editor.createContextKey<boolean>(
+            'consoleHistoryVisible',
+            historyBrowserActive,
+        );
+        interruptContext = editor.createContextKey<boolean>('consoleCanInterrupt', false);
+        const firstLine = editor.createContextKey<boolean>('consoleInputFirstLine', false);
+        const lastLine = editor.createContextKey<boolean>('consoleInputLastLine', false);
+        const emptyInput = editor.createContextKey<boolean>('consoleInputEmpty', true);
+        const tabSuggest = editor.createContextKey<boolean>('consoleTabSuggest', false);
         const updateInputContexts = () => {
             const model = editor.getModel();
             const position = editor.getPosition();
@@ -1803,80 +1656,178 @@
             keybindingContext: string,
             run: () => void | Promise<void>,
         ) => {
-            disposables.push(editor.addAction({
-                id: `console.${id}`,
-                label: localize(`console.action.${id}`, label),
-                keybindings,
-                precondition: "editorTextFocus",
-                keybindingContext,
-                run,
-            }));
+            disposables.push(
+                editor.addAction({
+                    id: `console.${id}`,
+                    label: localize(`console.action.${id}`, label),
+                    keybindings,
+                    precondition: 'editorTextFocus',
+                    keybindingContext,
+                    run,
+                }),
+            );
         };
         const commandKeys = (key: number) => [
             monaco.KeyMod.CtrlCmd | key,
             monaco.KeyMod.WinCtrl | key,
         ];
-        const noSuggestion = "!suggestWidgetVisible";
+        const noSuggestion = '!suggestWidgetVisible';
         const normalInput = `${noSuggestion} && !consoleHistoryVisible`;
         // Match Monaco's acceptSelectedSuggestion Enter condition, including its
         // precondition. Visibility alone also covers loading/empty suggestion
         // widgets, which cannot accept Enter and must not fall through to typing.
         const acceptsSuggestionOnEnter =
-            "suggestWidgetVisible && suggestWidgetHasFocusedSuggestion && textInputFocus && acceptSuggestionOnEnter && suggestionMakesTextEdit";
-        addAction("submit", "Submit Console Input", [monaco.KeyCode.Enter],
-            `!(${acceptsSuggestionOnEnter})`, submitInput);
-        addAction("newLine", "Insert Console Newline", [monaco.KeyMod.Shift | monaco.KeyCode.Enter], noSuggestion, () => {
-            editor.trigger("keyboard", "type", { text: "\n" });
-        });
-        addAction("tabSuggest", "Show Console Suggestions", [monaco.KeyCode.Tab],
-            `${normalInput} && consoleTabSuggest && !inSnippetMode && !inlineSuggestionVisible`, () => {
-                editor.trigger("console", "editor.action.triggerSuggest", null);
-            });
+            'suggestWidgetVisible && suggestWidgetHasFocusedSuggestion && textInputFocus && acceptSuggestionOnEnter && suggestionMakesTextEdit';
+        addAction(
+            'submit',
+            'Submit Console Input',
+            [monaco.KeyCode.Enter],
+            `!(${acceptsSuggestionOnEnter})`,
+            submitInput,
+        );
+        addAction(
+            'newLine',
+            'Insert Console Newline',
+            [monaco.KeyMod.Shift | monaco.KeyCode.Enter],
+            noSuggestion,
+            () => {
+                editor.trigger('keyboard', 'type', { text: '\n' });
+            },
+        );
+        addAction(
+            'tabSuggest',
+            'Show Console Suggestions',
+            [monaco.KeyCode.Tab],
+            `${normalInput} && consoleTabSuggest && !inSnippetMode && !inlineSuggestionVisible`,
+            () => {
+                editor.trigger('console', 'editor.action.triggerSuggest', null);
+            },
+        );
         // Enter accepts history through submitInput after native completion routing.
-        addAction("acceptHistory", "Accept Console History", [monaco.KeyCode.Tab],
-            `${noSuggestion} && consoleHistoryVisible`, () => acceptHistoryMatch(historyBrowserSelectedIndex));
-        addAction("previousHistory", "Previous Console History", [monaco.KeyCode.UpArrow],
-            `${normalInput} && consoleInputFirstLine`, navigateHistoryUp);
-        addAction("nextHistory", "Next Console History", [monaco.KeyCode.DownArrow],
-            `${normalInput} && consoleInputLastLine`, navigateHistoryDown);
-        addAction("previousHistoryMatch", "Previous Console History Match", [monaco.KeyCode.UpArrow],
-            `${noSuggestion} && consoleHistoryVisible`, () => moveHistoryBrowserSelection(-1));
-        addAction("nextHistoryMatch", "Next Console History Match", [monaco.KeyCode.DownArrow],
-            `${noSuggestion} && consoleHistoryVisible`, () => moveHistoryBrowserSelection(1));
-        addAction("searchHistoryPrefix", "Search Console History by Prefix", commandKeys(monaco.KeyCode.UpArrow), normalInput, () => {
-            engageHistoryBrowser(new HistoryPrefixMatchStrategy(historyEntries));
-        });
+        addAction(
+            'acceptHistory',
+            'Accept Console History',
+            [monaco.KeyCode.Tab],
+            `${noSuggestion} && consoleHistoryVisible`,
+            () => acceptHistoryMatch(historyBrowserSelectedIndex),
+        );
+        addAction(
+            'previousHistory',
+            'Previous Console History',
+            [monaco.KeyCode.UpArrow],
+            `${normalInput} && consoleInputFirstLine`,
+            navigateHistoryUp,
+        );
+        addAction(
+            'nextHistory',
+            'Next Console History',
+            [monaco.KeyCode.DownArrow],
+            `${normalInput} && consoleInputLastLine`,
+            navigateHistoryDown,
+        );
+        addAction(
+            'previousHistoryMatch',
+            'Previous Console History Match',
+            [monaco.KeyCode.UpArrow],
+            `${noSuggestion} && consoleHistoryVisible`,
+            () => moveHistoryBrowserSelection(-1),
+        );
+        addAction(
+            'nextHistoryMatch',
+            'Next Console History Match',
+            [monaco.KeyCode.DownArrow],
+            `${noSuggestion} && consoleHistoryVisible`,
+            () => moveHistoryBrowserSelection(1),
+        );
+        addAction(
+            'searchHistoryPrefix',
+            'Search Console History by Prefix',
+            commandKeys(monaco.KeyCode.UpArrow),
+            normalInput,
+            () => {
+                engageHistoryBrowser(new HistoryPrefixMatchStrategy(historyEntries));
+            },
+        );
         if (!isMacintosh) {
-            addAction("searchHistory", "Search Console History", [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyR], "", () => {
-                engageHistoryBrowser(new HistoryInfixMatchStrategy(historyEntries));
-            });
+            addAction(
+                'searchHistory',
+                'Search Console History',
+                [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyR],
+                '',
+                () => {
+                    engageHistoryBrowser(new HistoryInfixMatchStrategy(historyEntries));
+                },
+            );
         }
-        addAction("deleteAllLeft", "Delete Console Input to Line Start", commandKeys(monaco.KeyCode.KeyU), "", () => {
-            // Preserve the Console's line-start no-op instead of joining lines.
-            if (editor.getSelections()?.some((selection) => selection.isEmpty() && selection.positionColumn === 1)) {
-                return;
-            }
-            editor.trigger("console", "deleteAllLeft", null);
-        });
-        addAction("selectOutput", "Select All Console Output", commandKeys(monaco.KeyCode.KeyA), "consoleInputEmpty", onSelectAll);
-        addAction("find", "Find in Console", commandKeys(monaco.KeyCode.KeyF), "", () => onOpenSearch?.(currentSessionId()));
-        addAction("insertPipe", "Insert Pipe Operator", commandKeys(monaco.KeyMod.Shift | monaco.KeyCode.KeyM), "", () => {
-            editor.trigger("keyboard", "type", { text: " |> " });
-        });
-        addAction("clear", "Clear Console", commandKeys(monaco.KeyCode.KeyL), "", () => onClearConsole?.(currentSessionId()));
-        addAction("insertAssignment", "Insert Assignment Operator", [monaco.KeyMod.Alt | monaco.KeyCode.Minus], "", () => {
-            editor.trigger("keyboard", "type", { text: " <- " });
-        });
-        addAction("closeHistory", "Close Console History", [monaco.KeyCode.Escape],
-            `${noSuggestion} && consoleHistoryVisible`, disengageHistoryBrowser);
-        addAction("interrupt", "Interrupt Execution", [monaco.KeyCode.Escape],
-            `${normalInput} && consoleCanInterrupt && !inSnippetMode && !parameterHintsVisible && !editorHoverVisible`, interruptOrCancelSubmission);
+        addAction(
+            'deleteAllLeft',
+            'Delete Console Input to Line Start',
+            commandKeys(monaco.KeyCode.KeyU),
+            '',
+            () => {
+                // Preserve the Console's line-start no-op instead of joining lines.
+                if (
+                    editor
+                        .getSelections()
+                        ?.some((selection) => selection.isEmpty() && selection.positionColumn === 1)
+                ) {
+                    return;
+                }
+                editor.trigger('console', 'deleteAllLeft', null);
+            },
+        );
+        addAction(
+            'selectOutput',
+            'Select All Console Output',
+            commandKeys(monaco.KeyCode.KeyA),
+            'consoleInputEmpty',
+            onSelectAll,
+        );
+        addAction('find', 'Find in Console', commandKeys(monaco.KeyCode.KeyF), '', () =>
+            onOpenSearch?.(currentSessionId()),
+        );
+        addAction(
+            'insertPipe',
+            'Insert Pipe Operator',
+            commandKeys(monaco.KeyMod.Shift | monaco.KeyCode.KeyM),
+            '',
+            () => {
+                editor.trigger('keyboard', 'type', { text: ' |> ' });
+            },
+        );
+        addAction('clear', 'Clear Console', commandKeys(monaco.KeyCode.KeyL), '', () =>
+            onClearConsole?.(currentSessionId()),
+        );
+        addAction(
+            'insertAssignment',
+            'Insert Assignment Operator',
+            [monaco.KeyMod.Alt | monaco.KeyCode.Minus],
+            '',
+            () => {
+                editor.trigger('keyboard', 'type', { text: ' <- ' });
+            },
+        );
+        addAction(
+            'closeHistory',
+            'Close Console History',
+            [monaco.KeyCode.Escape],
+            `${noSuggestion} && consoleHistoryVisible`,
+            disengageHistoryBrowser,
+        );
+        addAction(
+            'interrupt',
+            'Interrupt Execution',
+            [monaco.KeyCode.Escape],
+            `${normalInput} && consoleCanInterrupt && !inSnippetMode && !parameterHintsVisible && !editorHoverVisible`,
+            interruptOrCancelSubmission,
+        );
 
         // Clipboard capture also handles output selection and Ctrl+C interrupt.
         const boundary = codeEditorWidgetContainerRef;
-        boundary.addEventListener("keydown", handleEditorClipboardKeyDown, true);
+        boundary.addEventListener('keydown', handleEditorClipboardKeyDown, true);
         disposables.push({
-            dispose: () => boundary.removeEventListener("keydown", handleEditorClipboardKeyDown, true),
+            dispose: () =>
+                boundary.removeEventListener('keydown', handleEditorClipboardKeyDown, true),
         });
     }
 
@@ -1895,22 +1846,22 @@
                 // Active session: enable the editor without stealing focus.
                 if (editorDomNode) {
                     // Restore pointer events and visibility
-                    editorDomNode.style.pointerEvents = "";
-                    editorDomNode.style.visibility = "";
+                    editorDomNode.style.pointerEvents = '';
+                    editorDomNode.style.visibility = '';
                 }
             } else {
                 // Inactive session: completely disable the editor to prevent keyboard capture
                 if (editorDomNode) {
                     // Prevent all pointer events and hide visually
-                    editorDomNode.style.pointerEvents = "none";
+                    editorDomNode.style.pointerEvents = 'none';
                     // Use visibility:hidden instead of display:none to maintain layout
                     // but prevent keyboard focus
-                    editorDomNode.style.visibility = "hidden";
+                    editorDomNode.style.visibility = 'hidden';
                 }
                 // Explicitly blur to prevent hidden editors capturing keys
                 const domNode = codeEditorWidget.getDomNode();
                 domNode?.blur();
-                const inputArea = domNode?.querySelector("textarea");
+                const inputArea = domNode?.querySelector('textarea');
                 if (inputArea instanceof HTMLElement) {
                     inputArea.blur();
                 }
@@ -1935,17 +1886,13 @@
         });
     }}
 >
-    <div
-        class="code-editor-widget-container"
-        bind:this={codeEditorWidgetContainerRef}
-    ></div>
+    <div class="code-editor-widget-container" bind:this={codeEditorWidgetContainerRef}></div>
 
     {#if historyBrowserActive}
         <HistoryBrowserPopup
             items={historyItems}
             selectedIndex={historyBrowserSelectedIndex}
-            bottomPx={codeEditorWidgetContainerRef?.getBoundingClientRect()
-                .height ?? 30}
+            bottomPx={codeEditorWidgetContainerRef?.getBoundingClientRect().height ?? 30}
             leftPx={24}
             onSelected={acceptHistoryMatch}
             onDismissed={disengageHistoryBrowser}
@@ -2010,10 +1957,7 @@
             var(--vscode-editorWidget-foreground)
         ) !important;
         border: 1px solid
-            var(
-                --vscode-editorHoverWidget-border,
-                var(--vscode-editorWidget-border, transparent)
-            ) !important;
+            var(--vscode-editorHoverWidget-border, var(--vscode-editorWidget-border, transparent)) !important;
     }
 
     :global(.monaco-editor .monaco-hover .hover-row),
@@ -2032,10 +1976,7 @@
     :global(.monaco-editor .monaco-hover .hover-row .actions) {
         background-color: var(
             --vscode-editorHoverWidget-statusBarBackground,
-            var(
-                --vscode-editorHoverWidget-background,
-                var(--vscode-editorWidget-background)
-            )
+            var(--vscode-editorHoverWidget-background, var(--vscode-editorWidget-background))
         ) !important;
     }
 
@@ -2050,15 +1991,10 @@
             var(--vscode-editorWidget-foreground)
         ) !important;
         border: 1px solid
-            var(
-                --vscode-editorSuggestWidget-border,
-                var(--vscode-editorWidget-border, transparent)
-            ) !important;
+            var(--vscode-editorSuggestWidget-border, var(--vscode-editorWidget-border, transparent)) !important;
     }
 
-    :global(
-            .monaco-editor .suggest-widget .monaco-list .monaco-list-row.focused
-        ) {
+    :global(.monaco-editor .suggest-widget .monaco-list .monaco-list-row.focused) {
         background-color: var(
             --vscode-editorSuggestWidget-selectedBackground,
             var(--vscode-list-activeSelectionBackground)
@@ -2079,10 +2015,7 @@
             var(--vscode-editorWidget-foreground)
         ) !important;
         border-left: 1px solid
-            var(
-                --vscode-editorSuggestWidget-border,
-                var(--vscode-editorWidget-border, transparent)
-            ) !important;
+            var(--vscode-editorSuggestWidget-border, var(--vscode-editorWidget-border, transparent)) !important;
     }
 
     /* Parameter hints / signature help widget */
@@ -2096,10 +2029,7 @@
             var(--vscode-editorWidget-foreground)
         ) !important;
         border: 1px solid
-            var(
-                --vscode-editorHoverWidget-border,
-                var(--vscode-editorWidget-border, transparent)
-            ) !important;
+            var(--vscode-editorHoverWidget-border, var(--vscode-editorWidget-border, transparent)) !important;
     }
 
     :global(.monaco-editor .parameter-hints-widget .signature) {
@@ -2115,10 +2045,7 @@
             --vscode-menu-background,
             var(--vscode-editorWidget-background)
         ) !important;
-        color: var(
-            --vscode-menu-foreground,
-            var(--vscode-editorWidget-foreground)
-        ) !important;
+        color: var(--vscode-menu-foreground, var(--vscode-editorWidget-foreground)) !important;
     }
 
     :global(.monaco-editor .rename-box) {

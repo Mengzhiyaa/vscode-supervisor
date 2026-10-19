@@ -1,11 +1,11 @@
 <script lang="ts">
-    import { onMount } from "svelte";
-    import { getRpcConnection } from "$lib/rpc/client";
-    import ActionBarButton from "../shared/ActionBarButton.svelte";
-    import ActionBarSeparator from "../shared/ActionBarSeparator.svelte";
-    import ActionBarMenuButton from "../shared/ActionBarMenuButton.svelte";
-    import ContextMenu from "../shared/ContextMenu.svelte";
-    import { localize } from "$lib/localization";
+    import { onMount } from 'svelte';
+    import { getRpcConnection } from '$lib/rpc/client';
+    import ActionBarButton from '../shared/ActionBarButton.svelte';
+    import ActionBarSeparator from '../shared/ActionBarSeparator.svelte';
+    import ActionBarMenuButton from '../shared/ActionBarMenuButton.svelte';
+    import ContextMenu from '../shared/ContextMenu.svelte';
+    import { localize } from '$lib/localization';
 
     interface HelpEntryState {
         entryId?: string;
@@ -44,7 +44,7 @@
 
     let iframeEl = $state<HTMLIFrameElement | null>(null);
     let pendingScroll = { x: 0, y: 0 };
-    let loadState = $state<"idle" | "loading" | "ready" | "error">("idle");
+    let loadState = $state<'idle' | 'loading' | 'ready' | 'error'>('idle');
     let reloadVersion = $state(0);
     let loadTimer: ReturnType<typeof setTimeout> | undefined;
     let pendingFocus = false;
@@ -53,11 +53,11 @@
     let contextMenu = $state<{ x: number; y: number; selection: string } | null>(null);
 
     let findVisible = $state(false);
-    let findValue = $state("");
+    let findValue = $state('');
     let findHasResult = $state(true);
 
     const currentTitle = $derived(
-        currentEntry?.title || (currentEntry?.isWelcome ? "Welcome" : "Help"),
+        currentEntry?.title || (currentEntry?.isWelcome ? 'Welcome' : 'Help'),
     );
 
     const currentIndex = $derived.by(() => {
@@ -83,7 +83,7 @@
         const computed = getComputedStyle(document.documentElement);
         for (let i = 0; i < computed.length; i++) {
             const name = computed[i];
-            if (name.startsWith("--vscode-")) {
+            if (name.startsWith('--vscode-')) {
                 const value = computed.getPropertyValue(name).trim();
                 if (value) {
                     styles[name.slice(2)] = value;
@@ -91,8 +91,8 @@
             }
         }
         currentStyles = styles;
-        connection.sendNotification("help/styles", { styles });
-        postToIframe({ id: "positron-help-styles", styles });
+        connection.sendNotification('help/styles', { styles });
+        postToIframe({ id: 'positron-help-styles', styles });
     }
 
     function clearLoadTimer(): void {
@@ -104,10 +104,10 @@
 
     function beginLoading(): void {
         clearLoadTimer();
-        loadState = "loading";
+        loadState = 'loading';
         loadTimer = setTimeout(() => {
             loadTimer = undefined;
-            loadState = "error";
+            loadState = 'error';
         }, 15000);
     }
 
@@ -120,117 +120,125 @@
 
     function handleLoadError(): void {
         clearLoadTimer();
-        loadState = "error";
+        loadState = 'error';
     }
 
     function focusContent(): void {
         pendingFocus = true;
-        if (loadState !== "ready" || !iframeEl) {
+        if (loadState !== 'ready' || !iframeEl) {
             return;
         }
         pendingFocus = false;
-        postToIframe({ id: "positron-help-focus" });
+        postToIframe({ id: 'positron-help-focus' });
         iframeEl.focus();
     }
 
     function postToIframe(message: Record<string, unknown>): void {
         if (iframeEl?.contentWindow) {
-            iframeEl.contentWindow.postMessage(message, "*");
+            iframeEl.contentWindow.postMessage(message, '*');
         }
     }
 
     function handleIframeMessage(message: IframeMessage): void {
         switch (message.id) {
-            case "positron-help-complete":
+            case 'positron-help-complete':
                 clearLoadTimer();
-                loadState = "ready";
-                postToIframe({ id: "positron-help-styles", styles: currentStyles });
+                loadState = 'ready';
+                postToIframe({ id: 'positron-help-styles', styles: currentStyles });
                 if (message.title) {
-                    connection.sendNotification("help/complete", {
+                    connection.sendNotification('help/complete', {
                         entryId: currentEntry?.entryId,
                         title: message.title,
                     });
                 }
                 if (pendingScroll.x || pendingScroll.y) {
                     postToIframe({
-                        id: "positron-help-scroll-to",
+                        id: 'positron-help-scroll-to',
                         scrollX: pendingScroll.x,
                         scrollY: pendingScroll.y,
                     });
                 }
                 pendingScroll = { x: 0, y: 0 };
                 if (findVisible && findValue) {
-                    postToIframe({ id: "positron-help-update-find", findValue });
+                    postToIframe({ id: 'positron-help-update-find', findValue });
                 }
                 if (pendingFocus) {
                     focusContent();
                 }
                 break;
-            case "positron-help-scroll":
-                connection.sendNotification("help/scroll", {
+            case 'positron-help-scroll':
+                connection.sendNotification('help/scroll', {
                     entryId: currentEntry?.entryId,
                     scrollX: message.scrollX || 0,
                     scrollY: message.scrollY || 0,
                 });
                 break;
-            case "positron-help-navigate":
+            case 'positron-help-navigate':
                 if (message.url) {
-                    connection.sendNotification("help/navigate", { entryId: currentEntry?.entryId, url: message.url });
+                    connection.sendNotification('help/navigate', {
+                        entryId: currentEntry?.entryId,
+                        url: message.url,
+                    });
                 }
                 break;
-            case "positron-help-navigate-backward":
-                connection.sendNotification("help/navigateBackward", {});
+            case 'positron-help-navigate-backward':
+                connection.sendNotification('help/navigateBackward', {});
                 break;
-            case "positron-help-navigate-forward":
-                connection.sendNotification("help/navigateForward", {});
+            case 'positron-help-navigate-forward':
+                connection.sendNotification('help/navigateForward', {});
                 break;
-            case "positron-help-find-result":
+            case 'positron-help-find-result':
                 findHasResult = Boolean(message.findResult);
                 break;
-            case "positron-help-keydown":
-                if ((message.metaKey || message.ctrlKey) && message.code === "KeyC") {
-                    postToIframe({ id: "positron-help-copy-selection" });
+            case 'positron-help-keydown':
+                if ((message.metaKey || message.ctrlKey) && message.code === 'KeyC') {
+                    postToIframe({ id: 'positron-help-copy-selection' });
                 } else if (
                     (message.metaKey || message.ctrlKey) &&
                     !message.altKey &&
-                    message.code === "KeyF"
+                    message.code === 'KeyF'
                 ) {
                     showFind();
-                } else if (message.altKey && !message.ctrlKey && !message.metaKey && !message.shiftKey) {
-                    if (message.code === "ArrowLeft" && canNavigateBackward) navigateBackward();
-                    if (message.code === "ArrowRight" && canNavigateForward) navigateForward();
-                } else if (message.code === "Escape" && findVisible) {
+                } else if (
+                    message.altKey &&
+                    !message.ctrlKey &&
+                    !message.metaKey &&
+                    !message.shiftKey
+                ) {
+                    if (message.code === 'ArrowLeft' && canNavigateBackward) navigateBackward();
+                    if (message.code === 'ArrowRight' && canNavigateForward) navigateForward();
+                } else if (message.code === 'Escape' && findVisible) {
                     closeFind();
-                } else if (message.code === "F3") {
+                } else if (message.code === 'F3') {
                     if (!findVisible) showFind();
                     else if (message.shiftKey) findPrevious();
                     else findNext();
                 }
                 break;
-            case "positron-help-context-menu": {
+            case 'positron-help-context-menu': {
                 const rect = iframeEl?.getBoundingClientRect();
                 if (rect) {
                     contextMenu = {
                         x: rect.left + (Number(message.clientX) || 0),
                         y: rect.top + (Number(message.clientY) || 0),
-                        selection: typeof message.selection === "string" ? message.selection : "",
+                        selection: typeof message.selection === 'string' ? message.selection : '',
                     };
                 }
                 break;
             }
-            case "positron-help-pointer-down":
+            case 'positron-help-pointer-down':
                 contextMenu = null;
                 break;
-            case "positron-help-copy-selection":
+            case 'positron-help-copy-selection':
                 if (message.selection) {
-                    connection.sendNotification("help/copySelection", {
+                    connection.sendNotification('help/copySelection', {
                         selection: message.selection,
                     });
                 }
                 break;
-            case "positron-help-execute-command":
+            case 'positron-help-execute-command':
                 if (message.command) {
-                    connection.sendNotification("help/executeCommand", {
+                    connection.sendNotification('help/executeCommand', {
                         command: message.command,
                     });
                 }
@@ -243,7 +251,7 @@
     function handleWindowMessage(event: MessageEvent): void {
         if (event.source === iframeEl?.contentWindow) {
             const data = event.data as IframeMessage;
-            if (data?.id && data.id.startsWith("positron-help-")) {
+            if (data?.id && data.id.startsWith('positron-help-')) {
                 handleIframeMessage(data);
             }
         }
@@ -274,49 +282,52 @@
 
     onMount(() => {
         const subscriptions = [
-        connection.onNotification("help/state", (params: HelpStateParams) => {
-            const previousUrl = currentEntry?.sourceUrl;
-            const previousEntryId = currentEntry?.entryId;
-            currentEntry = params.entry;
-            if (currentEntry?.entryId !== previousEntryId) contextMenu = null;
-            history = params.history || [];
-            canNavigateBackward = params.canNavigateBackward;
-            canNavigateForward = params.canNavigateForward;
+            connection.onNotification('help/state', (params: HelpStateParams) => {
+                const previousUrl = currentEntry?.sourceUrl;
+                const previousEntryId = currentEntry?.entryId;
+                currentEntry = params.entry;
+                if (currentEntry?.entryId !== previousEntryId) contextMenu = null;
+                history = params.history || [];
+                canNavigateBackward = params.canNavigateBackward;
+                canNavigateForward = params.canNavigateForward;
 
-            pendingScroll = {
-                x: currentEntry?.scrollX || 0,
-                y: currentEntry?.scrollY || 0,
-            };
+                pendingScroll = {
+                    x: currentEntry?.scrollX || 0,
+                    y: currentEntry?.scrollY || 0,
+                };
 
-            if (!currentEntry || currentEntry.isWelcome) {
-                clearLoadTimer();
-                loadState = "idle";
-                pendingFocus = false;
-                retryRequested = false;
-                findVisible = false;
-                findValue = "";
-            } else if (currentEntry.sourceUrl !== previousUrl || currentEntry.entryId !== previousEntryId) {
-                retryRequested = false;
-                beginLoading();
-            } else if (retryRequested || loadState === "error") {
-                // A repeated help request may deliberately revisit the same topic.
-                retryRequested = false;
-                beginLoading();
-                reloadVersion++;
-            }
-        }),
+                if (!currentEntry || currentEntry.isWelcome) {
+                    clearLoadTimer();
+                    loadState = 'idle';
+                    pendingFocus = false;
+                    retryRequested = false;
+                    findVisible = false;
+                    findValue = '';
+                } else if (
+                    currentEntry.sourceUrl !== previousUrl ||
+                    currentEntry.entryId !== previousEntryId
+                ) {
+                    retryRequested = false;
+                    beginLoading();
+                } else if (retryRequested || loadState === 'error') {
+                    // A repeated help request may deliberately revisit the same topic.
+                    retryRequested = false;
+                    beginLoading();
+                    reloadVersion++;
+                }
+            }),
 
-        connection.onNotification("help/themeChanged", () => {
-            sendStyles();
-        }),
+            connection.onNotification('help/themeChanged', () => {
+                sendStyles();
+            }),
 
-        connection.onNotification("help/find", () => {
-            showFind();
-        }),
+            connection.onNotification('help/find', () => {
+                showFind();
+            }),
 
-        connection.onNotification("help/focus", () => {
-            focusContent();
-        }),
+            connection.onNotification('help/focus', () => {
+                focusContent();
+            }),
         ];
 
         sendStyles();
@@ -330,24 +341,24 @@
 
     function openHistory(index: number): void {
         if (index >= 0) {
-            connection.sendNotification("help/openHistory", { index });
+            connection.sendNotification('help/openHistory', { index });
         }
     }
 
     function navigateBackward(): void {
-        connection.sendNotification("help/navigateBackward", {});
+        connection.sendNotification('help/navigateBackward', {});
     }
 
     function navigateForward(): void {
-        connection.sendNotification("help/navigateForward", {});
+        connection.sendNotification('help/navigateForward', {});
     }
 
     function showWelcome(): void {
-        connection.sendNotification("help/showWelcome", {});
+        connection.sendNotification('help/showWelcome', {});
     }
 
     function openExternal(url: string): void {
-        connection.sendNotification("help/navigate", { entryId: currentEntry?.entryId, url });
+        connection.sendNotification('help/navigate', { entryId: currentEntry?.entryId, url });
     }
 
     function showFind(): void {
@@ -358,7 +369,7 @@
         findVisible = true;
         pendingFocus = false;
         setTimeout(() => {
-            const input = document.getElementById("help-find-input") as HTMLInputElement | null;
+            const input = document.getElementById('help-find-input') as HTMLInputElement | null;
             input?.focus();
             input?.select();
         }, 0);
@@ -366,33 +377,33 @@
 
     function closeFind(): void {
         findVisible = false;
-        findValue = "";
-        postToIframe({ id: "positron-help-update-find", findValue: undefined });
+        findValue = '';
+        postToIframe({ id: 'positron-help-update-find', findValue: undefined });
         iframeEl?.focus();
-        postToIframe({ id: "positron-help-focus" });
+        postToIframe({ id: 'positron-help-focus' });
     }
 
     function updateFind(value: string): void {
         findValue = value;
-        postToIframe({ id: "positron-help-update-find", findValue: value });
+        postToIframe({ id: 'positron-help-update-find', findValue: value });
     }
 
     function findNext(): void {
-        postToIframe({ id: "positron-help-find-next", findValue });
+        postToIframe({ id: 'positron-help-find-next', findValue });
     }
 
     function findPrevious(): void {
-        postToIframe({ id: "positron-help-find-previous", findValue });
+        postToIframe({ id: 'positron-help-find-previous', findValue });
     }
 
     function handleFindKeydown(event: KeyboardEvent): void {
-        if (event.key === "Enter") {
+        if (event.key === 'Enter') {
             if (event.shiftKey) {
                 findPrevious();
             } else {
                 findNext();
             }
-        } else if (event.key === "Escape") {
+        } else if (event.key === 'Escape') {
             closeFind();
         }
     }
@@ -400,15 +411,15 @@
 
 <svelte:window onmessage={handleWindowMessage} onkeydown={handleHelpShortcut} />
 
-<div
-    class="help-root"
-    role="region"
-    aria-label={localize('help.region', 'Help')}
->
+<div class="help-root" role="region" aria-label={localize('help.region', 'Help')}>
     <!-- Action Bar Container - Two rows like Positron -->
     <div class="action-bars-container">
         <!-- Row 1: Navigation buttons -->
-        <div class="action-bar positron-action-bar border-top border-bottom" role="toolbar" aria-label={localize('help.navigation', 'Help navigation')}>
+        <div
+            class="action-bar positron-action-bar border-top border-bottom"
+            role="toolbar"
+            aria-label={localize('help.navigation', 'Help navigation')}
+        >
             <ActionBarButton
                 icon="arrow-left"
                 ariaLabel={localize('help.previousTopic', 'Previous topic')}
@@ -435,22 +446,27 @@
         </div>
 
         <!-- Row 2: History dropdown + Find button -->
-        <div class="action-bar positron-action-bar border-bottom" role="toolbar" aria-label={localize('help.topicActions', 'Help topic actions')}>
+        <div
+            class="action-bar positron-action-bar border-bottom"
+            role="toolbar"
+            aria-label={localize('help.topicActions', 'Help topic actions')}
+        >
             <div class="action-bar-region left">
                 {#if currentTitle && !currentEntry?.isWelcome}
                     <ActionBarMenuButton
                         label={currentTitle}
                         tooltip={localize('help.history', 'Help history')}
                         ariaLabel={localize('help.history', 'Help history')}
-                        actions={() => [...history].reverse().map((entry, idx) => {
-                            const realIndex = history.length - 1 - idx;
-                            return {
-                                id: `history-${realIndex}`,
-                                label: entry.title || shortenUrl(entry.sourceUrl),
-                                checked: realIndex === currentIndex,
-                                onSelected: () => openHistory(realIndex),
-                            };
-                        })}
+                        actions={() =>
+                            [...history].reverse().map((entry, idx) => {
+                                const realIndex = history.length - 1 - idx;
+                                return {
+                                    id: `history-${realIndex}`,
+                                    label: entry.title || shortenUrl(entry.sourceUrl),
+                                    checked: realIndex === currentIndex,
+                                    onSelected: () => openHistory(realIndex),
+                                };
+                            })}
                     />
                 {:else if currentEntry?.isWelcome}
                     <span class="welcome-title">{localize('common.welcome', 'Welcome')}</span>
@@ -484,16 +500,33 @@
                     onkeydown={handleFindKeydown}
                 />
                 {#if findValue && !findHasResult}
-                    <span class="find-no-results" role="status" aria-live="polite">{localize('common.noResults', 'No results')}</span>
+                    <span class="find-no-results" role="status" aria-live="polite"
+                        >{localize('common.noResults', 'No results')}</span
+                    >
                 {/if}
             </div>
-            <button class="find-action" onclick={findPrevious} title={localize('common.previousMatch', 'Previous match')} aria-label={localize('common.previousMatch', 'Previous match')}>
+            <button
+                class="find-action"
+                onclick={findPrevious}
+                title={localize('common.previousMatch', 'Previous match')}
+                aria-label={localize('common.previousMatch', 'Previous match')}
+            >
                 <span class="codicon codicon-arrow-up"></span>
             </button>
-            <button class="find-action" onclick={findNext} title={localize('common.nextMatch', 'Next match')} aria-label={localize('common.nextMatch', 'Next match')}>
+            <button
+                class="find-action"
+                onclick={findNext}
+                title={localize('common.nextMatch', 'Next match')}
+                aria-label={localize('common.nextMatch', 'Next match')}
+            >
                 <span class="codicon codicon-arrow-down"></span>
             </button>
-            <button class="find-action" onclick={closeFind} title={localize('common.close', 'Close')} aria-label={localize('common.close', 'Close')}>
+            <button
+                class="find-action"
+                onclick={closeFind}
+                title={localize('common.close', 'Close')}
+                aria-label={localize('common.close', 'Close')}
+            >
                 <span class="codicon codicon-close"></span>
             </button>
         </div>
@@ -508,33 +541,81 @@
                     <div class="welcome-logo-text">Positron Help</div>
 
                     <ul class="welcome-links">
-                        <li><a href="https://positron.posit.co/" onclick={(e) => { e.preventDefault(); openExternal("https://positron.posit.co/"); }}>Positron Documentation</a></li>
-                        <li><a href="https://github.com/posit-dev/positron/discussions" onclick={(e) => { e.preventDefault(); openExternal("https://github.com/posit-dev/positron/discussions"); }}>Positron Community Forum</a></li>
+                        <li>
+                            <a
+                                href="https://positron.posit.co/"
+                                onclick={(e) => {
+                                    e.preventDefault();
+                                    openExternal('https://positron.posit.co/');
+                                }}>Positron Documentation</a
+                            >
+                        </li>
+                        <li>
+                            <a
+                                href="https://github.com/posit-dev/positron/discussions"
+                                onclick={(e) => {
+                                    e.preventDefault();
+                                    openExternal(
+                                        'https://github.com/posit-dev/positron/discussions',
+                                    );
+                                }}>Positron Community Forum</a
+                            >
+                        </li>
                         <li class="link-spacer"></li>
-                        <li><a href="https://posit.co/resources/cheatsheets/" onclick={(e) => { e.preventDefault(); openExternal("https://posit.co/resources/cheatsheets/"); }}>Posit Cheat Sheets</a></li>
-                        <li><a href="https://posit.co/products/" onclick={(e) => { e.preventDefault(); openExternal("https://posit.co/products/"); }}>Posit Products</a></li>
-                        <li><a href="https://cran.r-project.org/doc/manuals/r-release/R-intro.html" onclick={(e) => { e.preventDefault(); openExternal("https://cran.r-project.org/doc/manuals/r-release/R-intro.html"); }}>R Introduction</a></li>
+                        <li>
+                            <a
+                                href="https://posit.co/resources/cheatsheets/"
+                                onclick={(e) => {
+                                    e.preventDefault();
+                                    openExternal('https://posit.co/resources/cheatsheets/');
+                                }}>Posit Cheat Sheets</a
+                            >
+                        </li>
+                        <li>
+                            <a
+                                href="https://posit.co/products/"
+                                onclick={(e) => {
+                                    e.preventDefault();
+                                    openExternal('https://posit.co/products/');
+                                }}>Posit Products</a
+                            >
+                        </li>
+                        <li>
+                            <a
+                                href="https://cran.r-project.org/doc/manuals/r-release/R-intro.html"
+                                onclick={(e) => {
+                                    e.preventDefault();
+                                    openExternal(
+                                        'https://cran.r-project.org/doc/manuals/r-release/R-intro.html',
+                                    );
+                                }}>R Introduction</a
+                            >
+                        </li>
                     </ul>
                 </div>
             </div>
         {:else}
             {#key `${currentEntry.entryId}:${currentEntry.sourceUrl}:${reloadVersion}`}
-            <iframe
-                class="help-frame"
-                bind:this={iframeEl}
-                src={currentEntry.sourceUrl}
-                title={currentTitle}
-                onerror={handleLoadError}
-            ></iframe>
+                <iframe
+                    class="help-frame"
+                    bind:this={iframeEl}
+                    src={currentEntry.sourceUrl}
+                    title={currentTitle}
+                    onerror={handleLoadError}
+                ></iframe>
             {/key}
-            {#if loadState === "loading"}
+            {#if loadState === 'loading'}
                 <div class="help-load-status" role="status">
                     {localize('common.loading', 'Loading')}
                 </div>
-            {:else if loadState === "error"}
+            {:else if loadState === 'error'}
                 <div class="help-load-status help-load-error" role="alert">
-                    <span>{localize('help.loadFailed', 'Help content did not finish loading.')}</span>
-                    <button type="button" onclick={retryLoad}>{localize('help.retry', 'Try Again')}</button>
+                    <span
+                        >{localize('help.loadFailed', 'Help content did not finish loading.')}</span
+                    >
+                    <button type="button" onclick={retryLoad}
+                        >{localize('help.retry', 'Try Again')}</button
+                    >
                 </div>
             {/if}
         {/if}
@@ -546,13 +627,17 @@
     <ContextMenu
         anchorEl={iframeEl}
         anchorPoint={contextMenu}
-        entries={[{
-            id: 'copy',
-            label: localize('common.copy', 'Copy'),
-            disabled: !selection,
-            onSelected: () => connection.sendNotification('help/copySelection', { selection }),
-        }]}
-        onclose={() => { contextMenu = null; }}
+        entries={[
+            {
+                id: 'copy',
+                label: localize('common.copy', 'Copy'),
+                disabled: !selection,
+                onSelected: () => connection.sendNotification('help/copySelection', { selection }),
+            },
+        ]}
+        onclose={() => {
+            contextMenu = null;
+        }}
     />
 {/if}
 

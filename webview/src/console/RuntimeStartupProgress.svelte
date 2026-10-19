@@ -5,7 +5,7 @@
     Mirrors: positron/.../components/runtimeStartupProgress.tsx
 -->
 <script lang="ts">
-    import { localize } from "$lib/localization";
+    import { localize } from '$lib/localization';
     interface Props {
         runtimeStartupEvent: {
             runtimeName: string;
@@ -18,8 +18,8 @@
 
     const statusText = $derived(
         runtimeStartupEvent.newSession
-            ? localize("console.preparing", "Preparing")
-            : localize("console.reconnecting", "Reconnecting"),
+            ? localize('console.preparing', 'Preparing')
+            : localize('console.reconnecting', 'Reconnecting'),
     );
 </script>
 

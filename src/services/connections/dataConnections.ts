@@ -47,7 +47,9 @@ interface PersistedDataConnectionProfile {
 
 export class DataConnectionsDriverManager implements vscode.Disposable {
     private readonly _drivers = new Map<string, DataConnectionDriver>();
-    private readonly _onDidChangeDrivers = new vscode.EventEmitter<readonly DataConnectionDriver[]>();
+    private readonly _onDidChangeDrivers = new vscode.EventEmitter<
+        readonly DataConnectionDriver[]
+    >();
     readonly onDidChangeDrivers = this._onDidChangeDrivers.event;
 
     registerDriver(driver: DataConnectionDriver | IDataConnectionDriver): vscode.Disposable {
@@ -62,10 +64,14 @@ export class DataConnectionsDriverManager implements vscode.Disposable {
         });
     }
 
-    getDriver(driverId: string): DataConnectionDriver | undefined { return this._drivers.get(driverId); }
-    getDrivers(): readonly DataConnectionDriver[] { return [...this._drivers.values()]; }
+    getDriver(driverId: string): DataConnectionDriver | undefined {
+        return this._drivers.get(driverId);
+    }
+    getDrivers(): readonly DataConnectionDriver[] {
+        return [...this._drivers.values()];
+    }
     getDriverSummaries(): readonly DataConnectionDriverSummary[] {
-        return this.getDrivers().map(driver => ({
+        return this.getDrivers().map((driver) => ({
             id: driver.id,
             name: driver.name,
             description: driver.description,
@@ -84,7 +90,10 @@ export class DataConnectionsDriverManager implements vscode.Disposable {
         }
         return driver.connect(mechanismId, parameters);
     }
-    dispose(): void { this._drivers.clear(); this._onDidChangeDrivers.dispose(); }
+    dispose(): void {
+        this._drivers.clear();
+        this._onDidChangeDrivers.dispose();
+    }
 }
 
 function normalizeDataConnectionDriver(
@@ -101,7 +110,7 @@ function normalizeDataConnectionDriver(
         description: legacy.metadata.description ?? '',
         iconSvg: legacy.metadata.iconSvg ?? '',
         supportedLanguageIds: legacy.metadata.supportedLanguageIds ?? [],
-        mechanisms: legacy.metadata.mechanisms.map(mechanism => ({
+        mechanisms: legacy.metadata.mechanisms.map((mechanism) => ({
             id: mechanism.id,
             label: mechanism.label,
             description: mechanism.description ?? '',
@@ -124,17 +133,48 @@ function normalizeLegacyParameter(
     };
     switch (parameter.type) {
         case 'boolean':
-            return { ...base, type: DataConnectionParameterType.Boolean, defaultValue: parameter.defaultValue as boolean | undefined };
+            return {
+                ...base,
+                type: DataConnectionParameterType.Boolean,
+                defaultValue: parameter.defaultValue as boolean | undefined,
+            };
         case 'number':
-            return { ...base, type: DataConnectionParameterType.Number, defaultValue: parameter.defaultValue as number | undefined, placeholder: parameter.placeholder };
+            return {
+                ...base,
+                type: DataConnectionParameterType.Number,
+                defaultValue: parameter.defaultValue as number | undefined,
+                placeholder: parameter.placeholder,
+            };
         case 'option':
-            return { ...base, type: DataConnectionParameterType.Option, options: [...(parameter.options ?? [])], defaultValue: parameter.defaultValue as string | undefined, placeholder: parameter.placeholder };
+            return {
+                ...base,
+                type: DataConnectionParameterType.Option,
+                options: [...(parameter.options ?? [])],
+                defaultValue: parameter.defaultValue as string | undefined,
+                placeholder: parameter.placeholder,
+            };
         case 'password':
-            return { ...base, type: DataConnectionParameterType.Password, secret: true, placeholder: parameter.placeholder };
+            return {
+                ...base,
+                type: DataConnectionParameterType.Password,
+                secret: true,
+                placeholder: parameter.placeholder,
+            };
         default:
             return parameter.secret
-                ? { ...base, type: DataConnectionParameterType.String, secret: true, placeholder: parameter.placeholder }
-                : { ...base, type: DataConnectionParameterType.String, secret: false, defaultValue: parameter.defaultValue as string | undefined, placeholder: parameter.placeholder };
+                ? {
+                      ...base,
+                      type: DataConnectionParameterType.String,
+                      secret: true,
+                      placeholder: parameter.placeholder,
+                  }
+                : {
+                      ...base,
+                      type: DataConnectionParameterType.String,
+                      secret: false,
+                      defaultValue: parameter.defaultValue as string | undefined,
+                      placeholder: parameter.placeholder,
+                  };
     }
 }
 
@@ -146,9 +186,7 @@ function adaptLegacyConnection(handle: IDataConnectionHandle): DataConnection {
         getChildren: node.hasChildren
             ? async () => (await handle.nodeGetChildren(node.handle)).map(adaptNode)
             : undefined,
-        preview: node.containsData
-            ? () => handle.nodePreview(node.handle)
-            : undefined,
+        preview: node.containsData ? () => handle.nodePreview(node.handle) : undefined,
     });
     return {
         isReadOnly: async () => false,
@@ -161,21 +199,26 @@ function adaptLegacyConnection(handle: IDataConnectionHandle): DataConnection {
 
 function normalizeNodeKind(kind: string): DataConnectionNodeKind {
     return (Object.values(DataConnectionNodeKind) as string[]).includes(kind)
-        ? kind as DataConnectionNodeKind
+        ? (kind as DataConnectionNodeKind)
         : DataConnectionNodeKind.Database;
 }
 
 /** Stores profile descriptors in Memento and cleartext values only in SecretStorage. */
 export class DataConnectionProfileStore implements vscode.Disposable {
     private readonly _profiles = new Map<string, PersistedDataConnectionProfile>();
-    private readonly _onDidChangeProfiles = new vscode.EventEmitter<readonly DataConnectionProfile[]>();
+    private readonly _onDidChangeProfiles = new vscode.EventEmitter<
+        readonly DataConnectionProfile[]
+    >();
     readonly onDidChangeProfiles = this._onDidChangeProfiles.event;
 
     constructor(
         private readonly _state: vscode.Memento,
         private readonly _secrets: vscode.SecretStorage,
     ) {
-        for (const persisted of _state.get<PersistedDataConnectionProfile[]>(ProfilesStorageKey, [])) {
+        for (const persisted of _state.get<PersistedDataConnectionProfile[]>(
+            ProfilesStorageKey,
+            [],
+        )) {
             if (isPersistedProfile(persisted)) {
                 this._profiles.set(persisted.profile.id, clonePersistedProfile(persisted));
             }
@@ -183,7 +226,7 @@ export class DataConnectionProfileStore implements vscode.Disposable {
     }
 
     getProfiles(): readonly DataConnectionProfile[] {
-        return [...this._profiles.values()].map(value => cloneProfile(value.profile));
+        return [...this._profiles.values()].map((value) => cloneProfile(value.profile));
     }
 
     getProfile(id: string): DataConnectionProfile | undefined {
@@ -253,29 +296,44 @@ export class DataConnectionProfileStore implements vscode.Disposable {
             return false;
         }
         this._profiles.delete(id);
-        await Promise.all(persisted.secretParameterIds.map(parameterId => this._secrets.delete(secretKey(id, parameterId))));
+        await Promise.all(
+            persisted.secretParameterIds.map((parameterId) =>
+                this._secrets.delete(secretKey(id, parameterId)),
+            ),
+        );
         await this._persist();
         this._onDidChangeProfiles.fire(this.getProfiles());
         return true;
     }
 
     private async _persist(): Promise<void> {
-        await this._state.update(ProfilesStorageKey, [...this._profiles.values()].map(clonePersistedProfile));
+        await this._state.update(
+            ProfilesStorageKey,
+            [...this._profiles.values()].map(clonePersistedProfile),
+        );
     }
 
-    dispose(): void { this._profiles.clear(); this._onDidChangeProfiles.dispose(); }
+    dispose(): void {
+        this._profiles.clear();
+        this._onDidChangeProfiles.dispose();
+    }
 }
 
 export function getSecretParameterIds(
     driver: DataConnectionDriver,
     mechanismId: string,
 ): readonly string[] {
-    const mechanism = driver.mechanisms.find(candidate => candidate.id === mechanismId)
-        ?? driver.mechanisms[0];
-    return mechanism?.parameters
-        .filter(parameter => parameter.type === DataConnectionParameterType.Password ||
-            ('secret' in parameter && parameter.secret === true))
-        .map(parameter => parameter.id) ?? [];
+    const mechanism =
+        driver.mechanisms.find((candidate) => candidate.id === mechanismId) ?? driver.mechanisms[0];
+    return (
+        mechanism?.parameters
+            .filter(
+                (parameter) =>
+                    parameter.type === DataConnectionParameterType.Password ||
+                    ('secret' in parameter && parameter.secret === true),
+            )
+            .map((parameter) => parameter.id) ?? []
+    );
 }
 
 function secretKey(profileId: string, parameterId: string): string {
@@ -286,13 +344,24 @@ function cloneProfile(profile: DataConnectionProfile): DataConnectionProfile {
     return { ...profile, parameterValues: { ...profile.parameterValues } };
 }
 
-function clonePersistedProfile(value: PersistedDataConnectionProfile): PersistedDataConnectionProfile {
-    return { profile: cloneProfile(value.profile), secretParameterIds: [...value.secretParameterIds] };
+function clonePersistedProfile(
+    value: PersistedDataConnectionProfile,
+): PersistedDataConnectionProfile {
+    return {
+        profile: cloneProfile(value.profile),
+        secretParameterIds: [...value.secretParameterIds],
+    };
 }
 
 function isPersistedProfile(value: unknown): value is PersistedDataConnectionProfile {
-    if (!value || typeof value !== 'object') { return false; }
+    if (!value || typeof value !== 'object') {
+        return false;
+    }
     const persisted = value as Partial<PersistedDataConnectionProfile>;
-    return !!persisted.profile && typeof persisted.profile.id === 'string' &&
-        typeof persisted.profile.driverId === 'string' && Array.isArray(persisted.secretParameterIds);
+    return (
+        !!persisted.profile &&
+        typeof persisted.profile.id === 'string' &&
+        typeof persisted.profile.driverId === 'string' &&
+        Array.isArray(persisted.secretParameterIds)
+    );
 }

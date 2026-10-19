@@ -1,7 +1,11 @@
 import { getErrorMessage } from '../shared/errors';
 import * as vscode from 'vscode';
 import { createMessageConnection, type MessageConnection } from 'vscode-jsonrpc/node';
-import type { ILanguageRuntimeSession, IPositronPackagesInstance, LanguageRuntimePackage } from '../api';
+import type {
+    ILanguageRuntimeSession,
+    IPositronPackagesInstance,
+    LanguageRuntimePackage,
+} from '../api';
 import { WebviewMessageReader, WebviewMessageWriter } from '../rpc/webview/transport';
 import { PositronPackagesService } from '../services/packages';
 import type { PackageDetailAction, PackageDetailState } from '../shared/packages';
@@ -27,7 +31,10 @@ export class PackageDetailProvider extends BaseWebviewProvider implements vscode
         private readonly _instance: IPositronPackagesInstance,
         private readonly _packageName: string,
         initialPackage: LanguageRuntimePackage | undefined,
-        private readonly _runAction: (action: PackageDetailAction, pkg: Partial<LanguageRuntimePackage> | undefined) => Promise<void>,
+        private readonly _runAction: (
+            action: PackageDetailAction,
+            pkg: Partial<LanguageRuntimePackage> | undefined,
+        ) => Promise<void>,
     ) {
         super(extensionUri, outputChannel);
         this._session = _instance.session;
@@ -50,7 +57,7 @@ export class PackageDetailProvider extends BaseWebviewProvider implements vscode
         const sendState = () => this._sendState();
         this._disposables.push(
             this.panel.onDidDispose(() => this.dispose()),
-            this.panel.onDidChangeViewState(event => {
+            this.panel.onDidChangeViewState((event) => {
                 if (event.webviewPanel.visible) {
                     this._sendState();
                 }
@@ -63,7 +70,7 @@ export class PackageDetailProvider extends BaseWebviewProvider implements vscode
             _instance.onDidChangeUpdateState(sendState),
             _instance.onDidChangeUpdateAllState(sendState),
             _instance.onDidChangeUninstallState(sendState),
-            vscode.workspace.onDidChangeConfiguration(event => {
+            vscode.workspace.onDidChangeConfiguration((event) => {
                 if (event.affectsConfiguration('packages.vulnerabilities.enabled')) {
                     this._sendState();
                 }
@@ -80,7 +87,12 @@ export class PackageDetailProvider extends BaseWebviewProvider implements vscode
         connection.onRequest('packageDetail/getState', () => this._buildState());
         connection.onRequest('packageDetail/action', async (params: { action?: unknown }) => {
             const action = params?.action;
-            if (action !== 'install' && action !== 'update' && action !== 'uninstall' && action !== 'help') {
+            if (
+                action !== 'install' &&
+                action !== 'update' &&
+                action !== 'uninstall' &&
+                action !== 'help'
+            ) {
                 throw new Error('Unknown package action');
             }
             const state = this._buildState();
@@ -95,7 +107,10 @@ export class PackageDetailProvider extends BaseWebviewProvider implements vscode
             const state = this._buildState();
             const url = typeof params?.url === 'string' ? params.url : '';
             // Only links supplied by the bound package may reach the external opener.
-            if (url !== state.package?.url && !state.package?.vulnerabilities?.some(item => item.url === url)) {
+            if (
+                url !== state.package?.url &&
+                !state.package?.vulnerabilities?.some((item) => item.url === url)
+            ) {
                 return false;
             }
             try {
@@ -111,8 +126,10 @@ export class PackageDetailProvider extends BaseWebviewProvider implements vscode
     }
 
     private get _sessionAlive(): boolean {
-        return this._packagesService.getInstance(this._session.sessionId) === this._instance &&
-            this._instance.session === this._session;
+        return (
+            this._packagesService.getInstance(this._session.sessionId) === this._instance &&
+            this._instance.session === this._session
+        );
     }
 
     private async _loadDetail(): Promise<void> {
@@ -136,9 +153,11 @@ export class PackageDetailProvider extends BaseWebviewProvider implements vscode
 
     private _buildState(): PackageDetailState {
         const sessionAlive = this._sessionAlive;
-        const livePackage = sessionAlive ? this._instance.packages.find(
-            pkg => pkg.name.toLowerCase() === this._packageName.toLowerCase(),
-        ) : undefined;
+        const livePackage = sessionAlive
+            ? this._instance.packages.find(
+                  (pkg) => pkg.name.toLowerCase() === this._packageName.toLowerCase(),
+              )
+            : undefined;
         if (livePackage) {
             this._lastKnownPackage = livePackage;
         }
@@ -153,7 +172,11 @@ export class PackageDetailProvider extends BaseWebviewProvider implements vscode
                 vulnerabilities: livePackage.vulnerabilities,
             });
         }
-        if (!vscode.workspace.getConfiguration().get<boolean>('packages.vulnerabilities.enabled', true)) {
+        if (
+            !vscode.workspace
+                .getConfiguration()
+                .get<boolean>('packages.vulnerabilities.enabled', true)
+        ) {
             pkg.vulnerabilities = undefined;
         }
         return {
@@ -164,8 +187,12 @@ export class PackageDetailProvider extends BaseWebviewProvider implements vscode
             package: pkg,
             installed: !!livePackage,
             sessionAlive,
-            isActive: sessionAlive && this._packagesService.activePackagesInstance === this._instance,
-            busy: sessionAlive && this._packagesService.activePackagesInstance === this._instance && this._packagesService.isBusy,
+            isActive:
+                sessionAlive && this._packagesService.activePackagesInstance === this._instance,
+            busy:
+                sessionAlive &&
+                this._packagesService.activePackagesInstance === this._instance &&
+                this._packagesService.isBusy,
             loading: sessionAlive && this._loading,
             error: this._error,
         };
@@ -187,9 +214,27 @@ export class PackageDetailProvider extends BaseWebviewProvider implements vscode
     }
 
     protected _getHtmlContent(webview: vscode.Webview): string {
-        const scriptUri = this._getWebviewUri(webview, 'webview', 'dist', 'packageDetail', 'index.js');
-        const commonStyleUri = this._getWebviewUri(webview, 'webview', 'dist', 'common', 'index.css');
-        const styleUri = this._getWebviewUri(webview, 'webview', 'dist', 'packageDetail', 'index.css');
+        const scriptUri = this._getWebviewUri(
+            webview,
+            'webview',
+            'dist',
+            'packageDetail',
+            'index.js',
+        );
+        const commonStyleUri = this._getWebviewUri(
+            webview,
+            'webview',
+            'dist',
+            'common',
+            'index.css',
+        );
+        const styleUri = this._getWebviewUri(
+            webview,
+            'webview',
+            'dist',
+            'packageDetail',
+            'index.css',
+        );
         const nonce = this._getNonce();
         return `<!DOCTYPE html>
 <html lang="en">

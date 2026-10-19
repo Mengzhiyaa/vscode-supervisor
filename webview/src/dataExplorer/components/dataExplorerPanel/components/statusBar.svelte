@@ -3,9 +3,9 @@
   Port from Positron's statusBar.tsx
 -->
 <script lang="ts">
-    import { getDataExplorerContext } from "../../../positronDataExplorerContext";
-    import { localize } from "../../../nls";
-    import StatusBarActivityIndicator from "./statusBarActivityIndicator.svelte";
+    import { getDataExplorerContext } from '../../../positronDataExplorerContext';
+    import { localize } from '../../../nls';
+    import StatusBarActivityIndicator from './statusBarActivityIndicator.svelte';
 
     const context = getDataExplorerContext();
     const { stores } = context;
@@ -22,39 +22,27 @@
 <div class="status-bar" role="status" aria-live="polite" aria-atomic="true">
     <StatusBarActivityIndicator />
     {#if hasFilters}
-        <span class="label"
-            >{localize("positron.statusBar.showing", "Showing")}</span
-        >
+        <span class="label">{localize('positron.statusBar.showing', 'Showing')}</span>
         <span>&nbsp;</span>
         <span class="counter">{$numRows.toLocaleString()}</span>
         <span>&nbsp;</span>
-        <span class="label"
-            >{localize("positron.statusBar.rows", "rows")}&nbsp;(</span
-        >
+        <span class="label">{localize('positron.statusBar.rows', 'rows')}&nbsp;(</span>
         <span class="counter">{filteredPercent.toFixed(2)}%</span>
         <span class="label">&nbsp;of&nbsp;</span>
         <span class="counter">{$numUnfilteredRows.toLocaleString()}</span>
-        <span class="label"
-            >&nbsp;{localize("positron.statusBar.total", "total")})</span
-        >
+        <span class="label">&nbsp;{localize('positron.statusBar.total', 'total')})</span>
         <span>&nbsp;&nbsp;</span>
         <span class="counter">{$numColumns.toLocaleString()}</span>
         <span>&nbsp;</span>
-        <span class="label"
-            >{localize("positron.statusBar.columns", "columns")}</span
-        >
+        <span class="label">{localize('positron.statusBar.columns', 'columns')}</span>
     {:else}
         <span class="counter">{$numRows.toLocaleString()}</span>
         <span>&nbsp;</span>
-        <span class="label"
-            >{localize("positron.statusBar.rows", "rows")}</span
-        >
+        <span class="label">{localize('positron.statusBar.rows', 'rows')}</span>
         <span>&nbsp;&nbsp;</span>
         <span class="counter">{$numColumns.toLocaleString()}</span>
         <span>&nbsp;</span>
-        <span class="label"
-            >{localize("positron.statusBar.columns", "columns")}</span
-        >
+        <span class="label">{localize('positron.statusBar.columns', 'columns')}</span>
     {/if}
 </div>
 

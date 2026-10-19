@@ -3,20 +3,14 @@
   Port from Positron's dataGridRowCell.tsx
 -->
 <script lang="ts">
-    import { onDestroy } from "svelte";
-    import { getPositronDataGridContext } from "../positronDataGridContext";
-    import {
-        CellSelectionState,
-        type DataGridCellComponent,
-    } from "../classes/dataGridInstance";
-    import { selectionType } from "../utilities/mouseUtilities";
-    import { renderLeadingTrailingWhitespace } from "../../dataExplorer/components/tableDataCell";
-    import { localize } from "../../dataExplorer/nls";
-    import { DataColumnAlignment } from "../interfaces";
-    import {
-        DataCellKind,
-        type DataCell,
-    } from "../../dataExplorer/common/tableDataCache";
+    import { onDestroy } from 'svelte';
+    import { getPositronDataGridContext } from '../positronDataGridContext';
+    import { CellSelectionState, type DataGridCellComponent } from '../classes/dataGridInstance';
+    import { selectionType } from '../utilities/mouseUtilities';
+    import { renderLeadingTrailingWhitespace } from '../../dataExplorer/components/tableDataCell';
+    import { localize } from '../../dataExplorer/nls';
+    import { DataColumnAlignment } from '../interfaces';
+    import { DataCellKind, type DataCell } from '../../dataExplorer/common/tableDataCache';
 
     interface Props {
         columnIndex: number;
@@ -27,14 +21,7 @@
         pinned?: boolean;
     }
 
-    let {
-        columnIndex,
-        rowIndex,
-        left,
-        width,
-        height,
-        pinned = false,
-    }: Props = $props();
+    let { columnIndex, rowIndex, left, width, height, pinned = false }: Props = $props();
 
     const { instance } = getPositronDataGridContext();
     const updateTrigger = instance.updateTrigger;
@@ -48,9 +35,9 @@
     });
 
     const customCell = $derived.by(() => {
-        if (cellContent && typeof cellContent === "object") {
+        if (cellContent && typeof cellContent === 'object') {
             const candidate = cellContent as DataGridCellComponent;
-            if (candidate.kind === "component") {
+            if (candidate.kind === 'component') {
                 return candidate;
             }
         }
@@ -59,9 +46,7 @@
     });
 
     const CustomCellComponent = $derived(customCell?.component);
-    const customCellProps = $derived(
-        (customCell?.props ?? {}) as Record<string, unknown>,
-    );
+    const customCellProps = $derived((customCell?.props ?? {}) as Record<string, unknown>);
 
     function getDataCell(
         candidate: unknown,
@@ -70,13 +55,11 @@
     ): DataCell | undefined {
         if (
             candidate &&
-            typeof candidate === "object" &&
-            "getDataCell" in candidate &&
-            typeof candidate.getDataCell === "function"
+            typeof candidate === 'object' &&
+            'getDataCell' in candidate &&
+            typeof candidate.getDataCell === 'function'
         ) {
-            return candidate.getDataCell(rowIndex, columnIndex) as
-                | DataCell
-                | undefined;
+            return candidate.getDataCell(rowIndex, columnIndex) as DataCell | undefined;
         }
 
         return undefined;
@@ -90,7 +73,7 @@
     const value = $derived.by(() => {
         $updateTrigger;
 
-        if (typeof cellContent === "string") {
+        if (typeof cellContent === 'string') {
             return cellContent;
         }
 
@@ -98,20 +81,18 @@
             return dataCell.formatted;
         }
 
-        return instance.getCellData(rowIndex, columnIndex) ?? "";
+        return instance.getCellData(rowIndex, columnIndex) ?? '';
     });
 
-    const formattedValue = $derived.by(() =>
-        value.replace(/\r/g, "\\r").replace(/\n/g, "\\n"),
-    );
+    const formattedValue = $derived.by(() => value.replace(/\r/g, '\\r').replace(/\n/g, '\\n'));
 
     const isEmptyString = $derived(
-        dataCell?.kind === DataCellKind.NON_NULL && formattedValue === "",
+        dataCell?.kind === DataCellKind.NON_NULL && formattedValue === '',
     );
 
     const renderedValueParts = $derived.by(() =>
         isEmptyString
-            ? [`<${localize("positron.dataExplorer.emptyString", "empty")}>`]
+            ? [`<${localize('positron.dataExplorer.emptyString', 'empty')}>`]
             : renderLeadingTrailingWhitespace(formattedValue),
     );
 
@@ -130,9 +111,7 @@
         return instance.cellSelectionState(columnIndex, rowIndex);
     });
 
-    const selected = $derived(
-        (cellSelectionState & CellSelectionState.Selected) !== 0,
-    );
+    const selected = $derived((cellSelectionState & CellSelectionState.Selected) !== 0);
 
     const focused = $derived.by(() => {
         $updateTrigger;
@@ -155,12 +134,12 @@
         const alignment = instance.column(columnIndex)?.alignment;
         switch (alignment) {
             case DataColumnAlignment.Center:
-                return "center";
+                return 'center';
             case DataColumnAlignment.Right:
-                return "right";
+                return 'right';
             case DataColumnAlignment.Left:
             default:
-                return "left";
+                return 'left';
         }
     });
 
@@ -169,10 +148,11 @@
         return instance.getCustomColumnWidth(columnIndex) ?? width;
     });
 
-    function renderPart(
-        part: string | { kind: "whitespace"; text: string },
-    ): { text: string; whitespace: boolean } {
-        if (typeof part === "string") {
+    function renderPart(part: string | { kind: 'whitespace'; text: string }): {
+        text: string;
+        whitespace: boolean;
+    } {
+        if (typeof part === 'string') {
             return { text: part, whitespace: false };
         }
 
@@ -186,12 +166,7 @@
 
         if (instance.selection) {
             if (cellSelectionState === CellSelectionState.None || event.button === 0) {
-                await instance.mouseSelectCell(
-                    columnIndex,
-                    rowIndex,
-                    pinned,
-                    selectionType(event),
-                );
+                await instance.mouseSelectCell(columnIndex, rowIndex, pinned, selectionType(event));
             } else if (!pinned) {
                 await instance.scrollToCell(columnIndex, rowIndex);
             }
@@ -202,8 +177,7 @@
 
             if (startingRect && endingRect) {
                 await instance.showCellContextMenu(columnIndex, rowIndex, cellRef!, {
-                    clientX:
-                        event.clientX + endingRect.left - startingRect.left,
+                    clientX: event.clientX + endingRect.left - startingRect.left,
                     clientY: event.clientY + endingRect.top - startingRect.top,
                 });
             }
@@ -242,9 +216,9 @@
         widthStartX = event.clientX;
         widthStartValue = width;
 
-        window.addEventListener("mousemove", onWidthResize);
-        window.addEventListener("mouseup", endWidthResize);
-        window.addEventListener("blur", endWidthResize);
+        window.addEventListener('mousemove', onWidthResize);
+        window.addEventListener('mouseup', endWidthResize);
+        window.addEventListener('blur', endWidthResize);
     }
 
     function onWidthResize(event: MouseEvent) {
@@ -267,9 +241,9 @@
 
     function endWidthResize() {
         resizingWidth = false;
-        window.removeEventListener("mousemove", onWidthResize);
-        window.removeEventListener("mouseup", endWidthResize);
-        window.removeEventListener("blur", endWidthResize);
+        window.removeEventListener('mousemove', onWidthResize);
+        window.removeEventListener('mouseup', endWidthResize);
+        window.removeEventListener('blur', endWidthResize);
     }
 
     let resizingHeight = $state(false);
@@ -290,9 +264,9 @@
         heightStartY = event.clientY;
         heightStartValue = height;
 
-        window.addEventListener("mousemove", onHeightResize);
-        window.addEventListener("mouseup", endHeightResize);
-        window.addEventListener("blur", endHeightResize);
+        window.addEventListener('mousemove', onHeightResize);
+        window.addEventListener('mouseup', endHeightResize);
+        window.addEventListener('blur', endHeightResize);
     }
 
     function onHeightResize(event: MouseEvent) {
@@ -315,9 +289,9 @@
 
     function endHeightResize() {
         resizingHeight = false;
-        window.removeEventListener("mousemove", onHeightResize);
-        window.removeEventListener("mouseup", endHeightResize);
-        window.removeEventListener("blur", endHeightResize);
+        window.removeEventListener('mousemove', onHeightResize);
+        window.removeEventListener('mouseup', endHeightResize);
+        window.removeEventListener('blur', endHeightResize);
     }
     onDestroy(() => {
         endWidthResize();
@@ -358,20 +332,11 @@
             <div
                 class="selection-overlay"
                 class:focused
-                class:selected-top={
-                    (cellSelectionState & CellSelectionState.SelectedTop) !== 0
-                }
-                class:selected-bottom={
-                    (cellSelectionState & CellSelectionState.SelectedBottom) !==
-                    0
-                }
-                class:selected-left={
-                    (cellSelectionState & CellSelectionState.SelectedLeft) !== 0
-                }
-                class:selected-right={
-                    (cellSelectionState & CellSelectionState.SelectedRight) !==
-                    0
-                }
+                class:selected-top={(cellSelectionState & CellSelectionState.SelectedTop) !== 0}
+                class:selected-bottom={(cellSelectionState & CellSelectionState.SelectedBottom) !==
+                    0}
+                class:selected-left={(cellSelectionState & CellSelectionState.SelectedLeft) !== 0}
+                class:selected-right={(cellSelectionState & CellSelectionState.SelectedRight) !== 0}
             >
                 {#if isCursorCell}
                     <div
@@ -406,9 +371,7 @@
                 >
                     {#each renderedValueParts as part, index (index)}
                         {@const renderedPart = renderPart(part)}
-                        <span class:whitespace={renderedPart.whitespace}
-                            >{renderedPart.text}</span
-                        >
+                        <span class:whitespace={renderedPart.whitespace}>{renderedPart.text}</span>
                     {/each}
                 </div>
             </div>
@@ -463,15 +426,9 @@
         position: absolute;
         box-sizing: border-box;
         border-right: 1px solid
-            var(
-                --vscode-positronDataGrid-border,
-                var(--vscode-editorGroup-border)
-            );
+            var(--vscode-positronDataGrid-border, var(--vscode-editorGroup-border));
         border-bottom: 1px solid
-            var(
-                --vscode-positronDataGrid-border,
-                var(--vscode-editorGroup-border)
-            );
+            var(--vscode-positronDataGrid-border, var(--vscode-editorGroup-border));
     }
 
     .data-grid-row-cell .selection-overlay {
@@ -493,57 +450,38 @@
 
     .data-grid-row-cell .selection-overlay.selected-top {
         border-top: 1px solid
-            var(
-                --vscode-positronDataGrid-selectionBorder,
-                var(--vscode-focusBorder)
-            );
+            var(--vscode-positronDataGrid-selectionBorder, var(--vscode-focusBorder));
     }
 
     .data-grid-row-cell .selection-overlay.selected-right {
         border-right: 1px solid
-            var(
-                --vscode-positronDataGrid-selectionBorder,
-                var(--vscode-focusBorder)
-            );
+            var(--vscode-positronDataGrid-selectionBorder, var(--vscode-focusBorder));
     }
 
     .data-grid-row-cell .selection-overlay:not(.selected-right) {
         border-right: 1px solid
-            var(
-                --vscode-positronDataGrid-selectionInnerBorder,
-                var(--vscode-focusBorder)
-            );
+            var(--vscode-positronDataGrid-selectionInnerBorder, var(--vscode-focusBorder));
     }
 
     .data-grid-row-cell .selection-overlay.selected-bottom {
         border-bottom: 1px solid
-            var(
-                --vscode-positronDataGrid-selectionBorder,
-                var(--vscode-focusBorder)
-            );
+            var(--vscode-positronDataGrid-selectionBorder, var(--vscode-focusBorder));
     }
 
     .data-grid-row-cell .selection-overlay:not(.selected-bottom) {
         border-bottom: 1px solid
-            var(
-                --vscode-positronDataGrid-selectionInnerBorder,
-                var(--vscode-focusBorder)
-            );
+            var(--vscode-positronDataGrid-selectionInnerBorder, var(--vscode-focusBorder));
     }
 
     .data-grid-row-cell .selection-overlay.selected-left {
         border-left: 1px solid
-            var(
-                --vscode-positronDataGrid-selectionBorder,
-                var(--vscode-focusBorder)
-            );
+            var(--vscode-positronDataGrid-selectionBorder, var(--vscode-focusBorder));
     }
 
     .data-grid-row-cell .cursor-border {
         position: absolute;
         box-sizing: border-box;
-        border: 1.5px solid
-            var(--vscode-positronDataGrid-cursorBorder, var(--vscode-focusBorder));
+        border: 1.5px solid var(--vscode-positronDataGrid-cursorBorder, var(--vscode-focusBorder));
     }
 
     .data-grid-row-cell .cursor-border.dimmed {
@@ -621,9 +559,6 @@
     .data-grid-row-cell .data-grid-vertical-splitter.active,
     .data-grid-row-cell .horizontal-splitter:hover,
     .data-grid-row-cell .horizontal-splitter.active {
-        background-color: var(
-            --vscode-sash-hoverBorder,
-            var(--vscode-focusBorder)
-        );
+        background-color: var(--vscode-sash-hoverBorder, var(--vscode-focusBorder));
     }
 </style>

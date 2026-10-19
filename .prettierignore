@@ -1,0 +1,31 @@
+# Dependencies, build output and test artifacts
+node_modules/
+dist/
+out/
+.vscode-test/
+.positron-upstream/
+coverage/
+*.vsix
+webview/node_modules/
+webview/dist/
+webview/test-results/
+webview/playwright-report/
+
+# Generated API declaration and Kallichore client
+src/api.d.ts
+kallichore.json
+src/supervisor/kcclient/api.ts
+src/supervisor/kcclient/upstream.json
+
+# Generated Positron contract snapshot and Webview RPC modules
+src/supervisor/contracts/positron-upstream-contract.json
+src/rpc/webview/console.ts
+src/rpc/webview/dataExplorer.ts
+src/rpc/webview/help.ts
+src/rpc/webview/lspTunnel.ts
+src/rpc/webview/plotEditor.ts
+src/rpc/webview/plots.ts
+src/rpc/webview/protocol.ts
+src/rpc/webview/session.ts
+src/rpc/webview/variables.ts
+src/rpc/webview/viewer.ts

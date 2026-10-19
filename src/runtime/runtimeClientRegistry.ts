@@ -25,4 +25,3 @@ export function registerRuntimeClientInstance(clientId: string): vscode.Disposab
 export function isRuntimeClientInstanceRegistered(clientId: string): boolean {
     return _registeredRuntimeClientIds.has(clientId);
 }
-

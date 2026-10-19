@@ -20,7 +20,7 @@ function checkSize(size: number, limit: number, setting: string): void {
     if (size > limit) {
         throw new Error(
             `Data import exceeds the ${limit / MiB} MB limit. ` +
-            `Choose a smaller file or increase dataExplorer.${setting}.`,
+                `Choose a smaller file or increase dataExplorer.${setting}.`,
         );
     }
 }
@@ -76,7 +76,13 @@ export async function readImportFile(
     progress.report({ message: 'Reading file…' });
     let data: Uint8Array;
     if (uri.scheme === 'file') {
-        data = await collect(createReadStream(uri.fsPath), fileLimit, 'maxImportFileSizeMB', token, progress);
+        data = await collect(
+            createReadStream(uri.fsPath),
+            fileLimit,
+            'maxImportFileSizeMB',
+            token,
+            progress,
+        );
     } else {
         // VS Code file-system providers expose whole-file reads, without cancellation.
         data = await vscode.workspace.fs.readFile(uri);
@@ -92,7 +98,13 @@ export async function readImportFile(
     const decompressor = createGunzip();
     try {
         input.pipe(decompressor);
-        return await collect(decompressor, unpackedLimit, 'maxDecompressedFileSizeMB', token, progress);
+        return await collect(
+            decompressor,
+            unpackedLimit,
+            'maxDecompressedFileSizeMB',
+            token,
+            progress,
+        );
     } finally {
         input.destroy();
         decompressor.destroy();

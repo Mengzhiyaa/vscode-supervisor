@@ -5,8 +5,8 @@
     Mirrors: positron/.../components/runtimeStarted.tsx
 -->
 <script lang="ts">
-    import type { RuntimeItemStarted } from "./classes";
-    import ConsoleOutputLines from "./ConsoleOutputLines.svelte";
+    import type { RuntimeItemStarted } from './classes';
+    import ConsoleOutputLines from './ConsoleOutputLines.svelte';
 
     interface RuntimeStartedProps {
         runtimeItemStarted: RuntimeItemStarted;

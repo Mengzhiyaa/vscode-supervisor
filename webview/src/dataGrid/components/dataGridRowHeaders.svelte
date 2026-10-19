@@ -3,9 +3,9 @@
   Port from Positron's dataGridRowHeaders.tsx
 -->
 <script lang="ts">
-    import { getPositronDataGridContext } from "../positronDataGridContext";
-    import DataGridRowHeader from "./dataGridRowHeader.svelte";
-    import type { RowDescriptors } from "../classes/dataGridInstance";
+    import { getPositronDataGridContext } from '../positronDataGridContext';
+    import DataGridRowHeader from './dataGridRowHeader.svelte';
+    import type { RowDescriptors } from '../classes/dataGridInstance';
 
     interface Props {
         height: number;

@@ -72,7 +72,7 @@ export class ActivityItemOutputPlot extends ActivityItem {
 
         // Find the first key in the data that starts with "image/". This is the MIME type, and is
         // guaranteed to exist since we only create this object if there is an image.
-        const imageKey = Object.keys(data).find(key => key.startsWith('image/'));
+        const imageKey = Object.keys(data).find((key) => key.startsWith('image/'));
 
         // Get the MIME type and data.
         this.mimeType = imageKey!;
@@ -130,9 +130,8 @@ export class ActivityItemOutputPlot extends ActivityItem {
      * @returns The remaining scrollback size.
      */
     public override optimizeScrollback(scrollbackSize: number, _clearData: boolean = true) {
-        const nextScrollbackSize = this._outputLines.length <= scrollbackSize
-            ? undefined
-            : scrollbackSize;
+        const nextScrollbackSize =
+            this._outputLines.length <= scrollbackSize ? undefined : scrollbackSize;
         if (nextScrollbackSize !== this._scrollbackSize) {
             this._scrollbackSize = nextScrollbackSize;
             this._outputLinesStore.set(this.outputLines);

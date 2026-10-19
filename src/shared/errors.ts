@@ -7,9 +7,14 @@ export function getErrorMessage(error: unknown): string {
 export function getErrorSummary(error: unknown): string {
     const message = getErrorMessage(error);
     try {
-        if (typeof error === 'object' && error !== null &&
-            'name' in error && typeof error.name === 'string' && error.name.length > 0 &&
-            error.name !== message) {
+        if (
+            typeof error === 'object' &&
+            error !== null &&
+            'name' in error &&
+            typeof error.name === 'string' &&
+            error.name.length > 0 &&
+            error.name !== message
+        ) {
             return `${error.name}: ${message}`;
         }
     } catch {
@@ -25,8 +30,13 @@ export function formatErrorForLogging(error: unknown): string {
 
 function readErrorMessage(error: unknown): string | undefined {
     try {
-        if (typeof error === 'object' && error !== null &&
-            'message' in error && typeof error.message === 'string' && error.message.length > 0) {
+        if (
+            typeof error === 'object' &&
+            error !== null &&
+            'message' in error &&
+            typeof error.message === 'string' &&
+            error.message.length > 0
+        ) {
             return error.message;
         }
         if (error instanceof Error) {

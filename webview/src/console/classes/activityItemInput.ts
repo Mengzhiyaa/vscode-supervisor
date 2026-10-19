@@ -96,7 +96,7 @@ export class ActivityItemInput extends ActivityItem {
         readonly inputPrompt: string,
         readonly continuationPrompt: string,
         readonly code: string,
-        readonly attribution?: ConsoleExecutionAttribution
+        readonly attribution?: ConsoleExecutionAttribution,
     ) {
         // Call the base class's constructor.
         super(id, parentId, when);
@@ -117,9 +117,7 @@ export class ActivityItemInput extends ActivityItem {
      */
     public override getClipboardRepresentation(_commentPrefix: string): string[] {
         // Activity item inputs are not commented out, so ignore the comment prefix.
-        return this._codeOutputLines.map(line =>
-            line.outputRuns.map(run => run.text).join('')
-        );
+        return this._codeOutputLines.map((line) => line.outputRuns.map((run) => run.text).join(''));
     }
 
     //#endregion Public Methods

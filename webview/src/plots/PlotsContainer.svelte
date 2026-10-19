@@ -5,24 +5,24 @@
      * Structured to match Positron's PlotsContainer responsibilities.
      */
 
-    import type { MessageConnection } from "vscode-jsonrpc/browser";
-    import DynamicPlotInstance from "./DynamicPlotInstance.svelte";
-    import StaticPlotInstance from "./StaticPlotInstance.svelte";
-    import WebviewPlotInstance from "./WebviewPlotInstance.svelte";
-    import PlotGalleryThumbnail from "./PlotGalleryThumbnail.svelte";
-    import DynamicPlotThumbnail from "./DynamicPlotThumbnail.svelte";
-    import StaticPlotThumbnail from "./StaticPlotThumbnail.svelte";
-    import WebviewPlotThumbnail from "./WebviewPlotThumbnail.svelte";
-    import { ZoomLevel, DarkFilter } from "./types";
+    import type { MessageConnection } from 'vscode-jsonrpc/browser';
+    import DynamicPlotInstance from './DynamicPlotInstance.svelte';
+    import StaticPlotInstance from './StaticPlotInstance.svelte';
+    import WebviewPlotInstance from './WebviewPlotInstance.svelte';
+    import PlotGalleryThumbnail from './PlotGalleryThumbnail.svelte';
+    import DynamicPlotThumbnail from './DynamicPlotThumbnail.svelte';
+    import StaticPlotThumbnail from './StaticPlotThumbnail.svelte';
+    import WebviewPlotThumbnail from './WebviewPlotThumbnail.svelte';
+    import { ZoomLevel, DarkFilter } from './types';
 
     interface PlotData {
         id: string;
         sessionId?: string;
-        kind?: "static" | "dynamic" | "html";
+        kind?: 'static' | 'dynamic' | 'html';
         thumbnail?: string;
         cachedThumbnail?: string;
         renderVersion?: number;
-        state?: import("@shared/plots").PlotClientState;
+        state?: import('@shared/plots').PlotClientState;
         renderEstimateMs?: number;
         initialData?: string;
         initialRenderSettings?: {
@@ -56,23 +56,12 @@
         onfocusNext?: (plotId: string) => void;
         oncontainerKeydown?: (event: KeyboardEvent) => void;
         onhistoryWheel?: (event: WheelEvent) => void;
-        onnavigateToSource?: (payload: {
-            sessionId: string;
-            executionId?: string;
-        }) => void;
+        onnavigateToSource?: (payload: { sessionId: string; executionId?: string }) => void;
         onopenOriginFile?: () => void;
         onclaimHtmlPlot?: (payload: { plotId: string }) => void;
         onreleaseHtmlPlot?: (payload: { plotId: string }) => void;
-        onlayoutHtmlPlot?: (payload: {
-            plotId: string;
-            width: number;
-            height: number;
-        }) => void;
-        onplotRendered?: (payload: {
-            plotId: string;
-            uri: string;
-            renderVersion: number;
-        }) => void;
+        onlayoutHtmlPlot?: (payload: { plotId: string; width: number; height: number }) => void;
+        onplotRendered?: (payload: { plotId: string; uri: string; renderVersion: number }) => void;
 
         containerElement?: HTMLDivElement;
         plotViewportElement?: HTMLDivElement;
@@ -119,8 +108,7 @@
 
     const selectedPlot = $derived(
         selectedPlotId
-            ? (plots.find((plot) => plot.id === selectedPlotId) ??
-                  plots[plots.length - 1])
+            ? (plots.find((plot) => plot.id === selectedPlotId) ?? plots[plots.length - 1])
             : plots[plots.length - 1],
     );
     const selectedPlotPosition = $derived(
@@ -128,12 +116,14 @@
     );
     const plotStatus = $derived(
         plots.length === 0
-            ? "No plots available"
-            : `Plot ${selectedPlotPosition} of ${plots.length}${selectedPlot?.name ? `: ${selectedPlot.name}` : ""}`,
+            ? 'No plots available'
+            : `Plot ${selectedPlotPosition} of ${plots.length}${selectedPlot?.name ? `: ${selectedPlot.name}` : ''}`,
     );
 
     const plotInfoHeaderPx = 30;
-    const showOriginFile = $derived(!!selectedOriginFile && selectedOriginFile !== selectedSessionName);
+    const showOriginFile = $derived(
+        !!selectedOriginFile && selectedOriginFile !== selectedSessionName,
+    );
 
     function handleSessionNameClick() {
         if (!selectedPlot?.sessionId) {
@@ -153,7 +143,6 @@
 
         onopenOriginFile?.();
     }
-
 </script>
 
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
@@ -216,7 +205,7 @@
             {#key selectedPlot?.id}
                 {#if plots.length === 0}
                     <div class="plot-placeholder"></div>
-                {:else if selectedPlot?.kind === "html" && selectedPlot.htmlUri}
+                {:else if selectedPlot?.kind === 'html' && selectedPlot.htmlUri}
                     <WebviewPlotInstance
                         plotId={selectedPlot.id}
                         width={viewportWidth}
@@ -227,13 +216,11 @@
                         onrelease={(payload) => onreleaseHtmlPlot?.(payload)}
                         onlayout={(payload) => onlayoutHtmlPlot?.(payload)}
                     />
-                {:else if selectedPlot?.kind === "static"}
+                {:else if selectedPlot?.kind === 'static'}
                     <StaticPlotInstance
                         plotId={selectedPlot.id}
                         plotName={selectedPlot.name}
-                        imageUri={selectedPlot.thumbnail ||
-                            selectedPlot.initialData ||
-                            ""}
+                        imageUri={selectedPlot.thumbnail || selectedPlot.initialData || ''}
                         zoom={zoomLevel}
                     />
                 {:else if selectedPlot}
@@ -246,8 +233,7 @@
                         {sizingPolicyId}
                         {customSize}
                         {darkFilterMode}
-                        latestUri={selectedPlot.thumbnail ||
-                            selectedPlot.cachedThumbnail}
+                        latestUri={selectedPlot.thumbnail || selectedPlot.cachedThumbnail}
                         hostState={selectedPlot.state}
                         hostRenderEstimateMs={selectedPlot.renderEstimateMs}
                         renderVersion={selectedPlot.renderVersion}
@@ -279,14 +265,14 @@
                         {onfocusNext}
                     >
                         {#snippet children()}
-                            {#if plot.kind === "dynamic"}
+                            {#if plot.kind === 'dynamic'}
                                 <DynamicPlotThumbnail
                                     plotId={plot.id}
                                     plotName={plot.name}
                                     thumbnailUri={plot.thumbnail}
                                     cachedThumbnailUri={plot.cachedThumbnail}
                                 />
-                            {:else if plot.kind === "html"}
+                            {:else if plot.kind === 'html'}
                                 <WebviewPlotThumbnail
                                     plotId={plot.id}
                                     thumbnailUri={plot.thumbnail}
@@ -296,9 +282,7 @@
                                 <StaticPlotThumbnail
                                     plotId={plot.id}
                                     plotName={plot.name}
-                                    imageUri={plot.thumbnail ||
-                                        plot.initialData ||
-                                        ""}
+                                    imageUri={plot.thumbnail || plot.initialData || ''}
                                 />
                             {/if}
                         {/snippet}
@@ -321,7 +305,10 @@
         display: flex;
         flex: 1;
         overflow: hidden;
-        background: var(--vscode-positronPlots-background, var(--vscode-panel-background, var(--vscode-editor-background)));
+        background: var(
+            --vscode-positronPlots-background,
+            var(--vscode-panel-background, var(--vscode-editor-background))
+        );
     }
 
     .plots-container:focus {

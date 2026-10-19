@@ -3,7 +3,7 @@
   Port from Positron's columnProfileNullCountValue.tsx
 -->
 <script lang="ts">
-    import type { TableSummaryDataGridInstance } from "../tableSummaryDataGridInstance";
+    import type { TableSummaryDataGridInstance } from '../tableSummaryDataGridInstance';
 
     interface Props {
         instance: TableSummaryDataGridInstance;
@@ -13,9 +13,7 @@
     let { instance, columnIndex }: Props = $props();
 
     const columnProfiles = $derived(instance.columnProfiles);
-    const columnProfileNullCount = $derived(
-        $columnProfiles.get(columnIndex)?.null_count,
-    );
+    const columnProfileNullCount = $derived($columnProfiles.get(columnIndex)?.null_count);
 </script>
 
 {#if columnProfileNullCount === undefined}

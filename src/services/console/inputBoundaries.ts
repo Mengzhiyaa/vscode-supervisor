@@ -3,7 +3,6 @@
  *  Licensed under the Elastic License 2.0. See LICENSE.txt for license information.
  *--------------------------------------------------------------------------------------------*/
 
-
 import type { InputBoundary } from '../../api';
 
 /**
@@ -12,31 +11,31 @@ import type { InputBoundary } from '../../api';
  * back to its source lines.
  */
 export interface IInputBoundaryFragment {
-	/** The fragment code (the boundary's lines joined with `\n`). */
-	readonly code: string;
+    /** The fragment code (the boundary's lines joined with `\n`). */
+    readonly code: string;
 
-	/** The fragment's 0-based start line within the submitted code. */
-	readonly startLine: number;
+    /** The fragment's 0-based start line within the submitted code. */
+    readonly startLine: number;
 
-	/** The fragment's 0-based end line (exclusive) within the submitted code. */
-	readonly endLine: number;
+    /** The fragment's 0-based end line (exclusive) within the submitted code. */
+    readonly endLine: number;
 }
 
 /**
  * The result of converting input boundaries into executable code fragments.
  */
 export interface IInputBoundaryFragments {
-	/**
-	 * The code fragments for the `complete` boundaries, in order. Each fragment
-	 * is the boundary's lines joined with `\n`, tagged with its line range.
-	 */
-	readonly fragments: IInputBoundaryFragment[];
+    /**
+     * The code fragments for the `complete` boundaries, in order. Each fragment
+     * is the boundary's lines joined with `\n`, tagged with its line range.
+     */
+    readonly fragments: IInputBoundaryFragment[];
 
-	/** True if any boundary was `incomplete`. */
-	readonly incomplete: boolean;
+    /** True if any boundary was `incomplete`. */
+    readonly incomplete: boolean;
 
-	/** True if any boundary was `invalid`. */
-	readonly invalid: boolean;
+    /** True if any boundary was `invalid`. */
+    readonly invalid: boolean;
 }
 
 /**
@@ -56,75 +55,77 @@ export interface IInputBoundaryFragments {
  *   non-contiguous). Callers treat a throw as "no usable provider result".
  */
 export function codeFragmentsFromBoundaries(
-	code: string,
-	boundaries: InputBoundary[]
+    code: string,
+    boundaries: InputBoundary[],
 ): IInputBoundaryFragments {
-	if (!Array.isArray(boundaries)) {
-		throw new Error('Input boundaries must be an array');
-	}
+    if (!Array.isArray(boundaries)) {
+        throw new Error('Input boundaries must be an array');
+    }
 
-	const lines = code.split('\n');
-	const fragments: IInputBoundaryFragment[] = [];
-	let incomplete = false;
-	let invalid = false;
-	let nextStart = 0;
+    const lines = code.split('\n');
+    const fragments: IInputBoundaryFragment[] = [];
+    let incomplete = false;
+    let invalid = false;
+    let nextStart = 0;
 
-	for (const boundary of boundaries) {
-		if (!boundary || typeof boundary !== 'object') {
-			throw new Error('Input boundary must be an object');
-		}
+    for (const boundary of boundaries) {
+        if (!boundary || typeof boundary !== 'object') {
+            throw new Error('Input boundary must be an object');
+        }
 
-		const kind = boundary.kind;
-		if (kind !== 'whitespace' &&
-			kind !== 'complete' &&
-			kind !== 'incomplete' &&
-			kind !== 'invalid'
-		) {
-			throw new Error(`Unknown input boundary kind: ${kind}`);
-		}
+        const kind = boundary.kind;
+        if (
+            kind !== 'whitespace' &&
+            kind !== 'complete' &&
+            kind !== 'incomplete' &&
+            kind !== 'invalid'
+        ) {
+            throw new Error(`Unknown input boundary kind: ${kind}`);
+        }
 
-		const range = boundary.range;
-		if (!range ||
-			!Number.isInteger(range.start) ||
-			!Number.isInteger(range.end) ||
-			range.start !== nextStart ||
-			range.start < 0 ||
-			range.end < range.start ||
-			range.end > lines.length
-		) {
-			throw new Error('Input boundary range is out of range or non-contiguous');
-		}
+        const range = boundary.range;
+        if (
+            !range ||
+            !Number.isInteger(range.start) ||
+            !Number.isInteger(range.end) ||
+            range.start !== nextStart ||
+            range.start < 0 ||
+            range.end < range.start ||
+            range.end > lines.length
+        ) {
+            throw new Error('Input boundary range is out of range or non-contiguous');
+        }
 
-		// A non-whitespace boundary must span at least one line.
-		if (kind !== 'whitespace' && range.start === range.end) {
-			throw new Error('Non-whitespace input boundary must span at least one line');
-		}
+        // A non-whitespace boundary must span at least one line.
+        if (kind !== 'whitespace' && range.start === range.end) {
+            throw new Error('Non-whitespace input boundary must span at least one line');
+        }
 
-		nextStart = range.end;
+        nextStart = range.end;
 
-		switch (kind) {
-			case 'whitespace':
-				break;
-			case 'complete': {
-				const fragment = lines.slice(range.start, range.end).join('\n');
-				if (fragment.length > 0) {
-					fragments.push({ code: fragment, startLine: range.start, endLine: range.end });
-				}
-				break;
-			}
-			case 'incomplete':
-				incomplete = true;
-				break;
-			case 'invalid':
-				invalid = true;
-				break;
-		}
-	}
+        switch (kind) {
+            case 'whitespace':
+                break;
+            case 'complete': {
+                const fragment = lines.slice(range.start, range.end).join('\n');
+                if (fragment.length > 0) {
+                    fragments.push({ code: fragment, startLine: range.start, endLine: range.end });
+                }
+                break;
+            }
+            case 'incomplete':
+                incomplete = true;
+                break;
+            case 'invalid':
+                invalid = true;
+                break;
+        }
+    }
 
-	// The boundaries must cover every line of the code.
-	if (nextStart !== lines.length) {
-		throw new Error('Input boundaries do not cover the entire code range');
-	}
+    // The boundaries must cover every line of the code.
+    if (nextStart !== lines.length) {
+        throw new Error('Input boundaries do not cover the entire code range');
+    }
 
-	return { fragments, incomplete, invalid };
+    return { fragments, incomplete, invalid };
 }

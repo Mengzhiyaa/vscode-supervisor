@@ -5,11 +5,9 @@
     Mirrors: positron/.../components/currentWorkingDirectory.tsx
 -->
 <script lang="ts">
-    import { onDestroy } from "svelte";
-    import ContextMenu, {
-        type ContextMenuEntry,
-    } from "../shared/ContextMenu.svelte";
-    import { localize } from "$lib/localization";
+    import { onDestroy } from 'svelte';
+    import ContextMenu, { type ContextMenuEntry } from '../shared/ContextMenu.svelte';
+    import { localize } from '$lib/localization';
 
     interface CurrentWorkingDirectoryProps {
         readonly directoryLabel: string;
@@ -18,11 +16,17 @@
     let { directoryLabel }: CurrentWorkingDirectoryProps = $props();
 
     // Localized strings
-    const positronCurrentWorkingDirectory = localize("console.cwd.label", "Current Working Directory");
-    const positronCopy = localize("common.copy", "Copy");
-    const positronDoubleClickToCopyPath = localize("console.cwd.doubleClickCopy", "Double-click to copy path");
-    const positronPathCopied = localize("console.cwd.copied", "Path copied");
-    const displayDirectoryLabel = $derived(directoryLabel.replace(/\\/g, "/"));
+    const positronCurrentWorkingDirectory = localize(
+        'console.cwd.label',
+        'Current Working Directory',
+    );
+    const positronCopy = localize('common.copy', 'Copy');
+    const positronDoubleClickToCopyPath = localize(
+        'console.cwd.doubleClickCopy',
+        'Double-click to copy path',
+    );
+    const positronPathCopied = localize('console.cwd.copied', 'Path copied');
+    const displayDirectoryLabel = $derived(directoryLabel.replace(/\\/g, '/'));
 
     let copied = $state(false);
     let copyResetTimer: ReturnType<typeof setTimeout> | undefined;
@@ -36,20 +40,18 @@
             ? `${displayDirectoryLabel}\n${
                   copied ? positronPathCopied : positronDoubleClickToCopyPath
               }`
-            : "",
+            : '',
     );
-    const contextMenuEntries = $derived.by(
-        (): ContextMenuEntry[] => [
-            {
-                label: positronCopy,
-                icon: "copy",
-                disabled: !directoryLabel,
-                onSelected: () => {
-                    void copyDirectoryLabel();
-                },
+    const contextMenuEntries = $derived.by((): ContextMenuEntry[] => [
+        {
+            label: positronCopy,
+            icon: 'copy',
+            disabled: !directoryLabel,
+            onSelected: () => {
+                void copyDirectoryLabel();
             },
-        ],
-    );
+        },
+    ]);
 
     function resetCopiedState() {
         if (copyResetTimer) {
@@ -70,7 +72,7 @@
     }
 
     async function handleKeyDown(event: KeyboardEvent) {
-        if (event.key !== "Enter" && event.key !== " ") {
+        if (event.key !== 'Enter' && event.key !== ' ') {
             return;
         }
 
@@ -107,7 +109,7 @@
             resetCopiedState();
         } catch (error) {
             copied = false;
-            console.error("Failed to copy working directory path:", error);
+            console.error('Failed to copy working directory path:', error);
         }
     }
 
@@ -153,10 +155,7 @@
         overflow: hidden;
         align-items: center;
         white-space: nowrap;
-        color: var(
-            --vscode-positronActionBar-foreground,
-            var(--vscode-foreground)
-        );
+        color: var(--vscode-positronActionBar-foreground, var(--vscode-foreground));
         cursor: default;
         width: 100%;
         min-width: 0;

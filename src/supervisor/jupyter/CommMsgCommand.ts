@@ -9,11 +9,14 @@ import { JupyterCommMsg } from './JupyterCommMsg';
 import { JupyterMessageType } from './JupyterMessageType';
 
 export class CommMsgCommand extends JupyterCommand<JupyterCommMsg> {
-	constructor(private readonly _id: string, payload: JupyterCommMsg) {
-		super(JupyterMessageType.CommMsg, payload, JupyterChannel.Shell);
-	}
+    constructor(
+        private readonly _id: string,
+        payload: JupyterCommMsg,
+    ) {
+        super(JupyterMessageType.CommMsg, payload, JupyterChannel.Shell);
+    }
 
-	protected override createMsgId(): string {
-		return this._id;
-	}
+    protected override createMsgId(): string {
+        return this._id;
+    }
 }

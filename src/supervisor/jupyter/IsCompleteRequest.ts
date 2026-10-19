@@ -7,10 +7,18 @@ import { JupyterChannel } from './JupyterChannel';
 import { JupyterMessageType } from './JupyterMessageType';
 import { JupyterRequest } from './JupyterRequest';
 
-export class IsCompleteRequest extends JupyterRequest<JupyterIsCompleteRequest, JupyterIsCompleteReply> {
-	constructor(req: JupyterIsCompleteRequest) {
-		super(JupyterMessageType.IsCompleteRequest, req, JupyterMessageType.IsCompleteReply, JupyterChannel.Shell);
-	}
+export class IsCompleteRequest extends JupyterRequest<
+    JupyterIsCompleteRequest,
+    JupyterIsCompleteReply
+> {
+    constructor(req: JupyterIsCompleteRequest) {
+        super(
+            JupyterMessageType.IsCompleteRequest,
+            req,
+            JupyterMessageType.IsCompleteReply,
+            JupyterChannel.Shell,
+        );
+    }
 }
 
 /**
@@ -20,10 +28,9 @@ export class IsCompleteRequest extends JupyterRequest<JupyterIsCompleteRequest, 
  * @link https://jupyter-client.readthedocs.io/en/stable/messaging.html#code-completeness
  */
 export interface JupyterIsCompleteRequest {
-	/** The code to test for completeness */
-	code: string;
+    /** The code to test for completeness */
+    code: string;
 }
-
 
 /**
  * Represents a is_complete_reply from the kernel.
@@ -31,10 +38,9 @@ export interface JupyterIsCompleteRequest {
  * @link https://jupyter-client.readthedocs.io/en/stable/messaging.html#code-completeness
  */
 export interface JupyterIsCompleteReply {
-	/** The status of the code that was tested for completeness */
-	status: 'complete' | 'incomplete' | 'invalid' | 'unknown';
+    /** The status of the code that was tested for completeness */
+    status: 'complete' | 'incomplete' | 'invalid' | 'unknown';
 
-	/** Characters to use to indent the next line (for 'incomplete' only) */
-	indent: string;
+    /** Characters to use to indent the next line (for 'incomplete' only) */
+    indent: string;
 }
-

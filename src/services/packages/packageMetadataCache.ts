@@ -69,7 +69,9 @@ export class PackageMetadataCache {
             }
         } catch (error) {
             if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-                this._outputChannel.warn(`[Packages] Ignoring invalid package metadata cache: ${getErrorMessage(error)}`);
+                this._outputChannel.warn(
+                    `[Packages] Ignoring invalid package metadata cache: ${getErrorMessage(error)}`,
+                );
             }
         }
 
@@ -89,8 +91,7 @@ export class PackageMetadataCache {
 
     isFresh(runtimeId: string, now = Date.now()): boolean {
         const environment = this.get(runtimeId);
-        return environment !== undefined &&
-            now - environment.lastFetched < this._maxAgeMs;
+        return environment !== undefined && now - environment.lastFetched < this._maxAgeMs;
     }
 
     upsert(
@@ -140,9 +141,10 @@ export class PackageMetadataCache {
                 PACKAGE_METADATA_CACHE_MAX_AGE_HOURS_SETTING,
                 PACKAGE_METADATA_CACHE_MAX_AGE_HOURS_DEFAULT,
             );
-        const hours = Number.isFinite(configured) && configured > 0
-            ? configured
-            : PACKAGE_METADATA_CACHE_MAX_AGE_HOURS_DEFAULT;
+        const hours =
+            Number.isFinite(configured) && configured > 0
+                ? configured
+                : PACKAGE_METADATA_CACHE_MAX_AGE_HOURS_DEFAULT;
         return hours * MS_PER_HOUR;
     }
 
@@ -156,9 +158,11 @@ export class PackageMetadataCache {
             return undefined;
         }
         const parsed = value as Partial<PersistedPackageMetadata>;
-        if (parsed.schemaVersion !== PACKAGE_METADATA_CACHE_SCHEMA_VERSION ||
+        if (
+            parsed.schemaVersion !== PACKAGE_METADATA_CACHE_SCHEMA_VERSION ||
             !parsed.environments ||
-            typeof parsed.environments !== 'object') {
+            typeof parsed.environments !== 'object'
+        ) {
             return undefined;
         }
         return {
@@ -173,12 +177,13 @@ export class PackageMetadataCache {
             if (JSON.stringify(current) === JSON.stringify(this._cache)) {
                 return;
             }
-            void this._storage.update(PACKAGE_METADATA_CACHE_STORAGE_KEY, this._cache).then(
-                undefined,
-                error => this._outputChannel.warn(
-                    `[Packages] Failed to persist package metadata cache: ${getErrorMessage(error)}`,
-                ),
-            );
+            void this._storage
+                .update(PACKAGE_METADATA_CACHE_STORAGE_KEY, this._cache)
+                .then(undefined, (error) =>
+                    this._outputChannel.warn(
+                        `[Packages] Failed to persist package metadata cache: ${getErrorMessage(error)}`,
+                    ),
+                );
             return;
         }
 
@@ -187,7 +192,7 @@ export class PackageMetadataCache {
             return;
         }
         const drain = this._drainFileWrites()
-            .catch(error => {
+            .catch((error) => {
                 this._outputChannel.warn(
                     `[Packages] Failed to persist package metadata cache: ${getErrorMessage(error)}`,
                 );

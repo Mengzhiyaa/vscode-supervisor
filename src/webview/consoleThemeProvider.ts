@@ -251,7 +251,10 @@ function stripTrailingCommas(content: string): string {
                 lookahead++;
             }
 
-            if (lookahead < content.length && (content[lookahead] === '}' || content[lookahead] === ']')) {
+            if (
+                lookahead < content.length &&
+                (content[lookahead] === '}' || content[lookahead] === ']')
+            ) {
                 continue;
             }
         }
@@ -327,7 +330,9 @@ export function flattenTokenColors(tokenColors: RawTokenColor[]): ConsoleThemeRu
 export class ConsoleThemeProvider {
     private readonly _cache = new Map<string, ThemeDocument>();
 
-    async getConsoleThemeData(theme: vscode.ColorTheme = vscode.window.activeColorTheme): Promise<ConsoleThemeData> {
+    async getConsoleThemeData(
+        theme: vscode.ColorTheme = vscode.window.activeColorTheme,
+    ): Promise<ConsoleThemeData> {
         const source = this._resolveActiveThemeSource(theme);
         const base = source?.base ?? BASE_BY_KIND[theme.kind] ?? 'vs-dark';
 
@@ -344,9 +349,8 @@ export class ConsoleThemeProvider {
 
         // Use embedded defaults when the theme file couldn't be read or
         // wasn't available
-        const effectiveTokenColors = tokenColors.length > 0
-            ? tokenColors
-            : getEmbeddedDefaultTokenColors(theme.kind);
+        const effectiveTokenColors =
+            tokenColors.length > 0 ? tokenColors : getEmbeddedDefaultTokenColors(theme.kind);
 
         const rules = flattenTokenColors(effectiveTokenColors);
         const fileIconThemeSettingsId = vscode.workspace
@@ -376,17 +380,13 @@ export class ConsoleThemeProvider {
                 }
 
                 const matches =
-                    contributed.id === configuredTheme ||
-                    contributed.label === configuredTheme;
+                    contributed.id === configuredTheme || contributed.label === configuredTheme;
                 if (!matches) {
                     continue;
                 }
 
                 // Use URI-based path resolution so it works across local/remote
-                const themeUri = vscode.Uri.joinPath(
-                    extension.extensionUri,
-                    contributed.path,
-                );
+                const themeUri = vscode.Uri.joinPath(extension.extensionUri, contributed.path);
 
                 return {
                     base: this._uiThemeToBase(contributed.uiTheme, theme.kind),
@@ -436,7 +436,10 @@ export class ConsoleThemeProvider {
         }
     }
 
-    private async _collectTokenColors(themeUri: vscode.Uri, visited = new Set<string>()): Promise<RawTokenColor[]> {
+    private async _collectTokenColors(
+        themeUri: vscode.Uri,
+        visited = new Set<string>(),
+    ): Promise<RawTokenColor[]> {
         const key = themeUri.toString();
         if (visited.has(key)) {
             return [];
@@ -452,7 +455,7 @@ export class ConsoleThemeProvider {
         if (document.include) {
             // Resolve include path relative to the current theme file's directory
             const includeUri = vscode.Uri.joinPath(themeUri, '..', document.include);
-            inherited.push(...await this._collectTokenColors(includeUri, visited));
+            inherited.push(...(await this._collectTokenColors(includeUri, visited)));
         }
 
         return [...inherited, ...(document.tokenColors ?? [])];
@@ -480,5 +483,4 @@ export class ConsoleThemeProvider {
             return undefined;
         }
     }
-
 }

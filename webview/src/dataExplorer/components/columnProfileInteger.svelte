@@ -3,12 +3,12 @@
   Port from Positron's columnProfileInteger.tsx
 -->
 <script lang="ts">
-    import { localize } from "../nls";
-    import type { NumericSummaryStats } from "../columnProfileTypes";
-    import type { TableSummaryDataGridInstance } from "../tableSummaryDataGridInstance";
-    import ColumnProfileNullCountValue from "./columnProfileNullCountValue.svelte";
-    import ColumnProfileSparklines from "./columnProfileSparklines.svelte";
-    import StatsValue from "./statsValue.svelte";
+    import { localize } from '../nls';
+    import type { NumericSummaryStats } from '../columnProfileTypes';
+    import type { TableSummaryDataGridInstance } from '../tableSummaryDataGridInstance';
+    import ColumnProfileNullCountValue from './columnProfileNullCountValue.svelte';
+    import ColumnProfileSparklines from './columnProfileSparklines.svelte';
+    import StatsValue from './statsValue.svelte';
 
     interface Props {
         instance: TableSummaryDataGridInstance;
@@ -19,55 +19,45 @@
 
     const columnProfiles = $derived(instance.columnProfiles);
     const profile = $derived($columnProfiles.get(columnIndex));
-    const columnHistogram = $derived(
-        profile?.large_histogram,
-    );
-    const stats = $derived(
-        profile?.summary_stats?.number_stats,
-    );
+    const columnHistogram = $derived(profile?.large_histogram);
+    const stats = $derived(profile?.summary_stats?.number_stats);
     const updateTrigger = $derived(instance.updateTrigger);
     const displayType = $derived.by(() => {
         $updateTrigger;
         return instance.getColumnSchema(columnIndex)?.type_display;
     });
 
-    const missingLabel = localize("positronMissing", "Missing");
-    const minLabel = localize("positronMin", "Min");
-    const medianLabel = localize("positronMedian", "Median");
-    const meanLabel = localize("positronMean", "Mean");
-    const maxLabel = localize("positronMax", "Max");
-    const sdLabel = localize("positronSD", "SD");
-    const naLabel = localize("positronNA", "N/A");
+    const missingLabel = localize('positronMissing', 'Missing');
+    const minLabel = localize('positronMin', 'Min');
+    const medianLabel = localize('positronMedian', 'Median');
+    const meanLabel = localize('positronMean', 'Mean');
+    const maxLabel = localize('positronMax', 'Max');
+    const sdLabel = localize('positronSD', 'SD');
+    const naLabel = localize('positronNA', 'N/A');
 
     function integerStatsValue(
         stats: NumericSummaryStats | undefined,
         value: number | string | undefined,
     ) {
         if (stats === undefined) {
-            return "\u22ef";
+            return '\u22ef';
         }
 
         if (value === undefined || value === null) {
             return naLabel;
         }
 
-        if (typeof value === "number") {
+        if (typeof value === 'number') {
             return Math.round(value).toString();
         }
 
         const numericValue = Number.parseFloat(value);
-        return Number.isNaN(numericValue)
-            ? value
-            : Math.round(numericValue).toString();
+        return Number.isNaN(numericValue) ? value : Math.round(numericValue).toString();
     }
 </script>
 
 <div class="column-profile-expanded column-profile-info">
-    <ColumnProfileSparklines
-        {columnHistogram}
-        {displayType}
-        hoverManager={instance.hoverManager}
-    />
+    <ColumnProfileSparklines {columnHistogram} {displayType} hoverManager={instance.hoverManager} />
 
     <div class="tabular-info">
         <div class="labels">

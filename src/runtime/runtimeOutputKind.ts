@@ -6,10 +6,7 @@ import {
     RuntimeOutputKind,
 } from '../internal/runtimeTypes';
 export { RuntimeOutputKind } from '../internal/runtimeTypes';
-import {
-    RuntimeOutputMime,
-    RuntimeOutputWebviewReplayMimeTypes,
-} from './runtimeOutputContract';
+import { RuntimeOutputMime, RuntimeOutputWebviewReplayMimeTypes } from './runtimeOutputContract';
 
 /**
  * Message shape needed to infer output kind.
@@ -118,7 +115,10 @@ export function inferPositronOutputKind(message: RuntimeOutputMessageLike): Runt
         return RuntimeOutputKind.PlotWidget;
     }
 
-    if (mimeTypes.includes(RuntimeOutputMime.widgetState) || mimeTypes.includes(RuntimeOutputMime.widgetView)) {
+    if (
+        mimeTypes.includes(RuntimeOutputMime.widgetState) ||
+        mimeTypes.includes(RuntimeOutputMime.widgetView)
+    ) {
         return RuntimeOutputKind.IPyWidget;
     }
 
@@ -180,4 +180,6 @@ export type LanguageRuntimeOutputWithKind = LanguageRuntimeOutput & { kind: Runt
 export type LanguageRuntimeResultWithKind = LanguageRuntimeResult & { kind: RuntimeOutputKind };
 
 /** LanguageRuntimeUpdateOutput with an attached `kind` field. */
-export type LanguageRuntimeUpdateOutputWithKind = LanguageRuntimeUpdateOutput & { kind: RuntimeOutputKind };
+export type LanguageRuntimeUpdateOutputWithKind = LanguageRuntimeUpdateOutput & {
+    kind: RuntimeOutputKind;
+};

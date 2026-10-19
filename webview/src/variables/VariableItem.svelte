@@ -1,6 +1,6 @@
 <script lang="ts">
-    import { localize } from "$lib/localization";
-    import VerticalSplitter from "./VerticalSplitter.svelte";
+    import { localize } from '$lib/localization';
+    import VerticalSplitter from './VerticalSplitter.svelte';
 
     interface Props {
         id: string;
@@ -50,7 +50,7 @@
         recent = false,
         viewerLoading = false,
         disabled = false,
-        rightText = "",
+        rightText = '',
         onselect,
         ondeselect,
         ontoggleExpand,
@@ -61,8 +61,7 @@
     }: Props = $props();
 
     const isMac =
-        typeof navigator !== "undefined" &&
-        navigator.platform.toLowerCase().includes("mac");
+        typeof navigator !== 'undefined' && navigator.platform.toLowerCase().includes('mac');
 
     const indentMargin = $derived(indentLevel * 20);
 
@@ -70,10 +69,7 @@
         event.preventDefault();
         event.stopPropagation();
         if (disabled) {
-            if (
-                event.button === 2 ||
-                (event.button === 0 && isMac && event.ctrlKey)
-            ) {
+            if (event.button === 2 || (event.button === 0 && isMac && event.ctrlKey)) {
                 oncontextMenu?.(id, event.clientX, event.clientY);
             }
             return;
@@ -130,10 +126,7 @@
     onmousedown={handleMouseDown}
     ondblclick={handleDoubleClick}
 >
-    <div
-        class="name-column"
-        style="width: {nameColumnWidth}px; min-width: {nameColumnWidth}px;"
-    >
+    <div class="name-column" style="width: {nameColumnWidth}px; min-width: {nameColumnWidth}px;">
         <div class="name-column-indenter" style="margin-left: {indentMargin}px;">
             <div class="gutter">
                 <button
@@ -154,15 +147,11 @@
         </div>
     </div>
 
-    <VerticalSplitter
-        onBeginResize={onBeginResizeNameColumn}
-        onResize={onResizeNameColumn}
-    />
+    <VerticalSplitter onBeginResize={onBeginResizeNameColumn} onResize={onResizeNameColumn} />
 
     <div
         class="details-column"
-        style="width: {detailsColumnWidth - 6}px; min-width: {detailsColumnWidth -
-            6}px;"
+        style="width: {detailsColumnWidth - 6}px; min-width: {detailsColumnWidth - 6}px;"
     >
         <div class="value" title={displayValue}>{displayValue}</div>
         {#if hasViewer}
@@ -172,18 +161,12 @@
                     class:enabled={!viewerLoading}
                     class:disabled={viewerLoading}
                     title={viewerLoading
-                        ? localize("variables.loading", "Loading...")
-                        : kind === "table"
-                          ? localize(
-                                "variables.viewDataTable",
-                                "View Data Table",
-                            )
-                          : kind === "connection"
-                            ? localize(
-                                  "variables.viewConnection",
-                                  "View Connection",
-                              )
-                            : localize("variables.view", "View")}
+                        ? localize('variables.loading', 'Loading...')
+                        : kind === 'table'
+                          ? localize('variables.viewDataTable', 'View Data Table')
+                          : kind === 'connection'
+                            ? localize('variables.viewConnection', 'View Connection')
+                            : localize('variables.view', 'View')}
                     disabled={disabled || viewerLoading}
                     onclick={(event) => {
                         event.preventDefault();
@@ -215,8 +198,7 @@
         display: flex;
         cursor: pointer;
         box-sizing: border-box;
-        border-top: 0.5px solid
-            var(--vscode-positronVariables-border, var(--vscode-panel-border));
+        border-top: 0.5px solid var(--vscode-positronVariables-border, var(--vscode-panel-border));
         border-bottom: 0.5px solid
             var(--vscode-positronVariables-border, var(--vscode-panel-border));
         min-height: 26px;
@@ -351,7 +333,9 @@
     .viewer-icon {
         display: flex;
         cursor: pointer;
-        transition: background-color 0.2s ease, border-color 0.2s ease;
+        transition:
+            background-color 0.2s ease,
+            border-color 0.2s ease;
         border-radius: 4px;
         padding: 4px;
         border: 1px solid transparent;

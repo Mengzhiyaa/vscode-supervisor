@@ -22,26 +22,26 @@ const MCP_DESCRIPTOR_VERSION = 1;
 
 /** A live MCP registration: everything an agent needs in order to connect. */
 export interface McpConnection {
-	/** The workspace ID issued by the supervisor. */
-	workspaceId: string;
+    /** The workspace ID issued by the supervisor. */
+    workspaceId: string;
 
-	/** The workspace's name, as the user sees it. */
-	displayName: string;
+    /** The workspace's name, as the user sees it. */
+    displayName: string;
 
-	/** The port the listener is bound to. */
-	port: number;
+    /** The port the listener is bound to. */
+    port: number;
 
-	/** The bearer token agents present. Never logged. */
-	token: string;
+    /** The bearer token agents present. Never logged. */
+    token: string;
 
-	/** The MCP endpoint URL. */
-	url: string;
+    /** The MCP endpoint URL. */
+    url: string;
 
-	/**
-	 * The workspace's folders, by which the stdio bridge finds the workspace
-	 * an agent is working in.
-	 */
-	folders: string[];
+    /**
+     * The workspace's folders, by which the stdio bridge finds the workspace
+     * an agent is working in.
+     */
+    folders: string[];
 }
 
 /**
@@ -49,34 +49,34 @@ export interface McpConnection {
  * and credential, for the stdio bridge and anything else that reads it.
  */
 export interface McpConnectionDescriptor {
-	version: number;
-	workspaceId: string;
-	displayName: string;
-	port: number;
-	url: string;
-	token: string;
-	folders: string[];
+    version: number;
+    workspaceId: string;
+    displayName: string;
+    port: number;
+    url: string;
+    token: string;
+    folders: string[];
 
-	/**
-	 * When a window of the workspace last registered or took focus, as an ISO
-	 * 8601 UTC timestamp, which sorts chronologically as text.
-	 */
-	lastActive: string;
+    /**
+     * When a window of the workspace last registered or took focus, as an ISO
+     * 8601 UTC timestamp, which sorts chronologically as text.
+     */
+    lastActive: string;
 }
 
 /** One workspace as the index lists it. */
 export interface McpIndexEntry {
-	/** The descriptor holding this workspace's token. */
-	descriptor: string;
+    /** The descriptor holding this workspace's token. */
+    descriptor: string;
 
-	/** The workspace's folders, so a reader can find it by directory. */
-	folders: string[];
+    /** The workspace's folders, so a reader can find it by directory. */
+    folders: string[];
 
-	/**
-	 * When the workspace was last active, so a reader can prefer the one the
-	 * user is working in when two list the same folder.
-	 */
-	lastActive: string;
+    /**
+     * When the workspace was last active, so a reader can prefer the one the
+     * user is working in when two list the same folder.
+     */
+    lastActive: string;
 }
 
 /**
@@ -88,8 +88,8 @@ export interface McpIndexEntry {
  * which copy to trust.
  */
 export interface McpConnectionIndex {
-	version: number;
-	workspaces: Record<string, McpIndexEntry>;
+    version: number;
+    workspaces: Record<string, McpIndexEntry>;
 }
 
 /**
@@ -99,16 +99,16 @@ export interface McpConnectionIndex {
  * @returns The descriptor to write.
  */
 function connectionDescriptor(connection: McpConnection): McpConnectionDescriptor {
-	return {
-		version: MCP_DESCRIPTOR_VERSION,
-		workspaceId: connection.workspaceId,
-		displayName: connection.displayName,
-		port: connection.port,
-		url: connection.url,
-		token: connection.token,
-		folders: connection.folders,
-		lastActive: new Date().toISOString(),
-	};
+    return {
+        version: MCP_DESCRIPTOR_VERSION,
+        workspaceId: connection.workspaceId,
+        displayName: connection.displayName,
+        port: connection.port,
+        url: connection.url,
+        token: connection.token,
+        folders: connection.folders,
+        lastActive: new Date().toISOString(),
+    };
 }
 
 /**
@@ -119,7 +119,7 @@ function connectionDescriptor(connection: McpConnection): McpConnectionDescripto
  * @returns The path to the directory.
  */
 export function mcpConnectionsDirectory(storageUri: vscode.Uri): string {
-	return path.join(storageUri.fsPath, 'mcp');
+    return path.join(storageUri.fsPath, 'mcp');
 }
 
 /**
@@ -129,7 +129,7 @@ export function mcpConnectionsDirectory(storageUri: vscode.Uri): string {
  * @returns The path to the index.
  */
 export function mcpIndexPath(storageUri: vscode.Uri): string {
-	return path.join(mcpConnectionsDirectory(storageUri), 'connections.json');
+    return path.join(mcpConnectionsDirectory(storageUri), 'connections.json');
 }
 
 /**
@@ -140,7 +140,7 @@ export function mcpIndexPath(storageUri: vscode.Uri): string {
  * @returns The path to the descriptor.
  */
 export function mcpDescriptorPath(storageUri: vscode.Uri, workspaceId: string): string {
-	return path.join(descriptorDirectory(storageUri), fileName(workspaceId));
+    return path.join(descriptorDirectory(storageUri), fileName(workspaceId));
 }
 
 /**
@@ -156,13 +156,14 @@ export function mcpDescriptorPath(storageUri: vscode.Uri, workspaceId: string): 
  * @param connection The live registration.
  */
 export async function writeConnectionFiles(
-	storageUri: vscode.Uri,
-	connection: McpConnection,
+    storageUri: vscode.Uri,
+    connection: McpConnection,
 ): Promise<void> {
-	await writeJsonFile(
-		mcpDescriptorPath(storageUri, connection.workspaceId),
-		connectionDescriptor(connection));
-	await writeIndex(storageUri);
+    await writeJsonFile(
+        mcpDescriptorPath(storageUri, connection.workspaceId),
+        connectionDescriptor(connection),
+    );
+    await writeIndex(storageUri);
 }
 
 /**
@@ -172,16 +173,16 @@ export async function writeConnectionFiles(
  * @param connection The registration being given up.
  */
 export async function removeConnectionFiles(
-	storageUri: vscode.Uri,
-	connection: Pick<McpConnection, 'workspaceId'>,
+    storageUri: vscode.Uri,
+    connection: Pick<McpConnection, 'workspaceId'>,
 ): Promise<void> {
-	await fs.rm(mcpDescriptorPath(storageUri, connection.workspaceId), { force: true });
-	await writeIndex(storageUri);
+    await fs.rm(mcpDescriptorPath(storageUri, connection.workspaceId), { force: true });
+    await writeIndex(storageUri);
 }
 
 /** Where the per-workspace descriptors live. */
 function descriptorDirectory(storageUri: vscode.Uri): string {
-	return path.join(mcpConnectionsDirectory(storageUri), 'workspaces');
+    return path.join(mcpConnectionsDirectory(storageUri), 'workspaces');
 }
 
 /**
@@ -191,7 +192,7 @@ function descriptorDirectory(storageUri: vscode.Uri): string {
  * with a file of ours.
  */
 function fileName(workspaceId: string): string {
-	return `${encodeURIComponent(workspaceId)}.json`;
+    return `${encodeURIComponent(workspaceId)}.json`;
 }
 
 /**
@@ -206,31 +207,32 @@ function fileName(workspaceId: string): string {
  * @param storageUri The extension's global storage directory.
  */
 async function writeIndex(storageUri: vscode.Uri): Promise<void> {
-	const directory = descriptorDirectory(storageUri);
-	const workspaces: Record<string, McpIndexEntry> = {};
-	let names: string[] = [];
-	try {
-		names = await fs.readdir(directory);
-	} catch {
-		// Nothing has been registered on this machine yet.
-	}
-	for (const name of names.filter(entry => entry.endsWith('.json'))) {
-		const descriptorPath = path.join(directory, name);
-		try {
-			const descriptor: McpConnectionDescriptor =
-				JSON.parse(await fs.readFile(descriptorPath, 'utf8'));
-			workspaces[descriptor.workspaceId] = {
-				descriptor: descriptorPath,
-				folders: descriptor.folders ?? [],
-				lastActive: descriptor.lastActive,
-			};
-		} catch {
-			// A descriptor we cannot read is left out rather than making the
-			// whole index unwritable.
-		}
-	}
-	const index: McpConnectionIndex = { version: MCP_DESCRIPTOR_VERSION, workspaces };
-	await writeJsonFile(mcpIndexPath(storageUri), index);
+    const directory = descriptorDirectory(storageUri);
+    const workspaces: Record<string, McpIndexEntry> = {};
+    let names: string[] = [];
+    try {
+        names = await fs.readdir(directory);
+    } catch {
+        // Nothing has been registered on this machine yet.
+    }
+    for (const name of names.filter((entry) => entry.endsWith('.json'))) {
+        const descriptorPath = path.join(directory, name);
+        try {
+            const descriptor: McpConnectionDescriptor = JSON.parse(
+                await fs.readFile(descriptorPath, 'utf8'),
+            );
+            workspaces[descriptor.workspaceId] = {
+                descriptor: descriptorPath,
+                folders: descriptor.folders ?? [],
+                lastActive: descriptor.lastActive,
+            };
+        } catch {
+            // A descriptor we cannot read is left out rather than making the
+            // whole index unwritable.
+        }
+    }
+    const index: McpConnectionIndex = { version: MCP_DESCRIPTOR_VERSION, workspaces };
+    await writeJsonFile(mcpIndexPath(storageUri), index);
 }
 
 /**
@@ -241,12 +243,15 @@ async function writeIndex(storageUri: vscode.Uri): Promise<void> {
  * @param value The value to serialize into it.
  */
 async function writeJsonFile(file: string, value: unknown): Promise<void> {
-	await fs.mkdir(path.dirname(file), { recursive: true, mode: 0o700 });
-	const temporary = `${file}.${process.pid}.${randomUUID()}.tmp`;
-	try {
-		await fs.writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600, flag: 'wx' });
-		await fs.rename(temporary, file);
-	} finally {
-		await fs.rm(temporary, { force: true });
-	}
+    await fs.mkdir(path.dirname(file), { recursive: true, mode: 0o700 });
+    const temporary = `${file}.${process.pid}.${randomUUID()}.tmp`;
+    try {
+        await fs.writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, {
+            mode: 0o600,
+            flag: 'wx',
+        });
+        await fs.rename(temporary, file);
+    } finally {
+        await fs.rm(temporary, { force: true });
+    }
 }

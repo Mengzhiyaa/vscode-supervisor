@@ -11,17 +11,19 @@ function extension(id: string, languageId: string, modulePath = './webview/index
         packageJSON: {
             supervisor: {
                 languageAssetsVersion: 1,
-                languages: [{
-                    languageId,
-                    assets: {
-                        localResourceRoots: ['./webview', './syntaxes'],
-                        monacoSupportModule: modulePath,
-                        textMateGrammar: {
-                            scopeName: `source.${languageId}`,
-                            path: `./syntaxes/${languageId}.tmGrammar.json`,
+                languages: [
+                    {
+                        languageId,
+                        assets: {
+                            localResourceRoots: ['./webview', './syntaxes'],
+                            monacoSupportModule: modulePath,
+                            textMateGrammar: {
+                                scopeName: `source.${languageId}`,
+                                path: `./syntaxes/${languageId}.tmGrammar.json`,
+                            },
                         },
                     },
-                }],
+                ],
             },
         },
     };
@@ -30,7 +32,12 @@ function extension(id: string, languageId: string, modulePath = './webview/index
 suite('[Unit] passive language asset catalog', () => {
     test('reads assets from package manifests without activating extensions', () => {
         let activationCalls = 0;
-        const source = { ...extension('publisher.r', 'r'), activate: () => { activationCalls += 1; } };
+        const source = {
+            ...extension('publisher.r', 'r'),
+            activate: () => {
+                activationCalls += 1;
+            },
+        };
         const catalog = new PassiveLanguageAssetCatalog(() => [source], noExtensionChanges);
 
         assert.strictEqual(activationCalls, 0);
@@ -51,7 +58,9 @@ suite('[Unit] passive language asset catalog', () => {
 
         assert.strictEqual(catalog.snapshot.entries.length, 1);
         assert.strictEqual(catalog.snapshot.entries[0].assets.monacoSupportModule, undefined);
-        assert.ok(catalog.snapshot.diagnostics.some(entry => entry.message.includes('relative path')));
+        assert.ok(
+            catalog.snapshot.diagnostics.some((entry) => entry.message.includes('relative path')),
+        );
         catalog.dispose();
     });
 
@@ -61,7 +70,11 @@ suite('[Unit] passive language asset catalog', () => {
             noExtensionChanges,
         );
         assert.strictEqual(catalog.snapshot.entries[0].ownerExtensionId, 'publisher.a');
-        assert.ok(catalog.snapshot.diagnostics.some(entry => entry.message.includes('Multiple manifest owners')));
+        assert.ok(
+            catalog.snapshot.diagnostics.some((entry) =>
+                entry.message.includes('Multiple manifest owners'),
+            ),
+        );
         catalog.dispose();
     });
 
@@ -75,7 +88,10 @@ suite('[Unit] passive language asset catalog', () => {
         emitter.fire();
 
         assert.ok(catalog.snapshot.generation > firstGeneration);
-        assert.deepStrictEqual(catalog.snapshot.entries.map(entry => entry.languageId), ['python']);
+        assert.deepStrictEqual(
+            catalog.snapshot.entries.map((entry) => entry.languageId),
+            ['python'],
+        );
         catalog.dispose();
         emitter.dispose();
     });
@@ -86,12 +102,20 @@ suite('[Unit] passive language asset catalog', () => {
         second.extensionUri = first.extensionUri;
         second.packageJSON.supervisor.languages[0].assets.textMateGrammar.scopeName = 'source.r';
         const catalog = new PassiveLanguageAssetCatalog(() => [second, first], noExtensionChanges);
-        const python = catalog.snapshot.entries.find(entry => entry.languageId === 'python');
+        const python = catalog.snapshot.entries.find((entry) => entry.languageId === 'python');
 
         assert.strictEqual(python?.assets.monacoSupportModule, undefined);
         assert.strictEqual(python?.assets.textMateGrammar, undefined);
-        assert.ok(catalog.snapshot.diagnostics.some(entry => entry.message.includes('Monaco module conflicts')));
-        assert.ok(catalog.snapshot.diagnostics.some(entry => entry.message.includes("TextMate scope 'source.r'")));
+        assert.ok(
+            catalog.snapshot.diagnostics.some((entry) =>
+                entry.message.includes('Monaco module conflicts'),
+            ),
+        );
+        assert.ok(
+            catalog.snapshot.diagnostics.some((entry) =>
+                entry.message.includes("TextMate scope 'source.r'"),
+            ),
+        );
         catalog.dispose();
     });
 });

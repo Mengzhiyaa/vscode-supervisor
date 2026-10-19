@@ -5,8 +5,7 @@
 import { MouseSelectionType } from '../classes/dataGridInstance';
 
 const isMacintosh =
-    typeof navigator !== 'undefined' &&
-    navigator.platform.toLowerCase().includes('mac');
+    typeof navigator !== 'undefined' && navigator.platform.toLowerCase().includes('mac');
 
 /**
  * Maps mouse modifier keys to a MouseSelectionType.

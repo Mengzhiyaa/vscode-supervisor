@@ -3,12 +3,12 @@
   Port from Positron's summaryRowActionBar.tsx
 -->
 <script lang="ts">
-    import ActionBarFilter from "../../../../../shared/ActionBarFilter.svelte";
-    import { getDataExplorerContext } from "../../../../positronDataExplorerContext";
-    import SummaryRowSortDropdown from "./summaryRowSortDropdown.svelte";
-    import { MAX_ADVANCED_LAYOUT_ENTRY_COUNT } from "../../../../../dataGrid/classes/layoutManager";
-    import type { SearchSchemaSortOrder } from "../../../../types";
-    import type { TableSummaryDataGridInstance } from "../../../../tableSummaryDataGridInstance";
+    import ActionBarFilter from '../../../../../shared/ActionBarFilter.svelte';
+    import { getDataExplorerContext } from '../../../../positronDataExplorerContext';
+    import SummaryRowSortDropdown from './summaryRowSortDropdown.svelte';
+    import { MAX_ADVANCED_LAYOUT_ENTRY_COUNT } from '../../../../../dataGrid/classes/layoutManager';
+    import type { SearchSchemaSortOrder } from '../../../../types';
+    import type { TableSummaryDataGridInstance } from '../../../../tableSummaryDataGridInstance';
 
     const SEARCH_DEBOUNCE_TIMEOUT = 500;
 
@@ -22,9 +22,9 @@
     const { stores } = context;
     const { state: explorerState } = stores;
 
-    let searchText = $state("");
-    let debouncedSearchText = $state("");
-    let sortOption = $state<SearchSchemaSortOrder>("original");
+    let searchText = $state('');
+    let debouncedSearchText = $state('');
+    let sortOption = $state<SearchSchemaSortOrder>('original');
 
     const disabled = $derived.by(() => {
         const backendState = $explorerState.backendState;
@@ -39,9 +39,9 @@
 
         // Restore controls only when switching instances. A sort change must
         // not overwrite text that is still waiting for the search debounce.
-        searchText = instance.searchText || "";
-        debouncedSearchText = instance.searchText || "";
-        sortOption = instance.sortOption || "original";
+        searchText = instance.searchText || '';
+        debouncedSearchText = instance.searchText || '';
+        sortOption = instance.sortOption || 'original';
     });
 
     $effect(() => {
@@ -80,18 +80,14 @@
 
 <div class="summary-row-filter-bar">
     <div class="positron-action-bar summary-row-action-bar">
-        <div
-            class="action-bar-region action-bar-region-left action-bar-region-justify-left"
-        >
+        <div class="action-bar-region action-bar-region-left action-bar-region-justify-left">
             <SummaryRowSortDropdown
                 currentSort={sortOption}
                 disabled={disabled || !instance}
                 onSortChanged={handleSortChanged}
             />
         </div>
-        <div
-            class="action-bar-region action-bar-region-right action-bar-region-justify-right"
-        >
+        <div class="action-bar-region action-bar-region-right action-bar-region-justify-right">
             <ActionBarFilter
                 width={140}
                 initialFilterText={searchText}
@@ -113,13 +109,17 @@
         box-sizing: border-box;
         justify-content: space-between;
         grid-row: summary-row-action-bar / data-grid;
-        border-bottom: 1px solid var(--vscode-positronDataGrid-border, var(--vscode-editorGroup-border));
+        border-bottom: 1px solid
+            var(--vscode-positronDataGrid-border, var(--vscode-editorGroup-border));
     }
 
     .summary-row-filter-bar .positron-action-bar {
         width: 100%;
         align-items: center;
-        background: var(--vscode-positronDataExplorer-contrastBackground, var(--vscode-editor-background));
+        background: var(
+            --vscode-positronDataExplorer-contrastBackground,
+            var(--vscode-editor-background)
+        );
     }
 
     .summary-row-action-bar {

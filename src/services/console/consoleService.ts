@@ -5,7 +5,11 @@
 
 import { getErrorMessage } from '../../shared/errors';
 import * as vscode from 'vscode';
-import { CoreConfigurationKeys, CoreConfigurationSections, ViewCommands } from '../../coreCommandIds';
+import {
+    CoreConfigurationKeys,
+    CoreConfigurationSections,
+    ViewCommands,
+} from '../../coreCommandIds';
 import {
     IPositronConsoleService,
     IPositronConsoleInstance,
@@ -34,7 +38,6 @@ import { randomUUID } from 'crypto';
 import type { ConsoleErrorFollowupServiceLike } from './consoleErrorFollowup';
 import { ExecutionHistoryService } from './executionHistoryService';
 
-
 /**
  * PositronConsoleService class (1:1 Positron).
  * Manages all console instances across sessions.
@@ -46,9 +49,9 @@ export class PositronConsoleService implements IPositronConsoleService {
     private _consoleWidth = 80;
     private _consoleViewProvider:
         | {
-            view?: vscode.WebviewView;
-            reveal?(preserveFocus: boolean): Promise<void>;
-        }
+              view?: vscode.WebviewView;
+              reveal?(preserveFocus: boolean): Promise<void>;
+          }
         | undefined;
     private readonly _disposables: vscode.Disposable[] = [];
     private readonly _consoleStateStore?: ConsoleStateStore;
@@ -59,14 +62,27 @@ export class PositronConsoleService implements IPositronConsoleService {
     private readonly _executionObservers = new Set<vscode.Disposable>();
 
     // Event emitters (1:1 Positron naming)
-    private readonly _onDidStartPositronConsoleInstanceEmitter = new vscode.EventEmitter<IPositronConsoleInstance>();
-    private readonly _onDidDeletePositronConsoleInstanceEmitter = new vscode.EventEmitter<IPositronConsoleInstance>();
-    private readonly _onDidChangeActivePositronConsoleInstanceEmitter = new vscode.EventEmitter<IPositronConsoleInstance | undefined>();
+    private readonly _onDidStartPositronConsoleInstanceEmitter =
+        new vscode.EventEmitter<IPositronConsoleInstance>();
+    private readonly _onDidDeletePositronConsoleInstanceEmitter =
+        new vscode.EventEmitter<IPositronConsoleInstance>();
+    private readonly _onDidChangeActivePositronConsoleInstanceEmitter = new vscode.EventEmitter<
+        IPositronConsoleInstance | undefined
+    >();
     private readonly _onDidChangeConsoleWidthEmitter = new vscode.EventEmitter<number>();
-    private readonly _onDidExecuteCodeEmitter = new vscode.EventEmitter<ILanguageRuntimeCodeExecutedEvent>();
-    private readonly _onDidChangeInputStateEmitter = new vscode.EventEmitter<ILanguageRuntimeInputStateChangedEvent>();
-    private readonly _onDidRevealExecutionEmitter = new vscode.EventEmitter<{ sessionId: string; executionId: string }>();
-    private readonly _onDidChangePendingInputEmitter = new vscode.EventEmitter<{ sessionId: string; code?: string; inputPrompt: string }>();
+    private readonly _onDidExecuteCodeEmitter =
+        new vscode.EventEmitter<ILanguageRuntimeCodeExecutedEvent>();
+    private readonly _onDidChangeInputStateEmitter =
+        new vscode.EventEmitter<ILanguageRuntimeInputStateChangedEvent>();
+    private readonly _onDidRevealExecutionEmitter = new vscode.EventEmitter<{
+        sessionId: string;
+        executionId: string;
+    }>();
+    private readonly _onDidChangePendingInputEmitter = new vscode.EventEmitter<{
+        sessionId: string;
+        code?: string;
+        inputPrompt: string;
+    }>();
     //#endregion
 
     constructor(
@@ -103,9 +119,12 @@ export class PositronConsoleService implements IPositronConsoleService {
         return this._activeConsoleInstance;
     }
 
-    readonly onDidStartPositronConsoleInstance = this._onDidStartPositronConsoleInstanceEmitter.event;
-    readonly onDidDeletePositronConsoleInstance = this._onDidDeletePositronConsoleInstanceEmitter.event;
-    readonly onDidChangeActivePositronConsoleInstance = this._onDidChangeActivePositronConsoleInstanceEmitter.event;
+    readonly onDidStartPositronConsoleInstance =
+        this._onDidStartPositronConsoleInstanceEmitter.event;
+    readonly onDidDeletePositronConsoleInstance =
+        this._onDidDeletePositronConsoleInstanceEmitter.event;
+    readonly onDidChangeActivePositronConsoleInstance =
+        this._onDidChangeActivePositronConsoleInstanceEmitter.event;
     readonly onDidChangeConsoleWidth = this._onDidChangeConsoleWidthEmitter.event;
     readonly onDidExecuteCode = this._onDidExecuteCodeEmitter.event;
     readonly onDidChangeInputState = this._onDidChangeInputStateEmitter.event;
@@ -125,7 +144,7 @@ export class PositronConsoleService implements IPositronConsoleService {
 
         this._scrollbackSize = this._getConfiguredScrollbackSize();
         this._disposables.push(
-            vscode.workspace.onDidChangeConfiguration(event => {
+            vscode.workspace.onDidChangeConfiguration((event) => {
                 if (!event.affectsConfiguration(CoreConfigurationKeys.consoleScrollbackSize)) {
                     return;
                 }
@@ -141,7 +160,9 @@ export class PositronConsoleService implements IPositronConsoleService {
         // Listen for session starts BEFORE kernel starts (Positron pattern: onWillStartSession)
         this._disposables.push(
             this._sessionManager.onWillStartSession((e) => {
-                this._outputChannel.debug(`[PositronConsoleService] Session will start: ${e.session.sessionId}, mode: ${e.startMode}`);
+                this._outputChannel.debug(
+                    `[PositronConsoleService] Session will start: ${e.session.sessionId}, mode: ${e.startMode}`,
+                );
 
                 // Convert RuntimeStartMode to SessionAttachMode
                 let attachMode: SessionAttachMode;
@@ -168,18 +189,22 @@ export class PositronConsoleService implements IPositronConsoleService {
                     // Create new console instance
                     this.startPositronConsoleInstance(e.session, attachMode, e.activate);
                 }
-            })
+            }),
         );
 
         // Follow foreground changes immediately; service handoff may finish later.
         this._disposables.push(
-            this._sessionManager.onDidChangeForegroundSession((session: RuntimeSession | undefined) => {
-                if (session) {
-                    this._outputChannel.debug(`[PositronConsoleService] Active session changed: ${session.sessionId}`);
-                    // Just activate the console, instance should already exist from onWillStartSession
-                    this.setActivePositronConsoleSession(session.sessionId);
-                }
-            })
+            this._sessionManager.onDidChangeForegroundSession(
+                (session: RuntimeSession | undefined) => {
+                    if (session) {
+                        this._outputChannel.debug(
+                            `[PositronConsoleService] Active session changed: ${session.sessionId}`,
+                        );
+                        // Just activate the console, instance should already exist from onWillStartSession
+                        this.setActivePositronConsoleSession(session.sessionId);
+                    }
+                },
+            ),
         );
 
         // Listen for session deletions (Positron pattern: onDidDeleteRuntimeSession)
@@ -200,10 +225,10 @@ export class PositronConsoleService implements IPositronConsoleService {
             this._runtimeStartupService &&
                 typeof this._runtimeStartupService.onSessionRestoreDiscarding === 'function'
                 ? this._runtimeStartupService.onSessionRestoreDiscarding((event) => {
-                    if (this._consoleInstancesBySessionId.has(event.sessionId)) {
-                        this._restoreDiscardsInProgress.add(event.sessionId);
-                    }
-                })
+                      if (this._consoleInstancesBySessionId.has(event.sessionId)) {
+                          this._restoreDiscardsInProgress.add(event.sessionId);
+                      }
+                  })
                 : new vscode.Disposable(() => undefined),
             this._runtimeStartupService?.onSessionRestoreFailure((event) => {
                 // A failed reconnect is not a user-requested deletion. Keep the
@@ -242,9 +267,9 @@ export class PositronConsoleService implements IPositronConsoleService {
     setConsoleViewProvider(
         provider:
             | {
-                view?: vscode.WebviewView;
-                reveal?(preserveFocus: boolean): Promise<void>;
-            }
+                  view?: vscode.WebviewView;
+                  reveal?(preserveFocus: boolean): Promise<void>;
+              }
             | undefined,
     ): void {
         this._consoleViewProvider = provider;
@@ -316,7 +341,9 @@ export class PositronConsoleService implements IPositronConsoleService {
 
         const instance = await this._resolveConsoleInstance(languageId, sessionId, code);
         if (!instance) {
-            throw new Error(`Could not find or create console for language ID ${languageId} (attempting to execute ${code})`);
+            throw new Error(
+                `Could not find or create console for language ID ${languageId} (attempting to execute ${code})`,
+            );
         }
 
         if (instance !== this._activeConsoleInstance) {
@@ -332,12 +359,17 @@ export class PositronConsoleService implements IPositronConsoleService {
         }
 
         const id = executionId ?? (observer ? randomUUID() : undefined);
-        const observation = observer && id
-            ? this._observeExecution(instance, id, observer)
-            : undefined;
+        const observation =
+            observer && id ? this._observeExecution(instance, id, observer) : undefined;
         try {
             await instance.enqueueCode(
-                code, attribution, allowIncomplete, mode, errorBehavior, id, executionMetadata,
+                code,
+                attribution,
+                allowIncomplete,
+                mode,
+                errorBehavior,
+                id,
+                executionMetadata,
             );
         } catch (error) {
             observation?.fail(error instanceof Error ? error : new Error(getErrorMessage(error)));
@@ -347,25 +379,39 @@ export class PositronConsoleService implements IPositronConsoleService {
         return instance.sessionId;
     }
 
-    private _observeExecution(instance: PositronConsoleInstance, id: string, observer: ICodeExecutionObserver) {
+    private _observeExecution(
+        instance: PositronConsoleInstance,
+        id: string,
+        observer: ICodeExecutionObserver,
+    ) {
         const session = instance.attachedRuntimeSession;
-        if (!session) { throw new Error('The Console is not attached to a runtime session.'); }
+        if (!session) {
+            throw new Error('The Console is not attached to a runtime session.');
+        }
         const subscriptions: vscode.Disposable[] = [];
         let settled = false;
         const finish = (error?: Error) => {
-            if (settled) { return; }
+            if (settled) {
+                return;
+            }
             settled = true;
-            subscriptions.forEach(subscription => subscription.dispose());
+            subscriptions.forEach((subscription) => subscription.dispose());
             this._executionObservers.delete(disposable);
-            if (error) { observer.onFailed?.(error); } else { observer.onFinished?.(); }
+            if (error) {
+                observer.onFailed?.(error);
+            } else {
+                observer.onFinished?.();
+            }
         };
         const disposable = new vscode.Disposable(() => finish(new vscode.CancellationError()));
         this._executionObservers.add(disposable);
         subscriptions.push(
-            session.onDidReceiveRuntimeMessageState(message => {
-                if (message.parent_id === id && String(message.state) === 'idle') { finish(); }
+            session.onDidReceiveRuntimeMessageState((message) => {
+                if (message.parent_id === id && String(message.state) === 'idle') {
+                    finish();
+                }
             }),
-            session.onDidReceiveRuntimeMessageError(message => {
+            session.onDidReceiveRuntimeMessageError((message) => {
                 if (message.parent_id === id) {
                     const error = new Error(message.message);
                     error.name = message.name;
@@ -373,15 +419,23 @@ export class PositronConsoleService implements IPositronConsoleService {
                     finish(error);
                 }
             }),
-            session.onDidEndSession(() => finish(new Error('The runtime session ended before execution completed.'))),
-            instance.onDidAttachSession(attached => {
-                if (attached !== session) { finish(new vscode.CancellationError()); }
+            session.onDidEndSession(() =>
+                finish(new Error('The runtime session ended before execution completed.')),
+            ),
+            instance.onDidAttachSession((attached) => {
+                if (attached !== session) {
+                    finish(new vscode.CancellationError());
+                }
             }),
         );
-        const cancelled = session.onDidCancelExecution?.(executionId => {
-            if (executionId === id) { finish(new vscode.CancellationError()); }
+        const cancelled = session.onDidCancelExecution?.((executionId) => {
+            if (executionId === id) {
+                finish(new vscode.CancellationError());
+            }
         });
-        if (cancelled) { subscriptions.push(cancelled); }
+        if (cancelled) {
+            subscriptions.push(cancelled);
+        }
         return { fail: (error: Error) => finish(error) };
     }
 
@@ -440,7 +494,9 @@ export class PositronConsoleService implements IPositronConsoleService {
     dispose(): void {
         this._outputChannel.debug('[PositronConsoleService] Disposing...');
         this._restoreDiscardsInProgress.clear();
-        for (const observer of [...this._executionObservers]) { observer.dispose(); }
+        for (const observer of [...this._executionObservers]) {
+            observer.dispose();
+        }
 
         // Dispose all console instances
         for (const instance of this._consoleInstancesBySessionId.values()) {
@@ -459,7 +515,7 @@ export class PositronConsoleService implements IPositronConsoleService {
         this._onDidChangePendingInputEmitter.dispose();
 
         // Dispose subscriptions
-        this._disposables.forEach(d => d.dispose());
+        this._disposables.forEach((d) => d.dispose());
     }
     //#endregion
 
@@ -485,7 +541,9 @@ export class PositronConsoleService implements IPositronConsoleService {
             return;
         }
 
-        this._outputChannel.debug(`[PositronConsoleService] Setting active console: ${instance.sessionId}`);
+        this._outputChannel.debug(
+            `[PositronConsoleService] Setting active console: ${instance.sessionId}`,
+        );
         this._activeConsoleInstance = instance;
         void this._consoleStateStore?.setActiveSessionId(instance.sessionId);
         this._onDidChangeActivePositronConsoleInstanceEmitter.fire(instance);
@@ -544,8 +602,10 @@ export class PositronConsoleService implements IPositronConsoleService {
         }
 
         return Array.from(this._consoleInstancesBySessionId.values())
-            .filter(instance => this._canRouteToConsoleInstance(instance))
-            .sort((a, b) => b.sessionMetadata.createdTimestamp - a.sessionMetadata.createdTimestamp)[0];
+            .filter((instance) => this._canRouteToConsoleInstance(instance))
+            .sort(
+                (a, b) => b.sessionMetadata.createdTimestamp - a.sessionMetadata.createdTimestamp,
+            )[0];
     }
 
     private async _resolveConsoleInstance(
@@ -564,7 +624,7 @@ export class PositronConsoleService implements IPositronConsoleService {
             if (existingInstance.runtimeMetadata.languageId !== languageId) {
                 this._outputChannel.warn(
                     `Code is being executed in a console instance for language ` +
-                    `${existingInstance.runtimeMetadata.languageId} (session ${sessionId}), not for requested language ${languageId}.`,
+                        `${existingInstance.runtimeMetadata.languageId} (session ${sessionId}), not for requested language ${languageId}.`,
                 );
             }
 
@@ -592,7 +652,9 @@ export class PositronConsoleService implements IPositronConsoleService {
         return this._startConsoleInstanceForLanguage(languageId, code);
     }
 
-    private _findConsoleInstanceForLanguage(languageId: string): PositronConsoleInstance | undefined {
+    private _findConsoleInstanceForLanguage(
+        languageId: string,
+    ): PositronConsoleInstance | undefined {
         return Array.from(this._consoleInstancesBySessionId.values())
             .sort((a, b) => b.sessionMetadata.createdTimestamp - a.sessionMetadata.createdTimestamp)
             .find(
@@ -638,7 +700,7 @@ export class PositronConsoleService implements IPositronConsoleService {
         if (instance.runtimeMetadata.languageId !== languageId) {
             throw new Error(
                 `Started console session ${session.sessionId} for language ` +
-                `${instance.runtimeMetadata.languageId}, but ${languageId} was requested while executing ${code}.`,
+                    `${instance.runtimeMetadata.languageId}, but ${languageId} was requested while executing ${code}.`,
             );
         }
 
@@ -648,9 +710,11 @@ export class PositronConsoleService implements IPositronConsoleService {
     private startPositronConsoleInstance(
         session: RuntimeSession,
         mode: SessionAttachMode,
-        activate: boolean = false
+        activate: boolean = false,
     ): PositronConsoleInstance {
-        this._outputChannel.debug(`[PositronConsoleService] Starting console instance for: ${session.sessionId}`);
+        this._outputChannel.debug(
+            `[PositronConsoleService] Starting console instance for: ${session.sessionId}`,
+        );
 
         const instance = this._constructPositronConsoleInstance(
             session.sessionMetadata,
@@ -679,11 +743,14 @@ export class PositronConsoleService implements IPositronConsoleService {
         }
 
         try {
-            const restoredSessions = (await this._runtimeStartupService.getRestoredSessions())
-                .filter(session => this._shouldRestorePositronConsole(session));
+            const restoredSessions = (
+                await this._runtimeStartupService.getRestoredSessions()
+            ).filter((session) => this._shouldRestorePositronConsole(session));
             const persistedActiveSessionId = this._consoleStateStore?.getActiveSessionId();
             const activeSessionId = !this._activeConsoleInstance
-                ? restoredSessions.some(session => session.metadata.sessionId === persistedActiveSessionId)
+                ? restoredSessions.some(
+                      (session) => session.metadata.sessionId === persistedActiveSessionId,
+                  )
                     ? persistedActiveSessionId
                     : restoredSessions[0]?.metadata.sessionId
                 : undefined;
@@ -699,13 +766,17 @@ export class PositronConsoleService implements IPositronConsoleService {
                 );
             }
         } catch (error) {
-            this._outputChannel.error(`[PositronConsoleService] Failed to restore console instances: ${getErrorMessage(error)}`);
+            this._outputChannel.error(
+                `[PositronConsoleService] Failed to restore console instances: ${getErrorMessage(error)}`,
+            );
         }
     }
 
     private _shouldRestorePositronConsole(session: SerializedSessionMetadata): boolean {
-        return session.metadata.sessionMode === LanguageRuntimeSessionMode.Console ||
-            session.hasConsole === true;
+        return (
+            session.metadata.sessionMode === LanguageRuntimeSessionMode.Console ||
+            session.hasConsole === true
+        );
     }
 
     private _restorePositronConsole(
@@ -714,7 +785,10 @@ export class PositronConsoleService implements IPositronConsoleService {
     ): PositronConsoleInstance {
         const sessionMetadata = {
             ...session.metadata,
-            sessionName: session.sessionName || session.metadata.sessionName || session.runtimeMetadata.runtimeName,
+            sessionName:
+                session.sessionName ||
+                session.metadata.sessionName ||
+                session.runtimeMetadata.runtimeName,
             workingDirectory: session.workingDirectory ?? session.metadata.workingDirectory,
         };
         const instance = this._constructPositronConsoleInstance(
@@ -729,9 +803,8 @@ export class PositronConsoleService implements IPositronConsoleService {
             instance,
             SessionAttachMode.Reconnecting,
         );
-        const executionEntries = this._executionHistoryService?.getExecutionEntries(
-            instance.sessionId,
-        ) ?? [];
+        const executionEntries =
+            this._executionHistoryService?.getExecutionEntries(instance.sessionId) ?? [];
         if (legacyState) {
             this._executionHistoryService?.restoreLegacyExecutionEntries(
                 instance.sessionId,
@@ -755,10 +828,7 @@ export class PositronConsoleService implements IPositronConsoleService {
         runtimeMetadata: RuntimeSession['runtimeMetadata'],
         activate: boolean,
     ): PositronConsoleInstance {
-        const instance = this._constructPositronConsoleInstance(
-            sessionMetadata,
-            runtimeMetadata,
-        );
+        const instance = this._constructPositronConsoleInstance(sessionMetadata, runtimeMetadata);
         this._publishPositronConsoleInstance(instance, activate);
         return instance;
     }
@@ -779,27 +849,27 @@ export class PositronConsoleService implements IPositronConsoleService {
         instance.setScrollbackSize(this._scrollbackSize);
 
         this._disposables.push(
-            instance.onDidExecuteCode(event => {
+            instance.onDidExecuteCode((event) => {
                 this._onDidExecuteCodeEmitter.fire(event);
             }),
-            instance.onDidChangeInputState(event => {
+            instance.onDidChangeInputState((event) => {
                 this._onDidChangeInputStateEmitter.fire({
                     sessionId: instance.sessionId,
                     executionId: event.executionId,
-                    state: event.state
+                    state: event.state,
                 });
             }),
-            instance.onDidRevealExecution(executionId => {
+            instance.onDidRevealExecution((executionId) => {
                 this._onDidRevealExecutionEmitter.fire({
                     sessionId: instance.sessionId,
-                    executionId
+                    executionId,
                 });
             }),
-            instance.onDidChangePendingInput(event => {
+            instance.onDidChangePendingInput((event) => {
                 this._onDidChangePendingInputEmitter.fire({
                     sessionId: instance.sessionId,
                     code: event.code,
-                    inputPrompt: event.inputPrompt
+                    inputPrompt: event.inputPrompt,
                 });
             }),
         );
@@ -866,16 +936,16 @@ export class PositronConsoleService implements IPositronConsoleService {
                 switch (runtimeEvent.event.name) {
                     case UiFrontendEvent.PromptState:
                         instance.handlePromptStateChange(
-                            (runtimeEvent.event.data ?? {}) as Partial<PromptStateEvent>
+                            (runtimeEvent.event.data ?? {}) as Partial<PromptStateEvent>,
                         );
                         break;
                     case UiFrontendEvent.WorkingDirectory:
                         instance.handleWorkingDirectoryChange(
-                            (runtimeEvent.event.data ?? {}) as Partial<WorkingDirectoryEvent>
+                            (runtimeEvent.event.data ?? {}) as Partial<WorkingDirectoryEvent>,
                         );
                         break;
                 }
-            })
+            }),
         );
     }
     //#endregion

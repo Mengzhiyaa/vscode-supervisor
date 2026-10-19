@@ -8,7 +8,7 @@ export default defineConfig(({ mode }) => ({
     server: {
         host: '0.0.0.0',
         port: 5173,
-        strictPort: true
+        strictPort: true,
     },
     build: {
         outDir: 'dist',
@@ -34,10 +34,12 @@ export default defineConfig(({ mode }) => ({
                 // Keep Monaco CSS at setup/index.css, which Host HTML loads explicitly.
                 // Feature pruning must not split core styles into an unlinked editor CSS.
                 codeSplitting: {
-                    groups: [{
-                        name: 'setup',
-                        test: /(?:node_modules[\\/]monaco-editor[\\/]|src[\\/]lib[\\/]monaco[\\/]setup\.ts$)/,
-                    }],
+                    groups: [
+                        {
+                            name: 'setup',
+                            test: /(?:node_modules[\\/]monaco-editor[\\/]|src[\\/]lib[\\/]monaco[\\/]setup\.ts$)/,
+                        },
+                    ],
                 },
                 entryFileNames: '[name]/index.js',
                 chunkFileNames: 'shared/[name]-[hash].js',
@@ -47,18 +49,18 @@ export default defineConfig(({ mode }) => ({
                         return '[name]/index.css';
                     }
                     return 'assets/[name]-[hash][extname]';
-                }
-            }
+                },
+            },
         },
         // Enable minification in production mode
-        minify: mode === 'production' ? 'esbuild' : false
+        minify: mode === 'production' ? 'esbuild' : false,
     },
     // Resolve aliases
     resolve: {
         alias: {
-            '$lib': resolve(__dirname, 'src/lib'),
-            '@shared': resolve(__dirname, '..', 'src', 'shared')
-        }
+            $lib: resolve(__dirname, 'src/lib'),
+            '@shared': resolve(__dirname, '..', 'src', 'shared'),
+        },
     },
     // Optimize deps for Monaco and TextMate integration
     optimizeDeps: {
@@ -67,9 +69,9 @@ export default defineConfig(({ mode }) => ({
             'monaco-editor/languages/definitions/r/register',
             'monaco-editor/languages/definitions/python/register',
             'vscode-textmate',
-            'vscode-oniguruma'
-        ]
+            'vscode-oniguruma',
+        ],
     },
     // Ensure .wasm files are treated as assets
-    assetsInclude: ['**/*.wasm']
+    assetsInclude: ['**/*.wasm'],
 }));

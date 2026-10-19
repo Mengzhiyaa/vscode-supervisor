@@ -3,8 +3,8 @@
   Port from Positron's VectorHistogram component
 -->
 <script lang="ts">
-    import type { DataGridHoverManager } from "../../dataGrid/classes/dataGridInstance";
-    import { isIntegerDisplayType } from "../columnDisplayTypeUtils";
+    import type { DataGridHoverManager } from '../../dataGrid/classes/dataGridInstance';
+    import { isIntegerDisplayType } from '../columnDisplayTypeUtils';
 
     interface Props {
         histogram: {
@@ -45,18 +45,13 @@
         const graphHeight = height;
 
         return counts.map((count, index) => {
-            const percent =
-                totalCount > 0
-                    ? ((count / totalCount) * 100).toFixed(1)
-                    : "0.0";
-            const start = histogram.bin_edges[index] ?? "";
-            const end = histogram.bin_edges[index + 1] ?? "";
+            const percent = totalCount > 0 ? ((count / totalCount) * 100).toFixed(1) : '0.0';
+            const start = histogram.bin_edges[index] ?? '';
+            const end = histogram.bin_edges[index + 1] ?? '';
             const barHeight = (count / maxCount) * graphHeight;
-            const integerType = displayType
-                ? isIntegerDisplayType(displayType)
-                : false;
-            const parsedStart = Number.parseFloat(start.replaceAll(",", ""));
-            const parsedEnd = Number.parseFloat(end.replaceAll(",", ""));
+            const integerType = displayType ? isIntegerDisplayType(displayType) : false;
+            const parsedStart = Number.parseFloat(start.replaceAll(',', ''));
+            const parsedEnd = Number.parseFloat(end.replaceAll(',', ''));
             const formattedStart =
                 integerType && !Number.isNaN(parsedStart)
                     ? Math.ceil(parsedStart).toString()
@@ -78,10 +73,10 @@
 
     const histogramPath = $derived.by(() => {
         if (!bars.length) {
-            return "";
+            return '';
         }
 
-        let path = "";
+        let path = '';
         const baseLineY = height - xAxisHeight;
 
         for (const [index, bar] of bars.entries()) {
@@ -96,7 +91,7 @@
             path += `L ${nextX} ${baseLineY} `;
         }
 
-        path += "Z";
+        path += 'Z';
         return path;
     });
 
@@ -123,13 +118,7 @@
         height="100%"
         shape-rendering="crispEdges"
     >
-        <rect
-            class="x-axis"
-            x="0"
-            y={height - xAxisHeight}
-            width={width}
-            height={xAxisHeight}
-        />
+        <rect class="x-axis" x="0" y={height - xAxisHeight} {width} height={xAxisHeight} />
 
         <path class="bin-count" d={histogramPath} />
 
@@ -160,11 +149,7 @@
                 role="presentation"
                 aria-hidden="true"
                 onmouseenter={(event) =>
-                    handleBarEnter(
-                        event.currentTarget as HTMLElement,
-                        i,
-                        bar.tooltip,
-                    )}
+                    handleBarEnter(event.currentTarget as HTMLElement, i, bar.tooltip)}
                 onmouseleave={handleBarLeave}
             ></div>
         {/each}

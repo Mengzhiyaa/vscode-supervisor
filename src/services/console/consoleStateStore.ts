@@ -1,13 +1,13 @@
 import { getErrorMessage } from '../../shared/errors';
-import * as vscode from "vscode";
+import * as vscode from 'vscode';
 import { createHash } from 'crypto';
-import { PositronConsoleInstance, SerializedConsoleState } from "./consoleInstance";
-import { SessionAttachMode } from "./interfaces/consoleService";
-import type { SerializedRuntimeItem, SerializedActivityItem } from "../../shared/consoleState";
-import { ConsoleRecoveryFileStore } from "./consoleRecoveryFileStore";
+import { PositronConsoleInstance, SerializedConsoleState } from './consoleInstance';
+import { SessionAttachMode } from './interfaces/consoleService';
+import type { SerializedRuntimeItem, SerializedActivityItem } from '../../shared/consoleState';
+import { ConsoleRecoveryFileStore } from './consoleRecoveryFileStore';
 
-const ConsoleStateKeyPrefix = "vscode-supervisor.console.state.";
-const ActiveConsoleSessionKey = "vscode-supervisor.console.activeSession.v1";
+const ConsoleStateKeyPrefix = 'vscode-supervisor.console.state.';
+const ActiveConsoleSessionKey = 'vscode-supervisor.console.activeSession.v1';
 
 /** Self-imposed budget. Memento has no hard VS Code limit; 256 KB covers most
  *  interactive sessions comfortably. */
@@ -74,8 +74,9 @@ export class ConsoleStateStore implements vscode.Disposable {
             return;
         }
 
-        const legacyKeys = this._storage.keys()
-            .filter(key => key.startsWith(ConsoleStateKeyPrefix));
+        const legacyKeys = this._storage
+            .keys()
+            .filter((key) => key.startsWith(ConsoleStateKeyPrefix));
         const migratedLegacyKeys: string[] = [];
         for (const key of legacyKeys) {
             const sessionId = key.slice(ConsoleStateKeyPrefix.length);
@@ -101,7 +102,7 @@ export class ConsoleStateStore implements vscode.Disposable {
         // All successfully migrated Console data is now canonical in the
         // Extension Host file store. Batch removal so Memento can coalesce it.
         await Promise.all([
-            ...migratedLegacyKeys.map(key => this._storage.update(key, undefined)),
+            ...migratedLegacyKeys.map((key) => this._storage.update(key, undefined)),
             ...(hasLegacyActiveSession
                 ? [this._storage.update(ActiveConsoleSessionKey, undefined)]
                 : []),
@@ -116,12 +117,16 @@ export class ConsoleStateStore implements vscode.Disposable {
         instance: PositronConsoleInstance,
         attachMode: SessionAttachMode,
     ): SerializedConsoleState | undefined {
-        if (attachMode === SessionAttachMode.Starting || attachMode === SessionAttachMode.Restarting) {
+        if (
+            attachMode === SessionAttachMode.Starting ||
+            attachMode === SessionAttachMode.Restarting
+        ) {
             void this.delete(instance.sessionId);
             return undefined;
         }
 
-        const state = this._fileStore.get(instance.sessionId) ??
+        const state =
+            this._fileStore.get(instance.sessionId) ??
             this._storage.get<SerializedConsoleState>(this._key(instance.sessionId));
         if (!state) {
             return undefined;
@@ -134,14 +139,13 @@ export class ConsoleStateStore implements vscode.Disposable {
                     state,
                     this._fileStore.enabled ? MaxFileCheckpointBytes : MaxPersistedStateBytes,
                 );
-                this._lastPersistedHash.set(
-                    instance.sessionId,
-                    this._hashState(restoredState),
-                );
+                this._lastPersistedHash.set(instance.sessionId, this._hashState(restoredState));
             }
             return state;
         } catch (error) {
-            this._logChannel.warn(`[ConsoleStateStore] Failed to restore state for ${instance.sessionId}: ${getErrorMessage(error)}`);
+            this._logChannel.warn(
+                `[ConsoleStateStore] Failed to restore state for ${instance.sessionId}: ${getErrorMessage(error)}`,
+            );
         }
         return undefined;
     }
@@ -155,14 +159,11 @@ export class ConsoleStateStore implements vscode.Disposable {
         this._instances.set(sessionId, instance);
 
         const markDirty = () => {
-            this._dirtyVersion.set(
-                sessionId,
-                (this._dirtyVersion.get(sessionId) ?? 0) + 1
-            );
+            this._dirtyVersion.set(sessionId, (this._dirtyVersion.get(sessionId) ?? 0) + 1);
         };
 
         const flushDirty = () => {
-            void this.flush().catch(error => {
+            void this.flush().catch((error) => {
                 this._logChannel.warn(
                     `[ConsoleStateStore] Immediate flush failed for ${sessionId}: ${getErrorMessage(error)}`,
                 );
@@ -190,26 +191,26 @@ export class ConsoleStateStore implements vscode.Disposable {
     }
 
     getActiveSessionId(): string | undefined {
-        return this._fileStore.getActiveSessionId() ??
-            this._storage.get<string>(ActiveConsoleSessionKey);
+        return (
+            this._fileStore.getActiveSessionId() ??
+            this._storage.get<string>(ActiveConsoleSessionKey)
+        );
     }
 
     setActiveSessionId(sessionId: string | undefined): Promise<void> {
-        return this._enqueueStorageWrite(
-            async () => {
-                if (this._fileStore.enabled) {
-                    await this._fileStore.setActiveSessionId(sessionId);
-                } else if (this._storage.get<string>(ActiveConsoleSessionKey) !== sessionId) {
-                    await this._storage.update(ActiveConsoleSessionKey, sessionId);
-                }
-            },
-        );
+        return this._enqueueStorageWrite(async () => {
+            if (this._fileStore.enabled) {
+                await this._fileStore.setActiveSessionId(sessionId);
+            } else if (this._storage.get<string>(ActiveConsoleSessionKey) !== sessionId) {
+                await this._storage.update(ActiveConsoleSessionKey, sessionId);
+            }
+        });
     }
 
     delete(sessionId: string): Promise<void> {
         const disposables = this._subscriptions.get(sessionId);
         if (disposables) {
-            disposables.forEach(d => d.dispose());
+            disposables.forEach((d) => d.dispose());
             this._subscriptions.delete(sessionId);
         }
 
@@ -217,15 +218,13 @@ export class ConsoleStateStore implements vscode.Disposable {
         this._dirtyVersion.delete(sessionId);
         this._flushedVersion.delete(sessionId);
         this._lastPersistedHash.delete(sessionId);
-        return this._enqueueStorageWrite(
-            async () => {
-                if (this._fileStore.enabled) {
-                    await this._fileStore.delete(sessionId);
-                } else {
-                    await this._storage.update(this._key(sessionId), undefined);
-                }
-            },
-        );
+        return this._enqueueStorageWrite(async () => {
+            if (this._fileStore.enabled) {
+                await this._fileStore.delete(sessionId);
+            } else {
+                await this._storage.update(this._key(sessionId), undefined);
+            }
+        });
     }
 
     /**
@@ -245,10 +244,9 @@ export class ConsoleStateStore implements vscode.Disposable {
      */
     async flush(): Promise<void> {
         if (!this._flushPromise) {
-            this._flushPromise = this._drainUntilStable()
-                .finally(() => {
-                    this._flushPromise = undefined;
-                });
+            this._flushPromise = this._drainUntilStable().finally(() => {
+                this._flushPromise = undefined;
+            });
         }
         return this._flushPromise;
     }
@@ -269,7 +267,7 @@ export class ConsoleStateStore implements vscode.Disposable {
         void this._flushInBackground('Disposal');
 
         for (const disposables of this._subscriptions.values()) {
-            disposables.forEach(d => d.dispose());
+            disposables.forEach((d) => d.dispose());
         }
         this._subscriptions.clear();
         this._instances.clear();
@@ -286,7 +284,9 @@ export class ConsoleStateStore implements vscode.Disposable {
         try {
             await this.flush();
         } catch (error) {
-            this._logChannel.warn(`[ConsoleStateStore] ${reason} flush failed: ${getErrorMessage(error)}`);
+            this._logChannel.warn(
+                `[ConsoleStateStore] ${reason} flush failed: ${getErrorMessage(error)}`,
+            );
         }
     }
 
@@ -298,7 +298,7 @@ export class ConsoleStateStore implements vscode.Disposable {
             await this._storageWriteQueue;
             iterations += 1;
             if (iterations >= 3 && this._hasDirtySessions()) {
-                await new Promise<void>(resolve => setTimeout(resolve, 0));
+                await new Promise<void>((resolve) => setTimeout(resolve, 0));
                 iterations = 0;
             }
         } while (this._hasDirtySessions());
@@ -342,15 +342,13 @@ export class ConsoleStateStore implements vscode.Disposable {
                     continue;
                 }
 
-                const p = this._enqueueStorageWrite(
-                    async () => {
-                        if (this._fileStore.enabled) {
-                            await this._fileStore.write(sid, fileState, contentHash);
-                        } else {
-                            await this._storage.update(this._key(sid), state);
-                        }
-                    },
-                )
+                const p = this._enqueueStorageWrite(async () => {
+                    if (this._fileStore.enabled) {
+                        await this._fileStore.write(sid, fileState, contentHash);
+                    } else {
+                        await this._storage.update(this._key(sid), state);
+                    }
+                })
                     .then(() => {
                         this._lastPersistedHash.set(sid, contentHash);
                         // Only mark flushed if no new changes arrived since
@@ -360,12 +358,12 @@ export class ConsoleStateStore implements vscode.Disposable {
                         }
                         this._logChannel.debug(
                             `[ConsoleStateStore] Flushed ${sid}: ${sizeBytes} bytes, ` +
-                            `${state.items.length} items, ${state.inputHistory.length} history`
+                                `${state.items.length} items, ${state.inputHistory.length} history`,
                         );
                     })
                     .catch((error) => {
                         this._logChannel.warn(
-                            `[ConsoleStateStore] Failed to persist state for ${sid}: ${getErrorMessage(error)}`
+                            `[ConsoleStateStore] Failed to persist state for ${sid}: ${getErrorMessage(error)}`,
                         );
                         throw error;
                     });
@@ -373,7 +371,7 @@ export class ConsoleStateStore implements vscode.Disposable {
                 writePromises.push(p);
             } catch (error) {
                 this._logChannel.warn(
-                    `[ConsoleStateStore] Failed to serialize state for ${sid}: ${getErrorMessage(error)}`
+                    `[ConsoleStateStore] Failed to serialize state for ${sid}: ${getErrorMessage(error)}`,
                 );
                 throw error;
             }
@@ -428,7 +426,7 @@ export class ConsoleStateStore implements vscode.Disposable {
         // Phase 1: truncate long string values inside each item.
         prepared = {
             ...prepared,
-            items: prepared.items.map(item => this._truncateItemStrings(item)),
+            items: prepared.items.map((item) => this._truncateItemStrings(item)),
         };
 
         sizeBytes = this._estimateStateBytes(prepared);
@@ -439,8 +437,12 @@ export class ConsoleStateStore implements vscode.Disposable {
         // Phase 2: remove oldest top-level items until within budget.
         // Pre-compute per-item sizes (in UTF-8 bytes, matching
         // _estimateStateBytes) to avoid O(n²) re-serialisation.
-        const itemSizes = prepared.items.map(item => {
-            try { return Buffer.byteLength(JSON.stringify(item), 'utf8'); } catch { return 0; }
+        const itemSizes = prepared.items.map((item) => {
+            try {
+                return Buffer.byteLength(JSON.stringify(item), 'utf8');
+            } catch {
+                return 0;
+            }
         });
         let runningSize = sizeBytes;
         let removeCount = 0;
@@ -516,27 +518,28 @@ export class ConsoleStateStore implements vscode.Disposable {
             // array structure intact.
             return {
                 ...item,
-                items: item.items.map(child =>
-                    this._truncateActivityItemStrings(child)
-                ),
+                items: item.items.map((child) => this._truncateActivityItemStrings(child)),
             };
         }
 
         // For non-activity top-level items, truncate any string fields.
-        return this._shallowTruncateStrings(item as unknown as Record<string, unknown>) as unknown as SerializedRuntimeItem;
+        return this._shallowTruncateStrings(
+            item as unknown as Record<string, unknown>,
+        ) as unknown as SerializedRuntimeItem;
     }
 
     /**
      * Truncate string fields inside a single activity item (stream, error,
      * output, input, etc.).  Does not touch id/type/parentId.
      */
-    private _truncateActivityItemStrings(
-        item: SerializedActivityItem
-    ): SerializedActivityItem {
+    private _truncateActivityItemStrings(item: SerializedActivityItem): SerializedActivityItem {
         switch (item.type) {
             case 'stream':
                 if (typeof item.text === 'string' && item.text.length > MaxStringFieldChars) {
-                    return { ...item, text: item.text.slice(-MaxStringFieldChars) + '\n…(truncated)' };
+                    return {
+                        ...item,
+                        text: item.text.slice(-MaxStringFieldChars) + '\n…(truncated)',
+                    };
                 }
                 return item;
 
@@ -545,9 +548,10 @@ export class ConsoleStateStore implements vscode.Disposable {
                     ...item,
                     message: this._truncStr(item.message),
                     name: this._truncStr(item.name),
-                    traceback: item.traceback.length > 20
-                        ? item.traceback.slice(-20).map(l => this._truncStr(l))
-                        : item.traceback.map(l => this._truncStr(l)),
+                    traceback:
+                        item.traceback.length > 20
+                            ? item.traceback.slice(-20).map((l) => this._truncStr(l))
+                            : item.traceback.map((l) => this._truncStr(l)),
                 };
 
             case 'outputHtml':
@@ -562,9 +566,8 @@ export class ConsoleStateStore implements vscode.Disposable {
                 if (item.data && typeof item.data === 'object') {
                     const truncatedData: Record<string, string | undefined> = {};
                     for (const [mime, value] of Object.entries(item.data)) {
-                        truncatedData[mime] = typeof value === 'string'
-                            ? this._truncStr(value)
-                            : value;
+                        truncatedData[mime] =
+                            typeof value === 'string' ? this._truncStr(value) : value;
                     }
                     return { ...item, data: truncatedData };
                 }
@@ -572,7 +575,10 @@ export class ConsoleStateStore implements vscode.Disposable {
 
             case 'input':
                 if (typeof item.code === 'string' && item.code.length > MaxStringFieldChars) {
-                    return { ...item, code: item.code.slice(0, MaxStringFieldChars) + '\n…(truncated)' };
+                    return {
+                        ...item,
+                        code: item.code.slice(0, MaxStringFieldChars) + '\n…(truncated)',
+                    };
                 }
                 return item;
 
@@ -651,16 +657,14 @@ export class ConsoleStateStore implements vscode.Disposable {
 
     private _estimateStateBytes(state: SerializedConsoleState): number {
         try {
-            return Buffer.byteLength(JSON.stringify(state), "utf8");
+            return Buffer.byteLength(JSON.stringify(state), 'utf8');
         } catch {
             return Number.MAX_SAFE_INTEGER;
         }
     }
 
     private _hashState(state: SerializedConsoleState): string {
-        return createHash('sha256')
-            .update(JSON.stringify(state), 'utf8')
-            .digest('hex');
+        return createHash('sha256').update(JSON.stringify(state), 'utf8').digest('hex');
     }
 
     private _isSerializedConsoleState(value: unknown): value is SerializedConsoleState {
@@ -668,11 +672,13 @@ export class ConsoleStateStore implements vscode.Disposable {
             return false;
         }
         const state = value as Partial<SerializedConsoleState>;
-        return (state.version === 1 || state.version === 2 || state.version === 3) &&
+        return (
+            (state.version === 1 || state.version === 2 || state.version === 3) &&
             Array.isArray(state.items) &&
             Array.isArray(state.inputHistory) &&
             typeof state.trace === 'boolean' &&
-            typeof state.wordWrap === 'boolean';
+            typeof state.wordWrap === 'boolean'
+        );
     }
 
     private _key(sessionId: string): string {

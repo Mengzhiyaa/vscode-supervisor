@@ -48,6 +48,8 @@
     "sync:positron-contracts": "node scripts/sync-positron-contracts.mjs",
     "verify:positron-contracts": "node scripts/sync-positron-contracts.mjs --check",
     "verify:data-explorer-localization": "node scripts/verify-data-explorer-localization.mjs",
+    "test:data-explorer-localization": "node --test scripts/verify-data-explorer-localization.test.mjs",
+    "test:monaco-contracts": "node --test scripts/monaco-contracts.test.mjs",
     "verify:contracts": "npm run verify:api-dts && npm run verify:webview-rpc-contracts && npm run verify:positron-contracts && npm run verify:data-explorer-localization",
     "build:webview": "npm --prefix webview run build",
     "watch:webview": "npm --prefix webview run dev",
@@ -59,6 +61,8 @@
     "test": "npm run test:prepare && node scripts/run-vscode-tests.mjs --label all",
     "test:unit:ext": "npm run test:prepare && node scripts/run-vscode-tests.mjs --label unit",
     "lint": "eslint src && cd webview && npm run check",
+    "format": "prettier --write \"src/**/*.ts\" \"webview/**/*.{ts,svelte}\"",
+    "format:check": "prettier --check \"src/**/*.ts\" \"webview/**/*.{ts,svelte}\"",
     "vsce:package": "vsce package"
   },
   "positron": {
@@ -1443,6 +1447,8 @@
     "esbuild": "^0.25.0",
     "eslint": "^10.1.0",
     "ovsx": "^0.10.9",
+    "prettier": "3.9.10",
+    "prettier-plugin-svelte": "4.1.1",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.57.1"

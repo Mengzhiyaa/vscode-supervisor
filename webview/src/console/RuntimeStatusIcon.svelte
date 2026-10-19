@@ -5,14 +5,14 @@
     Mirrors: positron/.../components/runtimeStatus.tsx
 -->
 <script lang="ts">
-    export type RuntimeStatusType = "active" | "idle" | "disconnected";
+    export type RuntimeStatusType = 'active' | 'idle' | 'disconnected';
 
     interface Props {
         status: RuntimeStatusType;
-        size?: "small" | "medium" | "large";
+        size?: 'small' | 'medium' | 'large';
     }
 
-    let { status, size = "medium" }: Props = $props();
+    let { status, size = 'medium' }: Props = $props();
 
     // Map status to icon and color (Positron 1:1 replication)
     const statusConfig: Record<
@@ -20,18 +20,18 @@
         { icon: string; color: string; animate: boolean }
     > = {
         active: {
-            icon: "codicon-positron-status-active",
-            color: "var(--supervisor-runtime-state-icon-active)",
+            icon: 'codicon-positron-status-active',
+            color: 'var(--supervisor-runtime-state-icon-active)',
             animate: true,
         },
         idle: {
-            icon: "codicon-positron-status-idle",
-            color: "var(--supervisor-runtime-state-icon-idle)",
+            icon: 'codicon-positron-status-idle',
+            color: 'var(--supervisor-runtime-state-icon-idle)',
             animate: false,
         },
         disconnected: {
-            icon: "codicon-positron-status-disconnected",
-            color: "var(--supervisor-runtime-state-icon-disconnected)",
+            icon: 'codicon-positron-status-disconnected',
+            color: 'var(--supervisor-runtime-state-icon-disconnected)',
             animate: false,
         },
     };

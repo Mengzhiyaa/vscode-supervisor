@@ -3,7 +3,7 @@
   1:1 Positron replication - Empty state for variables panel
 -->
 <script lang="ts">
-    import { localize } from "$lib/localization";
+    import { localize } from '$lib/localization';
     // Props using Svelte 5 runes
     interface Props {
         initializing?: boolean;
@@ -14,13 +14,14 @@
     let { initializing = false, hasFilter = false, message }: Props = $props();
 
     // Localized strings (matching Positron)
-    const noVariablesTitle = localize("variables.noVariables", "No variables have been created.");
-    const noMatchingTitle = localize("variables.noMatches", "No variables match the current filter.");
+    const noVariablesTitle = localize('variables.noVariables', 'No variables have been created.');
+    const noMatchingTitle = localize(
+        'variables.noMatches',
+        'No variables match the current filter.',
+    );
 
     // Use custom message if provided, otherwise use default based on filter state
-    let displayMessage = $derived(
-        message ?? (hasFilter ? noMatchingTitle : noVariablesTitle),
-    );
+    let displayMessage = $derived(message ?? (hasFilter ? noMatchingTitle : noVariablesTitle));
 </script>
 
 <div class="variables-empty">

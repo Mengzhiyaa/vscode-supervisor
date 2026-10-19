@@ -8,7 +8,7 @@
      * Licensed under the Elastic License 2.0. See LICENSE.txt for license information.
      */
 
-    import PlaceholderThumbnail from "./PlaceholderThumbnail.svelte";
+    import PlaceholderThumbnail from './PlaceholderThumbnail.svelte';
 
     /**
      * DynamicPlotThumbnailProps interface.
@@ -24,22 +24,21 @@
         cachedThumbnailUri?: string;
     }
 
-    let { plotId, plotName, thumbnailUri, cachedThumbnailUri }: Props =
-        $props();
+    let { plotId, plotName, thumbnailUri, cachedThumbnailUri }: Props = $props();
 
-    let uri = $state("");
+    let uri = $state('');
 
     // Keep local URI in sync with provided thumbnail updates.
     // Thumbnail updates flow from App.svelte which listens to
     // plots/renderCompleted and updates the thumbnailUri prop.
     $effect(() => {
         if (thumbnailUri || cachedThumbnailUri) {
-            uri = thumbnailUri || cachedThumbnailUri || "";
+            uri = thumbnailUri || cachedThumbnailUri || '';
             return;
         }
 
         if (!uri) {
-            uri = "";
+            uri = '';
         }
     });
 

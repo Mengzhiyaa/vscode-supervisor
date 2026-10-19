@@ -9,7 +9,7 @@ export {
     PositronConsoleState,
     SessionAttachMode,
     IConsoleCodeAttribution,
-    ILanguageRuntimeCodeExecutedEvent
+    ILanguageRuntimeCodeExecutedEvent,
 } from './interfaces/consoleService';
 
 // Classes
@@ -44,7 +44,7 @@ export {
     ActivityItemOutputPlot,
     ActivityItemPrompt,
     ILanguageRuntimeMessageOutputData,
-    ActivityItemOutput
+    ActivityItemOutput,
 } from './classes/runtimeItem';
 
 export {

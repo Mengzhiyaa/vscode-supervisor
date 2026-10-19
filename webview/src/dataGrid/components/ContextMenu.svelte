@@ -3,8 +3,8 @@
   Mirrors the keyboard and visual behavior of Positron's customContextMenu.
 -->
 <script lang="ts">
-    import { onMount } from "svelte";
-    import type { DataGridContextMenuItem } from "../classes/dataGridInstance";
+    import { onMount } from 'svelte';
+    import type { DataGridContextMenuItem } from '../classes/dataGridInstance';
 
     export type ContextMenuItem = DataGridContextMenuItem;
 
@@ -16,36 +16,30 @@
         onClose: () => void;
     }
 
-    let {
-        anchorElement = null,
-        x,
-        y,
-        items,
-        onClose,
-    }: Props = $props();
+    let { anchorElement = null, x, y, items, onClose }: Props = $props();
 
     let menuRef = $state<HTMLDivElement | null>(null);
-    let menuStyle = $state("");
+    let menuStyle = $state('');
     let restoreFocus = $state(true);
     let focusTarget = $state<HTMLElement | null>(null);
 
     const directPositronIcons = new Set([
-        "positron-add-filter",
-        "positron-clear-row-filters",
-        "positron-clear-sorting",
-        "positron-hide-filters",
-        "positron-show-filters",
+        'positron-add-filter',
+        'positron-clear-row-filters',
+        'positron-clear-sorting',
+        'positron-hide-filters',
+        'positron-show-filters',
     ]);
 
     const iconAliases: Record<string, string> = {
-        "positron-select-column": "symbol-field",
-        "positron-select-row": "list-selection",
-        "positron-pin": "pin",
-        "positron-unpin": "pinned",
+        'positron-select-column': 'symbol-field',
+        'positron-select-row': 'list-selection',
+        'positron-pin': 'pin',
+        'positron-unpin': 'pinned',
     };
 
     function getIconClass(icon: string) {
-        if (icon.startsWith("codicon-")) {
+        if (icon.startsWith('codicon-')) {
             return icon;
         }
 
@@ -54,7 +48,7 @@
         }
 
         const alias = iconAliases[icon] ?? icon;
-        return alias.startsWith("codicon-") ? alias : `codicon-${alias}`;
+        return alias.startsWith('codicon-') ? alias : `codicon-${alias}`;
     }
 
     function getMenuItems(): HTMLButtonElement[] {
@@ -62,9 +56,7 @@
             return [];
         }
 
-        return Array.from(
-            menuRef.querySelectorAll<HTMLButtonElement>(".menu-item:not(:disabled)"),
-        );
+        return Array.from(menuRef.querySelectorAll<HTMLButtonElement>('.menu-item:not(:disabled)'));
     }
 
     function focusMenuItem(index: number) {
@@ -86,9 +78,7 @@
         }
 
         const activeElement =
-            document.activeElement instanceof HTMLButtonElement
-                ? document.activeElement
-                : null;
+            document.activeElement instanceof HTMLButtonElement ? document.activeElement : null;
         const currentIndex = activeElement ? menuItems.indexOf(activeElement) : -1;
         const nextIndex =
             currentIndex === -1
@@ -110,17 +100,11 @@
 
         const left = Math.min(
             Math.max(x, viewportPadding),
-            Math.max(
-                viewportPadding,
-                window.innerWidth - menuRect.width - viewportPadding,
-            ),
+            Math.max(viewportPadding, window.innerWidth - menuRect.width - viewportPadding),
         );
         const top = Math.min(
             Math.max(y, viewportPadding),
-            Math.max(
-                viewportPadding,
-                window.innerHeight - menuRect.height - viewportPadding,
-            ),
+            Math.max(viewportPadding, window.innerHeight - menuRect.height - viewportPadding),
         );
 
         menuStyle = `top: ${Math.round(top)}px; left: ${Math.round(left)}px;`;
@@ -154,34 +138,34 @@
 
     function handleKeyDown(event: KeyboardEvent) {
         switch (event.key) {
-            case "Escape":
-            case "ArrowLeft":
+            case 'Escape':
+            case 'ArrowLeft':
                 event.preventDefault();
                 event.stopPropagation();
                 requestClose();
                 break;
 
-            case "ArrowDown":
+            case 'ArrowDown':
                 event.preventDefault();
                 focusRelativeMenuItem(1);
                 break;
 
-            case "ArrowUp":
+            case 'ArrowUp':
                 event.preventDefault();
                 focusRelativeMenuItem(-1);
                 break;
 
-            case "Home":
+            case 'Home':
                 event.preventDefault();
                 focusMenuItem(0);
                 break;
 
-            case "End":
+            case 'End':
                 event.preventDefault();
                 focusMenuItem(Number.MAX_SAFE_INTEGER);
                 break;
 
-            case "Tab":
+            case 'Tab':
                 requestClose({ restoreFocus: false });
                 break;
         }
@@ -229,10 +213,7 @@
     onmousedowncapture={handleOutsidePointer}
     oncontextmenucapture={handleOutsidePointer}
 />
-<svelte:window
-    onresize={updatePosition}
-    onscrollcapture={updatePosition}
-/>
+<svelte:window onresize={updatePosition} onscrollcapture={updatePosition} />
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
@@ -251,9 +232,9 @@
                 {@const checkable = item.checked !== undefined}
                 <button
                     class="menu-item"
-                    class:checkable={checkable}
+                    class:checkable
                     disabled={item.disabled}
-                    role={checkable ? "menuitemcheckbox" : "menuitem"}
+                    role={checkable ? 'menuitemcheckbox' : 'menuitem'}
                     aria-checked={checkable ? item.checked : undefined}
                     onclick={() => handleItemClick(item)}
                 >
@@ -266,9 +247,7 @@
                     {/if}
 
                     {#if item.icon}
-                        <span
-                            class="menu-icon codicon {getIconClass(item.icon)}"
-                            aria-hidden="true"
+                        <span class="menu-icon codicon {getIconClass(item.icon)}" aria-hidden="true"
                         ></span>
                     {:else if checkable}
                         <span class="menu-icon icon-placeholder" aria-hidden="true"></span>
@@ -277,7 +256,7 @@
                     {/if}
 
                     <span class="menu-title">{item.label}</span>
-                    <span class="shortcut">{item.shortcut ?? ""}</span>
+                    <span class="shortcut">{item.shortcut ?? ''}</span>
                 </button>
             {/if}
         {/each}
@@ -299,12 +278,8 @@
         box-sizing: border-box;
         border-radius: 4px;
         box-shadow: 0 4px 10px rgba(0, 0, 0, 0.12);
-        border: 1px solid
-            var(--vscode-positronContextMenu-border, var(--vscode-menu-border));
-        background: var(
-            --vscode-positronContextMenu-background,
-            var(--vscode-menu-background)
-        );
+        border: 1px solid var(--vscode-positronContextMenu-border, var(--vscode-menu-border));
+        background: var(--vscode-positronContextMenu-background, var(--vscode-menu-background));
     }
 
     .menu-separator {
@@ -333,10 +308,7 @@
         appearance: none;
         -webkit-appearance: none;
         background: transparent;
-        color: var(
-            --vscode-positronContextMenu-foreground,
-            var(--vscode-menu-foreground)
-        );
+        color: var(--vscode-positronContextMenu-foreground, var(--vscode-menu-foreground));
         grid-template-columns:
             [icon] 22px
             [title] 1fr

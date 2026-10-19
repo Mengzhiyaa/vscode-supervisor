@@ -3,7 +3,7 @@
   Shared action bar text filter modeled after Positron's ActionBarFilter.
 -->
 <script lang="ts">
-    type ActionBarFilterSize = "sm" | "md";
+    type ActionBarFilterSize = 'sm' | 'md';
 
     interface Props {
         width?: number | string;
@@ -17,27 +17,23 @@
     let {
         width = 150,
         disabled = false,
-        initialFilterText = "",
-        placeholder = "Filter",
-        size = "sm",
+        initialFilterText = '',
+        placeholder = 'Filter',
+        size = 'sm',
         onFilterTextChanged,
     }: Props = $props();
 
     let focused = $state(false);
-    let filterText = $state("");
+    let filterText = $state('');
     let inputRef = $state<HTMLInputElement | null>(null);
 
     $effect(() => {
         filterText = initialFilterText;
     });
 
-    const widthStyle = $derived(
-        typeof width === "number" ? `${width}px` : width,
-    );
+    const widthStyle = $derived(typeof width === 'number' ? `${width}px` : width);
     const sizeClassName = $derived(
-        size === "md"
-            ? "action-bar-filter-input-md"
-            : "action-bar-filter-input-sm",
+        size === 'md' ? 'action-bar-filter-input-md' : 'action-bar-filter-input-sm',
     );
 
     function changeHandler(event: Event) {
@@ -47,13 +43,13 @@
     }
 
     function buttonClearClickHandler() {
-        filterText = "";
-        onFilterTextChanged?.("");
+        filterText = '';
+        onFilterTextChanged?.('');
         inputRef?.focus();
     }
 
     function inputKeyDownHandler(event: KeyboardEvent) {
-        if (event.key === "Escape" && filterText !== "") {
+        if (event.key === 'Escape' && filterText !== '') {
             event.preventDefault();
             event.stopPropagation();
             buttonClearClickHandler();
@@ -61,7 +57,7 @@
     }
 
     function buttonClearKeyDownHandler(event: KeyboardEvent) {
-        if (event.key === "Enter" || event.key === " ") {
+        if (event.key === 'Enter' || event.key === ' ') {
             event.preventDefault();
             buttonClearClickHandler();
         }
@@ -82,7 +78,7 @@
             oninput={changeHandler}
             onkeydown={inputKeyDownHandler}
         />
-        {#if filterText !== ""}
+        {#if filterText !== ''}
             <button
                 class="clear-button"
                 aria-label="Clear filter"

@@ -51,7 +51,10 @@ class FakeConnection {
     readonly requests = new Map<string, (params: any) => Promise<any> | any>();
     readonly notifications: Array<{ method: string; params: unknown }> = [];
 
-    onRequest(type: { method: string }, handler: (params: any) => Promise<any> | any): vscode.Disposable {
+    onRequest(
+        type: { method: string },
+        handler: (params: any) => Promise<any> | any,
+    ): vscode.Disposable {
         this.requests.set(type.method, handler);
         return { dispose: () => undefined };
     }
@@ -72,15 +75,12 @@ class FakeConnection {
 suite('[Unit] console provider session switching', () => {
     test('a Console deletion restores its view if debugger cleanup hides it', async () => {
         const deletion = createDeferred<boolean>();
-        const provider = new ConsoleViewProvider(
-            vscode.Uri.file('/tmp'), makeNoopLogChannel(),
-            {
-                getSession: () => ({ sessionId: 'session-1' }),
-                deleteSession: () => deletion.promise,
-                onDidReceiveRuntimeEvent: createEventStub(),
-                onDidUpdateSessionName: createEventStub(),
-            } as any,
-        );
+        const provider = new ConsoleViewProvider(vscode.Uri.file('/tmp'), makeNoopLogChannel(), {
+            getSession: () => ({ sessionId: 'session-1' }),
+            deleteSession: () => deletion.promise,
+            onDidReceiveRuntimeEvent: createEventStub(),
+            onDidUpdateSessionName: createEventStub(),
+        } as any);
         const visibility = new vscode.EventEmitter<void>();
         const shows: boolean[] = [];
         const view = {
@@ -93,7 +93,9 @@ suite('[Unit] console provider session switching', () => {
         };
         (provider as any)._view = view;
         let snapshots = 0;
-        (provider as any)._sendSessionInfoUpdate = () => { snapshots += 1; };
+        (provider as any)._sendSessionInfoUpdate = () => {
+            snapshots += 1;
+        };
         const connection = new FakeConnection();
         (provider as any)._registerRpcHandlers(connection as any);
         const stop = connection.requests.get(SessionProtocol.StopSessionRequest.type.method)!;
@@ -112,7 +114,10 @@ suite('[Unit] console provider session switching', () => {
         visibility.dispose();
     });
 
-    const originalActiveTextEditor = Object.getOwnPropertyDescriptor(vscode.window, 'activeTextEditor');
+    const originalActiveTextEditor = Object.getOwnPropertyDescriptor(
+        vscode.window,
+        'activeTextEditor',
+    );
     const originalShowTextDocument = vscode.window.showTextDocument.bind(vscode.window);
     const originalShowErrorMessage = vscode.window.showErrorMessage.bind(vscode.window);
     const originalExecuteCommand = vscode.commands.executeCommand.bind(vscode.commands);
@@ -125,10 +130,15 @@ suite('[Unit] console provider session switching', () => {
     }
 
     teardown(() => {
-        (vscode.window as { showTextDocument: typeof vscode.window.showTextDocument }).showTextDocument = originalShowTextDocument;
-        (vscode.window as { showErrorMessage: typeof vscode.window.showErrorMessage }).showErrorMessage =
-            originalShowErrorMessage;
-        (vscode.commands as { executeCommand: typeof vscode.commands.executeCommand }).executeCommand = originalExecuteCommand;
+        (
+            vscode.window as { showTextDocument: typeof vscode.window.showTextDocument }
+        ).showTextDocument = originalShowTextDocument;
+        (
+            vscode.window as { showErrorMessage: typeof vscode.window.showErrorMessage }
+        ).showErrorMessage = originalShowErrorMessage;
+        (
+            vscode.commands as { executeCommand: typeof vscode.commands.executeCommand }
+        ).executeCommand = originalExecuteCommand;
 
         if (originalActiveTextEditor) {
             Object.defineProperty(vscode.window, 'activeTextEditor', originalActiveTextEditor);
@@ -141,23 +151,19 @@ suite('[Unit] console provider session switching', () => {
         const calls: string[] = [];
         const deferred = createDeferred<void>();
 
-        const provider = new ConsoleViewProvider(
-            vscode.Uri.file('/tmp'),
-            makeNoopLogChannel(),
-            {
-                getSession: (sessionId: string) =>
-                    sessionId === 'session-2'
-                        ? ({ sessionId, sessionMetadata: { sessionMode: 'console' } } as any)
-                        : undefined,
-                focusSession: async (sessionId: string) => {
-                    calls.push(`focus:start:${sessionId}`);
-                    await deferred.promise;
-                    calls.push(`focus:end:${sessionId}`);
-                },
-                onDidReceiveRuntimeEvent: createEventStub(),
-                onDidUpdateSessionName: createEventStub(),
-            } as any,
-        );
+        const provider = new ConsoleViewProvider(vscode.Uri.file('/tmp'), makeNoopLogChannel(), {
+            getSession: (sessionId: string) =>
+                sessionId === 'session-2'
+                    ? ({ sessionId, sessionMetadata: { sessionMode: 'console' } } as any)
+                    : undefined,
+            focusSession: async (sessionId: string) => {
+                calls.push(`focus:start:${sessionId}`);
+                await deferred.promise;
+                calls.push(`focus:end:${sessionId}`);
+            },
+            onDidReceiveRuntimeEvent: createEventStub(),
+            onDidUpdateSessionName: createEventStub(),
+        } as any);
 
         const connection = new FakeConnection();
         (provider as any)._sendSessionInfoUpdate = () => {
@@ -176,26 +182,30 @@ suite('[Unit] console provider session switching', () => {
         deferred.resolve();
         await requestPromise;
 
-        assert.deepStrictEqual(calls, [
-            'focus:start:session-2',
-            'focus:end:session-2',
-        ]);
+        assert.deepStrictEqual(calls, ['focus:start:session-2', 'focus:end:session-2']);
     });
 
     test('hydrates only the active console during initial Webview sync', () => {
-        const provider = new ConsoleViewProvider(
-            vscode.Uri.file('/tmp'),
-            makeNoopLogChannel(),
-        );
+        const provider = new ConsoleViewProvider(vscode.Uri.file('/tmp'), makeNoopLogChannel());
         const instances = [
-            { sessionId: 'session-active', inputPrompt: '>', continuationPrompt: '+', workingDirectory: '/active' },
-            { sessionId: 'session-inactive', inputPrompt: '>', continuationPrompt: '+', workingDirectory: '/inactive' },
+            {
+                sessionId: 'session-active',
+                inputPrompt: '>',
+                continuationPrompt: '+',
+                workingDirectory: '/active',
+            },
+            {
+                sessionId: 'session-inactive',
+                inputPrompt: '>',
+                continuationPrompt: '+',
+                workingDirectory: '/inactive',
+            },
         ];
         (provider as any)._consoleService = {
             positronConsoleInstances: instances,
             activePositronConsoleInstance: instances[0],
             getConsoleInstance: (sessionId: string) =>
-                instances.find(instance => instance.sessionId === sessionId),
+                instances.find((instance) => instance.sessionId === sessionId),
             getSerializedState: (sessionId: string) => ({
                 version: 3,
                 generation: `generation-${sessionId}`,
@@ -212,15 +222,13 @@ suite('[Unit] console provider session switching', () => {
 
         (provider as any)._sendRestoreStatesForInstances();
 
-        const restores = connection.notifications.filter(notification =>
-            notification.method === ConsoleProtocol.ConsoleRestoreStateNotification.type.method
+        const restores = connection.notifications.filter(
+            (notification) =>
+                notification.method === ConsoleProtocol.ConsoleRestoreStateNotification.type.method,
         );
         assert.strictEqual(restores.length, 1);
         assert.strictEqual((restores[0].params as any).sessionId, 'session-active');
-        assert.deepStrictEqual(
-            [...(provider as any)._initializedSessions],
-            ['session-active'],
-        );
+        assert.deepStrictEqual([...(provider as any)._initializedSessions], ['session-active']);
     });
 
     test('executes submitted console input directly instead of enqueueing it', async () => {
@@ -240,7 +248,8 @@ suite('[Unit] console provider session switching', () => {
             },
         };
         const sessionManager = {
-            getSession: (sessionId: string) => sessionId === session.sessionId ? session : undefined,
+            getSession: (sessionId: string) =>
+                sessionId === session.sessionId ? session : undefined,
             onDidReceiveRuntimeEvent: createEventStub(),
             onDidUpdateSessionName: createEventStub(),
         };
@@ -269,37 +278,30 @@ suite('[Unit] console provider session switching', () => {
 
         assert.deepStrictEqual(result, { executionId: 'execution-1' });
         assert.strictEqual(enqueueCalls, 0);
-        assert.deepStrictEqual(executeCalls, [[
-            ')',
-            { source: 'console' },
-            'interactive',
-            'continue',
-            'execution-1',
-        ]]);
+        assert.deepStrictEqual(executeCalls, [
+            [')', { source: 'console' }, 'interactive', 'continue', 'execution-1'],
+        ]);
     });
 
     test('reports completeness failures through a VS Code notification', async () => {
         const messages: string[] = [];
-        (vscode.window as { showErrorMessage: typeof vscode.window.showErrorMessage }).showErrorMessage =
-            (async (message: string) => {
-                messages.push(message);
-                return undefined;
-            }) as typeof vscode.window.showErrorMessage;
+        (
+            vscode.window as { showErrorMessage: typeof vscode.window.showErrorMessage }
+        ).showErrorMessage = (async (message: string) => {
+            messages.push(message);
+            return undefined;
+        }) as typeof vscode.window.showErrorMessage;
 
-        const provider = new ConsoleViewProvider(
-            vscode.Uri.file('/tmp'),
-            makeNoopLogChannel(),
-            {
-                getSession: () => ({
-                    sessionId: 'session-1',
-                    isCodeFragmentComplete: async () => {
-                        throw new Error('completeness unavailable');
-                    },
-                }),
-                onDidReceiveRuntimeEvent: createEventStub(),
-                onDidUpdateSessionName: createEventStub(),
-            } as any,
-        );
+        const provider = new ConsoleViewProvider(vscode.Uri.file('/tmp'), makeNoopLogChannel(), {
+            getSession: () => ({
+                sessionId: 'session-1',
+                isCodeFragmentComplete: async () => {
+                    throw new Error('completeness unavailable');
+                },
+            }),
+            onDidReceiveRuntimeEvent: createEventStub(),
+            onDidUpdateSessionName: createEventStub(),
+        } as any);
 
         const connection = new FakeConnection();
         (provider as any)._registerRpcHandlers(connection as any);
@@ -308,22 +310,19 @@ suite('[Unit] console provider session switching', () => {
         assert.ok(handler, 'expected console/isComplete handler to be registered');
 
         await assert.rejects(
-            Promise.resolve(handler?.({
-                code: '1 + 1',
-                sessionId: 'session-1',
-            })),
+            Promise.resolve(
+                handler?.({
+                    code: '1 + 1',
+                    sessionId: 'session-1',
+                }),
+            ),
             /completeness unavailable/,
         );
-        assert.deepStrictEqual(messages, [
-            'Cannot execute code: completeness unavailable',
-        ]);
+        assert.deepStrictEqual(messages, ['Cannot execute code: completeness unavailable']);
     });
 
     test('reveals the console view without restoring the active editor when preserveFocus is enabled', async () => {
-        const provider = new ConsoleViewProvider(
-            vscode.Uri.file('/tmp'),
-            makeNoopLogChannel(),
-        );
+        const provider = new ConsoleViewProvider(vscode.Uri.file('/tmp'), makeNoopLogChannel());
         const executedCommands: Array<{ command: string; args: unknown[] }> = [];
         const restoredEditors: vscode.TextDocument[] = [];
         const editor = {
@@ -332,31 +331,32 @@ suite('[Unit] console provider session switching', () => {
         } as vscode.TextEditor;
 
         setActiveTextEditor(editor);
-        (vscode.commands as { executeCommand: typeof vscode.commands.executeCommand }).executeCommand =
-            (async (command: string, ...args: unknown[]) => {
-                executedCommands.push({ command, args });
-                return undefined;
-            }) as typeof vscode.commands.executeCommand;
-        (vscode.window as { showTextDocument: typeof vscode.window.showTextDocument }).showTextDocument =
-            (async (document) => {
-                restoredEditors.push(document as vscode.TextDocument);
-                return editor;
-            }) as typeof vscode.window.showTextDocument;
+        (
+            vscode.commands as { executeCommand: typeof vscode.commands.executeCommand }
+        ).executeCommand = (async (command: string, ...args: unknown[]) => {
+            executedCommands.push({ command, args });
+            return undefined;
+        }) as typeof vscode.commands.executeCommand;
+        (
+            vscode.window as { showTextDocument: typeof vscode.window.showTextDocument }
+        ).showTextDocument = (async (document) => {
+            restoredEditors.push(document as vscode.TextDocument);
+            return editor;
+        }) as typeof vscode.window.showTextDocument;
 
         await provider.reveal(true);
 
-        assert.deepStrictEqual(executedCommands, [{
-            command: `${ViewIds.console}.focus`,
-            args: [{ preserveFocus: true }],
-        }]);
+        assert.deepStrictEqual(executedCommands, [
+            {
+                command: `${ViewIds.console}.focus`,
+                args: [{ preserveFocus: true }],
+            },
+        ]);
         assert.deepStrictEqual(restoredEditors, []);
     });
 
     test('shows an existing console view without restoring the active editor when preserveFocus is enabled', async () => {
-        const provider = new ConsoleViewProvider(
-            vscode.Uri.file('/tmp'),
-            makeNoopLogChannel(),
-        );
+        const provider = new ConsoleViewProvider(vscode.Uri.file('/tmp'), makeNoopLogChannel());
         const showCalls: boolean[] = [];
         const restoredEditors: vscode.TextDocument[] = [];
         const editor = {
@@ -370,11 +370,12 @@ suite('[Unit] console provider session switching', () => {
                 showCalls.push(Boolean(preserveFocus));
             },
         } as vscode.WebviewView;
-        (vscode.window as { showTextDocument: typeof vscode.window.showTextDocument }).showTextDocument =
-            (async (document) => {
-                restoredEditors.push(document as vscode.TextDocument);
-                return editor;
-            }) as typeof vscode.window.showTextDocument;
+        (
+            vscode.window as { showTextDocument: typeof vscode.window.showTextDocument }
+        ).showTextDocument = (async (document) => {
+            restoredEditors.push(document as vscode.TextDocument);
+            return editor;
+        }) as typeof vscode.window.showTextDocument;
 
         await provider.reveal(true);
 

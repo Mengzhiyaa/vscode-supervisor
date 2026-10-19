@@ -22,19 +22,12 @@ export function calculateVariablesColumnLayout(
     rightColumnVisibilityThreshold: number,
 ): VariablesColumnLayout {
     const safeContainerWidth = Math.max(0, containerWidth);
-    const bounds = getNameColumnBounds(
-        safeContainerWidth,
-        minimumNameWidth,
-    );
-    const nameWidth = Math.min(
-        bounds.maximum,
-        Math.max(bounds.minimum, requestedNameWidth),
-    );
+    const bounds = getNameColumnBounds(safeContainerWidth, minimumNameWidth);
+    const nameWidth = Math.min(bounds.maximum, Math.max(bounds.minimum, requestedNameWidth));
     const detailsWidth = Math.max(0, safeContainerWidth - nameWidth);
     return {
         nameWidth,
         detailsWidth,
-        rightColumnVisible:
-            detailsWidth > rightColumnVisibilityThreshold,
+        rightColumnVisible: detailsWidth > rightColumnVisibilityThreshold,
     };
 }

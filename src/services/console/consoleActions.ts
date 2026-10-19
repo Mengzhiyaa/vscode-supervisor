@@ -45,10 +45,7 @@ function toUtf8Character(document: vscode.TextDocument, position: vscode.Positio
     );
 }
 
-function createCodeLocation(
-    document: vscode.TextDocument,
-    range: vscode.Range,
-): Utf8Location {
+function createCodeLocation(document: vscode.TextDocument, range: vscode.Range): Utf8Location {
     return {
         uri: document.uri,
         range: {
@@ -101,21 +98,24 @@ async function resolveExecutionTarget(
     }
     if (!options.uri) {
         const editor = vscode.window.activeTextEditor;
-        if (!editor || isNotebookCell(editor.document)) { return undefined; }
+        if (!editor || isNotebookCell(editor.document)) {
+            return undefined;
+        }
         return { document: editor.document, editor, position: editor.selection.active };
     }
 
-    const uri = typeof options.uri === 'string'
-        ? vscode.Uri.parse(options.uri)
-        : options.uri;
+    const uri = typeof options.uri === 'string' ? vscode.Uri.parse(options.uri) : options.uri;
     const document = await vscode.workspace.openTextDocument(uri);
-    if (isNotebookCell(document)) { return undefined; }
+    if (isNotebookCell(document)) {
+        return undefined;
+    }
     const supplied = options.position;
-    const requested = supplied instanceof vscode.Position
-        ? supplied
-        : supplied
-            ? new vscode.Position(supplied.line, supplied.character)
-            : new vscode.Position(0, 0);
+    const requested =
+        supplied instanceof vscode.Position
+            ? supplied
+            : supplied
+              ? new vscode.Position(supplied.line, supplied.character)
+              : new vscode.Position(0, 0);
     const line = Math.max(0, Math.min(requested.line, document.lineCount - 1));
     const position = document.validatePosition(
         new vscode.Position(line, Math.max(0, requested.character)),
@@ -124,9 +124,14 @@ async function resolveExecutionTarget(
 }
 
 function isNotebookCell(document: vscode.TextDocument): boolean {
-    return document.uri.scheme === 'vscode-notebook-cell' ||
-        vscode.workspace.notebookDocuments.some(notebook =>
-            notebook.getCells().some(cell => cell.document.uri.toString() === document.uri.toString()));
+    return (
+        document.uri.scheme === 'vscode-notebook-cell' ||
+        vscode.workspace.notebookDocuments.some((notebook) =>
+            notebook
+                .getCells()
+                .some((cell) => cell.document.uri.toString() === document.uri.toString()),
+        )
+    );
 }
 
 async function synchronizeDirtyFileBreakpoints(
@@ -153,7 +158,9 @@ async function synchronizeDirtyFileBreakpoints(
         vscode.debug.removeBreakpoints(breakpoints);
         vscode.debug.addBreakpoints(breakpoints);
     } catch (error) {
-        outputChannel.warn(`[ConsoleActions] Failed to synchronize dirty breakpoints: ${getErrorMessage(error)}`);
+        outputChannel.warn(
+            `[ConsoleActions] Failed to synchronize dirty breakpoints: ${getErrorMessage(error)}`,
+        );
         throw error;
     }
 }
@@ -207,9 +214,10 @@ async function notifyStatementRangeSyntaxRejection(
             ? vscode.l10n.t("Can't execute code due to a syntax error.")
             : vscode.l10n.t("Can't execute code due to a syntax error near line {0}.", line + 1);
 
-    const selection = line === undefined
-        ? await vscode.window.showInformationMessage(message)
-        : await vscode.window.showInformationMessage(message, jumpToLineAction);
+    const selection =
+        line === undefined
+            ? await vscode.window.showInformationMessage(message)
+            : await vscode.window.showInformationMessage(message, jumpToLineAction);
 
     if (selection === jumpToLineAction && line !== undefined) {
         const position = document.validatePosition(new vscode.Position(line, 0));
@@ -225,45 +233,60 @@ async function notifyStatementRangeSyntaxRejection(
  */
 export function registerConsoleActions(
     consoleService: PositronConsoleService,
-    outputChannel: vscode.LogOutputChannel
+    outputChannel: vscode.LogOutputChannel,
 ): vscode.Disposable[] {
     const submissions = new EditorCodeSubmissionService();
     const disposables: vscode.Disposable[] = [submissions];
     disposables.push(
-        vscode.commands.registerCommand(CoreCommandIds.consoleCancelCodeSubmission, () => submissions.cancel()),
-        vscode.commands.registerCommand(CoreCommandIds.consoleRunCodeAsIs, () => submissions.runAsIs()),
+        vscode.commands.registerCommand(CoreCommandIds.consoleCancelCodeSubmission, () =>
+            submissions.cancel(),
+        ),
+        vscode.commands.registerCommand(CoreCommandIds.consoleRunCodeAsIs, () =>
+            submissions.runAsIs(),
+        ),
     );
 
     const execute = async (options: ConsoleExecutionCommandOptions) => {
         submissions.cancel();
         const target = await resolveExecutionTarget(options);
-        if (!target) { return; }
+        if (!target) {
+            return;
+        }
         try {
             return await executeCodeWithAdvancement(
-                target, consoleService, outputChannel, submissions, options.advance ?? true, options,
+                target,
+                consoleService,
+                outputChannel,
+                submissions,
+                options.advance ?? true,
+                options,
             );
         } catch (error) {
-            if (error instanceof vscode.CancellationError) { return undefined; }
+            if (error instanceof vscode.CancellationError) {
+                return undefined;
+            }
             throw error;
         }
     };
 
     // Execute the selection, or the current statement with optional advancement.
     disposables.push(
-        vscode.commands.registerCommand(CoreCommandIds.consoleExecuteCode, async (
-            options: ConsoleExecutionCommandOptions = {},
-        ) => {
-            return execute(options);
-        })
+        vscode.commands.registerCommand(
+            CoreCommandIds.consoleExecuteCode,
+            async (options: ConsoleExecutionCommandOptions = {}) => {
+                return execute(options);
+            },
+        ),
     );
 
     // Execute Code Without Advancing (Alt+Enter)
     disposables.push(
-        vscode.commands.registerCommand(CoreCommandIds.consoleExecuteCodeWithoutAdvancing, async (
-            options: ConsoleExecutionCommandOptions = {},
-        ) => {
-            return execute({ ...options, advance: false });
-        })
+        vscode.commands.registerCommand(
+            CoreCommandIds.consoleExecuteCodeWithoutAdvancing,
+            async (options: ConsoleExecutionCommandOptions = {}) => {
+                return execute({ ...options, advance: false });
+            },
+        ),
     );
 
     // Clear Console (Ctrl+L)
@@ -274,7 +297,7 @@ export function registerConsoleActions(
                 outputChannel.info('[ConsoleActions] Clearing console');
                 activeInstance.clearConsole();
             }
-        })
+        }),
     );
 
     // Focus Console
@@ -282,7 +305,7 @@ export function registerConsoleActions(
         vscode.commands.registerCommand(CoreCommandIds.consoleFocusConsole, async () => {
             outputChannel.info('[ConsoleActions] Focusing console input');
             await consoleService.focusConsole();
-        })
+        }),
     );
 
     // Clear Input History
@@ -305,7 +328,9 @@ export function registerConsoleActions(
                 ),
                 {
                     modal: true,
-                    detail: vscode.l10n.t('This clears command recall for the active console session.'),
+                    detail: vscode.l10n.t(
+                        'This clears command recall for the active console session.',
+                    ),
                 },
                 clear,
             );
@@ -318,99 +343,104 @@ export function registerConsoleActions(
             void vscode.window.showInformationMessage(
                 vscode.l10n.t('The {0} input history has been cleared.', languageName),
             );
-        })
+        }),
     );
 
     // Execute Code Before Cursor (Ctrl+Alt+Home)
     disposables.push(
-        vscode.commands.registerCommand(CoreCommandIds.consoleExecuteCodeBeforeCursor, async (
-            options: ConsoleExecutionCommandOptions = {},
-        ) => {
-            submissions.cancel();
-            const target = await resolveExecutionTarget(options);
-            if (!target) {
-                return;
-            }
+        vscode.commands.registerCommand(
+            CoreCommandIds.consoleExecuteCodeBeforeCursor,
+            async (options: ConsoleExecutionCommandOptions = {}) => {
+                submissions.cancel();
+                const target = await resolveExecutionTarget(options);
+                if (!target) {
+                    return;
+                }
 
-            const { document, position } = target;
+                const { document, position } = target;
 
-            // Get all text from start of document to end of current line (Positron pattern)
-            const range = new vscode.Range(
-                new vscode.Position(0, 0),
-                new vscode.Position(position.line, document.lineAt(position.line).text.length)
-            );
-            const code = document.getText(range);
+                // Get all text from start of document to end of current line (Positron pattern)
+                const range = new vscode.Range(
+                    new vscode.Position(0, 0),
+                    new vscode.Position(position.line, document.lineAt(position.line).text.length),
+                );
+                const code = document.getText(range);
 
-            if (!code.trim()) {
-                vscode.window.showInformationMessage('No code found before cursor position.');
-                return;
-            }
+                if (!code.trim()) {
+                    vscode.window.showInformationMessage('No code found before cursor position.');
+                    return;
+                }
 
-            const attribution: IConsoleCodeAttribution = {
-                source: 'editor',
-                fileUri: document.uri,
-                lineNumber: 1,
-                codeLocation: createCodeLocation(document, range),
-            };
+                const attribution: IConsoleCodeAttribution = {
+                    source: 'editor',
+                    fileUri: document.uri,
+                    lineNumber: 1,
+                    codeLocation: createCodeLocation(document, range),
+                };
 
-            outputChannel.debug(`[ConsoleActions] Executing code before cursor`);
+                outputChannel.debug(`[ConsoleActions] Executing code before cursor`);
 
-            await executeEditorCode(
-                consoleService,
-                document,
-                document.languageId,
-                code,
-                attribution,
-                options,
-                outputChannel,
-            );
-        })
+                await executeEditorCode(
+                    consoleService,
+                    document,
+                    document.languageId,
+                    code,
+                    attribution,
+                    options,
+                    outputChannel,
+                );
+            },
+        ),
     );
 
     // Execute Code After Cursor (Ctrl+Alt+End)
     disposables.push(
-        vscode.commands.registerCommand(CoreCommandIds.consoleExecuteCodeAfterCursor, async (
-            options: ConsoleExecutionCommandOptions = {},
-        ) => {
-            submissions.cancel();
-            const target = await resolveExecutionTarget(options);
-            if (!target) {
-                return;
-            }
+        vscode.commands.registerCommand(
+            CoreCommandIds.consoleExecuteCodeAfterCursor,
+            async (options: ConsoleExecutionCommandOptions = {}) => {
+                submissions.cancel();
+                const target = await resolveExecutionTarget(options);
+                if (!target) {
+                    return;
+                }
 
-            const { document, position } = target;
+                const { document, position } = target;
 
-            // Get all text from start of current line to end of document (Positron pattern)
-            const range = new vscode.Range(
-                new vscode.Position(position.line, 0),
-                new vscode.Position(document.lineCount - 1, document.lineAt(document.lineCount - 1).text.length)
-            );
-            const code = document.getText(range);
+                // Get all text from start of current line to end of document (Positron pattern)
+                const range = new vscode.Range(
+                    new vscode.Position(position.line, 0),
+                    new vscode.Position(
+                        document.lineCount - 1,
+                        document.lineAt(document.lineCount - 1).text.length,
+                    ),
+                );
+                const code = document.getText(range);
 
-            if (!code.trim()) {
-                vscode.window.showInformationMessage('No code found after cursor position.');
-                return;
-            }
+                if (!code.trim()) {
+                    vscode.window.showInformationMessage('No code found after cursor position.');
+                    return;
+                }
 
-            const attribution: IConsoleCodeAttribution = {
-                source: 'editor',
-                fileUri: document.uri,
-                lineNumber: position.line + 1,
-                codeLocation: createCodeLocation(document, range),
-            };
+                const attribution: IConsoleCodeAttribution = {
+                    source: 'editor',
+                    fileUri: document.uri,
+                    lineNumber: position.line + 1,
+                    codeLocation: createCodeLocation(document, range),
+                };
 
-            outputChannel.debug(`[ConsoleActions] Executing code after cursor`);
+                outputChannel.debug(`[ConsoleActions] Executing code after cursor`);
 
-            await executeEditorCode(
-                consoleService,
-                document,
-                document.languageId,
-                code,
-                attribution,
-                options,
-                outputChannel,
-            );
-        })
+                await executeEditorCode(
+                    consoleService,
+                    document,
+                    document.languageId,
+                    code,
+                    attribution,
+                    options,
+                    outputChannel,
+                );
+            },
+        ),
     );
 
     // Navigate Input History Up (1:1 Positron)
@@ -421,12 +451,16 @@ export function registerConsoleActions(
                 outputChannel.info('[ConsoleActions] Navigate input history up');
                 const result = activeInstance.navigateInputHistoryUp('', false);
                 if (result !== undefined) {
-                    outputChannel.debug(`[ConsoleActions] History result: ${result.substring(0, 50)}...`);
+                    outputChannel.debug(
+                        `[ConsoleActions] History result: ${result.substring(0, 50)}...`,
+                    );
                 }
             } else {
-                vscode.window.showInformationMessage('Cannot navigate input history. A console is not active.');
+                vscode.window.showInformationMessage(
+                    'Cannot navigate input history. A console is not active.',
+                );
             }
-        })
+        }),
     );
 
     // Navigate Input History Down (1:1 Positron)
@@ -437,28 +471,39 @@ export function registerConsoleActions(
                 outputChannel.info('[ConsoleActions] Navigate input history down');
                 const result = activeInstance.navigateInputHistoryDown('', false);
                 if (result !== undefined) {
-                    outputChannel.debug(`[ConsoleActions] History result: ${result.substring(0, 50)}...`);
+                    outputChannel.debug(
+                        `[ConsoleActions] History result: ${result.substring(0, 50)}...`,
+                    );
                 }
             } else {
-                vscode.window.showInformationMessage('Cannot navigate input history. A console is not active.');
+                vscode.window.showInformationMessage(
+                    'Cannot navigate input history. A console is not active.',
+                );
             }
-        })
+        }),
     );
 
     // Navigate Input History Up with Prefix Match (1:1 Positron)
     disposables.push(
-        vscode.commands.registerCommand(CoreCommandIds.consoleNavigateInputHistoryUpPrefixMatch, () => {
-            const activeInstance = consoleService.activePositronConsoleInstance;
-            if (activeInstance) {
-                outputChannel.info('[ConsoleActions] Navigate input history up (prefix match)');
-                const result = activeInstance.navigateInputHistoryUp('', true);
-                if (result !== undefined) {
-                    outputChannel.debug(`[ConsoleActions] History result: ${result.substring(0, 50)}...`);
+        vscode.commands.registerCommand(
+            CoreCommandIds.consoleNavigateInputHistoryUpPrefixMatch,
+            () => {
+                const activeInstance = consoleService.activePositronConsoleInstance;
+                if (activeInstance) {
+                    outputChannel.info('[ConsoleActions] Navigate input history up (prefix match)');
+                    const result = activeInstance.navigateInputHistoryUp('', true);
+                    if (result !== undefined) {
+                        outputChannel.debug(
+                            `[ConsoleActions] History result: ${result.substring(0, 50)}...`,
+                        );
+                    }
+                } else {
+                    vscode.window.showInformationMessage(
+                        'Cannot navigate input history. A console is not active.',
+                    );
                 }
-            } else {
-                vscode.window.showInformationMessage('Cannot navigate input history. A console is not active.');
-            }
-        })
+            },
+        ),
     );
 
     return disposables;
@@ -506,7 +551,12 @@ async function executeCodeWithAdvancement(
 
     // If no selection, try to get statement range from LSP (Positron pattern)
     if (code === undefined) {
-        const statementRange = await getStatementRangeAtPosition(document, position, outputChannel, submissions);
+        const statementRange = await getStatementRangeAtPosition(
+            document,
+            position,
+            outputChannel,
+            submissions,
+        );
 
         if (statementRange) {
             if (isStatementRangeRejection(statementRange)) {
@@ -523,7 +573,12 @@ async function executeCodeWithAdvancement(
             completenessVerified = true;
 
             if (advance) {
-                nextPosition = await nextStatementPosition(target, statementRange, outputChannel, submissions);
+                nextPosition = await nextStatementPosition(
+                    target,
+                    statementRange,
+                    outputChannel,
+                    submissions,
+                );
             }
         }
     }
@@ -563,7 +618,10 @@ async function executeCodeWithAdvancement(
 
     if (editor && nextPosition) {
         editor.selection = new vscode.Selection(nextPosition, nextPosition);
-        editor.revealRange(new vscode.Range(nextPosition, nextPosition), vscode.TextEditorRevealType.InCenterIfOutsideViewport);
+        editor.revealRange(
+            new vscode.Range(nextPosition, nextPosition),
+            vscode.TextEditorRevealType.InCenterIfOutsideViewport,
+        );
     }
 
     // Execute the code
@@ -572,9 +630,7 @@ async function executeCodeWithAdvancement(
             source: 'editor',
             fileUri: document.uri,
             lineNumber: (codeRange?.start.line ?? position.line) + 1,
-            codeLocation: codeRange
-                ? createCodeLocation(document, codeRange)
-                : undefined,
+            codeLocation: codeRange ? createCodeLocation(document, codeRange) : undefined,
             metadata: completenessVerified
                 ? { [COMPLETENESS_VERIFIED_METADATA_KEY]: true }
                 : undefined,
@@ -609,15 +665,23 @@ async function getStatementRangeAtPosition(
     try {
         // Try to get statement range from language server via custom LSP request
         // This mirrors Positron's statementRangeProvider.provideStatementRange
-        const outcome = await detection.wait(vscode.commands.executeCommand<StatementRangeCommandResult | undefined>(
-            InternalCommandIds.lspGetStatementRange,
-            document.uri.toString(),
-            { line: position.line, character: position.character },
-            detection.token,
-        ));
-        if (outcome.kind === 'cancel') { throw new vscode.CancellationError(); }
-        if (outcome.kind === 'runAsIs') { return undefined; }
-        if (outcome.kind === 'error') { throw outcome.error; }
+        const outcome = await detection.wait(
+            vscode.commands.executeCommand<StatementRangeCommandResult | undefined>(
+                InternalCommandIds.lspGetStatementRange,
+                document.uri.toString(),
+                { line: position.line, character: position.character },
+                detection.token,
+            ),
+        );
+        if (outcome.kind === 'cancel') {
+            throw new vscode.CancellationError();
+        }
+        if (outcome.kind === 'runAsIs') {
+            return undefined;
+        }
+        if (outcome.kind === 'error') {
+            throw outcome.error;
+        }
         const result = outcome.value;
 
         if (!result) {
@@ -632,15 +696,19 @@ async function getStatementRangeAtPosition(
             return {
                 range: new vscode.Range(
                     new vscode.Position(result.range.start.line, result.range.start.character),
-                    new vscode.Position(result.range.end.line, result.range.end.character)
+                    new vscode.Position(result.range.end.line, result.range.end.character),
                 ),
-                code: result.code
+                code: result.code,
             };
         }
     } catch (err) {
-        if (err instanceof vscode.CancellationError) { throw err; }
+        if (err instanceof vscode.CancellationError) {
+            throw err;
+        }
         // Statement range provider not available or threw error
-        outputChannel.debug(`[ConsoleActions] Failed to get statement range: ${getErrorMessage(err)}`);
+        outputChannel.debug(
+            `[ConsoleActions] Failed to get statement range: ${getErrorMessage(err)}`,
+        );
     } finally {
         detection.dispose();
     }
@@ -670,7 +738,9 @@ async function nextStatementPosition(
         // add a newline unless it already ends with an empty line (Positron pattern)
         const lastLine = document.lineAt(document.lineCount - 1);
         if (lastLine.text.trim().length > 0) {
-            if (!await amendNewlineToEnd(target)) { return undefined; }
+            if (!(await amendNewlineToEnd(target))) {
+                return undefined;
+            }
         }
         newLineNumber = document.lineCount - 1;
         newColumn = 0;
@@ -734,7 +804,9 @@ async function nextLinePosition(
 
         if (lineNumber >= document.lineCount) {
             // Past end of document, add newline and move to it (Positron pattern)
-            if (!await amendNewlineToEnd(target)) { return undefined; }
+            if (!(await amendNewlineToEnd(target))) {
+                return undefined;
+            }
         }
     }
 
@@ -750,7 +822,7 @@ async function amendNewlineToEnd(target: ResolvedExecutionTarget): Promise<boole
     const lastLine = document.lineAt(document.lineCount - 1);
     const newline = document.eol === vscode.EndOfLine.CRLF ? '\r\n' : '\n';
     if (editor) {
-        return editor.edit(editBuilder => editBuilder.insert(lastLine.range.end, newline));
+        return editor.edit((editBuilder) => editBuilder.insert(lastLine.range.end, newline));
     }
     const edit = new vscode.WorkspaceEdit();
     edit.insert(document.uri, lastLine.range.end, newline);

@@ -26,15 +26,12 @@ suite('[Unit] Language runtime Data Explorer client', () => {
             dispose: () => undefined,
         } as unknown as IDataExplorerComm;
         const logs: Array<{ level: string; message: string }> = [];
-        const client = new DataExplorerClientInstance(
-            comm,
-            {
-                debug: () => undefined,
-                info: (message: string) => logs.push({ level: 'info', message }),
-                warn: (message: string) => logs.push({ level: 'warn', message }),
-                error: () => undefined,
-            } as unknown as vscode.LogOutputChannel,
-        );
+        const client = new DataExplorerClientInstance(comm, {
+            debug: () => undefined,
+            info: (message: string) => logs.push({ level: 'info', message }),
+            warn: (message: string) => logs.push({ level: 'warn', message }),
+            error: () => undefined,
+        } as unknown as vscode.LogOutputChannel);
         return {
             client,
             logs,
@@ -100,12 +97,19 @@ suite('[Unit] Language runtime Data Explorer client', () => {
 
         assert.strictEqual(await fixture.client.updateBackendState(), state);
         assert.strictEqual(attempts, 2);
-        assert.ok(fixture.logs.some(({ level, message }) =>
-            level === 'warn' &&
-            message.includes('attempt 1/2 failed: Error: RPC timed out; retrying.')));
-        assert.ok(fixture.logs.some(({ level, message }) =>
-            level === 'info' &&
-            message.includes('recovered on attempt 2')));
+        assert.ok(
+            fixture.logs.some(
+                ({ level, message }) =>
+                    level === 'warn' &&
+                    message.includes('attempt 1/2 failed: Error: RPC timed out; retrying.'),
+            ),
+        );
+        assert.ok(
+            fixture.logs.some(
+                ({ level, message }) =>
+                    level === 'info' && message.includes('recovered on attempt 2'),
+            ),
+        );
         fixture.dispose();
     });
 
@@ -119,14 +123,8 @@ suite('[Unit] Language runtime Data Explorer client', () => {
             return state;
         });
 
-        await assert.rejects(
-            fixture.client.updateBackendState(),
-            /RPC timed out/,
-        );
-        assert.strictEqual(
-            await fixture.client.updateBackendState(),
-            state,
-        );
+        await assert.rejects(fixture.client.updateBackendState(), /RPC timed out/);
+        assert.strictEqual(await fixture.client.updateBackendState(), state);
         assert.strictEqual(attempts, 3);
         fixture.dispose();
     });
@@ -149,22 +147,21 @@ suite('[Unit] Language runtime Data Explorer client', () => {
             closeClient: () => undefined,
             dispose: () => undefined,
         } as unknown as IDataExplorerComm;
-        const client = new DataExplorerClientInstance(
-            comm,
-            {
-                debug: () => undefined,
-                info: () => undefined,
-                warn: () => undefined,
-                error: () => undefined,
-            } as unknown as vscode.LogOutputChannel,
-        );
+        const client = new DataExplorerClientInstance(comm, {
+            debug: () => undefined,
+            info: () => undefined,
+            warn: () => undefined,
+            error: () => undefined,
+        } as unknown as vscode.LogOutputChannel);
         const tokenSource = new vscode.CancellationTokenSource();
 
         const pending = client.requestColumnProfiles(
-            [{
-                column_index: 0,
-                profiles: [{ profile_type: ColumnProfileType.NullCount }],
-            }],
+            [
+                {
+                    column_index: 0,
+                    profiles: [{ profile_type: ColumnProfileType.NullCount }],
+                },
+            ],
             tokenSource.token,
         );
         await Promise.resolve();

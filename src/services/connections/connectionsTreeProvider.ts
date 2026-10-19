@@ -18,13 +18,21 @@ import {
 
 export type ConnectionsTreeNode =
     | { readonly kind: 'connection'; readonly connection: IConnectionInstance }
-    | { readonly kind: 'object'; readonly connection: IConnectionInstance; readonly object: PositronConnectionNode }
+    | {
+          readonly kind: 'object';
+          readonly connection: IConnectionInstance;
+          readonly object: PositronConnectionNode;
+      }
     | { readonly kind: 'error'; readonly message: string };
 
-export class ConnectionsTreeProvider implements vscode.TreeDataProvider<ConnectionsTreeNode>, vscode.Disposable {
+export class ConnectionsTreeProvider
+    implements vscode.TreeDataProvider<ConnectionsTreeNode>, vscode.Disposable
+{
     private readonly _disposables: vscode.Disposable[] = [];
     private readonly _surfaceAttachments = new Map<string, SurfaceAttachmentLease>();
-    private readonly _onDidChangeTreeData = new vscode.EventEmitter<ConnectionsTreeNode | undefined>();
+    private readonly _onDidChangeTreeData = new vscode.EventEmitter<
+        ConnectionsTreeNode | undefined
+    >();
     private _treeView: vscode.TreeView<ConnectionsTreeNode> | undefined;
 
     readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
@@ -39,37 +47,55 @@ export class ConnectionsTreeProvider implements vscode.TreeDataProvider<Connecti
                 this._reconcileSurfaceAttachments();
                 this.refresh();
             }),
-            this._connections.onDidFocusConnection(connection => void this.revealConnection(connection)),
-            vscode.commands.registerCommand(CoreCommandIds.connectionsRefresh, async (node?: ConnectionsTreeNode) => {
-                if (node?.kind === 'connection' || node?.kind === 'object') {
-                    node.connection.refresh();
-                } else {
-                    this._connections.connections.forEach(connection => connection.refresh());
-                }
-                this.refresh();
-            }),
-            vscode.commands.registerCommand(CoreCommandIds.connectionsNew, () => this._createConnection()),
-            vscode.commands.registerCommand(CoreCommandIds.connectionsConnect, async (node?: ConnectionsTreeNode) => {
-                if (node?.kind === 'connection' && node.connection.sessionId === 'profile') {
-                    await this._connections.connectProfile(node.connection.clientId);
-                }
-            }),
-            vscode.commands.registerCommand(CoreCommandIds.connectionsDisconnect, (node?: ConnectionsTreeNode) => {
-                if (node?.kind === 'connection') {
-                    node.connection.disconnect();
-                }
-            }),
-            vscode.commands.registerCommand(CoreCommandIds.connectionsPreview, async (node?: ConnectionsTreeNode) => {
-                if (node?.kind === 'object') {
-                    await node.connection.preview(node.object.path);
-                }
-            }),
+            this._connections.onDidFocusConnection(
+                (connection) => void this.revealConnection(connection),
+            ),
+            vscode.commands.registerCommand(
+                CoreCommandIds.connectionsRefresh,
+                async (node?: ConnectionsTreeNode) => {
+                    if (node?.kind === 'connection' || node?.kind === 'object') {
+                        node.connection.refresh();
+                    } else {
+                        this._connections.connections.forEach((connection) => connection.refresh());
+                    }
+                    this.refresh();
+                },
+            ),
+            vscode.commands.registerCommand(CoreCommandIds.connectionsNew, () =>
+                this._createConnection(),
+            ),
+            vscode.commands.registerCommand(
+                CoreCommandIds.connectionsConnect,
+                async (node?: ConnectionsTreeNode) => {
+                    if (node?.kind === 'connection' && node.connection.sessionId === 'profile') {
+                        await this._connections.connectProfile(node.connection.clientId);
+                    }
+                },
+            ),
+            vscode.commands.registerCommand(
+                CoreCommandIds.connectionsDisconnect,
+                (node?: ConnectionsTreeNode) => {
+                    if (node?.kind === 'connection') {
+                        node.connection.disconnect();
+                    }
+                },
+            ),
+            vscode.commands.registerCommand(
+                CoreCommandIds.connectionsPreview,
+                async (node?: ConnectionsTreeNode) => {
+                    if (node?.kind === 'object') {
+                        await node.connection.preview(node.object.path);
+                    }
+                },
+            ),
         );
     }
 
     bindTreeView(treeView: vscode.TreeView<ConnectionsTreeNode>): void {
         this._treeView = treeView;
-        this._disposables.push(treeView.onDidChangeVisibility(() => this._reconcileSurfaceAttachments()));
+        this._disposables.push(
+            treeView.onDidChangeVisibility(() => this._reconcileSurfaceAttachments()),
+        );
         this._reconcileSurfaceAttachments();
     }
 
@@ -81,7 +107,10 @@ export class ConnectionsTreeProvider implements vscode.TreeDataProvider<Connecti
         if (node.kind === 'error') {
             const item = new vscode.TreeItem(node.message, vscode.TreeItemCollapsibleState.None);
             item.iconPath = new vscode.ThemeIcon('error');
-            item.accessibilityInformation = { label: `Connection error: ${node.message}`, role: 'treeitem' };
+            item.accessibilityInformation = {
+                label: `Connection error: ${node.message}`,
+                role: 'treeitem',
+            };
             return item;
         }
         if (node.kind === 'connection') {
@@ -102,10 +131,14 @@ export class ConnectionsTreeProvider implements vscode.TreeDataProvider<Connecti
                 `Type: ${node.connection.metadata.type ?? '<unknown>'}`,
                 `State: ${node.connection.active ? 'connected' : 'disconnected'}`,
             ].join('\n');
-            item.iconPath = new vscode.ThemeIcon(node.connection.active ? 'database' : 'debug-disconnect');
-            item.contextValue = node.connection.active ? 'supervisor.connection.active'
-                : node.connection.sessionId === 'profile' ? 'supervisor.connection.profile.inactive'
-                    : 'supervisor.connection.inactive';
+            item.iconPath = new vscode.ThemeIcon(
+                node.connection.active ? 'database' : 'debug-disconnect',
+            );
+            item.contextValue = node.connection.active
+                ? 'supervisor.connection.active'
+                : node.connection.sessionId === 'profile'
+                  ? 'supervisor.connection.profile.inactive'
+                  : 'supervisor.connection.inactive';
             item.accessibilityInformation = {
                 label: `${node.connection.metadata.name}, ${node.connection.active ? 'connected' : 'disconnected'}${item.description ? `, ${item.description}` : ''}`,
                 role: 'treeitem',
@@ -116,11 +149,13 @@ export class ConnectionsTreeProvider implements vscode.TreeDataProvider<Connecti
         const hasChildren = node.object.kind !== 'field' && node.object.has_children !== false;
         const item = new vscode.TreeItem(
             node.object.name,
-            hasChildren ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None,
+            hasChildren
+                ? vscode.TreeItemCollapsibleState.Collapsed
+                : vscode.TreeItemCollapsibleState.None,
         );
         item.id = `connection-object:${node.connection.id}:${node.object.id}`;
         item.description = node.object.dtype || node.object.kind;
-        item.tooltip = `${node.object.path.map(entry => entry.name).join(' / ')}\nType: ${node.object.dtype ?? node.object.kind}`;
+        item.tooltip = `${node.object.path.map((entry) => entry.name).join(' / ')}\nType: ${node.object.dtype ?? node.object.kind}`;
         item.iconPath = connectionObjectIcon(node.object.kind);
         item.contextValue = node.object.containsData
             ? 'supervisor.connectionObject.previewable'
@@ -146,7 +181,7 @@ export class ConnectionsTreeProvider implements vscode.TreeDataProvider<Connecti
             connection: node.connection,
             object: {
                 ...parent,
-                id: parentPath.map(entry => `${entry.kind}:${entry.name}`).join('/'),
+                id: parentPath.map((entry) => `${entry.kind}:${entry.name}`).join('/'),
                 path: parentPath,
                 containsData: false,
             },
@@ -155,7 +190,10 @@ export class ConnectionsTreeProvider implements vscode.TreeDataProvider<Connecti
 
     async getChildren(node?: ConnectionsTreeNode): Promise<ConnectionsTreeNode[]> {
         if (!node) {
-            return this._connections.connections.map(connection => ({ kind: 'connection', connection }));
+            return this._connections.connections.map((connection) => ({
+                kind: 'connection',
+                connection,
+            }));
         }
         if (node.kind === 'error') {
             return [];
@@ -163,15 +201,24 @@ export class ConnectionsTreeProvider implements vscode.TreeDataProvider<Connecti
         try {
             // A root node may predate a reconnect/refresh. Always use the live
             // instance, and open saved profiles on expansion as Positron does.
-            let connection = this._connections.connections.find(value => value.id === node.connection.id);
-            if (!connection) { return []; }
-            if (node.kind === 'object' && connection !== node.connection) { return []; }
+            let connection = this._connections.connections.find(
+                (value) => value.id === node.connection.id,
+            );
+            if (!connection) {
+                return [];
+            }
+            if (node.kind === 'object' && connection !== node.connection) {
+                return [];
+            }
             if (!connection.active) {
-                if (node.kind !== 'connection' || connection.sessionId !== 'profile') { return []; }
+                if (node.kind !== 'connection' || connection.sessionId !== 'profile') {
+                    return [];
+                }
                 connection = await this._connections.connectProfile(connection.clientId);
             }
-            const path: readonly ConnectionPathEntry[] = node.kind === 'object' ? node.object.path : [];
-            return (await connection.getChildren(path)).map(object => ({
+            const path: readonly ConnectionPathEntry[] =
+                node.kind === 'object' ? node.object.path : [];
+            return (await connection.getChildren(path)).map((object) => ({
                 kind: 'object',
                 connection,
                 object,
@@ -182,8 +229,13 @@ export class ConnectionsTreeProvider implements vscode.TreeDataProvider<Connecti
     }
 
     private async revealConnection(connection: IConnectionInstance): Promise<void> {
-        await vscode.commands.executeCommand(`workbench.view.extension.${ViewContainerIds.connections}`);
-        await this._treeView?.reveal({ kind: 'connection', connection }, { focus: true, select: true, expand: true });
+        await vscode.commands.executeCommand(
+            `workbench.view.extension.${ViewContainerIds.connections}`,
+        );
+        await this._treeView?.reveal(
+            { kind: 'connection', connection },
+            { focus: true, select: true, expand: true },
+        );
     }
 
     private async _createConnection(): Promise<void> {
@@ -193,18 +245,33 @@ export class ConnectionsTreeProvider implements vscode.TreeDataProvider<Connecti
             return;
         }
         const driverPick = await vscode.window.showQuickPick(
-            drivers.map(driver => ({ label: driver.name, description: driver.description, driver })),
+            drivers.map((driver) => ({
+                label: driver.name,
+                description: driver.description,
+                driver,
+            })),
             { title: 'New Data Connection', placeHolder: 'Select a connection provider' },
         );
-        if (!driverPick) { return; }
+        if (!driverPick) {
+            return;
+        }
         const mechanisms = driverPick.driver.mechanisms;
-        const mechanism = mechanisms.length === 1
-            ? mechanisms[0]
-            : (await vscode.window.showQuickPick(
-                mechanisms.map(value => ({ label: value.label, description: value.description, value })),
-                { title: 'Connection Method' },
-            ))?.value;
-        if (!mechanism) { return; }
+        const mechanism =
+            mechanisms.length === 1
+                ? mechanisms[0]
+                : (
+                      await vscode.window.showQuickPick(
+                          mechanisms.map((value) => ({
+                              label: value.label,
+                              description: value.description,
+                              value,
+                          })),
+                          { title: 'Connection Method' },
+                      )
+                  )?.value;
+        if (!mechanism) {
+            return;
+        }
 
         const parameterValues: Record<string, boolean | number | string> = {};
         for (const parameter of mechanism.parameters) {
@@ -212,7 +279,9 @@ export class ConnectionsTreeProvider implements vscode.TreeDataProvider<Connecti
                 const selected = await vscode.window.showQuickPick(['Yes', 'No'], {
                     title: parameter.label,
                 });
-                if (!selected && parameter.required) { return; }
+                if (!selected && parameter.required) {
+                    return;
+                }
                 parameterValues[parameter.id] = selected === 'Yes';
                 continue;
             }
@@ -224,15 +293,19 @@ export class ConnectionsTreeProvider implements vscode.TreeDataProvider<Connecti
                     canSelectMany: false,
                     filters: parameter.filters
                         ? Object.fromEntries(
-                            Object.entries(parameter.filters).map(([name, extensions]) => [
-                                name,
-                                [...extensions],
-                            ]),
-                        )
+                              Object.entries(parameter.filters).map(([name, extensions]) => [
+                                  name,
+                                  [...extensions],
+                              ]),
+                          )
                         : undefined,
                 });
-                if (!selected?.[0] && parameter.required) { return; }
-                if (selected?.[0]) { parameterValues[parameter.id] = selected[0].fsPath; }
+                if (!selected?.[0] && parameter.required) {
+                    return;
+                }
+                if (selected?.[0]) {
+                    parameterValues[parameter.id] = selected[0].fsPath;
+                }
                 continue;
             }
             if (parameter.type === 'option') {
@@ -240,29 +313,40 @@ export class ConnectionsTreeProvider implements vscode.TreeDataProvider<Connecti
                     title: parameter.label,
                     placeHolder: parameter.placeholder,
                 });
-                if (!selected && parameter.required) { return; }
-                if (selected) { parameterValues[parameter.id] = selected; }
+                if (!selected && parameter.required) {
+                    return;
+                }
+                if (selected) {
+                    parameterValues[parameter.id] = selected;
+                }
                 continue;
             }
             const value = await vscode.window.showInputBox({
                 title: parameter.label,
                 placeHolder: parameter.placeholder,
-                password: parameter.type === 'password' ||
+                password:
+                    parameter.type === 'password' ||
                     ('secret' in parameter && parameter.secret === true),
-                value: 'defaultValue' in parameter && parameter.defaultValue !== undefined
-                    ? String(parameter.defaultValue)
-                    : undefined,
-                validateInput: input => parameter.required && !input ? `${parameter.label} is required.` : undefined,
+                value:
+                    'defaultValue' in parameter && parameter.defaultValue !== undefined
+                        ? String(parameter.defaultValue)
+                        : undefined,
+                validateInput: (input) =>
+                    parameter.required && !input ? `${parameter.label} is required.` : undefined,
             });
-            if (value === undefined) { return; }
+            if (value === undefined) {
+                return;
+            }
             parameterValues[parameter.id] = parameter.type === 'number' ? Number(value) : value;
         }
         const connectionName = await vscode.window.showInputBox({
             title: 'Connection Name',
             value: driverPick.driver.name,
-            validateInput: value => value.trim() ? undefined : 'A connection name is required.',
+            validateInput: (value) => (value.trim() ? undefined : 'A connection name is required.'),
         });
-        if (!connectionName) { return; }
+        if (!connectionName) {
+            return;
+        }
         await this._connections.addUpdateProfile({
             id: randomUUID(),
             createdAt: Date.now(),
@@ -275,11 +359,11 @@ export class ConnectionsTreeProvider implements vscode.TreeDataProvider<Connecti
 
     private _reconcileSurfaceAttachments(): void {
         if (!this._treeView?.visible) {
-            this._surfaceAttachments.forEach(lease => lease.dispose());
+            this._surfaceAttachments.forEach((lease) => lease.dispose());
             this._surfaceAttachments.clear();
             return;
         }
-        const activeIds = new Set(this._connections.connections.map(connection => connection.id));
+        const activeIds = new Set(this._connections.connections.map((connection) => connection.id));
         for (const [connectionId, lease] of [...this._surfaceAttachments]) {
             if (!activeIds.has(connectionId)) {
                 lease.dispose();
@@ -296,31 +380,41 @@ export class ConnectionsTreeProvider implements vscode.TreeDataProvider<Connecti
                 connection.clientId,
             );
             if (this._lifecycle.getModel(modelId)) {
-                this._surfaceAttachments.set(connection.id, this._lifecycle.attach(modelId, {
-                    surfaceId: `connections-pane:${connection.id}`,
-                    kind: SurfaceKind.ConnectionsPane,
-                    ownerId: 'connections-tree-provider',
-                    metadata: { connectionId: connection.id },
-                }));
+                this._surfaceAttachments.set(
+                    connection.id,
+                    this._lifecycle.attach(modelId, {
+                        surfaceId: `connections-pane:${connection.id}`,
+                        kind: SurfaceKind.ConnectionsPane,
+                        ownerId: 'connections-tree-provider',
+                        metadata: { connectionId: connection.id },
+                    }),
+                );
             }
         }
     }
 
     dispose(): void {
-        this._surfaceAttachments.forEach(lease => lease.dispose());
+        this._surfaceAttachments.forEach((lease) => lease.dispose());
         this._surfaceAttachments.clear();
-        this._disposables.forEach(disposable => disposable.dispose());
+        this._disposables.forEach((disposable) => disposable.dispose());
     }
 }
 
 function connectionObjectIcon(kind: string): vscode.ThemeIcon {
     switch (kind.toLowerCase()) {
-        case 'database': return new vscode.ThemeIcon('database');
-        case 'catalog': return new vscode.ThemeIcon('library');
-        case 'schema': return new vscode.ThemeIcon('symbol-namespace');
-        case 'table': return new vscode.ThemeIcon('table');
-        case 'view': return new vscode.ThemeIcon('preview');
-        case 'field': return new vscode.ThemeIcon('symbol-field');
-        default: return new vscode.ThemeIcon('symbol-object');
+        case 'database':
+            return new vscode.ThemeIcon('database');
+        case 'catalog':
+            return new vscode.ThemeIcon('library');
+        case 'schema':
+            return new vscode.ThemeIcon('symbol-namespace');
+        case 'table':
+            return new vscode.ThemeIcon('table');
+        case 'view':
+            return new vscode.ThemeIcon('preview');
+        case 'field':
+            return new vscode.ThemeIcon('symbol-field');
+        default:
+            return new vscode.ThemeIcon('symbol-object');
     }
 }

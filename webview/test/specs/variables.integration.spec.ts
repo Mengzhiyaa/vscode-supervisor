@@ -1,6 +1,16 @@
 import { expect, test } from '@playwright/test';
-import { SessionMethods, VariablesMethods, createSession, createVariablesInstance, registerVariablesDefaults } from '../harness/domains';
-import { clearClipboardRecords, getClipboardRecords, installClipboardMock } from '../harness/browser';
+import {
+    SessionMethods,
+    VariablesMethods,
+    createSession,
+    createVariablesInstance,
+    registerVariablesDefaults,
+} from '../harness/domains';
+import {
+    clearClipboardRecords,
+    getClipboardRecords,
+    installClipboardMock,
+} from '../harness/browser';
 import { openWebviewPage } from '../harness/page';
 
 test('variables bootstraps an active session and shows the empty state', async ({ page }) => {
@@ -26,7 +36,9 @@ test('variables bootstraps an active session and shows the empty state', async (
     await expect(page.getByText('No variables have been created.')).toBeVisible();
 });
 
-test('variables filter fills the secondary action bar and shrinks with the viewport', async ({ page }) => {
+test('variables filter fills the secondary action bar and shrinks with the viewport', async ({
+    page,
+}) => {
     const backend = await openWebviewPage(page, 'variables', {
         configure: (mockBackend) => {
             registerVariablesDefaults(mockBackend, {
@@ -61,9 +73,7 @@ test('variables filter fills the secondary action bar and shrinks with the viewp
                 '.secondary .action-bar-region.left',
             );
             if (!actionBar || !filter || !leftRegion) {
-                throw new Error(
-                    'Missing variables secondary action bar, session menu, or filter',
-                );
+                throw new Error('Missing variables secondary action bar, session menu, or filter');
             }
 
             const actionBarRect = actionBar.getBoundingClientRect();
@@ -93,7 +103,9 @@ test('variables filter fills the secondary action bar and shrinks with the viewp
     expect(narrow.leftRegionRight).toBeLessThanOrEqual(narrow.filterLeft);
 });
 
-test('variables applies entry updates and sends refresh requests from the toolbar', async ({ page }) => {
+test('variables applies entry updates and sends refresh requests from the toolbar', async ({
+    page,
+}) => {
     const backend = await openWebviewPage(page, 'variables', {
         configure: (mockBackend) => {
             registerVariablesDefaults(mockBackend, {
@@ -150,7 +162,9 @@ test('variables applies entry updates and sends refresh requests from the toolba
 
     const refreshRequest = backend.waitForNextRequest(VariablesMethods.refresh);
     await page.getByLabel('Refresh objects').click();
-    await expect.poll(async () => (await refreshRequest).params).toEqual({ sessionId: 'session-1' });
+    await expect
+        .poll(async () => (await refreshRequest).params)
+        .toEqual({ sessionId: 'session-1' });
 });
 
 test('variables sends grouping, sorting, highlight, and clear requests', async ({ page }) => {
@@ -204,14 +218,13 @@ test('variables sends grouping, sorting, highlight, and clear requests', async (
 
     const clearRequest = backend.waitForNextRequest(VariablesMethods.clear);
     await page.getByLabel('Delete all objects').click();
-    await page
-        .getByRole('dialog')
-        .getByRole('button', { name: 'Delete', exact: true })
-        .click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Delete', exact: true }).click();
     expect((await clearRequest).params).toEqual({ sessionId: 'session-1' });
 });
 
-test('variables switches active sessions and reacts to lifecycle notifications', async ({ page }) => {
+test('variables switches active sessions and reacts to lifecycle notifications', async ({
+    page,
+}) => {
     const sessions = [
         createSession({ id: 'session-1', name: 'Primary' }),
         createSession({ id: 'session-2', name: 'Analytics' }),
@@ -398,7 +411,9 @@ test('variables sends filter, expand-collapse, clipboard, and view requests', as
     });
 });
 
-test('variables sends collapse requests and uses the browser clipboard for copy-name and copy-value actions', async ({ page }) => {
+test('variables sends collapse requests and uses the browser clipboard for copy-name and copy-value actions', async ({
+    page,
+}) => {
     await installClipboardMock(page);
     const backend = await openWebviewPage(page, 'variables', {
         configure: (mockBackend) => {
@@ -460,22 +475,26 @@ test('variables sends collapse requests and uses the browser clipboard for copy-
     await clearClipboardRecords(page);
     await page.locator('.variable-item').filter({ hasText: 'iris' }).click({ button: 'right' });
     await page.getByText('Copy Name').click();
-    await expect.poll(() => getClipboardRecords(page)).toEqual([
-        {
-            kind: 'writeText',
-            text: 'iris',
-        },
-    ]);
+    await expect
+        .poll(() => getClipboardRecords(page))
+        .toEqual([
+            {
+                kind: 'writeText',
+                text: 'iris',
+            },
+        ]);
 
     await clearClipboardRecords(page);
     await page.locator('.variable-item').filter({ hasText: 'iris' }).click({ button: 'right' });
     await page.getByText('Copy Value').click();
-    await expect.poll(() => getClipboardRecords(page)).toEqual([
-        {
-            kind: 'writeText',
-            text: 'data.frame',
-        },
-    ]);
+    await expect
+        .poll(() => getClipboardRecords(page))
+        .toEqual([
+            {
+                kind: 'writeText',
+                text: 'data.frame',
+            },
+        ]);
 });
 
 test('variables supports keyboard selection, toggling, and viewing', async ({ page }) => {
@@ -598,7 +617,10 @@ test('variables ignores entriesChanged for inactive session', async ({ page }) =
             },
         ],
     });
-    await page.waitForTimeout(300);
+    // Wait for the notification's render turn before checking that no other session leaked in.
+    await page.evaluate(
+        () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())),
+    );
 
     // Session-1's 'iris' should still be visible
     await expect(page.getByText('iris')).toBeVisible();
@@ -619,7 +641,9 @@ test('variables ignores entriesChanged for inactive session', async ({ page }) =
     await expect(page.getByText('iris')).toHaveCount(0);
 });
 
-test('variables clears entries when session is destroyed and selects remaining session', async ({ page }) => {
+test('variables clears entries when session is destroyed and selects remaining session', async ({
+    page,
+}) => {
     const sessions = [
         createSession({ id: 'session-1', name: 'Primary' }),
         createSession({ id: 'session-2', name: 'Analytics' }),
@@ -692,10 +716,12 @@ test('variables clears entries when session is destroyed and selects remaining s
 });
 
 test('variables debounces non-empty filters and clears immediately', async ({ page }) => {
+    await page.clock.install();
     const backend = await openWebviewPage(page, 'variables', {
-        configure: (mockBackend) => registerVariablesDefaults(mockBackend, {
-            entriesBySession: { 'session-1': [] },
-        }),
+        configure: (mockBackend) =>
+            registerVariablesDefaults(mockBackend, {
+                entriesBySession: { 'session-1': [] },
+            }),
     });
     await backend.notify(VariablesMethods.instanceStarted, {
         instance: createVariablesInstance('session-1'),
@@ -706,9 +732,12 @@ test('variables debounces non-empty filters and clears immediately', async ({ pa
     });
 
     const input = page.getByPlaceholder('Filter');
+    await expect(input).toBeVisible();
+    await page.clock.pauseAt(await page.evaluate(() => Date.now() + 1000));
     await input.fill('iris');
-    await page.waitForTimeout(300);
+    await page.clock.runFor(799);
     expect(backend.requestCount(VariablesMethods.setFilter)).toBe(0);
+    await page.clock.runFor(1);
     await expect.poll(() => backend.requestCount(VariablesMethods.setFilter)).toBe(1);
 
     await input.fill('');
@@ -728,9 +757,10 @@ test('variables virtualizes long lists and navigates the selection into view', a
         hasViewer: false,
     }));
     const backend = await openWebviewPage(page, 'variables', {
-        configure: (mockBackend) => registerVariablesDefaults(mockBackend, {
-            entriesBySession: { 'session-1': entries },
-        }),
+        configure: (mockBackend) =>
+            registerVariablesDefaults(mockBackend, {
+                entriesBySession: { 'session-1': entries },
+            }),
     });
     await backend.notify(VariablesMethods.instanceStarted, {
         instance: createVariablesInstance('session-1'),
@@ -750,6 +780,7 @@ test('variables virtualizes long lists and navigates the selection into view', a
 });
 
 test('variables resets the recent highlight deadline after repeated updates', async ({ page }) => {
+    await page.clock.install();
     const entry = {
         type: 'item' as const,
         id: 'var-1',
@@ -764,9 +795,10 @@ test('variables resets the recent highlight deadline after repeated updates', as
         updatedTime: 1,
     };
     const backend = await openWebviewPage(page, 'variables', {
-        configure: (mockBackend) => registerVariablesDefaults(mockBackend, {
-            entriesBySession: { 'session-1': [entry] },
-        }),
+        configure: (mockBackend) =>
+            registerVariablesDefaults(mockBackend, {
+                entriesBySession: { 'session-1': [entry] },
+            }),
     });
     await backend.notify(VariablesMethods.instanceStarted, {
         instance: createVariablesInstance('session-1'),
@@ -777,35 +809,47 @@ test('variables resets the recent highlight deadline after repeated updates', as
     });
 
     const row = page.locator('.variable-item');
-    await expect(row).toHaveClass(/recent/);
-    await page.waitForTimeout(1_200);
+    await expect(row).toBeVisible();
+    await page.clock.pauseAt(await page.evaluate(() => Date.now() + 1000));
     await backend.notify(VariablesMethods.entriesChanged, {
         sessionId: 'session-1',
-        entries: [{ ...entry, displayValue: 'updated', updatedTime: 2 }],
+        entries: [{ ...entry, updatedTime: 2 }],
     });
-    await page.waitForTimeout(1_200);
     await expect(row).toHaveClass(/recent/);
-    await expect(row).not.toHaveClass(/recent/, { timeout: 2_000 });
+    await page.clock.runFor(1_200);
+    await backend.notify(VariablesMethods.entriesChanged, {
+        sessionId: 'session-1',
+        entries: [{ ...entry, displayValue: 'updated', updatedTime: 3 }],
+    });
+    await expect(row).toContainText('updated');
+    await page.clock.runFor(1_200);
+    await expect(row).toHaveClass(/recent/);
+    await page.clock.runFor(801);
+    await expect(row).not.toHaveClass(/recent/);
 });
 
 test('variables delays busy progress and disables rows for a closed instance', async ({ page }) => {
+    await page.clock.install();
     await installClipboardMock(page);
     const backend = await openWebviewPage(page, 'variables', {
-        configure: (mockBackend) => registerVariablesDefaults(mockBackend, {
-            entriesBySession: {
-                'session-1': [{
-                    type: 'item',
-                    id: 'var-1',
-                    path: ['iris'],
-                    displayName: 'iris',
-                    displayValue: 'data.frame',
-                    displayType: 'data.frame',
-                    kind: 'table',
-                    hasChildren: false,
-                    hasViewer: true,
-                }],
-            },
-        }),
+        configure: (mockBackend) =>
+            registerVariablesDefaults(mockBackend, {
+                entriesBySession: {
+                    'session-1': [
+                        {
+                            type: 'item',
+                            id: 'var-1',
+                            path: ['iris'],
+                            displayName: 'iris',
+                            displayValue: 'data.frame',
+                            displayType: 'data.frame',
+                            kind: 'table',
+                            hasChildren: false,
+                            hasViewer: true,
+                        },
+                    ],
+                },
+            }),
     });
     await backend.notify(VariablesMethods.instanceStarted, {
         instance: createVariablesInstance('session-1'),
@@ -816,12 +860,15 @@ test('variables delays busy progress and disables rows for a closed instance', a
     });
     await expect(page.getByText('iris')).toBeVisible();
 
+    await page.clock.pauseAt(await page.evaluate(() => Date.now() + 1000));
     await backend.notify(VariablesMethods.instanceStarted, {
         instance: createVariablesInstance('session-1', { status: 'busy' }),
     });
-    await page.waitForTimeout(250);
+    await page.clock.runFor(499);
     await expect(page.locator('.variables-progress')).toHaveCount(0);
+    await page.clock.runFor(1);
     await expect(page.locator('.variables-progress')).toBeVisible();
+    await page.clock.resume();
 
     await backend.notify(VariablesMethods.instanceStarted, {
         instance: createVariablesInstance('session-1', { state: 'closed', status: 'disconnected' }),
@@ -833,9 +880,9 @@ test('variables delays busy progress and disables rows for a closed instance', a
     await page.locator('.variable-item').click({ button: 'right', force: true });
     await expect(page.getByText('View Data Table')).toHaveCount(0);
     await page.getByText('Copy Name').click();
-    await expect.poll(() => getClipboardRecords(page)).toEqual([
-        { kind: 'writeText', text: 'iris' },
-    ]);
+    await expect
+        .poll(() => getClipboardRecords(page))
+        .toEqual([{ kind: 'writeText', text: 'iris' }]);
 });
 
 test('variables memory meter exposes usage and opens low-memory settings', async ({ page }) => {
@@ -855,12 +902,14 @@ test('variables memory meter exposes usage and opens low-memory settings', async
             timestamp: Date.now(),
             totalSystemMemory: 1_000,
             freeSystemMemory: 200,
-            kernelSessions: [{
-                sessionId: 'session-1',
-                sessionName: 'Primary',
-                languageId: 'r',
-                memoryBytes: 300,
-            }],
+            kernelSessions: [
+                {
+                    sessionId: 'session-1',
+                    sessionName: 'Primary',
+                    languageId: 'r',
+                    memoryBytes: 300,
+                },
+            ],
             kernelTotalBytes: 300,
             supervisorOverheadBytes: 100,
             extensionHostOverheadBytes: 100,
@@ -884,28 +933,30 @@ test('variables memory meter exposes usage and opens low-memory settings', async
 });
 
 test('variables restores selection and scroll offset per session', async ({ page }) => {
-    const makeEntries = (prefix: string) => Array.from({ length: 200 }, (_, index) => ({
-        type: 'item' as const,
-        id: `${prefix}-${index}`,
-        path: [`${prefix}_${index}`],
-        displayName: `${prefix}_${index}`,
-        displayValue: String(index),
-        displayType: 'number',
-        kind: 'number',
-        hasChildren: false,
-        hasViewer: false,
-    }));
+    const makeEntries = (prefix: string) =>
+        Array.from({ length: 200 }, (_, index) => ({
+            type: 'item' as const,
+            id: `${prefix}-${index}`,
+            path: [`${prefix}_${index}`],
+            displayName: `${prefix}_${index}`,
+            displayValue: String(index),
+            displayType: 'number',
+            kind: 'number',
+            hasChildren: false,
+            hasViewer: false,
+        }));
     const sessions = [
         createSession({ id: 'session-1', name: 'Primary' }),
         createSession({ id: 'session-2', name: 'Analytics' }),
     ];
     const backend = await openWebviewPage(page, 'variables', {
-        configure: (mockBackend) => registerVariablesDefaults(mockBackend, {
-            entriesBySession: {
-                'session-1': makeEntries('alpha'),
-                'session-2': makeEntries('beta'),
-            },
-        }),
+        configure: (mockBackend) =>
+            registerVariablesDefaults(mockBackend, {
+                entriesBySession: {
+                    'session-1': makeEntries('alpha'),
+                    'session-2': makeEntries('beta'),
+                },
+            }),
     });
     for (const session of sessions) {
         await backend.notify(VariablesMethods.instanceStarted, {
@@ -937,7 +988,9 @@ test('variables restores selection and scroll offset per session', async ({ page
     await page.getByLabel('Select session to view variables from').click();
     await page.getByText('Primary').click();
     await backend.notify(VariablesMethods.activeInstanceChanged, { sessionId: 'session-1' });
-    await expect.poll(() => container.evaluate(element => element.scrollTop)).toBeGreaterThan(1_400);
+    await expect
+        .poll(() => container.evaluate((element) => element.scrollTop))
+        .toBeGreaterThan(1_400);
     await expect(page.getByText('alpha_60', { exact: true })).toBeVisible();
     await expect(page.locator('.variable-item.selected')).toContainText('alpha_60');
 });

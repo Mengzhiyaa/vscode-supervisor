@@ -1,9 +1,9 @@
-import * as monaco from "monaco-editor/editor";
-import "./features";
-import "monaco-editor/languages/definitions/r/register";
-import "monaco-editor/languages/definitions/python/register";
+import * as monaco from 'monaco-editor/editor';
+import './features';
+import 'monaco-editor/languages/definitions/r/register';
+import 'monaco-editor/languages/definitions/python/register';
 
-import EditorWorkerUrl from "monaco-editor/editor/editor.worker?worker&url";
+import EditorWorkerUrl from 'monaco-editor/editor/editor.worker?worker&url';
 
 type MonacoEnv = {
     MonacoEnvironment?: { getWorker: (id: string, label: string) => Worker };
@@ -19,17 +19,16 @@ function configureMonacoEnvironment(): void {
             // in VS Code Remote SSH webviews where the webview origin
             // (vscode-webview://) differs from the resource origin
             // (vscode-remote+ssh://).
-            const blob = new Blob(
-                [`importScripts(${JSON.stringify(EditorWorkerUrl)});`],
-                { type: "application/javascript" },
-            );
+            const blob = new Blob([`importScripts(${JSON.stringify(EditorWorkerUrl)});`], {
+                type: 'application/javascript',
+            });
             return new Worker(URL.createObjectURL(blob));
         },
     };
 }
 
 function exposeMonacoOnWindow(): void {
-    if (typeof window !== "undefined") {
+    if (typeof window !== 'undefined') {
         (window as unknown as { monaco: typeof monaco }).monaco = monaco;
     }
 }

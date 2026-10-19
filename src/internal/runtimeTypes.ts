@@ -19,7 +19,12 @@ export {
     RuntimeErrorBehavior,
     type RuntimeResourceUsage,
 } from '../shared/runtime';
-export { RuntimeState, RuntimeExitReason, RuntimeStartMode, type LanguageRuntimeExit } from '../api';
+export {
+    RuntimeState,
+    RuntimeExitReason,
+    RuntimeStartMode,
+    type LanguageRuntimeExit,
+} from '../api';
 
 export enum RuntimeOnlineState {
     Starting = 'starting',
@@ -63,7 +68,7 @@ export enum RuntimeClientStatus {
 
 export type RuntimeClientHandlerCallback = (
     client: RuntimeClientInstance,
-    params: Record<string, unknown>
+    params: Record<string, unknown>,
 ) => boolean;
 
 export interface RuntimeClientHandler {
@@ -88,8 +93,6 @@ export enum LanguageRuntimeStreamName {
     Stdout = 'stdout',
     Stderr = 'stderr',
 }
-
-
 
 export interface LanguageRuntimeInfo {
     banner: string;
@@ -238,8 +241,6 @@ export type LanguageRuntimeMessageCommOpen = LanguageRuntimeCommOpen;
 export type LanguageRuntimeMessageCommData = LanguageRuntimeCommMessage;
 export type LanguageRuntimeMessageCommClosed = LanguageRuntimeCommClosed;
 
-
-
 export interface RuntimeMethodError {
     code: RuntimeMethodErrorCode;
     message: string;
@@ -296,7 +297,7 @@ export interface LanguageRuntimeSession extends vscode.Disposable {
         mode: RuntimeCodeExecutionMode,
         errorBehavior: RuntimeErrorBehavior,
         codeLocation?: Utf8Location,
-        executionMetadata?: Record<string, unknown>
+        executionMetadata?: Record<string, unknown>,
     ): void | Promise<void>;
 
     isCodeFragmentComplete(code: string): Thenable<RuntimeCodeFragmentStatus>;
@@ -305,7 +306,7 @@ export interface LanguageRuntimeSession extends vscode.Disposable {
         id: string,
         type: RuntimeClientType,
         params: Record<string, unknown>,
-        metadata?: Record<string, unknown>
+        metadata?: Record<string, unknown>,
     ): Thenable<void>;
 
     listClients(type?: RuntimeClientType): Thenable<Record<string, string>>;

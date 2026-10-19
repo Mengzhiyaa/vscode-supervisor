@@ -195,7 +195,9 @@ function makeLiveSession(
         state: options?.state ?? RuntimeState.Ready,
         created: options?.created ?? 0,
         lastUsed: options?.lastUsed ?? 0,
-        restoreLastUsed(lastUsed: number) { this.lastUsed = lastUsed; },
+        restoreLastUsed(lastUsed: number) {
+            this.lastUsed = lastUsed;
+        },
         onDidChangeRuntimeState: createEventStub(),
         onDidChangeWorkingDirectory: createEventStub(),
     };
@@ -203,7 +205,10 @@ function makeLiveSession(
 
 function makeSessionManager() {
     let persistedRestoreHandler: (() => Promise<void>) | undefined;
-    const activeSessions = new Map<string, { session: ReturnType<typeof makeLiveSession>; hasConsole: boolean }>();
+    const activeSessions = new Map<
+        string,
+        { session: ReturnType<typeof makeLiveSession>; hasConsole: boolean }
+    >();
     const sessionManager = {
         updateActiveLanguagesCalls: 0,
         isRestoringPersistedSessions: false,
@@ -268,9 +273,10 @@ function makeSessionManager() {
         autoStartRuntime: async () => {
             throw new Error('autoStartRuntime should not be called in this test');
         },
-        getSession: (sessionId: string) => sessionManager.value.sessions.find(
-            (session: { sessionId: string }) => session.sessionId === sessionId,
-        ),
+        getSession: (sessionId: string) =>
+            sessionManager.value.sessions.find(
+                (session: { sessionId: string }) => session.sessionId === sessionId,
+            ),
         getActiveSession: (sessionId: string) => activeSessions.get(sessionId),
         deleteSession: async () => true,
         validateRuntimeSession: async () => true,
@@ -303,18 +309,26 @@ suite('[Unit] runtime startup', () => {
         const context = makeContext();
         const logChannel = makeNoopLogChannel();
         const sessionManager = makeSessionManager();
-        const runtime = makeRuntimeMetadata({ languageId: 'python', runtimeId: 'python-implicit',
-            startupBehavior: LanguageRuntimeStartupBehavior.Implicit });
+        const runtime = makeRuntimeMetadata({
+            languageId: 'python',
+            runtimeId: 'python-implicit',
+            startupBehavior: LanguageRuntimeStartupBehavior.Implicit,
+        });
         const startupService = new RuntimeStartupService(
-            context, { ...makeRuntimeManager(), runtimes: [runtime] }, sessionManager.value,
-            makeNewFolderService(context, logChannel), logChannel, createMemento(),
+            context,
+            { ...makeRuntimeManager(), runtimes: [runtime] },
+            sessionManager.value,
+            makeNewFolderService(context, logChannel),
+            logChannel,
+            createMemento(),
         );
         const pending = createDeferred<void>();
         const starts: string[] = [];
         const internalService = startupService as unknown as {
             _autoStartEncounteredLanguage(languageId: string): Promise<void>;
         };
-        const encounter = (languageId: string) => internalService._autoStartEncounteredLanguage(languageId);
+        const encounter = (languageId: string) =>
+            internalService._autoStartEncounteredLanguage(languageId);
         Object.assign(startupService, {
             _autoStartRuntime: async (metadata: LanguageRuntimeMetadata) => {
                 starts.push(metadata.runtimeId);
@@ -356,7 +370,8 @@ suite('[Unit] runtime startup', () => {
         });
         const runtimeManager = {
             ...makeRuntimeManager(),
-            getRuntime: (runtimeId: string) => runtimeId === registered.runtimeId ? registered : undefined,
+            getRuntime: (runtimeId: string) =>
+                runtimeId === registered.runtimeId ? registered : undefined,
             runtimes: [registered],
         } as any;
         const startupService = new RuntimeStartupService(
@@ -439,11 +454,20 @@ suite('[Unit] runtime startup', () => {
         );
 
         startupService.resetArchitectureMismatchWarning('r');
-        assert.strictEqual(context.globalState.get('vscode-supervisor.dismissedArchMismatch.v1.r'), undefined);
-        assert.strictEqual(context.globalState.get('vscode-supervisor.dismissedArchMismatch.v1.python'), true);
+        assert.strictEqual(
+            context.globalState.get('vscode-supervisor.dismissedArchMismatch.v1.r'),
+            undefined,
+        );
+        assert.strictEqual(
+            context.globalState.get('vscode-supervisor.dismissedArchMismatch.v1.python'),
+            true,
+        );
 
         startupService.resetArchitectureMismatchWarning();
-        assert.strictEqual(context.globalState.get('vscode-supervisor.dismissedArchMismatch.v1.python'), undefined);
+        assert.strictEqual(
+            context.globalState.get('vscode-supervisor.dismissedArchMismatch.v1.python'),
+            undefined,
+        );
         assert.strictEqual(context.globalState.get('vscode-supervisor.other'), true);
 
         startupService.dispose();
@@ -465,14 +489,17 @@ suite('[Unit] runtime startup', () => {
             ephemeralState,
         );
 
-        startupService.registerNewFolderInitTask(async () => {
-            startupService.registerNewFolderInitTask(deferredTask.promise, {
-                label: 'follow-up-task',
-                affiliatedRuntimeMetadata: runtimeMetadata,
-            });
-        }, {
-            label: 'initial-task',
-        });
+        startupService.registerNewFolderInitTask(
+            async () => {
+                startupService.registerNewFolderInitTask(deferredTask.promise, {
+                    label: 'follow-up-task',
+                    affiliatedRuntimeMetadata: runtimeMetadata,
+                });
+            },
+            {
+                label: 'initial-task',
+            },
+        );
 
         let completed = false;
         const phaseReached = new Promise<void>((resolve) => {
@@ -567,13 +594,16 @@ suite('[Unit] runtime startup', () => {
     });
 
     test('validates persisted sessions before reconnect and activates the first valid console session', async () => {
-        const context = makeContext({}, {
-            [WORKSPACE_SESSION_LIST_KEY]: [
-                makeStoredSession('session-2', { lastUsed: 2 }),
-                makeStoredSession('session-3', { lastUsed: 3 }),
-                makeStoredSession('session-1', { lastUsed: 1 }),
-            ],
-        });
+        const context = makeContext(
+            {},
+            {
+                [WORKSPACE_SESSION_LIST_KEY]: [
+                    makeStoredSession('session-2', { lastUsed: 2 }),
+                    makeStoredSession('session-3', { lastUsed: 3 }),
+                    makeStoredSession('session-1', { lastUsed: 1 }),
+                ],
+            },
+        );
         const logChannel = makeNoopLogChannel();
         const localSessionManager = makeSessionManager();
         const runtimeProvider = makeRuntimeProvider();
@@ -582,7 +612,10 @@ suite('[Unit] runtime startup', () => {
         const restoreCalls: Array<{ sessionId: string; activate: boolean }> = [];
         const restoreFailures: Array<{ sessionId: string; message: string }> = [];
 
-        localSessionManager.value.validateRuntimeSession = async (_runtimeMetadata: unknown, sessionId: string) => {
+        localSessionManager.value.validateRuntimeSession = async (
+            _runtimeMetadata: unknown,
+            sessionId: string,
+        ) => {
             validateCalls.push(sessionId);
             return sessionId !== 'session-3';
         };
@@ -629,10 +662,9 @@ suite('[Unit] runtime startup', () => {
         assert.strictEqual(localSessionManager.value.getSession('session-2').lastUsed, 2);
         assert.strictEqual(localSessionManager.value.getSession('session-1').lastUsed, 1);
         assert.deepStrictEqual(
-            ephemeralState.get<SerializedSessionMetadata[]>(
-                EPHEMERAL_WORKSPACE_SESSIONS,
-                [],
-            )!.map((session) => session.metadata.sessionId),
+            ephemeralState
+                .get<SerializedSessionMetadata[]>(EPHEMERAL_WORKSPACE_SESSIONS, [])!
+                .map((session) => session.metadata.sessionId),
             ['session-2', 'session-1'],
         );
 
@@ -640,13 +672,18 @@ suite('[Unit] runtime startup', () => {
     });
 
     test('retries a persisted session after its runtime provider registers', async () => {
-        const context = makeContext({}, {
-            [WORKSPACE_SESSION_LIST_KEY]: [makeStoredSession('session-late-provider', {
-                runtimeMetadata: makeRuntimeMetadata({
-                    sessionLocation: LanguageRuntimeSessionLocation.Machine,
-                }),
-            })],
-        });
+        const context = makeContext(
+            {},
+            {
+                [WORKSPACE_SESSION_LIST_KEY]: [
+                    makeStoredSession('session-late-provider', {
+                        runtimeMetadata: makeRuntimeMetadata({
+                            sessionLocation: LanguageRuntimeSessionLocation.Machine,
+                        }),
+                    }),
+                ],
+            },
+        );
         const logChannel = makeNoopLogChannel();
         const localSessionManager = makeSessionManager();
         const onDidRegisterRuntimeProvider = new vscode.EventEmitter<string>();
@@ -655,7 +692,9 @@ suite('[Unit] runtime startup', () => {
         let restoreCalls = 0;
         let autoStartCalls = 0;
 
-        localSessionManager.value.restoreRuntimeSession = async (...args: Parameters<typeof localSessionManager.restoreSession>) => {
+        localSessionManager.value.restoreRuntimeSession = async (
+            ...args: Parameters<typeof localSessionManager.restoreSession>
+        ) => {
             restoreCalls += 1;
             restored.resolve();
             return localSessionManager.restoreSession(...args);
@@ -709,14 +748,19 @@ suite('[Unit] runtime startup', () => {
 
     test('activates the persisted runtime extension before validating and restoring', async () => {
         const extensionId = 'publisher.runtime-r';
-        const context = makeContext({}, {
-            [WORKSPACE_SESSION_LIST_KEY]: [makeStoredSession('session-extension-activation', {
-                runtimeMetadata: makeRuntimeMetadata({
-                    extensionId,
-                    sessionLocation: LanguageRuntimeSessionLocation.Machine,
-                }),
-            })],
-        });
+        const context = makeContext(
+            {},
+            {
+                [WORKSPACE_SESSION_LIST_KEY]: [
+                    makeStoredSession('session-extension-activation', {
+                        runtimeMetadata: makeRuntimeMetadata({
+                            extensionId,
+                            sessionLocation: LanguageRuntimeSessionLocation.Machine,
+                        }),
+                    }),
+                ],
+            },
+        );
         const logChannel = makeNoopLogChannel();
         const localSessionManager = makeSessionManager();
         const order: string[] = [];
@@ -725,7 +769,9 @@ suite('[Unit] runtime startup', () => {
             order.push('validate');
             return true;
         };
-        localSessionManager.value.restoreRuntimeSession = async (...args: Parameters<typeof localSessionManager.restoreSession>) => {
+        localSessionManager.value.restoreRuntimeSession = async (
+            ...args: Parameters<typeof localSessionManager.restoreSession>
+        ) => {
             order.push('restore');
             return localSessionManager.restoreSession(...args);
         };
@@ -749,11 +795,7 @@ suite('[Unit] runtime startup', () => {
         await startupService.getRestoredSessions();
         await localSessionManager.value.restorePersistedSessionsInBackground();
 
-        assert.deepStrictEqual(order, [
-            `activate:${extensionId}:r`,
-            'validate',
-            'restore',
-        ]);
+        assert.deepStrictEqual(order, [`activate:${extensionId}:r`, 'validate', 'restore']);
         startupService.dispose();
     });
 
@@ -810,10 +852,7 @@ suite('[Unit] runtime startup', () => {
             restoredSessions.map((session) => session.metadata.sessionId),
             ['session-across-reload'],
         );
-        assert.strictEqual(
-            restoredSessions[0].runtimeMetadata.extensionId,
-            'publisher.runtime-r',
-        );
+        assert.strictEqual(restoredSessions[0].runtimeMetadata.extensionId, 'publisher.runtime-r');
         await replacementSessionManager.value.restorePersistedSessionsInBackground();
         assert.deepStrictEqual(restoreCalls, ['session-across-reload']);
 
@@ -821,17 +860,20 @@ suite('[Unit] runtime startup', () => {
     });
 
     test('restores newest sessions first and never activates a notebook session', async () => {
-        const context = makeContext({}, {
-            [WORKSPACE_SESSION_LIST_KEY]: [
-                makeStoredSession('console-old', { lastUsed: 10 }),
-                makeStoredSession('notebook-new', {
-                    lastUsed: 30,
-                    notebookUri: vscode.Uri.file('/tmp/notebook.ipynb'),
-                    sessionMode: LanguageRuntimeSessionMode.Notebook,
-                }),
-                makeStoredSession('console-new', { lastUsed: 20 }),
-            ],
-        });
+        const context = makeContext(
+            {},
+            {
+                [WORKSPACE_SESSION_LIST_KEY]: [
+                    makeStoredSession('console-old', { lastUsed: 10 }),
+                    makeStoredSession('notebook-new', {
+                        lastUsed: 30,
+                        notebookUri: vscode.Uri.file('/tmp/notebook.ipynb'),
+                        sessionMode: LanguageRuntimeSessionMode.Notebook,
+                    }),
+                    makeStoredSession('console-new', { lastUsed: 20 }),
+                ],
+            },
+        );
         const logChannel = makeNoopLogChannel();
         const localSessionManager = makeSessionManager();
         const restoreCalls: Array<{ sessionId: string; activate: boolean }> = [];
@@ -870,11 +912,13 @@ suite('[Unit] runtime startup', () => {
         await startupService.getRestoredSessions();
         await localSessionManager.value.restorePersistedSessionsInBackground();
 
-        assert.deepStrictEqual(startupEvents, [{
-            runtimeName: 'console-new',
-            newSession: false,
-            activate: true,
-        }]);
+        assert.deepStrictEqual(startupEvents, [
+            {
+                runtimeName: 'console-new',
+                newSession: false,
+                activate: true,
+            },
+        ]);
         assert.deepStrictEqual(restoreCalls, [
             { sessionId: 'notebook-new', activate: false },
             { sessionId: 'console-new', activate: true },
@@ -897,22 +941,27 @@ suite('[Unit] runtime startup', () => {
         });
         const rAffiliationKey = 'vscode-supervisor.affiliatedRuntimeMetadata.v1.r';
         const pythonAffiliationKey = 'vscode-supervisor.affiliatedRuntimeMetadata.v1.python';
-        const context = makeContext({}, {
-            [rAffiliationKey]: {
-                metadata: rRuntime,
-                lastUsed: 20,
-                lastStarted: 10,
+        const context = makeContext(
+            {},
+            {
+                [rAffiliationKey]: {
+                    metadata: rRuntime,
+                    lastUsed: 20,
+                    lastStarted: 10,
+                },
+                [pythonAffiliationKey]: {
+                    metadata: pythonRuntime,
+                    lastUsed: 15,
+                    lastStarted: 10,
+                },
             },
-            [pythonAffiliationKey]: {
-                metadata: pythonRuntime,
-                lastUsed: 15,
-                lastStarted: 10,
-            },
-        });
+        );
         const logChannel = makeNoopLogChannel();
         const localSessionManager = makeSessionManager();
         const onDidStartRuntime = new vscode.EventEmitter<ReturnType<typeof makeLiveSession>>();
-        const onDidChangeForegroundSession = new vscode.EventEmitter<ReturnType<typeof makeLiveSession>>();
+        const onDidChangeForegroundSession = new vscode.EventEmitter<
+            ReturnType<typeof makeLiveSession>
+        >();
         const starts: Array<{ runtimeId: string; activate: boolean }> = [];
         const secondaryStarted = createDeferred<void>();
 
@@ -971,9 +1020,7 @@ suite('[Unit] runtime startup', () => {
         await (startupService as any)._startAffiliatedLanguageRuntimes();
         await Promise.resolve();
 
-        assert.deepStrictEqual(starts, [
-            { runtimeId: rRuntime.runtimeId, activate: true },
-        ]);
+        assert.deepStrictEqual(starts, [{ runtimeId: rRuntime.runtimeId, activate: true }]);
 
         startupService.dispose();
         onDidStartRuntime.dispose();
@@ -1024,10 +1071,7 @@ suite('[Unit] runtime startup', () => {
         await (startupService as any)._startRecommendedLanguageRuntimes();
 
         assert.deepStrictEqual(starts, [{ runtimeId: 'python-immediate', activate: true }]);
-        assert.deepStrictEqual(
-            startupService.getAffiliatedRuntimeMetadata('r'),
-            explicit,
-        );
+        assert.deepStrictEqual(startupService.getAffiliatedRuntimeMetadata('r'), explicit);
         startupService.dispose();
     });
 
@@ -1098,18 +1142,21 @@ suite('[Unit] runtime startup', () => {
             languageName: 'Python',
             startupBehavior: LanguageRuntimeStartupBehavior.Implicit,
         });
-        const context = makeContext({}, {
-            'vscode-supervisor.affiliatedRuntimeMetadata.v1.r': {
-                metadata: rRuntime,
-                lastUsed: 20,
-                lastStarted: 10,
+        const context = makeContext(
+            {},
+            {
+                'vscode-supervisor.affiliatedRuntimeMetadata.v1.r': {
+                    metadata: rRuntime,
+                    lastUsed: 20,
+                    lastStarted: 10,
+                },
+                'vscode-supervisor.affiliatedRuntimeMetadata.v1.python': {
+                    metadata: pythonRuntime,
+                    lastUsed: 15,
+                    lastStarted: 10,
+                },
             },
-            'vscode-supervisor.affiliatedRuntimeMetadata.v1.python': {
-                metadata: pythonRuntime,
-                lastUsed: 15,
-                lastStarted: 10,
-            },
-        });
+        );
         const logChannel = makeNoopLogChannel();
         const localSessionManager = makeSessionManager();
         const starts: Array<{ runtimeId: string; activate: boolean }> = [];
@@ -1152,13 +1199,16 @@ suite('[Unit] runtime startup', () => {
             runtimeId: 'r-never-used',
             startupBehavior: LanguageRuntimeStartupBehavior.Explicit,
         });
-        const context = makeContext({}, {
-            'vscode-supervisor.affiliatedRuntimeMetadata.v1.r': {
-                metadata: runtime,
-                lastUsed: 0,
-                lastStarted: 0,
+        const context = makeContext(
+            {},
+            {
+                'vscode-supervisor.affiliatedRuntimeMetadata.v1.r': {
+                    metadata: runtime,
+                    lastUsed: 0,
+                    lastStarted: 0,
+                },
             },
-        });
+        );
         const logChannel = makeNoopLogChannel();
         const localSessionManager = makeSessionManager();
         let starts = 0;
@@ -1185,12 +1235,15 @@ suite('[Unit] runtime startup', () => {
     });
 
     test('drops failed restored sessions from persistence and deletes partially restored runtime sessions', async () => {
-        const context = makeContext({}, {
-            [WORKSPACE_SESSION_LIST_KEY]: [
-                makeStoredSession('session-failed', { lastUsed: 2 }),
-                makeStoredSession('session-ok', { lastUsed: 1 }),
-            ],
-        });
+        const context = makeContext(
+            {},
+            {
+                [WORKSPACE_SESSION_LIST_KEY]: [
+                    makeStoredSession('session-failed', { lastUsed: 2 }),
+                    makeStoredSession('session-ok', { lastUsed: 1 }),
+                ],
+            },
+        );
         const logChannel = makeNoopLogChannel();
         const localSessionManager = makeSessionManager();
         const runtimeProvider = makeRuntimeProvider();
@@ -1198,9 +1251,7 @@ suite('[Unit] runtime startup', () => {
         const ephemeralState = createMemento();
 
         localSessionManager.value.getSession = (sessionId: string) => {
-            return sessionId === 'session-failed'
-                ? ({ sessionId } as any)
-                : undefined;
+            return sessionId === 'session-failed' ? ({ sessionId } as any) : undefined;
         };
         localSessionManager.value.deleteSession = async (sessionId: string) => {
             deletedSessionIds.push(sessionId);
@@ -1233,10 +1284,9 @@ suite('[Unit] runtime startup', () => {
 
         assert.deepStrictEqual(deletedSessionIds, ['session-failed']);
         assert.deepStrictEqual(
-            ephemeralState.get<SerializedSessionMetadata[]>(
-                EPHEMERAL_WORKSPACE_SESSIONS,
-                [],
-            )!.map((session) => session.metadata.sessionId),
+            ephemeralState
+                .get<SerializedSessionMetadata[]>(EPHEMERAL_WORKSPACE_SESSIONS, [])!
+                .map((session) => session.metadata.sessionId),
             ['session-ok'],
         );
         assert.strictEqual((startupService as any)._hasOutstandingSessionRestores(), false);
@@ -1249,9 +1299,12 @@ suite('[Unit] runtime startup', () => {
             makeStoredSession('session-1', { lastUsed: 2 }),
             makeStoredSession('session-2', { lastUsed: 1 }),
         ];
-        const context = makeContext({}, {
-            [WORKSPACE_SESSION_LIST_KEY]: storedSessions,
-        });
+        const context = makeContext(
+            {},
+            {
+                [WORKSPACE_SESSION_LIST_KEY]: storedSessions,
+            },
+        );
         const logChannel = makeNoopLogChannel();
         const localSessionManager = makeSessionManager();
         const runtimeProvider = makeRuntimeProvider();
@@ -1264,9 +1317,7 @@ suite('[Unit] runtime startup', () => {
             return sessionId === liveSession.sessionId ? liveSession : undefined;
         };
         localSessionManager.value.getActiveSession = (sessionId: string) => {
-            return sessionId === liveSession.sessionId
-                ? { hasConsole: true }
-                : undefined;
+            return sessionId === liveSession.sessionId ? { hasConsole: true } : undefined;
         };
 
         const startupService = new RuntimeStartupService(
@@ -1295,7 +1346,8 @@ suite('[Unit] runtime startup', () => {
             ['session-1', 'session-2'],
         );
         assert.strictEqual(
-            persistedSessions.find((session) => session.metadata.sessionId === 'session-2')?.workingDirectory,
+            persistedSessions.find((session) => session.metadata.sessionId === 'session-2')
+                ?.workingDirectory,
             '/tmp/session-2',
         );
 
@@ -1365,14 +1417,17 @@ suite('[Unit] runtime startup', () => {
     });
 
     test('preserves sessions owned by other windows when saving workspace sessions', async () => {
-        const context = makeContext({}, {
-            [WORKSPACE_SESSION_LIST_KEY]: [
-                makeStoredSession('session-remote', {
-                    lastUsed: 5,
-                    localWindowId: 'window-other',
-                }),
-            ],
-        });
+        const context = makeContext(
+            {},
+            {
+                [WORKSPACE_SESSION_LIST_KEY]: [
+                    makeStoredSession('session-remote', {
+                        lastUsed: 5,
+                        localWindowId: 'window-other',
+                    }),
+                ],
+            },
+        );
         const logChannel = makeNoopLogChannel();
         const localSessionManager = makeSessionManager();
         const runtimeProvider = makeRuntimeProvider();
@@ -1385,9 +1440,7 @@ suite('[Unit] runtime startup', () => {
             return sessionId === liveSession.sessionId ? liveSession : undefined;
         };
         localSessionManager.value.getActiveSession = (sessionId: string) => {
-            return sessionId === liveSession.sessionId
-                ? { hasConsole: true }
-                : undefined;
+            return sessionId === liveSession.sessionId ? { hasConsole: true } : undefined;
         };
 
         const startupService = new RuntimeStartupService(
@@ -1442,11 +1495,7 @@ suite('[Unit] runtime startup', () => {
                 sessionLocation: LanguageRuntimeSessionLocation.Browser,
             },
         });
-        localSessionManager.value.sessions = [
-            workspaceSession,
-            machineSession,
-            browserSession,
-        ];
+        localSessionManager.value.sessions = [workspaceSession, machineSession, browserSession];
         localSessionManager.value.getActiveSession = () => ({ hasConsole: true });
 
         const startupService = new RuntimeStartupService(
@@ -1469,16 +1518,17 @@ suite('[Unit] runtime startup', () => {
             [],
         );
         assert.deepStrictEqual(
-            ephemeralSessions.map(session => session.metadata.sessionId),
+            ephemeralSessions.map((session) => session.metadata.sessionId),
             ['session-workspace'],
         );
         assert.deepStrictEqual(
-            persistentSessions.map(session => session.metadata.sessionId),
+            persistentSessions.map((session) => session.metadata.sessionId),
             ['session-machine'],
         );
         assert.ok(
-            ![...ephemeralSessions, ...persistentSessions]
-                .some(session => session.metadata.sessionId === 'session-browser'),
+            ![...ephemeralSessions, ...persistentSessions].some(
+                (session) => session.metadata.sessionId === 'session-browser',
+            ),
         );
 
         startupService.dispose();
@@ -1498,19 +1548,27 @@ suite('[Unit] runtime startup', () => {
         const originalShowWarningMessage = vscode.window.showWarningMessage;
         let warning = '';
         let showOutputCalls = 0;
-        (vscode.window as { showWarningMessage: typeof vscode.window.showWarningMessage })
-            .showWarningMessage = (async (message: string) => {
-                warning = message;
-                return 'Open Kernel Log';
-            }) as typeof vscode.window.showWarningMessage;
+        (
+            vscode.window as { showWarningMessage: typeof vscode.window.showWarningMessage }
+        ).showWarningMessage = (async (message: string) => {
+            warning = message;
+            return 'Open Kernel Log';
+        }) as typeof vscode.window.showWarningMessage;
         try {
-            await (startupService as any)._notifySessionCrash({
-                runtimeMetadata: makeRuntimeMetadata(),
-                showOutput: () => { showOutputCalls++; },
-            }, 137, false);
+            await (startupService as any)._notifySessionCrash(
+                {
+                    runtimeMetadata: makeRuntimeMetadata(),
+                    showOutput: () => {
+                        showOutputCalls++;
+                    },
+                },
+                137,
+                false,
+            );
         } finally {
-            (vscode.window as { showWarningMessage: typeof vscode.window.showWarningMessage })
-                .showWarningMessage = originalShowWarningMessage;
+            (
+                vscode.window as { showWarningMessage: typeof vscode.window.showWarningMessage }
+            ).showWarningMessage = originalShowWarningMessage;
         }
 
         assert.match(warning, /was not automatically restarted/);

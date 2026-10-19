@@ -3,7 +3,7 @@
   Renders a webview-based (HTML) plot.
 -->
 <script lang="ts">
-    import { onMount, onDestroy } from "svelte";
+    import { onMount, onDestroy } from 'svelte';
 
     interface Props {
         plotId: string;
@@ -14,11 +14,7 @@
         visible?: boolean;
         onclaim?: (payload: { plotId: string }) => void;
         onrelease?: (payload: { plotId: string }) => void;
-        onlayout?: (payload: {
-            plotId: string;
-            width: number;
-            height: number;
-        }) => void;
+        onlayout?: (payload: { plotId: string; width: number; height: number }) => void;
     }
 
     let {

@@ -26,9 +26,11 @@ function isReloadScopedValue(value: unknown): value is ReloadScopedValue<unknown
     }
 
     const candidate = value as Partial<ReloadScopedValue<unknown>>;
-    return candidate.version === RELOAD_STATE_ENVELOPE_VERSION &&
+    return (
+        candidate.version === RELOAD_STATE_ENVELOPE_VERSION &&
         typeof candidate.ownerEpoch === 'string' &&
-        Object.prototype.hasOwnProperty.call(candidate, 'value');
+        Object.prototype.hasOwnProperty.call(candidate, 'value')
+    );
 }
 
 /**
@@ -45,12 +47,9 @@ export function createApplicationOwnerEpoch(
 ): string {
     const vscodePid = environment.VSCODE_PID?.trim() || '';
     const ipcHook = environment.VSCODE_IPC_HOOK?.trim() || '';
-    const applicationIdentity = vscodePid || ipcHook
-        ? `${vscodePid}\0${ipcHook}`
-        : `parent:${parentPid}`;
-    return createHash('sha256')
-        .update(`v1\0${applicationIdentity}`)
-        .digest('hex');
+    const applicationIdentity =
+        vscodePid || ipcHook ? `${vscodePid}\0${ipcHook}` : `parent:${parentPid}`;
+    return createHash('sha256').update(`v1\0${applicationIdentity}`).digest('hex');
 }
 
 class ReloadPersistentMemento implements EphemeralMemento {
@@ -64,10 +63,7 @@ class ReloadPersistentMemento implements EphemeralMemento {
     get<T>(key: string, defaultValue?: T): T | undefined {
         const storageKey = `${RELOAD_STATE_KEY_PREFIX}${key}`;
         const stored = this._workspaceState.get<unknown>(storageKey);
-        if (
-            !isReloadScopedValue(stored) ||
-            stored.ownerEpoch !== this._ownerEpoch
-        ) {
+        if (!isReloadScopedValue(stored) || stored.ownerEpoch !== this._ownerEpoch) {
             if (stored !== undefined) {
                 this._removeStaleValue(storageKey);
             }
@@ -99,10 +95,7 @@ class ReloadPersistentMemento implements EphemeralMemento {
             }
 
             const stored = this._workspaceState.get<unknown>(storageKey);
-            if (
-                isReloadScopedValue(stored) &&
-                stored.ownerEpoch === this._ownerEpoch
-            ) {
+            if (isReloadScopedValue(stored) && stored.ownerEpoch === this._ownerEpoch) {
                 keys.push(storageKey.slice(RELOAD_STATE_KEY_PREFIX.length));
             } else if (stored !== undefined) {
                 this._removeStaleValue(storageKey);
@@ -117,15 +110,13 @@ class ReloadPersistentMemento implements EphemeralMemento {
             const current = this._workspaceState.get<unknown>(storageKey);
             if (
                 current === undefined ||
-                (isReloadScopedValue(current) &&
-                    current.ownerEpoch === this._ownerEpoch)
+                (isReloadScopedValue(current) && current.ownerEpoch === this._ownerEpoch)
             ) {
                 return;
             }
-            void this._workspaceState.update(storageKey, undefined).then(
-                undefined,
-                () => undefined,
-            );
+            void this._workspaceState
+                .update(storageKey, undefined)
+                .then(undefined, () => undefined);
         });
     }
 }

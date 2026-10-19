@@ -32,7 +32,10 @@ function createEventStub<T>(): vscode.Event<T> {
 class FakeConnection {
     readonly notifications = new Map<string, (params: any) => Promise<any> | any>();
 
-    onNotification(type: { method: string } | string, handler: (params: any) => Promise<any> | any): vscode.Disposable {
+    onNotification(
+        type: { method: string } | string,
+        handler: (params: any) => Promise<any> | any,
+    ): vscode.Disposable {
         const method = typeof type === 'string' ? type : type.method;
         this.notifications.set(method, handler);
         return { dispose: () => undefined };
@@ -47,9 +50,7 @@ class FakeConnection {
     }
 }
 
-function createProvider(options?: {
-    getConsoleInstance?: (sessionId: string) => any;
-}) {
+function createProvider(options?: { getConsoleInstance?: (sessionId: string) => any }) {
     return new ViewerViewProvider(
         vscode.Uri.file('/tmp'),
         makeNoopLogChannel(),
@@ -70,10 +71,10 @@ suite('[Unit] viewer provider interrupt routing', () => {
             getConsoleInstance: (sessionId: string) =>
                 sessionId === 'session-1'
                     ? {
-                        interrupt: () => {
-                            interrupts.push(sessionId);
-                        },
-                    }
+                          interrupt: () => {
+                              interrupts.push(sessionId);
+                          },
+                      }
                     : undefined,
         });
         (provider as any)._lastPreview = {

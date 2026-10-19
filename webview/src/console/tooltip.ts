@@ -4,7 +4,7 @@
 
 interface TooltipOptions {
     content: string;
-    placement?: "top" | "bottom" | "left" | "right";
+    placement?: 'top' | 'bottom' | 'left' | 'right';
     delay?: number;
 }
 
@@ -13,9 +13,9 @@ let showTimeout: ReturnType<typeof setTimeout> | null = null;
 
 function ensureTooltipEl(): HTMLDivElement {
     if (!tooltipEl) {
-        tooltipEl = document.createElement("div");
-        tooltipEl.className = "ark-tooltip";
-        tooltipEl.setAttribute("role", "tooltip");
+        tooltipEl = document.createElement('div');
+        tooltipEl.className = 'ark-tooltip';
+        tooltipEl.setAttribute('role', 'tooltip');
         document.body.appendChild(tooltipEl);
     }
 
@@ -25,7 +25,7 @@ function ensureTooltipEl(): HTMLDivElement {
 function positionTooltip(
     node: HTMLElement,
     tooltip: HTMLDivElement,
-    placement: "top" | "bottom" | "left" | "right",
+    placement: 'top' | 'bottom' | 'left' | 'right',
 ) {
     const rect = node.getBoundingClientRect();
     const tooltipRect = tooltip.getBoundingClientRect();
@@ -34,12 +34,12 @@ function positionTooltip(
     let top = rect.bottom + gap;
     let left = rect.left + (rect.width - tooltipRect.width) / 2;
 
-    if (placement === "top") {
+    if (placement === 'top') {
         top = rect.top - tooltipRect.height - gap;
-    } else if (placement === "left") {
+    } else if (placement === 'left') {
         top = rect.top + (rect.height - tooltipRect.height) / 2;
         left = rect.left - tooltipRect.width - gap;
-    } else if (placement === "right") {
+    } else if (placement === 'right') {
         top = rect.top + (rect.height - tooltipRect.height) / 2;
         left = rect.right + gap;
     }
@@ -54,11 +54,11 @@ function positionTooltip(
 function showTooltip(
     node: HTMLElement,
     content: string,
-    placement: "top" | "bottom" | "left" | "right",
+    placement: 'top' | 'bottom' | 'left' | 'right',
 ) {
     const tooltip = ensureTooltipEl();
     tooltip.textContent = content;
-    tooltip.classList.add("visible");
+    tooltip.classList.add('visible');
 
     requestAnimationFrame(() => {
         positionTooltip(node, tooltip, placement);
@@ -72,12 +72,12 @@ function hideTooltip() {
     }
 
     if (tooltipEl) {
-        tooltipEl.classList.remove("visible");
+        tooltipEl.classList.remove('visible');
     }
 }
 
 function normalizeOptions(options: TooltipOptions | string): TooltipOptions {
-    if (typeof options === "string") {
+    if (typeof options === 'string') {
         return { content: options };
     }
 
@@ -87,11 +87,11 @@ function normalizeOptions(options: TooltipOptions | string): TooltipOptions {
 export function tooltip(node: HTMLElement, options: TooltipOptions | string) {
     let opts = normalizeOptions(options);
 
-    const originalTitle = node.getAttribute("title");
+    const originalTitle = node.getAttribute('title');
     if (originalTitle && !opts.content) {
         opts.content = originalTitle;
     }
-    node.removeAttribute("title");
+    node.removeAttribute('title');
 
     function handleMouseEnter() {
         if (!opts.content) return;
@@ -101,7 +101,7 @@ export function tooltip(node: HTMLElement, options: TooltipOptions | string) {
         }
 
         showTimeout = setTimeout(() => {
-            showTooltip(node, opts.content, opts.placement ?? "bottom");
+            showTooltip(node, opts.content, opts.placement ?? 'bottom');
         }, opts.delay ?? 120);
     }
 
@@ -111,28 +111,28 @@ export function tooltip(node: HTMLElement, options: TooltipOptions | string) {
 
     function handleFocusIn() {
         if (!opts.content) return;
-        showTooltip(node, opts.content, opts.placement ?? "bottom");
+        showTooltip(node, opts.content, opts.placement ?? 'bottom');
     }
 
     function handleFocusOut() {
         hideTooltip();
     }
 
-    node.addEventListener("mouseenter", handleMouseEnter);
-    node.addEventListener("mouseleave", handleMouseLeave);
-    node.addEventListener("focusin", handleFocusIn);
-    node.addEventListener("focusout", handleFocusOut);
+    node.addEventListener('mouseenter', handleMouseEnter);
+    node.addEventListener('mouseleave', handleMouseLeave);
+    node.addEventListener('focusin', handleFocusIn);
+    node.addEventListener('focusout', handleFocusOut);
 
     return {
         update(newOptions: TooltipOptions | string) {
             opts = normalizeOptions(newOptions);
-            node.removeAttribute("title");
+            node.removeAttribute('title');
         },
         destroy() {
-            node.removeEventListener("mouseenter", handleMouseEnter);
-            node.removeEventListener("mouseleave", handleMouseLeave);
-            node.removeEventListener("focusin", handleFocusIn);
-            node.removeEventListener("focusout", handleFocusOut);
+            node.removeEventListener('mouseenter', handleMouseEnter);
+            node.removeEventListener('mouseleave', handleMouseLeave);
+            node.removeEventListener('focusin', handleFocusIn);
+            node.removeEventListener('focusout', handleFocusOut);
             hideTooltip();
         },
     };

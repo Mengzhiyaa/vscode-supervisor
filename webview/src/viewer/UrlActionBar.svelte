@@ -64,7 +64,6 @@
             (event.currentTarget as HTMLInputElement).select();
         }
     }
-
 </script>
 
 <div class="preview-action-bar">
@@ -92,7 +91,10 @@
         </div>
 
         <div class="action-bar-region center">
-            <form onsubmit={handleSubmit} aria-label={localize('viewer.navigateUrl', 'Navigate to URL')}>
+            <form
+                onsubmit={handleSubmit}
+                aria-label={localize('viewer.navigateUrl', 'Navigate to URL')}
+            >
                 <input
                     type="text"
                     class="text-input url-bar"

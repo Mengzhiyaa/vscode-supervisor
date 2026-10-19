@@ -61,7 +61,7 @@ export class ExecutionHistoryService implements vscode.Disposable {
     constructor(
         private readonly _storage: vscode.Memento,
         private readonly _outputChannel: vscode.LogOutputChannel,
-    ) { }
+    ) {}
 
     getSessionInputEntries(sessionId: string): InputHistoryEntry[] {
         return [...this._loadSessionEntries(sessionId)];
@@ -93,15 +93,15 @@ export class ExecutionHistoryService implements vscode.Disposable {
     }
 
     getExecutionEntries(sessionId: string): ExecutionHistoryEntry[] {
-        return this._loadExecutionEntries(sessionId).map(entry => {
+        return this._loadExecutionEntries(sessionId).map((entry) => {
             const copy: ExecutionHistoryEntry = {
                 ...entry,
                 output: typeof entry.output === 'string' ? entry.output : { ...entry.output },
             };
             // Omit absent optional fields, including those introduced by loading
             // a legacy record. An own property set to undefined is not equivalent.
-            if (entry.outputs?.some(output => output.outputId !== undefined)) {
-                copy.outputs = entry.outputs.map(output => ({ ...output }));
+            if (entry.outputs?.some((output) => output.outputId !== undefined)) {
+                copy.outputs = entry.outputs.map((output) => ({ ...output }));
             } else {
                 delete copy.outputs;
             }
@@ -118,8 +118,10 @@ export class ExecutionHistoryService implements vscode.Disposable {
         sessionId: string,
         state: SerializedConsoleState,
     ): ExecutionHistoryEntry[] {
-        if (this._initializedExecutionSessions.has(sessionId) ||
-            this._storage.get(this._executionKey(sessionId)) !== undefined) {
+        if (
+            this._initializedExecutionSessions.has(sessionId) ||
+            this._storage.get(this._executionKey(sessionId)) !== undefined
+        ) {
             return this.getExecutionEntries(sessionId);
         }
         const entries: ExecutionHistoryEntry[] = [];
@@ -139,15 +141,17 @@ export class ExecutionHistoryService implements vscode.Disposable {
             if (item.type !== 'activity') {
                 continue;
             }
-            const input = item.items.find(entry => entry.type === 'input');
-            const error = item.items.find(entry => entry.type === 'error');
-            const outputs = item.items.flatMap<ExecutionHistoryOutput>(entry => {
+            const input = item.items.find((entry) => entry.type === 'input');
+            const error = item.items.find((entry) => entry.type === 'error');
+            const outputs = item.items.flatMap<ExecutionHistoryOutput>((entry) => {
                 if (entry.type === 'stream') {
                     return [{ text: entry.text }];
                 }
                 if (entry.type === 'output' || entry.type === 'outputPlot') {
                     const text = entry.data['text/plain'];
-                    return [{ outputId: entry.outputId, text: typeof text === 'string' ? text : '' }];
+                    return [
+                        { outputId: entry.outputId, text: typeof text === 'string' ? text : '' },
+                    ];
                 }
                 if (entry.type === 'outputHtml') {
                     return [{ outputId: entry.outputId, text: entry.resource ?? '' }];
@@ -160,15 +164,16 @@ export class ExecutionHistoryService implements vscode.Disposable {
                 prompt: input?.inputPrompt ?? '',
                 input: input?.code ?? '',
                 outputType: ExecutionEntryType.Execution,
-                output: outputs.map(output => output.text).join(''),
+                output: outputs.map((output) => output.text).join(''),
                 outputs,
-                error: error && error.type === 'error'
-                    ? {
-                        name: error.name,
-                        message: error.message,
-                        traceback: error.traceback,
-                    }
-                    : undefined,
+                error:
+                    error && error.type === 'error'
+                        ? {
+                              name: error.name,
+                              message: error.message,
+                              traceback: error.traceback,
+                          }
+                        : undefined,
                 durationMs: 0,
             });
         }
@@ -214,17 +219,21 @@ export class ExecutionHistoryService implements vscode.Disposable {
             } else {
                 outputs.push({ outputId, text: output });
             }
-            entry.output = replace ? output : outputs.map(part => part.text).join('');
+            entry.output = replace ? output : outputs.map((part) => part.text).join('');
         }
         this._persistExecutionEntries(sessionId);
     }
 
     /** Updates every occurrence of a display ID, independent of the update's parent ID. */
     updateExecutionOutput(sessionId: string, outputId: string, text: string): boolean {
-        if (this._disposed) { return false; }
+        if (this._disposed) {
+            return false;
+        }
         let changed = false;
         for (const entry of this._loadExecutionEntries(sessionId)) {
-            if (entry.outputType !== ExecutionEntryType.Execution) { continue; }
+            if (entry.outputType !== ExecutionEntryType.Execution) {
+                continue;
+            }
             const outputs = this._getOutputParts(entry);
             let entryChanged = false;
             for (const output of outputs) {
@@ -234,23 +243,25 @@ export class ExecutionHistoryService implements vscode.Disposable {
                 }
             }
             if (entryChanged) {
-                entry.output = outputs.map(output => output.text).join('');
+                entry.output = outputs.map((output) => output.text).join('');
                 changed = true;
             }
         }
-        if (changed) { this._persistExecutionEntries(sessionId); }
+        if (changed) {
+            this._persistExecutionEntries(sessionId);
+        }
         return changed;
     }
 
     private _getOutputParts(entry: ExecutionHistoryEntry): ExecutionHistoryOutput[] {
-        return entry.outputs ??= typeof entry.output === 'string' && entry.output
-            ? [{ text: entry.output }]
-            : [];
+        return (entry.outputs ??=
+            typeof entry.output === 'string' && entry.output ? [{ text: entry.output }] : []);
     }
 
     clearExecutionOutput(sessionId: string, executionId: string): void {
-        const entry = this._loadExecutionEntries(sessionId)
-            .find(candidate => candidate.id === executionId);
+        const entry = this._loadExecutionEntries(sessionId).find(
+            (candidate) => candidate.id === executionId,
+        );
         if (!entry) {
             return;
         }
@@ -272,8 +283,9 @@ export class ExecutionHistoryService implements vscode.Disposable {
     }
 
     completeExecution(sessionId: string, executionId: string): void {
-        const entry = this._loadExecutionEntries(sessionId)
-            .find(candidate => candidate.id === executionId);
+        const entry = this._loadExecutionEntries(sessionId).find(
+            (candidate) => candidate.id === executionId,
+        );
         if (!entry) {
             return;
         }
@@ -284,7 +296,7 @@ export class ExecutionHistoryService implements vscode.Disposable {
 
     recordStartup(sessionId: string, id: string, banner: string, version: string): void {
         const entries = this._loadExecutionEntries(sessionId);
-        const existing = entries.find(entry => entry.id === id);
+        const existing = entries.find((entry) => entry.id === id);
         if (existing) {
             existing.output = { banner, version };
         } else {
@@ -330,7 +342,7 @@ export class ExecutionHistoryService implements vscode.Disposable {
         }
 
         const entries = legacyInputs
-            .filter(input => typeof input === 'string' && input.trim().length > 0)
+            .filter((input) => typeof input === 'string' && input.trim().length > 0)
             .slice(-this._maxHistorySize())
             .map((input, index) => ({ when: index, input }));
         this._sessionEntries.set(sessionId, entries);
@@ -339,10 +351,9 @@ export class ExecutionHistoryService implements vscode.Disposable {
         }
         this._persist(this._sessionKey(sessionId), entries);
 
-        const languageEntries = [
-            ...this._loadLanguageEntries(languageId),
-            ...entries,
-        ].slice(-this._maxHistorySize());
+        const languageEntries = [...this._loadLanguageEntries(languageId), ...entries].slice(
+            -this._maxHistorySize(),
+        );
         this._languageEntries.set(languageId, languageEntries);
         this._persist(this._languageKey(languageId), languageEntries);
         return [...entries];
@@ -375,7 +386,9 @@ export class ExecutionHistoryService implements vscode.Disposable {
     }
 
     dispose(): void {
-        if (this._disposed) { return; }
+        if (this._disposed) {
+            return;
+        }
         this._flushExecutionEntries();
         this._disposed = true;
     }
@@ -410,22 +423,33 @@ export class ExecutionHistoryService implements vscode.Disposable {
         }
         const key = this._executionKey(sessionId);
         const stored = this._storage.get<unknown>(key);
-        if (stored !== undefined) { this._initializedExecutionSessions.add(sessionId); }
+        if (stored !== undefined) {
+            this._initializedExecutionSessions.add(sessionId);
+        }
         const entries = Array.isArray(stored)
-            ? stored.filter((entry): entry is ExecutionHistoryEntry => (
-                typeof entry === 'object' &&
-                entry !== null &&
-                typeof (entry as ExecutionHistoryEntry).id === 'string' &&
-                typeof (entry as ExecutionHistoryEntry).when === 'number' &&
-                typeof (entry as ExecutionHistoryEntry).input === 'string'
-            )).map(entry => ({
-                ...entry,
-                outputs: Array.isArray(entry.outputs)
-                    ? entry.outputs.filter(output => output && typeof output.text === 'string' &&
-                        (output.outputId === undefined || typeof output.outputId === 'string'))
-                        .map(output => ({ ...output }))
-                    : undefined,
-            }))
+            ? stored
+                  .filter(
+                      (entry): entry is ExecutionHistoryEntry =>
+                          typeof entry === 'object' &&
+                          entry !== null &&
+                          typeof (entry as ExecutionHistoryEntry).id === 'string' &&
+                          typeof (entry as ExecutionHistoryEntry).when === 'number' &&
+                          typeof (entry as ExecutionHistoryEntry).input === 'string',
+                  )
+                  .map((entry) => ({
+                      ...entry,
+                      outputs: Array.isArray(entry.outputs)
+                          ? entry.outputs
+                                .filter(
+                                    (output) =>
+                                        output &&
+                                        typeof output.text === 'string' &&
+                                        (output.outputId === undefined ||
+                                            typeof output.outputId === 'string'),
+                                )
+                                .map((output) => ({ ...output }))
+                          : undefined,
+                  }))
             : [];
         this._executionEntries.set(sessionId, entries);
         return entries;
@@ -437,7 +461,7 @@ export class ExecutionHistoryService implements vscode.Disposable {
         when: number,
     ): ExecutionHistoryEntry {
         const entries = this._loadExecutionEntries(sessionId);
-        let entry = entries.find(candidate => candidate.id === executionId);
+        let entry = entries.find((candidate) => candidate.id === executionId);
         if (!entry) {
             entry = {
                 id: executionId,
@@ -454,12 +478,17 @@ export class ExecutionHistoryService implements vscode.Disposable {
     }
 
     private _persistExecutionEntries(sessionId: string): void {
-        if (this._disposed) { return; }
+        if (this._disposed) {
+            return;
+        }
         this._initializedExecutionSessions.add(sessionId);
         this._dirtyExecutionSessions.add(sessionId);
         if (this._executionSaveTimer === undefined) {
             // Keep a bounded save interval even while output streams continuously.
-            this._executionSaveTimer = setTimeout(() => this._flushExecutionEntries(), ExecutionHistorySaveDelayMs);
+            this._executionSaveTimer = setTimeout(
+                () => this._flushExecutionEntries(),
+                ExecutionHistorySaveDelayMs,
+            );
         }
     }
 
@@ -470,7 +499,9 @@ export class ExecutionHistoryService implements vscode.Disposable {
         }
         for (const sessionId of this._dirtyExecutionSessions) {
             const entries = this._executionEntries.get(sessionId);
-            if (entries) { this._persist(this._executionKey(sessionId), entries); }
+            if (entries) {
+                this._persist(this._executionKey(sessionId), entries);
+            }
         }
         this._dirtyExecutionSessions.clear();
     }
@@ -478,16 +509,19 @@ export class ExecutionHistoryService implements vscode.Disposable {
     private _read(key: string): InputHistoryEntry[] {
         const stored = this._storage.get<unknown>(key, []);
         if (!Array.isArray(stored)) {
-            this._outputChannel.warn(`[ExecutionHistoryService] Ignoring invalid history at ${key}`);
+            this._outputChannel.warn(
+                `[ExecutionHistoryService] Ignoring invalid history at ${key}`,
+            );
             return [];
         }
         return stored
-            .filter((entry): entry is InputHistoryEntry => (
-                typeof entry === 'object' &&
-                entry !== null &&
-                typeof (entry as InputHistoryEntry).input === 'string' &&
-                typeof (entry as InputHistoryEntry).when === 'number'
-            ))
+            .filter(
+                (entry): entry is InputHistoryEntry =>
+                    typeof entry === 'object' &&
+                    entry !== null &&
+                    typeof (entry as InputHistoryEntry).input === 'string' &&
+                    typeof (entry as InputHistoryEntry).when === 'number',
+            )
             .slice(-this._maxHistorySize());
     }
 
@@ -499,9 +533,10 @@ export class ExecutionHistoryService implements vscode.Disposable {
         if (max === 0) {
             return [];
         }
-        const base = entries.length > 0 && entries[entries.length - 1].input === entry.input
-            ? entries.slice(0, -1)
-            : [...entries];
+        const base =
+            entries.length > 0 && entries[entries.length - 1].input === entry.input
+                ? entries.slice(0, -1)
+                : [...entries];
         return [...base, entry].slice(-max);
     }
 
@@ -518,13 +553,15 @@ export class ExecutionHistoryService implements vscode.Disposable {
         key: string,
         value: InputHistoryEntry[] | ExecutionHistoryEntry[] | undefined,
     ): void {
-        if (this._disposed) { return; }
+        if (this._disposed) {
+            return;
+        }
         // Snapshot at enqueue time: later updates or clears must not mutate an
         // in-flight save. Stream output reaches here only once per batch.
         const snapshot = value === undefined ? undefined : JSON.parse(JSON.stringify(value));
         this._writeQueue = this._writeQueue
             .then(() => this._storage.update(key, snapshot))
-            .catch(error => {
+            .catch((error) => {
                 this._outputChannel.warn(
                     `[ExecutionHistoryService] Failed to persist ${key}: ${getErrorMessage(error)}`,
                 );

@@ -14,7 +14,7 @@ import {
     PlotSize,
     UpdateEvent,
     ShowEvent,
-    PlotBackendRequest
+    PlotBackendRequest,
 } from './positronPlotComm';
 
 /**
@@ -37,7 +37,7 @@ export class PositronPlotCommClass extends PositronBaseComm {
 
     constructor(
         instance: RuntimeClientInstance,
-        options?: PositronCommOptions<PlotBackendRequest>
+        options?: PositronCommOptions<PlotBackendRequest>,
     ) {
         super(instance, options);
 
@@ -83,12 +83,12 @@ export class PositronPlotCommClass extends PositronBaseComm {
     async render(
         size: PlotSize | undefined,
         pixelRatio: number,
-        format: PlotRenderFormat
+        format: PlotRenderFormat,
     ): Promise<PlotResult> {
         return this.performRpc<PlotResult>(
             'render',
             ['size', 'pixel_ratio', 'format'],
-            [size, pixelRatio, format]
+            [size, pixelRatio, format],
         );
     }
 }

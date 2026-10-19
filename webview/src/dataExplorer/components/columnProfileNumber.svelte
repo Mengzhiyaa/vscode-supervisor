@@ -3,11 +3,11 @@
   Port from Positron's columnProfileNumber.tsx
 -->
 <script lang="ts">
-    import { localize } from "../nls";
-    import type { TableSummaryDataGridInstance } from "../tableSummaryDataGridInstance";
-    import ColumnProfileNullCountValue from "./columnProfileNullCountValue.svelte";
-    import ColumnProfileSparklines from "./columnProfileSparklines.svelte";
-    import StatsValue from "./statsValue.svelte";
+    import { localize } from '../nls';
+    import type { TableSummaryDataGridInstance } from '../tableSummaryDataGridInstance';
+    import ColumnProfileNullCountValue from './columnProfileNullCountValue.svelte';
+    import ColumnProfileSparklines from './columnProfileSparklines.svelte';
+    import StatsValue from './statsValue.svelte';
 
     interface Props {
         instance: TableSummaryDataGridInstance;
@@ -18,32 +18,24 @@
 
     const columnProfiles = $derived(instance.columnProfiles);
     const profile = $derived($columnProfiles.get(columnIndex));
-    const columnHistogram = $derived(
-        profile?.large_histogram,
-    );
-    const stats = $derived(
-        profile?.summary_stats?.number_stats,
-    );
+    const columnHistogram = $derived(profile?.large_histogram);
+    const stats = $derived(profile?.summary_stats?.number_stats);
     const updateTrigger = $derived(instance.updateTrigger);
     const displayType = $derived.by(() => {
         $updateTrigger;
         return instance.getColumnSchema(columnIndex)?.type_display;
     });
 
-    const missingLabel = localize("positronMissing", "Missing");
-    const minLabel = localize("positronMin", "Min");
-    const medianLabel = localize("positronMedian", "Median");
-    const meanLabel = localize("positronMean", "Mean");
-    const maxLabel = localize("positronMax", "Max");
-    const sdLabel = localize("positronSD", "SD");
+    const missingLabel = localize('positronMissing', 'Missing');
+    const minLabel = localize('positronMin', 'Min');
+    const medianLabel = localize('positronMedian', 'Median');
+    const meanLabel = localize('positronMean', 'Mean');
+    const maxLabel = localize('positronMax', 'Max');
+    const sdLabel = localize('positronSD', 'SD');
 </script>
 
 <div class="column-profile-expanded column-profile-info">
-    <ColumnProfileSparklines
-        {columnHistogram}
-        {displayType}
-        hoverManager={instance.hoverManager}
-    />
+    <ColumnProfileSparklines {columnHistogram} {displayType} hoverManager={instance.hoverManager} />
 
     <div class="tabular-info">
         <div class="labels">

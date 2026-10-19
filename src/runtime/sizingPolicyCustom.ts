@@ -18,7 +18,10 @@ export class PlotSizingPolicyCustom implements IPositronPlotSizingPolicy {
     public readonly id = PlotSizingPolicyCustom.ID;
     private readonly _name: string;
 
-    constructor(public readonly size: IPlotSize, slow: boolean = false) {
+    constructor(
+        public readonly size: IPlotSize,
+        slow: boolean = false,
+    ) {
         const name = slow
             ? `${size.width}×${size.height} (frozen)`
             : `${size.width}×${size.height} (custom)`;

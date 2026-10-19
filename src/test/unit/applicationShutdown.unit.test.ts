@@ -10,10 +10,15 @@ function makeApplication(failures = new Set<string>()) {
             throw new Error(name);
         }
     };
-    const output = { debug: () => undefined, warn: (message: string) => warnings.push(message),
-        dispose: () => step('log') };
-    const sessionManager = { detachForExtensionHostShutdown: async () => step('detach'),
-        dispose: () => step('session-dispose') };
+    const output = {
+        debug: () => undefined,
+        warn: (message: string) => warnings.push(message),
+        dispose: () => step('log'),
+    };
+    const sessionManager = {
+        detachForExtensionHostShutdown: async () => step('detach'),
+        dispose: () => step('session-dispose'),
+    };
     const application = Object.assign(Object.create(SupervisorApplication.prototype), {
         _outputChannel: output,
         _plotEditorProvider: {
@@ -26,15 +31,30 @@ function makeApplication(failures = new Set<string>()) {
         _sessionManager: sessionManager,
         _surfaceLifecycle: { whenPersisted: async () => step('surfaces') },
         _languageCapabilityRegistry: { dispose: () => step('registry') },
-        _disposables: [output, sessionManager, { dispose: () => step('first-resource') },
-            { dispose: () => step('last-resource') }],
+        _disposables: [
+            output,
+            sessionManager,
+            { dispose: () => step('first-resource') },
+            { dispose: () => step('last-resource') },
+        ],
     }) as SupervisorApplication;
     return { application, calls, warnings };
 }
 
 suite('[Unit] application shutdown', () => {
-    const expected = ['prepare-editors', 'prepare-plots', 'plot-editors', 'console', 'sessions', 'detach', 'surfaces', 'registry',
-        'first-resource', 'last-resource', 'log'];
+    const expected = [
+        'prepare-editors',
+        'prepare-plots',
+        'plot-editors',
+        'console',
+        'sessions',
+        'detach',
+        'surfaces',
+        'registry',
+        'first-resource',
+        'last-resource',
+        'log',
+    ];
 
     test('coalesces shutdown and releases logging last', async () => {
         const { application, calls } = makeApplication();
@@ -46,8 +66,17 @@ suite('[Unit] application shutdown', () => {
         assert.deepStrictEqual(calls, expected);
     });
 
-    for (const stage of ['prepare-editors', 'prepare-plots', 'plot-editors',
-        'console', 'sessions', 'detach', 'surfaces', 'registry', 'first-resource']) {
+    for (const stage of [
+        'prepare-editors',
+        'prepare-plots',
+        'plot-editors',
+        'console',
+        'sessions',
+        'detach',
+        'surfaces',
+        'registry',
+        'first-resource',
+    ]) {
         test(`continues cleanup after ${stage} fails`, async () => {
             const { application, calls, warnings } = makeApplication(new Set([stage]));
             await assert.rejects(application.shutdown(), (error: unknown) => {
@@ -62,11 +91,15 @@ suite('[Unit] application shutdown', () => {
     }
 
     test('reports all failures after attempting every cleanup step', async () => {
-        const { application, calls } = makeApplication(new Set(['prepare-plots', 'plot-editors', 'console', 'registry', 'first-resource']));
+        const { application, calls } = makeApplication(
+            new Set(['prepare-plots', 'plot-editors', 'console', 'registry', 'first-resource']),
+        );
         await assert.rejects(application.shutdown(), (error: unknown) => {
             assert.ok(error instanceof AggregateError);
-            assert.deepStrictEqual(error.errors.map(failure => failure.message),
-                ['prepare-plots', 'plot-editors', 'console', 'registry', 'first-resource']);
+            assert.deepStrictEqual(
+                error.errors.map((failure) => failure.message),
+                ['prepare-plots', 'plot-editors', 'console', 'registry', 'first-resource'],
+            );
             return true;
         });
         assert.deepStrictEqual(calls, expected);

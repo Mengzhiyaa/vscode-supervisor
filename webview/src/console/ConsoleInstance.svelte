@@ -3,15 +3,13 @@
      * ConsoleInstance.svelte - Per-session console view
      * Based on Positron's ConsoleInstance in consoleInstance.tsx
      */
-    import { onMount, onDestroy, untrack } from "svelte";
-    import ContextMenu, {
-        type ContextMenuEntry,
-    } from "../shared/ContextMenu.svelte";
-    import ConsoleInstanceItems from "./ConsoleInstanceItems.svelte";
-    import ConsoleSearchWidget from "./ConsoleSearchWidget.svelte";
-    import SubmittingOverlay from "./SubmittingOverlay.svelte";
-    import type { ConsoleInstanceModel } from "./models/consoleInstance";
-    import { getRpcConnection, getVsCodeState, setVsCodeState } from "../lib/rpc/client";
+    import { onMount, onDestroy, untrack } from 'svelte';
+    import ContextMenu, { type ContextMenuEntry } from '../shared/ContextMenu.svelte';
+    import ConsoleInstanceItems from './ConsoleInstanceItems.svelte';
+    import ConsoleSearchWidget from './ConsoleSearchWidget.svelte';
+    import SubmittingOverlay from './SubmittingOverlay.svelte';
+    import type { ConsoleInstanceModel } from './models/consoleInstance';
+    import { getRpcConnection, getVsCodeState, setVsCodeState } from '../lib/rpc/client';
     import {
         type SearchOptions,
         type SearchMatch,
@@ -21,12 +19,9 @@
         applyHighlights,
         clearHighlights,
         scrollCurrentMatchIntoView,
-    } from "./utils/consoleSearch";
-    import {
-        copyScopedSelection,
-        getScopedSelection,
-    } from "./utils/selectionUtils";
-    import { localize } from "$lib/localization";
+    } from './utils/consoleSearch';
+    import { copyScopedSelection, getScopedSelection } from './utils/selectionUtils';
+    import { localize } from '$lib/localization';
 
     /** Persisted state structure for this console */
     interface ConsolePersistedState {
@@ -59,14 +54,12 @@
         consoleInstance: ConsoleInstanceModel;
         active: boolean;
         width: number;
-        revealRequest:
-            | { sessionId: string; executionId: string; nonce: number }
-            | undefined;
+        revealRequest: { sessionId: string; executionId: string; nonce: number } | undefined;
         openSearchRequest: { sessionId: string; nonce: number } | undefined;
         findCommandRequest:
             | {
                   sessionId: string;
-                  command: "focus" | "next" | "previous" | "close";
+                  command: 'focus' | 'next' | 'previous' | 'close';
                   nonce: number;
               }
             | undefined;
@@ -78,18 +71,9 @@
         onInsertText: (text: string) => void;
         onPasteText: (text: string) => void;
         onRestart?: () => void | Promise<void>;
-        onInputAnchorReady?: (
-            sessionId: string,
-            anchor: HTMLDivElement | null,
-        ) => void;
-        onScrollLockChanged?: (
-            sessionId: string,
-            scrollLocked: boolean,
-        ) => void;
-        onWidthInCharsChanged?: (
-            sessionId: string,
-            widthInChars: number,
-        ) => void;
+        onInputAnchorReady?: (sessionId: string, anchor: HTMLDivElement | null) => void;
+        onScrollLockChanged?: (sessionId: string, scrollLocked: boolean) => void;
+        onWidthInCharsChanged?: (sessionId: string, widthInChars: number) => void;
         onCancelSubmission?: (sessionId: string) => void;
         onFindVisibilityChanged?: (visible: boolean) => void;
     } = $props();
@@ -121,16 +105,14 @@
     let lastRuntimeItemsMarker = $state(0);
     let lastExecuteScrollMarker = $state(0);
     let expectedProgrammaticScrollTop: number | undefined;
-    let lastObservedSize:
-        | { scrollHeight: number; clientHeight: number }
-        | undefined;
+    let lastObservedSize: { scrollHeight: number; clientHeight: number } | undefined;
     let instanceResizeObserver: ResizeObserver | undefined;
     let showSubmittingOverlay = $state(false);
 
     // Search state
     let searchVisible = $state(false);
     let searchFocusNonce = $state(0);
-    let searchQuery = $state("");
+    let searchQuery = $state('');
     let searchOptions = $state<SearchOptions>({ ...defaultSearchOptions });
     let searchMatches = $state<SearchMatch[]>([]);
     let currentMatchIndex = $state(0);
@@ -141,26 +123,26 @@
     let showContextMenu = $state(false);
     let contextMenuX = $state(0);
     let contextMenuY = $state(0);
-    let contextMenuClipboardText = $state("");
+    let contextMenuClipboardText = $state('');
     let contextMenuCopyEnabled = $state(false);
     let composingInput = $state(false);
 
     const contextMenuEntries = $derived.by((): ContextMenuEntry[] => [
         {
-            label: localize("common.copy", "Copy"),
+            label: localize('common.copy', 'Copy'),
             disabled: !contextMenuCopyEnabled,
             onSelected: copySelection,
         },
         {
-            label: localize("common.paste", "Paste"),
-            disabled: contextMenuClipboardText === "",
+            label: localize('common.paste', 'Paste'),
+            disabled: contextMenuClipboardText === '',
             onSelected: () => {
                 pasteText(contextMenuClipboardText);
             },
         },
         { separator: true },
         {
-            label: localize("common.selectAll", "Select All"),
+            label: localize('common.selectAll', 'Select All'),
             onSelected: () => onSelectAll(),
         },
     ]);
@@ -183,15 +165,10 @@
     }
 
     function distanceFromBottom(container: HTMLDivElement): number {
-        return Math.abs(
-            container.scrollHeight - container.clientHeight - container.scrollTop,
-        );
+        return Math.abs(container.scrollHeight - container.clientHeight - container.scrollTop);
     }
 
-    function setScrollLocked(
-        nextScrollLocked: boolean,
-        forceNotify: boolean = false,
-    ) {
+    function setScrollLocked(nextScrollLocked: boolean, forceNotify: boolean = false) {
         const changed = scrollLocked !== nextScrollLocked;
         scrollLocked = nextScrollLocked;
 
@@ -237,8 +214,10 @@
         const expectedScrollTop = expectedProgrammaticScrollTop;
         expectedProgrammaticScrollTop = undefined;
         const maximumScrollTop = Math.max(0, container.scrollHeight - container.clientHeight);
-        if (expectedScrollTop !== undefined &&
-            Math.abs(container.scrollTop - Math.min(expectedScrollTop, maximumScrollTop)) < 1) {
+        if (
+            expectedScrollTop !== undefined &&
+            Math.abs(container.scrollTop - Math.min(expectedScrollTop, maximumScrollTop)) < 1
+        ) {
             lastObservedSize = currentSize;
             return;
         }
@@ -270,8 +249,10 @@
         consoleInstanceRef.scrollTop = position;
         // A no-op scroll does not emit an event. Only ignore an event at the
         // position we actually wrote, so a later user scroll still locks output.
-        expectedProgrammaticScrollTop = previousScrollTop !== consoleInstanceRef.scrollTop
-            ? consoleInstanceRef.scrollTop : undefined;
+        expectedProgrammaticScrollTop =
+            previousScrollTop !== consoleInstanceRef.scrollTop
+                ? consoleInstanceRef.scrollTop
+                : undefined;
         lastObservedSize = {
             scrollHeight: consoleInstanceRef.scrollHeight,
             clientHeight: consoleInstanceRef.clientHeight,
@@ -310,20 +291,22 @@
     function handleClick(event: MouseEvent) {
         closeContextMenu();
 
-        const fileLink = event.target instanceof Element
-            ? event.target.closest<HTMLElement>(".console-file-link")
-            : null;
+        const fileLink =
+            event.target instanceof Element
+                ? event.target.closest<HTMLElement>('.console-file-link')
+                : null;
         if (fileLink) {
             event.preventDefault();
             // Do not refocus the Console after the editor has been opened.
             event.stopPropagation();
             if (event.ctrlKey || event.metaKey || event.detail === 0) {
-                void getRpcConnection().sendNotification("console/openFile", {
+                void getRpcConnection().sendNotification('console/openFile', {
                     sessionId: session.id,
                     path: fileLink.dataset.consoleFilePath,
                     line: Number(fileLink.dataset.consoleFileLine),
                     column: fileLink.dataset.consoleFileColumn
-                        ? Number(fileLink.dataset.consoleFileColumn) : undefined,
+                        ? Number(fileLink.dataset.consoleFileColumn)
+                        : undefined,
                 });
             }
             return;
@@ -333,15 +316,12 @@
         // instance. Do not move focus to the Monaco input when a click starts
         // in the find box (or one of its buttons); doing so prevents native
         // text selection and clipboard shortcuts in the search input.
-        if (
-            event.target instanceof Element &&
-            event.target.closest(".search-widget")
-        ) {
+        if (event.target instanceof Element && event.target.closest('.search-widget')) {
             return;
         }
 
         const selection = window.getSelection();
-        if ((!selection || selection.type !== "Range") && !scrollLocked) {
+        if ((!selection || selection.type !== 'Range') && !scrollLocked) {
             onFocusInput();
         }
     }
@@ -376,12 +356,12 @@
         event.stopPropagation();
 
         const selection = getConsoleSelection();
-        contextMenuCopyEnabled = selection?.type === "Range";
+        contextMenuCopyEnabled = selection?.type === 'Range';
 
         try {
             contextMenuClipboardText = await navigator.clipboard.readText();
         } catch {
-            contextMenuClipboardText = "";
+            contextMenuClipboardText = '';
         }
 
         contextMenuX = event.clientX;
@@ -396,10 +376,7 @@
     const searchHighlightOwner = {};
 
     function getSearchContainer(): HTMLElement | null {
-        return (
-            consoleInstanceRef?.querySelector(".console-instance-container") ??
-            null
-        );
+        return consoleInstanceRef?.querySelector('.console-instance-container') ?? null;
     }
 
     function clearSearchResults() {
@@ -408,10 +385,7 @@
         clearHighlights(searchHighlightOwner);
     }
 
-    function scheduleSearchRefresh(
-        preserveCurrentIndex = true,
-        immediate = false,
-    ) {
+    function scheduleSearchRefresh(preserveCurrentIndex = true, immediate = false) {
         if (!active || !searchVisible || !searchQuery || !consoleInstanceRef) {
             return;
         }
@@ -444,7 +418,7 @@
 
             const hasRelevantMutation = mutations.some(
                 (mutation) =>
-                    mutation.type === "characterData" ||
+                    mutation.type === 'characterData' ||
                     mutation.addedNodes.length > 0 ||
                     mutation.removedNodes.length > 0,
             );
@@ -505,19 +479,11 @@
         const navigationRevision = searchNavigationRevision;
         searchInputDebounceTimer = setTimeout(() => {
             searchInputDebounceTimer = undefined;
-            performSearch(
-                query,
-                options,
-                searchNavigationRevision !== navigationRevision,
-            );
+            performSearch(query, options, searchNavigationRevision !== navigationRevision);
         }, 150);
     }
 
-    function performSearch(
-        query: string,
-        options: SearchOptions,
-        preserveCurrentIndex = false,
-    ) {
+    function performSearch(query: string, options: SearchOptions, preserveCurrentIndex = false) {
         if (!active || !searchVisible) {
             return;
         }
@@ -565,9 +531,7 @@
     function navigatePreviousMatch() {
         if (!active || !searchVisible || searchMatches.length === 0) return;
         searchNavigationRevision += 1;
-        currentMatchIndex =
-            (currentMatchIndex - 1 + searchMatches.length) %
-            searchMatches.length;
+        currentMatchIndex = (currentMatchIndex - 1 + searchMatches.length) % searchMatches.length;
         applyHighlights(searchMatches, currentMatchIndex, searchHighlightOwner);
         scrollCurrentMatchIntoView(searchMatches, currentMatchIndex);
     }
@@ -575,8 +539,12 @@
     // --- Keyboard shortcut handling ---
 
     function isPromptInputTarget(target: EventTarget | null): boolean {
-        return target instanceof Element &&
-            target.closest(".activity-prompt .editor-input-container, .activity-prompt .password-input") !== null;
+        return (
+            target instanceof Element &&
+            target.closest(
+                '.activity-prompt .editor-input-container, .activity-prompt .password-input',
+            ) !== null
+        );
     }
 
     function handleKeyDown(e: KeyboardEvent) {
@@ -589,8 +557,7 @@
         // handler owns the console-level Ctrl/Cmd+C/V/A shortcuts, but must
         // not redirect them while the search widget is focused.
         const isSearchWidgetTarget =
-            e.target instanceof Element &&
-            e.target.closest(".search-widget") !== null;
+            e.target instanceof Element && e.target.closest('.search-widget') !== null;
 
         // Find controls own their keyboard input. Let these events continue to
         // the webview/window keyboard layer so native clipboard shortcuts work.
@@ -604,19 +571,18 @@
 
         const isCmdOrCtrl = e.ctrlKey || e.metaKey;
         const noOtherModifiers = !e.shiftKey && !e.altKey;
-        const onlyShiftKey =
-            e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey;
+        const onlyShiftKey = e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey;
 
         if (isCmdOrCtrl && noOtherModifiers) {
             switch (e.key.toLowerCase()) {
-                case "f": {
+                case 'f': {
                     // Open search
                     e.preventDefault();
                     e.stopPropagation();
                     openSearch();
                     break;
                 }
-                case "c": {
+                case 'c': {
                     // Copy selected text
                     if (copyScopedSelection(consoleInstanceRef)) {
                         e.preventDefault();
@@ -624,14 +590,14 @@
                     }
                     break;
                 }
-                case "a": {
+                case 'a': {
                     // Select all console output
                     e.preventDefault();
                     e.stopPropagation();
                     onSelectAll();
                     break;
                 }
-                case "v": {
+                case 'v': {
                     e.preventDefault();
                     e.stopPropagation();
                     void navigator.clipboard
@@ -648,7 +614,7 @@
         }
 
         // F3 / Shift+F3 for next/previous match
-        if (e.key === "F3" && searchVisible) {
+        if (e.key === 'F3' && searchVisible) {
             e.preventDefault();
             e.stopPropagation();
             if (e.shiftKey) {
@@ -661,26 +627,24 @@
         // Scrolling keys
         if (!e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey) {
             switch (e.key) {
-                case "PageUp":
+                case 'PageUp':
                     e.preventDefault();
                     setScrollLocked(true);
-                    consoleInstanceRef.scrollTop -=
-                        consoleInstanceRef.clientHeight * 0.9;
+                    consoleInstanceRef.scrollTop -= consoleInstanceRef.clientHeight * 0.9;
                     saveScrollPosition();
                     break;
-                case "PageDown":
+                case 'PageDown':
                     e.preventDefault();
-                    consoleInstanceRef.scrollTop +=
-                        consoleInstanceRef.clientHeight * 0.9;
+                    consoleInstanceRef.scrollTop += consoleInstanceRef.clientHeight * 0.9;
                     saveScrollPosition();
                     break;
-                case "Home":
+                case 'Home':
                     e.preventDefault();
                     setScrollLocked(true);
                     consoleInstanceRef.scrollTop = 0;
                     saveScrollPosition();
                     break;
-                case "End":
+                case 'End':
                     e.preventDefault();
                     scrollToBottom();
                     break;
@@ -692,9 +656,7 @@
         // area (Monaco editor), let Monaco handle it natively so that
         // language features like autoClosingPairs work correctly.
         const isFromInputArea =
-            inputAnchorRef &&
-            e.target instanceof Node &&
-            inputAnchorRef.contains(e.target);
+            inputAnchorRef && e.target instanceof Node && inputAnchorRef.contains(e.target);
 
         if (
             !isFromInputArea &&
@@ -738,9 +700,7 @@
     function handleWheel(e: WheelEvent) {
         if (e.deltaY < 0 && !scrollLocked) {
             // Scrolling up engages scroll lock
-            const scrollable =
-                consoleInstanceRef.scrollHeight >
-                consoleInstanceRef.clientHeight;
+            const scrollable = consoleInstanceRef.scrollHeight > consoleInstanceRef.clientHeight;
             setScrollLocked(scrollable);
         }
     }
@@ -751,19 +711,17 @@
     function revealExecution(executionId: string) {
         if (!consoleInstanceRef) return;
 
-        const element = consoleInstanceRef.querySelector(
-            `[data-execution-id="${executionId}"]`,
-        );
+        const element = consoleInstanceRef.querySelector(`[data-execution-id="${executionId}"]`);
         if (!element) return;
 
-        const activityInput = element.querySelector(".activity-input");
+        const activityInput = element.querySelector('.activity-input');
         if (!activityInput) return;
 
-        element.scrollIntoView({ behavior: "smooth", block: "center" });
-        activityInput.classList.add("revealed");
+        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        activityInput.classList.add('revealed');
 
         window.setTimeout(() => {
-            activityInput.classList.remove("revealed");
+            activityInput.classList.remove('revealed');
         }, 2000);
     }
 
@@ -780,10 +738,7 @@
             return;
         }
 
-        const widthInChars = Math.max(
-            40,
-            Math.floor(consoleInputWidth / charWidth),
-        );
+        const widthInChars = Math.max(40, Math.floor(consoleInputWidth / charWidth));
 
         if (widthInChars !== lastWidthInChars) {
             lastWidthInChars = widthInChars;
@@ -890,16 +845,16 @@
 
         lastFindCommandNonce = findCommandRequest.nonce;
         switch (findCommandRequest.command) {
-            case "focus":
+            case 'focus':
                 openSearch();
                 break;
-            case "next":
+            case 'next':
                 navigateNextMatch();
                 break;
-            case "previous":
+            case 'previous':
                 navigatePreviousMatch();
                 break;
-            case "close":
+            case 'close':
                 closeSearch();
                 break;
         }
@@ -911,12 +866,7 @@
         }
 
         lastRuntimeItemsMarker = runtimeItemsMarker;
-        if (
-            runtimeItemsMarker > 0 &&
-            !scrollLocked &&
-            !isInitialMount &&
-            hasRestoredScroll
-        ) {
+        if (runtimeItemsMarker > 0 && !scrollLocked && !isInitialMount && hasRestoredScroll) {
             scrollToBottomIfNeeded();
         }
     });
@@ -981,9 +931,7 @@
         ? 'pre-wrap'
         : 'pre'}; overflow-x: {wordWrap
         ? 'hidden'
-        : 'auto'}; --console-output-white-space: {wordWrap
-        ? 'pre-wrap'
-        : 'pre'};"
+        : 'auto'}; --console-output-white-space: {wordWrap ? 'pre-wrap' : 'pre'};"
     style:--console-char-width={charWidth > 0 ? `${charWidth}px` : undefined}
     onclick={handleClick}
     onkeydown={handleKeyDown}
@@ -1059,13 +1007,11 @@
     }
 
     .console-instance::-webkit-scrollbar:vertical {
-        border-left: 1px solid
-            var(--vscode-positronScrollBar-border, var(--vscode-panel-border));
+        border-left: 1px solid var(--vscode-positronScrollBar-border, var(--vscode-panel-border));
     }
 
     .console-instance::-webkit-scrollbar:horizontal {
-        border-top: 1px solid
-            var(--vscode-positronScrollBar-border, var(--vscode-panel-border));
+        border-top: 1px solid var(--vscode-positronScrollBar-border, var(--vscode-panel-border));
     }
 
     .console-instance::-webkit-scrollbar-track {
@@ -1079,16 +1025,12 @@
 
     .console-instance::-webkit-scrollbar-thumb:hover {
         cursor: pointer !important;
-        background-color: var(
-            --vscode-scrollbarSlider-hoverBackground
-        ) !important;
+        background-color: var(--vscode-scrollbarSlider-hoverBackground) !important;
     }
 
     .console-instance::-webkit-scrollbar-corner {
-        border-top: 1px solid
-            var(--vscode-positronScrollBar-border, var(--vscode-panel-border));
-        border-left: 1px solid
-            var(--vscode-positronScrollBar-border, var(--vscode-panel-border));
+        border-top: 1px solid var(--vscode-positronScrollBar-border, var(--vscode-panel-border));
+        border-left: 1px solid var(--vscode-positronScrollBar-border, var(--vscode-panel-border));
     }
 
     .console-instance.hidden {

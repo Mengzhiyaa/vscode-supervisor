@@ -6,15 +6,8 @@ import {
     type LanguageRuntimeMessageCommOpen,
 } from '../../internal/runtimeTypes';
 import { PlotClientInstance, shouldFreezeSlowPlot } from '../../runtime/PlotClientInstance';
-import {
-    type IntrinsicSize,
-    type ShowEvent,
-    PlotUnit,
-} from '../../runtime/comms/positronPlotComm';
-import {
-    PositronPlotCommProxy,
-    type UpdateEvent,
-} from '../../runtime/comms/positronPlotCommProxy';
+import { type IntrinsicSize, type ShowEvent, PlotUnit } from '../../runtime/comms/positronPlotComm';
+import { PositronPlotCommProxy, type UpdateEvent } from '../../runtime/comms/positronPlotCommProxy';
 import { HtmlPlotClient } from '../../runtime/htmlPlotClient';
 import {
     PositronPlotsService,
@@ -41,29 +34,57 @@ suite('[Unit] Plot resource and sizing lifecycle', () => {
             plot.claim({ index });
         });
 
-        assert.strictEqual(plots.filter(plot => plot.isActive).length, 5);
+        assert.strictEqual(plots.filter((plot) => plot.isActive).length, 5);
         assert.strictEqual(plots[0]?.isActive, false);
         assert.strictEqual(plots.at(-1)?.isActive, true);
         service.dispose();
     });
 
     test('freezes only a first render slower than three seconds with a known size', () => {
-        assert.strictEqual(shouldFreezeSlowPlot(true, {
-            renderTimeMs: 3001,
-            size: { width: 640, height: 480 },
-        }, true), true);
-        assert.strictEqual(shouldFreezeSlowPlot(false, {
-            renderTimeMs: 5000,
-            size: { width: 640, height: 480 },
-        }, true), false);
-        assert.strictEqual(shouldFreezeSlowPlot(true, {
-            renderTimeMs: 5000,
-            size: undefined,
-        }, true), false);
-        assert.strictEqual(shouldFreezeSlowPlot(true, {
-            renderTimeMs: 5000,
-            size: { width: 640, height: 480 },
-        }, false), false);
+        assert.strictEqual(
+            shouldFreezeSlowPlot(
+                true,
+                {
+                    renderTimeMs: 3001,
+                    size: { width: 640, height: 480 },
+                },
+                true,
+            ),
+            true,
+        );
+        assert.strictEqual(
+            shouldFreezeSlowPlot(
+                false,
+                {
+                    renderTimeMs: 5000,
+                    size: { width: 640, height: 480 },
+                },
+                true,
+            ),
+            false,
+        );
+        assert.strictEqual(
+            shouldFreezeSlowPlot(
+                true,
+                {
+                    renderTimeMs: 5000,
+                    size: undefined,
+                },
+                true,
+            ),
+            false,
+        );
+        assert.strictEqual(
+            shouldFreezeSlowPlot(
+                true,
+                {
+                    renderTimeMs: 5000,
+                    size: { width: 640, height: 480 },
+                },
+                false,
+            ),
+            false,
+        );
     });
 
     test('uses intrinsic for Python Auto and switches non-Python only when intrinsic arrives', () => {
@@ -72,12 +93,22 @@ suite('[Unit] Plot resource and sizing lifecycle', () => {
         const square = new PlotSizingPolicySquare();
         const policies = [auto, intrinsic, square];
 
-        assert.strictEqual(resolveInitialPlotSizingPolicy({ language: 'python' }, policies, auto), intrinsic);
+        assert.strictEqual(
+            resolveInitialPlotSizingPolicy({ language: 'python' }, policies, auto),
+            intrinsic,
+        );
         assert.strictEqual(resolveInitialPlotSizingPolicy({ language: 'r' }, policies, auto), auto);
-        assert.strictEqual(resolveInitialPlotSizingPolicy({
-            language: 'python',
-            sizing_policy: { id: square.id },
-        }, policies, auto), square);
+        assert.strictEqual(
+            resolveInitialPlotSizingPolicy(
+                {
+                    language: 'python',
+                    sizing_policy: { id: square.id },
+                },
+                policies,
+                auto,
+            ),
+            square,
+        );
     });
 
     test('delegates intrinsic size state and emits proxy updates exactly once', async () => {
@@ -128,7 +159,7 @@ suite('[Unit] Plot resource and sizing lifecycle', () => {
         );
         let eventCount = 0;
         let emittedSize: IntrinsicSize | undefined;
-        const subscription = plotClient.onDidSetIntrinsicSize(size => {
+        const subscription = plotClient.onDidSetIntrinsicSize((size) => {
             eventCount++;
             emittedSize = size;
         });

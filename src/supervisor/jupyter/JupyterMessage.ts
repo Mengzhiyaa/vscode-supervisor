@@ -12,26 +12,25 @@ import { JupyterMessageHeader } from './JupyterMessageHeader';
  * @link https://jupyter-client.readthedocs.io/en/stable/messaging.html#a-full-message
  */
 export interface JupyterMessage {
+    /** The message header */
+    header: JupyterMessageHeader;
 
-	/** The message header */
-	header: JupyterMessageHeader;
+    /** The parent message (the one that caused this one), if any */
+    parent_header: JupyterMessageHeader;
 
-	/** The parent message (the one that caused this one), if any */
-	parent_header: JupyterMessageHeader;
+    /** Additional metadata, if any */
+    metadata: Record<string, unknown>;
 
-	/** Additional metadata, if any */
-	metadata: Record<string, unknown>;
+    /** The body of the message */
+    content: unknown;
 
-	/** The body of the message */
-	content: unknown;
+    /**
+     * The channel (ZeroMQ socket) for the message. This isn't part of the
+     * formal Jupyter protocol; it is used to route websocket messages to/from
+     * the correct ZeroMQ socket.
+     */
+    channel: JupyterChannel;
 
-	/**
-	 * The channel (ZeroMQ socket) for the message. This isn't part of the
-	 * formal Jupyter protocol; it is used to route websocket messages to/from
-	 * the correct ZeroMQ socket.
-	 */
-	channel: JupyterChannel;
-
-	/** Additional binary data */
-	buffers: Array<Uint8Array>;
+    /** Additional binary data */
+    buffers: Array<Uint8Array>;
 }

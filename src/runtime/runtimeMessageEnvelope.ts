@@ -8,8 +8,7 @@ import {
  * Base queued runtime event.
  */
 export abstract class QueuedRuntimeEvent {
-    constructor(readonly clock: number) {
-    }
+    constructor(readonly clock: number) {}
 
     abstract summary(): string;
 }

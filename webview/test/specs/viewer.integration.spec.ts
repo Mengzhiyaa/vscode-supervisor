@@ -17,7 +17,10 @@ test('viewer renders placeholder content and then shows URL previews', async ({ 
         canNavigateForward: false,
     });
 
-    await expect(page.locator('iframe.viewer-frame')).toHaveAttribute('src', createPreviewFixtureUrl());
+    await expect(page.locator('iframe.viewer-frame')).toHaveAttribute(
+        'src',
+        createPreviewFixtureUrl(),
+    );
     await expect(page.getByRole('textbox', { name: 'The current URL' })).toHaveValue(
         createPreviewFixtureUrl(),
     );
@@ -26,7 +29,9 @@ test('viewer renders placeholder content and then shows URL previews', async ({ 
     await expect(page.getByLabel('Interrupt execution')).toHaveCount(0);
 });
 
-test('viewer sends navigation and open/clear actions back to the extension host', async ({ page }) => {
+test('viewer sends navigation and open/clear actions back to the extension host', async ({
+    page,
+}) => {
     const backend = await openWebviewPage(page, 'viewer');
 
     await backend.notify(ViewerMethods.show, {
@@ -114,7 +119,9 @@ test('viewer supports html and basic preview action bars', async ({ page }) => {
     await clearBasic;
 });
 
-test('viewer remembers a successful open target for the split-button primary action', async ({ page }) => {
+test('viewer remembers a successful open target for the split-button primary action', async ({
+    page,
+}) => {
     const backend = await openWebviewPage(page, 'viewer');
     await backend.notify(ViewerMethods.show, {
         url: createPreviewFixtureUrl(),
@@ -132,7 +139,9 @@ test('viewer remembers a successful open target for the split-button primary act
     expect((await request).params).toEqual({ target: 'editorTab' });
 });
 
-test('viewer resets interrupt state and applies iframe title and height on new previews', async ({ page }) => {
+test('viewer resets interrupt state and applies iframe title and height on new previews', async ({
+    page,
+}) => {
     const backend = await openWebviewPage(page, 'viewer');
 
     await backend.notify(ViewerMethods.show, {
@@ -166,12 +175,17 @@ test('viewer resets interrupt state and applies iframe title and height on new p
     });
 
     await expect(page.getByLabel('Interrupt execution')).toBeEnabled();
-    await expect(page.locator('iframe.viewer-frame')).toHaveAttribute('src', `${createPreviewFixtureUrl()}?refresh=1`);
+    await expect(page.locator('iframe.viewer-frame')).toHaveAttribute(
+        'src',
+        `${createPreviewFixtureUrl()}?refresh=1`,
+    );
     await expect(page.locator('iframe.viewer-frame')).toHaveAttribute('title', 'Sized Preview');
     await expect(page.locator('iframe.viewer-frame')).toHaveAttribute('style', /height: 420px;/);
 });
 
-test('viewer routes html preview browser and editor actions through the backend', async ({ page }) => {
+test('viewer routes html preview browser and editor actions through the backend', async ({
+    page,
+}) => {
     const backend = await openWebviewPage(page, 'viewer');
 
     await backend.notify(ViewerMethods.show, {

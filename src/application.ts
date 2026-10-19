@@ -2,8 +2,14 @@ import { getErrorMessage } from './shared/errors';
 import * as vscode from 'vscode';
 import { DataImporterRegistry } from './services/dataExplorer/dataImporterRegistry';
 import { buildDataImportView } from './services/dataExplorer/dataImportView';
-import type { IDataImporter, IDataImporterMetadata, IDataImportRequest, IDataImportResult,
-    IDataImportOptions, IDataImportView } from './api';
+import type {
+    IDataImporter,
+    IDataImporterMetadata,
+    IDataImportRequest,
+    IDataImportResult,
+    IDataImportOptions,
+    IDataImportView,
+} from './api';
 import { registerFrameworkLogChannel } from './logging/frameworkLogger';
 import { RedactingLogOutputChannel } from './logging/logSinks';
 import {
@@ -72,7 +78,13 @@ import {
     PositronDataExplorerEditorContribution,
 } from './services/dataExplorer';
 import { PositronDataExplorerCommandId } from './services/dataExplorer/positronDataExplorerActions';
-import { CoreCommandIds, ContextKeys, InternalCommandIds, TestCommandIds, ViewIds } from './coreCommandIds';
+import {
+    CoreCommandIds,
+    ContextKeys,
+    InternalCommandIds,
+    TestCommandIds,
+    ViewIds,
+} from './coreCommandIds';
 import { UiFrontendEvent } from './runtime/comms/positronUiComm';
 import {
     initializePositronCompatibility,
@@ -100,7 +112,6 @@ interface SessionQuickLaunchPickItem extends vscode.QuickPickItem {
     sessionId?: string;
 }
 
-
 interface TestRuntimeSnapshot {
     activeSessionId: string | undefined;
     sessionIds: string[];
@@ -109,12 +120,14 @@ interface TestRuntimeSnapshot {
     workingDirectory: string | undefined;
     lspState: string | undefined;
     lspTransportKind: 'serverComm' | undefined;
-    clientInfo: {
-        variablesClientId: string | undefined;
-        uiClientId: string | undefined;
-        helpClientId: string | undefined;
-        clientIds: string[];
-    } | undefined;
+    clientInfo:
+        | {
+              variablesClientId: string | undefined;
+              uiClientId: string | undefined;
+              helpClientId: string | undefined;
+              clientIds: string[];
+          }
+        | undefined;
 }
 
 interface TestEmitRuntimeEventParams {
@@ -130,7 +143,9 @@ interface TestSimulateCommOpenParams {
     data?: Record<string, unknown>;
 }
 
-function isStatementRangeSyntaxError(error: unknown): error is { name: 'StatementRangeSyntaxError'; line?: number } {
+function isStatementRangeSyntaxError(
+    error: unknown,
+): error is { name: 'StatementRangeSyntaxError'; line?: number } {
     if (!error || typeof error !== 'object') {
         return false;
     }
@@ -216,9 +231,7 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
     private readonly _positronDataExplorerEditorProvider: PositronDataExplorerEditorProvider;
     private readonly _sessionLifecycleWiredIds = new Set<string>();
 
-    constructor(
-        private readonly _context: vscode.ExtensionContext,
-    ) {
+    constructor(private readonly _context: vscode.ExtensionContext) {
         initializePositronCompatibility(_context);
 
         // Create log output channel for logging with level support
@@ -238,17 +251,19 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
         this._sessionManager = new RuntimeSessionService(_context, this._outputChannel);
         this._disposables.push(this._sessionManager);
         this._disposables.push(
-            setForegroundSessionProvider(() =>
-                this._sessionManager.activeSession?.kernelSession as unknown as
-                    LanguageRuntimeSession | undefined,
+            setForegroundSessionProvider(
+                () =>
+                    this._sessionManager.activeSession?.kernelSession as unknown as
+                        LanguageRuntimeSession | undefined,
                 this._sessionManager.onDidChangeForegroundSession,
-            )
+            ),
         );
         this._disposables.push(
-            setRuntimeSessionProvider((sessionId) =>
-                this._sessionManager.getSession(sessionId)?.kernelSession as unknown as
-                    LanguageRuntimeSession | undefined
-            )
+            setRuntimeSessionProvider(
+                (sessionId) =>
+                    this._sessionManager.getSession(sessionId)?.kernelSession as unknown as
+                        LanguageRuntimeSession | undefined,
+            ),
         );
 
         this._surfaceLifecycle = new SurfaceLifecycleService(
@@ -263,10 +278,17 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
         this._disposables.push(this._runtimeFrontendEventService);
 
         // Initialize runtime manager
-        this._runtimeManager = new RuntimeManager(_context, this._sessionManager, this._outputChannel);
+        this._runtimeManager = new RuntimeManager(
+            _context,
+            this._sessionManager,
+            this._outputChannel,
+        );
         this._disposables.push(this._runtimeManager);
 
-        this._positronNewFolderService = new PositronNewFolderService(_context, this._outputChannel);
+        this._positronNewFolderService = new PositronNewFolderService(
+            _context,
+            this._outputChannel,
+        );
         this._disposables.push(this._positronNewFolderService);
 
         // Initialize runtime startup orchestration (Positron-style)
@@ -275,7 +297,7 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
             this._runtimeManager,
             this._sessionManager,
             this._positronNewFolderService,
-            this._outputChannel
+            this._outputChannel,
         );
         this._disposables.push(this._runtimeStartupService);
         this._disposables.push(
@@ -296,21 +318,30 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
             this._consoleErrorFollowupService,
         );
         this._disposables.push(this._consoleService);
-        this._disposables.push(setConsoleWidthSource(
-            this._consoleService.onDidChangeConsoleWidth,
-            () => this._consoleService.getConsoleWidth(),
-        ));
-        this._disposables.push(setClearConsoleProvider((sessionId) => {
-            const instance = sessionId
-                ? this._consoleService.getConsoleInstance(sessionId)
-                : this._consoleService.activePositronConsoleInstance;
-            return instance?.clearConsole() ?? false;
-        }));
+        this._disposables.push(
+            setConsoleWidthSource(this._consoleService.onDidChangeConsoleWidth, () =>
+                this._consoleService.getConsoleWidth(),
+            ),
+        );
+        this._disposables.push(
+            setClearConsoleProvider((sessionId) => {
+                const instance = sessionId
+                    ? this._consoleService.getConsoleInstance(sessionId)
+                    : this._consoleService.activePositronConsoleInstance;
+                return instance?.clearConsole() ?? false;
+            }),
+        );
 
-        this._variablesService = new PositronVariablesService(this._sessionManager, this._outputChannel);
+        this._variablesService = new PositronVariablesService(
+            this._sessionManager,
+            this._outputChannel,
+        );
         this._disposables.push(this._variablesService);
 
-        this._memoryUsageService = new MemoryUsageService(this._sessionManager, this._outputChannel);
+        this._memoryUsageService = new MemoryUsageService(
+            this._sessionManager,
+            this._outputChannel,
+        );
         this._disposables.push(this._memoryUsageService);
 
         this._plotsService = new PositronPlotsService(this._outputChannel, this._context);
@@ -360,7 +391,11 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
             }),
         );
 
-        this._helpService = new PositronHelpService(this._sessionManager, this._outputChannel, this._context.extensionUri);
+        this._helpService = new PositronHelpService(
+            this._sessionManager,
+            this._outputChannel,
+            this._context.extensionUri,
+        );
         this._disposables.push(this._helpService);
 
         // Serialize plot/gallery moves because VS Code's public command targets the active editor.
@@ -373,15 +408,18 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
             this._plotsService,
             this._surfaceLifecycle,
             editorWindowMover,
-            uri => this._previewService.retainProxyUri(uri),
-            uri => this._previewService.keepProxyForExternalWindow(uri),
+            (uri) => this._previewService.retainProxyUri(uri),
+            (uri) => this._previewService.keepProxyForExternalWindow(uri),
             this._context.storageUri ?? this._context.globalStorageUri,
         );
         this._plotEditorProvider.registerSerializer();
         this._disposables.push(this._plotEditorProvider);
 
         // Initialize Data Explorer service and editor provider
-        this._positronDataExplorerService = new PositronDataExplorerService(this._sessionManager, this._outputChannel);
+        this._positronDataExplorerService = new PositronDataExplorerService(
+            this._sessionManager,
+            this._outputChannel,
+        );
         this._disposables.push(this._positronDataExplorerService);
 
         this._dataScienceSurfaceLifecycle = new DataScienceSurfaceLifecycle(
@@ -410,10 +448,12 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
             this._surfaceLifecycle,
         );
         this._disposables.push(this._positronDataExplorerEditorProvider);
-        this._disposables.push(new PositronDataExplorerEditorContribution(
-            this._variablesService,
-            this._sessionManager,
-        ));
+        this._disposables.push(
+            new PositronDataExplorerEditorContribution(
+                this._variablesService,
+                this._sessionManager,
+            ),
+        );
 
         this._inlineDataExplorerNotebookService = new InlineDataExplorerNotebookService(
             this._positronDataExplorerService,
@@ -446,8 +486,8 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
 
         this._languageCapabilityRegistry = new LanguageCapabilityRegistry({
             services: this._getLanguageContributionServices(),
-            validateOwner: ownerExtensionId => !!vscode.extensions.getExtension(ownerExtensionId),
-            installSnapshot: snapshot => this._installLanguageCapabilitySnapshot(snapshot),
+            validateOwner: (ownerExtensionId) => !!vscode.extensions.getExtension(ownerExtensionId),
+            installSnapshot: (snapshot) => this._installLanguageCapabilitySnapshot(snapshot),
             log: this._outputChannel,
         });
         this._disposables.push(this._languageCapabilityRegistry);
@@ -456,14 +496,14 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
         const dataExplorerCustomEditorProvider = new PositronDataExplorerCustomEditorProvider(
             this._positronDataExplorerService,
             this._positronDataExplorerEditorProvider,
-            this._outputChannel
+            this._outputChannel,
         );
         this._disposables.push(
             vscode.window.registerCustomEditorProvider(
                 PositronDataExplorerCustomEditorProvider.viewType,
                 dataExplorerCustomEditorProvider,
                 POSITRON_DATA_EXPLORER_CUSTOM_EDITOR_OPTIONS,
-            )
+            ),
         );
 
         // Initialize webview manager with session manager and services
@@ -482,13 +522,15 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
             () => this._getLanguageWebviewLocalResourceRoots(),
             (webview) => this._getLanguageMonacoSupportModuleUris(webview),
             (webview) => this._getLanguageTextMateGrammarDefinitions(webview),
-            sessionName => this._startNewSessionFromDiscoveredRuntimes(sessionName),
+            (sessionName) => this._startNewSessionFromDiscoveredRuntimes(sessionName),
             this._positronDataExplorerService,
         );
         this._disposables.push(this._webviewManager);
-        this._disposables.push(this._languageAssetCatalog.onDidChangeSnapshot(() => {
-            this._refreshLanguageSupportAssetsInWebviews();
-        }));
+        this._disposables.push(
+            this._languageAssetCatalog.onDidChangeSnapshot(() => {
+                this._refreshLanguageSupportAssetsInWebviews();
+            }),
+        );
 
         this._plotsGalleryEditorProvider = new PlotsGalleryEditorProvider(
             this._context.extensionUri,
@@ -505,9 +547,11 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
                 getState: () => this._sessionManager.getSupervisorState(),
                 restart: () => this._sessionManager.restartSupervisor(),
                 shutdown: () => this._sessionManager.shutdownSupervisor(),
-                getSessionConnection: sessionId => this._sessionManager.getSupervisorSessionConnection(sessionId),
-                reconnectSession: sessionId => this._sessionManager.reconnectSupervisorSession(sessionId),
-                focusSession: async sessionId => {
+                getSessionConnection: (sessionId) =>
+                    this._sessionManager.getSupervisorSessionConnection(sessionId),
+                reconnectSession: (sessionId) =>
+                    this._sessionManager.reconnectSupervisorSession(sessionId),
+                focusSession: async (sessionId) => {
                     await this._sessionManager.focusSession(sessionId);
                     await this._consoleService.focusConsole();
                 },
@@ -532,8 +576,8 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
 
     getApi(): ISupervisorFrameworkApi {
         return {
-            registerDataImporter: importer => this.registerDataImporter(importer),
-            getDataImporters: extension => this.getDataImporters(extension),
+            registerDataImporter: (importer) => this.registerDataImporter(importer),
+            getDataImporters: (extension) => this.getDataImporters(extension),
             generateDataImportCode: (id, request) => this.generateDataImportCode(id, request),
             apiVersion: this.apiVersion,
             protocolVersion: this.protocolVersion,
@@ -553,18 +597,21 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
             openDataExplorer: async (uri, providerId) => {
                 await this._positronDataExplorerService.openWithBackend(uri, providerId);
             },
-            registerRuntimeOutputRenderer: renderer =>
+            registerRuntimeOutputRenderer: (renderer) =>
                 this._richOutputRouter.registerRenderer(renderer),
-            registerDataConnectionDriver: driver =>
+            registerDataConnectionDriver: (driver) =>
                 this._connectionsService.registerDriver(driver),
             getDataConnectionDrivers: async () =>
                 this._connectionsService.driverManager.getDriverSummaries(),
             connectDataConnection: (driverId, mechanismId, parameters) =>
                 this._connectionsService.driverManager.connect(driverId, mechanismId, parameters),
-            addUpdateDataConnectionProfile: async (profile: IDataConnectionProfile, connect = true) => {
+            addUpdateDataConnectionProfile: async (
+                profile: IDataConnectionProfile,
+                connect = true,
+            ) => {
                 await this._connectionsService.addUpdateProfile(profile, connect);
             },
-            connectDataConnectionProfile: async profileId => {
+            connectDataConnectionProfile: async (profileId) => {
                 await this._connectionsService.connectProfile(profileId);
             },
             registerEnvironmentContributions: (extensionId, actions) =>
@@ -588,7 +635,10 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
         return this._dataImporters.getImporters(extension);
     }
 
-    generateDataImportCode(id: string, request: IDataImportRequest): Promise<IDataImportResult | undefined> {
+    generateDataImportCode(
+        id: string,
+        request: IDataImportRequest,
+    ): Promise<IDataImportResult | undefined> {
         return this._dataImporters.generateCode(id, request);
     }
 
@@ -611,11 +661,7 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
         sessionMetadata: IRuntimeSessionMetadata,
         dynState: LanguageRuntimeDynState,
     ): Promise<RuntimeSession> {
-        return this._sessionManager.restoreSession(
-            runtimeMetadata,
-            sessionMetadata,
-            dynState,
-        );
+        return this._sessionManager.restoreSession(runtimeMetadata, sessionMetadata, dynState);
     }
 
     async validateSession(sessionId: string): Promise<boolean> {
@@ -652,7 +698,10 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
         return this._connectionsService.driverManager.connect(driverId, mechanismId, parameters);
     }
 
-    async addUpdateDataConnectionProfile(profile: IDataConnectionProfile, connect = true): Promise<void> {
+    async addUpdateDataConnectionProfile(
+        profile: IDataConnectionProfile,
+        connect = true,
+    ): Promise<void> {
         await this._connectionsService.addUpdateProfile(profile, connect);
     }
 
@@ -679,7 +728,7 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
             positronNewFolderService: this._positronNewFolderService,
             positronConsoleService: {
                 onDidChangeConsoleWidth: this._consoleService.onDidChangeConsoleWidth,
-                revealConsole: preserveFocus => this._consoleService.revealConsole(preserveFocus),
+                revealConsole: (preserveFocus) => this._consoleService.revealConsole(preserveFocus),
                 focusConsole: () => this._consoleService.focusConsole(),
                 showConsole: () => this._consoleService.showConsole(),
                 getConsoleWidth: () => this._consoleService.getConsoleWidth(),
@@ -714,33 +763,45 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
                 );
             }
             if (snapshot.sessionManager) {
-                disposables.push(this._sessionManager.registerSessionManager(snapshot.sessionManager));
+                disposables.push(
+                    this._sessionManager.registerSessionManager(snapshot.sessionManager),
+                );
             }
             if (snapshot.lspFactory) {
-                disposables.push(this._sessionManager.registerLspFactory(
-                    snapshot.lspFactory,
-                    snapshot.generation,
-                ));
+                disposables.push(
+                    this._sessionManager.registerLspFactory(
+                        snapshot.lspFactory,
+                        snapshot.generation,
+                    ),
+                );
             }
             for (const capability of snapshot.notebookControllers) {
-                disposables.push(this._sessionManager.registerNotebookController(
-                    capability.controller,
-                    capability.languageIds,
-                ));
+                disposables.push(
+                    this._sessionManager.registerNotebookController(
+                        capability.controller,
+                        capability.languageIds,
+                    ),
+                );
             }
             if (snapshot.runtimeProvider) {
                 queueMicrotask(() => this._reconcileLanguageDiscovery(snapshot));
             }
             if (snapshot.binaryProvider) {
                 queueMicrotask(() => {
-                    if (this.languages.getSnapshot(snapshot.identity.languageId)?.generation !== snapshot.generation) {
+                    if (
+                        this.languages.getSnapshot(snapshot.identity.languageId)?.generation !==
+                        snapshot.generation
+                    ) {
                         return;
                     }
-                    void ensureBinaries(this._context, this._outputChannel, [snapshot.binaryProvider!])
-                        .catch(error => this._outputChannel.error(
+                    void ensureBinaries(this._context, this._outputChannel, [
+                        snapshot.binaryProvider!,
+                    ]).catch((error) =>
+                        this._outputChannel.error(
                             `[LanguageRegistry] Failed to ensure binaries for ` +
-                            `${snapshot.identity.languageId}: ${getErrorMessage(error)}`,
-                        ));
+                                `${snapshot.identity.languageId}: ${getErrorMessage(error)}`,
+                        ),
+                    );
                 });
             }
             return disposables;
@@ -749,7 +810,9 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
                 try {
                     disposable.dispose();
                 } catch (cleanupError) {
-                    this._outputChannel.warn(`[LanguageRegistry] Failed to roll back registration: ${getErrorMessage(cleanupError)}`);
+                    this._outputChannel.warn(
+                        `[LanguageRegistry] Failed to roll back registration: ${getErrorMessage(cleanupError)}`,
+                    );
                 }
             }
             throw error;
@@ -759,7 +822,10 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
     private async _reconcileLanguageDiscovery(
         snapshot: ILanguageCapabilitySnapshot,
     ): Promise<void> {
-        if (this.languages.getSnapshot(snapshot.identity.languageId)?.generation !== snapshot.generation) {
+        if (
+            this.languages.getSnapshot(snapshot.identity.languageId)?.generation !==
+            snapshot.generation
+        ) {
             return;
         }
         const operationKey = {
@@ -777,7 +843,10 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
         });
         try {
             await this._runtimeManager.discoverLanguageRuntime(snapshot.identity.languageId);
-            if (this.languages.getSnapshot(snapshot.identity.languageId)?.generation !== snapshot.generation) {
+            if (
+                this.languages.getSnapshot(snapshot.identity.languageId)?.generation !==
+                snapshot.generation
+            ) {
                 return;
             }
             this._languageCapabilityRegistry.setOperationState({
@@ -787,7 +856,10 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
                 changedAt: Date.now(),
             });
         } catch (error) {
-            if (this.languages.getSnapshot(snapshot.identity.languageId)?.generation !== snapshot.generation) {
+            if (
+                this.languages.getSnapshot(snapshot.identity.languageId)?.generation !==
+                snapshot.generation
+            ) {
                 return;
             }
             this._languageCapabilityRegistry.setOperationState({
@@ -822,7 +894,9 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
             this._runtimeStartupStarted = true;
             void this._runtimeStartupService.startup().catch((error) => {
                 this._runtimeStartupStarted = false;
-                this._outputChannel.error(`[RuntimeStartup] Failed to start runtime startup sequence: ${getErrorMessage(error)}`);
+                this._outputChannel.error(
+                    `[RuntimeStartup] Failed to start runtime startup sequence: ${getErrorMessage(error)}`,
+                );
             });
         }
     }
@@ -840,49 +914,50 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
     }
 
     private _getLanguageMonacoSupportModuleUris(
-        webview: vscode.Webview
+        webview: vscode.Webview,
     ): Readonly<Record<string, string>> {
         return Object.fromEntries(
-            this._languageAssetCatalog.snapshot.entries
-                .flatMap(({ languageId, assets }) => {
-                    if (!assets.monacoSupportModule) {
-                        return [];
-                    }
+            this._languageAssetCatalog.snapshot.entries.flatMap(({ languageId, assets }) => {
+                if (!assets.monacoSupportModule) {
+                    return [];
+                }
 
-                    return [[
-                        languageId,
-                        webview.asWebviewUri(assets.monacoSupportModule).toString(),
-                    ]];
-                })
+                return [[languageId, webview.asWebviewUri(assets.monacoSupportModule).toString()]];
+            }),
         );
     }
 
     private _getLanguageTextMateGrammarDefinitions(
-        webview: vscode.Webview
+        webview: vscode.Webview,
     ): Readonly<Record<string, { scopeName: string; grammarUrl: string }>> {
         return Object.fromEntries(
-            this._languageAssetCatalog.snapshot.entries
-                .flatMap(({ languageId, assets }) => {
-                    if (!assets.textMateGrammar) {
-                        return [];
-                    }
+            this._languageAssetCatalog.snapshot.entries.flatMap(({ languageId, assets }) => {
+                if (!assets.textMateGrammar) {
+                    return [];
+                }
 
-                    return [[
+                return [
+                    [
                         languageId,
                         {
                             scopeName: assets.textMateGrammar.scopeName,
-                            grammarUrl: webview.asWebviewUri(
-                                assets.textMateGrammar.grammarUri,
-                            ).toString(),
+                            grammarUrl: webview
+                                .asWebviewUri(assets.textMateGrammar.grammarUri)
+                                .toString(),
                         },
-                    ]];
-                })
+                    ],
+                ];
+            }),
         );
     }
 
     private _updateConsoleSessionsExistContext(): void {
         const hasSessions = this._sessionManager.sessions.length > 0;
-        void vscode.commands.executeCommand('setContext', ContextKeys.consoleSessionsExist, hasSessions);
+        void vscode.commands.executeCommand(
+            'setContext',
+            ContextKeys.consoleSessionsExist,
+            hasSessions,
+        );
     }
 
     private _toRuntimeSourceLabel(source: string): string {
@@ -932,8 +1007,8 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
             const preferredRuntime = this._runtimeStartupService.getPreferredRuntime(languageId);
             const runtimeMetadataByPath = new Map(
                 runtimes
-                    .filter(runtime => runtime.languageId === languageId)
-                    .map(runtime => [runtime.runtimePath, runtime]),
+                    .filter((runtime) => runtime.languageId === languageId)
+                    .map((runtime) => [runtime.runtimePath, runtime]),
             );
 
             for (const installation of this._runtimeManager.getInstallations(languageId)) {
@@ -974,8 +1049,10 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
                 : undefined;
             quickPick.items = this._buildRuntimeQuickPickItems();
             const activeItem = activeKey
-                ? quickPick.items.find(item => `${item.languageId}:${item.runtimePath}` === activeKey)
-                : quickPick.items.find(item => item.picked);
+                ? quickPick.items.find(
+                      (item) => `${item.languageId}:${item.runtimePath}` === activeKey,
+                  )
+                : quickPick.items.find((item) => item.picked);
             if (activeItem) {
                 quickPick.activeItems = [activeItem];
             }
@@ -983,12 +1060,12 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
             quickPick.busy = this._runtimeManager.isDiscovering;
             quickPick.placeholder = quickPick.busy
                 ? 'Discovering interpreters...'
-                : quickPick.items.some(item => item.kind !== vscode.QuickPickItemKind.Separator)
-                    ? undefined
-                    : 'No interpreters found';
+                : quickPick.items.some((item) => item.kind !== vscode.QuickPickItemKind.Separator)
+                  ? undefined
+                  : 'No interpreters found';
         };
 
-        return new Promise<RuntimeQuickPickItem | undefined>(resolve => {
+        return new Promise<RuntimeQuickPickItem | undefined>((resolve) => {
             let accepted: RuntimeQuickPickItem | undefined;
             const disposables = [
                 this._runtimeManager.onDidDiscoverRuntime(rebuildItems),
@@ -1002,7 +1079,7 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
                     quickPick.hide();
                 }),
                 quickPick.onDidHide(() => {
-                    disposables.forEach(disposable => disposable.dispose());
+                    disposables.forEach((disposable) => disposable.dispose());
                     quickPick.dispose();
                     resolve(accepted);
                 }),
@@ -1014,15 +1091,20 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
     }
 
     private _resolveInstallationForSession(session: RuntimeSession): unknown | undefined {
-        const provider = this._runtimeManager.getRuntimeProvider(session.runtimeMetadata.languageId);
+        const provider = this._runtimeManager.getRuntimeProvider(
+            session.runtimeMetadata.languageId,
+        );
         if (!provider) {
             return undefined;
         }
 
         const runtimePath = session.runtimeMetadata.runtimePath;
-        return this._runtimeManager.getInstallations(session.runtimeMetadata.languageId).find(
-            inst => provider.getRuntimePath(inst) === runtimePath
-        ) ?? provider.restoreInstallationFromMetadata?.(session.runtimeMetadata);
+        return (
+            this._runtimeManager
+                .getInstallations(session.runtimeMetadata.languageId)
+                .find((inst) => provider.getRuntimePath(inst) === runtimePath) ??
+            provider.restoreInstallationFromMetadata?.(session.runtimeMetadata)
+        );
     }
 
     private _buildSessionQuickLaunchItems(): SessionQuickLaunchPickItem[] {
@@ -1089,15 +1171,17 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
             });
             for (const session of allSessions) {
                 const installation = this._resolveInstallationForSession(session);
-                const sessionName = session.dynState.sessionName
-                    || session.sessionMetadata.sessionName
-                    || session.runtimeMetadata.runtimeName
-                    || 'R';
+                const sessionName =
+                    session.dynState.sessionName ||
+                    session.sessionMetadata.sessionName ||
+                    session.runtimeMetadata.runtimeName ||
+                    'R';
                 const isActive = activeSession && session.sessionId === activeSession.sessionId;
                 items.push({
                     label: sessionName,
                     iconPath: installation
-                        ? (provider.getRuntimeIconPath?.(installation) ?? new vscode.ThemeIcon('debug-start'))
+                        ? (provider.getRuntimeIconPath?.(installation) ??
+                          new vscode.ThemeIcon('debug-start'))
                         : new vscode.ThemeIcon('debug-start'),
                     description: isActive ? '(active)' : '',
                     action: 'switchSession',
@@ -1132,7 +1216,7 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
         session.onDidEndSession((exit) => {
             if (exit.reason === RuntimeExitReason.Restart) {
                 this._outputChannel.debug(
-                    `[SupervisorApplication] Session ${session.sessionId} exited for restart; keeping webview subscriptions`
+                    `[SupervisorApplication] Session ${session.sessionId} exited for restart; keeping webview subscriptions`,
                 );
                 return;
             }
@@ -1145,11 +1229,11 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
     private async _startSessionForInstallation(
         languageId: string,
         installation: unknown,
-        sessionName: string
+        sessionName: string,
     ): Promise<RuntimeSession> {
         const provider = this._requireRuntimeProvider(languageId);
         this._outputChannel.debug(
-            `[session] Creating new ${provider.languageName} session (${provider.getRuntimePath(installation)})...`
+            `[session] Creating new ${provider.languageName} session (${provider.getRuntimePath(installation)})...`,
         );
         const session = await this._sessionManager.startConsoleSessionFromInstallation(
             languageId,
@@ -1187,7 +1271,8 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
             const items = this._buildSessionQuickLaunchItems();
             const selected = await vscode.window.showQuickPick<SessionQuickLaunchPickItem>(items, {
                 title: 'Quick Launch Session',
-                placeHolder: 'Start a new session from a recent runtime or choose another installation',
+                placeHolder:
+                    'Start a new session from a recent runtime or choose another installation',
                 canPickMany: false,
             });
 
@@ -1212,11 +1297,17 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
             await this._startSessionForInstallation(
                 this._getPreferredLanguageId(),
                 selected.installation,
-                this._requireRuntimeProvider(this._getPreferredLanguageId()).formatRuntimeName(selected.installation)
+                this._requireRuntimeProvider(this._getPreferredLanguageId()).formatRuntimeName(
+                    selected.installation,
+                ),
             );
         } catch (error) {
-            this._outputChannel.error(`[Supervisor] Failed to quick launch session: ${getErrorMessage(error)}`);
-            vscode.window.showErrorMessage(`Failed to quick launch session: ${getErrorMessage(error)}`);
+            this._outputChannel.error(
+                `[Supervisor] Failed to quick launch session: ${getErrorMessage(error)}`,
+            );
+            vscode.window.showErrorMessage(
+                `Failed to quick launch session: ${getErrorMessage(error)}`,
+            );
         }
     }
 
@@ -1228,13 +1319,19 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
         }
 
         const runtimePath = currentSession.runtimeMetadata.runtimePath;
-        const provider = this._runtimeManager.getRuntimeProvider(currentSession.runtimeMetadata.languageId);
-        const installation = this._runtimeManager.getInstallations(currentSession.runtimeMetadata.languageId).find(
-            inst => provider?.getRuntimePath(inst) === runtimePath
-        ) ?? provider?.restoreInstallationFromMetadata?.(currentSession.runtimeMetadata);
+        const provider = this._runtimeManager.getRuntimeProvider(
+            currentSession.runtimeMetadata.languageId,
+        );
+        const installation =
+            this._runtimeManager
+                .getInstallations(currentSession.runtimeMetadata.languageId)
+                .find((inst) => provider?.getRuntimePath(inst) === runtimePath) ??
+            provider?.restoreInstallationFromMetadata?.(currentSession.runtimeMetadata);
         try {
             if (!installation) {
-                this._outputChannel.warn(`[Supervisor] Active runtime ${runtimePath} not found in cache; opening runtime picker`);
+                this._outputChannel.warn(
+                    `[Supervisor] Active runtime ${runtimePath} not found in cache; opening runtime picker`,
+                );
                 await this._startNewSessionFromDiscoveredRuntimes();
                 return;
             }
@@ -1242,11 +1339,17 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
             await this._startSessionForInstallation(
                 currentSession.runtimeMetadata.languageId,
                 installation,
-                currentSession.dynState.sessionName || currentSession.sessionMetadata.sessionName || currentSession.runtimeMetadata.runtimeName
+                currentSession.dynState.sessionName ||
+                    currentSession.sessionMetadata.sessionName ||
+                    currentSession.runtimeMetadata.runtimeName,
             );
         } catch (error) {
-            this._outputChannel.error(`[Supervisor] Failed to duplicate session: ${getErrorMessage(error)}`);
-            vscode.window.showErrorMessage(`Failed to duplicate session: ${getErrorMessage(error)}`);
+            this._outputChannel.error(
+                `[Supervisor] Failed to duplicate session: ${getErrorMessage(error)}`,
+            );
+            vscode.window.showErrorMessage(
+                `Failed to duplicate session: ${getErrorMessage(error)}`,
+            );
         }
     }
 
@@ -1259,7 +1362,9 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
         try {
             await migrateLegacyPlotsConfiguration(this._outputChannel);
         } catch (error) {
-            this._outputChannel.warn(`[Plots] Failed to migrate legacy configuration: ${getErrorMessage(error)}`);
+            this._outputChannel.warn(
+                `[Plots] Failed to migrate legacy configuration: ${getErrorMessage(error)}`,
+            );
         }
 
         // Initialize service-class services before session restore so they can
@@ -1286,7 +1391,7 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
         this._runtimeManager.onDidDiscoverRuntime(({ provider, installation }) => {
             const runtimePath = provider.getRuntimePath(installation);
             this._outputChannel.info(
-                `[Discovery] Found ${provider.formatRuntimeName(installation)} (${provider.getRuntimeSource(installation)}) at ${runtimePath}`
+                `[Discovery] Found ${provider.formatRuntimeName(installation)} (${provider.getRuntimeSource(installation)}) at ${runtimePath}`,
             );
 
             // Update session manager with first discovered installation per language
@@ -1298,7 +1403,7 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
         this._runtimeManager.onDidFinishDiscovery(() => {
             const summary = this._runtimeManager
                 .getSupportedLanguageIds()
-                .map(languageId => {
+                .map((languageId) => {
                     const provider = this._runtimeManager.getRuntimeProvider(languageId);
                     const label = provider?.languageName ?? languageId;
                     const count = this._runtimeManager.getInstallations(languageId).length;
@@ -1306,7 +1411,9 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
                 })
                 .join(', ');
 
-            this._outputChannel.info(`[Discovery] Complete.${summary ? ` ${summary} installation(s) available.` : ''}`);
+            this._outputChannel.info(
+                `[Discovery] Complete.${summary ? ` ${summary} installation(s) available.` : ''}`,
+            );
         });
 
         // Register webview providers
@@ -1327,7 +1434,7 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
                 this._webviewManager.onSessionClosed(sessionId);
                 this._sessionLifecycleWiredIds.delete(sessionId);
                 this._updateConsoleSessionsExistContext();
-            })
+            }),
         );
 
         for (const session of this._sessionManager.sessions) {
@@ -1345,91 +1452,167 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
      * Registers extension commands
      */
     private _registerCommands(): void {
-        this._disposables.push(vscode.commands.registerCommand(CoreCommandIds.openSupervisorManager,
-            () => this._supervisorManagerProvider.open()));
-        this._disposables.push(this._dataImporters,
-            vscode.commands.registerCommand(CoreCommandIds.dataExplorerImport, async (
-                uri?: vscode.Uri, options: IDataImportOptions = {}, currentView?: IDataImportView,
-            ) => {
-                if (!vscode.workspace.isTrusted) {
-                    await vscode.commands.executeCommand('workbench.trust.manage');
-                    if (!vscode.workspace.isTrusted) { return; }
-                }
-                const selected = (uri instanceof vscode.Uri ? uri : undefined) ?? (await vscode.window.showOpenDialog({ canSelectMany: false,
-                    title: vscode.l10n.t('Import Data') }))?.[0];
-                if (!selected) { return; }
-                const remoteUri = vscode.workspace.workspaceFile?.scheme === 'vscode-remote'
-                    ? vscode.workspace.workspaceFile : vscode.workspace.workspaceFolders?.find(folder =>
-                        folder.uri.scheme === 'vscode-remote')?.uri;
-                const visibleToSession = vscode.env.remoteName
-                    ? selected.scheme === 'vscode-remote' && !!remoteUri &&
-                        selected.authority.toLowerCase() === remoteUri.authority.toLowerCase()
-                    : selected.scheme === 'file';
-                if (!visibleToSession) {
-                    await vscode.window.showInformationMessage(vscode.l10n.t('Choose a file on the runtime session machine.'));
-                    return;
-                }
-                const explorer = await this._positronDataExplorerService.openWithDuckDB(selected);
-                options = { hasHeaderRow: explorer.fileHasHeaderRow, sheetName: explorer.fileSelectedSheet, ...options };
-                if (!currentView && explorer.backendState) {
-                    currentView = await buildDataImportView(explorer.backendState, indexes => explorer.getSchema(indexes))
-                        .catch(() => undefined);
-                }
-                const filename = selected.path.split('/').at(-1) ?? 'data';
-                const importers = await this.getDataImporters(filename.includes('.') ? filename.split('.').at(-1)! : '');
-                if (importers.length === 0) {
-                    await vscode.window.showInformationMessage(vscode.l10n.t('No data importer is available for this file.'));
-                    return;
-                }
-                const preferredLanguage = this._sessionManager.foregroundSession?.runtimeMetadata.languageId;
-                const orderedImporters = [...importers].sort((left, right) =>
-                    Number(right.languageId === preferredLanguage) - Number(left.languageId === preferredLanguage));
-                const chosen = await vscode.window.showQuickPick(orderedImporters.map(importer => ({
-                    label: importer.displayName, importer,
-                })), { title: vscode.l10n.t('Import Data') });
-                if (!chosen) { return; }
-                let defaultName = filename.replace(/\.[^.]+$/, '').replace(/[^\p{L}\p{N}_]/gu, '_') || 'data';
-                if (/^[\p{N}]/u.test(defaultName)) { defaultName = `data_${defaultName}`; }
-                if (chosen.importer.reservedNames?.includes(defaultName)) { defaultName += '_'; }
-                const variableName = await vscode.window.showInputBox({
-                    title: vscode.l10n.t('Variable Name'), value: defaultName,
-                    validateInput: value => value.trim() ? undefined : vscode.l10n.t('Enter a variable name.'),
-                });
-                if (variableName === undefined) { return; }
-                let view: IDataImportView | undefined;
-                if (currentView) {
-                    const include = vscode.l10n.t('Include Filters and Sorting');
-                    const all = vscode.l10n.t('Import All Rows');
-                    const choice = await vscode.window.showQuickPick([include, all], { title: vscode.l10n.t('Import Data') });
-                    if (choice === undefined) { return; }
-                    if (choice === include) { view = currentView; }
-                }
-                const generated = await this.generateDataImportCode(chosen.importer.id, {
-                    fileUri: selected, variableName, options, view,
-                });
-                if (!generated) { return; }
-                if (generated.unsupported?.length) {
-                    await vscode.window.showWarningMessage(generated.unsupported.join('\n'));
-                }
-                const document = await vscode.workspace.openTextDocument({
-                    language: chosen.importer.languageId, content: generated.code,
-                });
-                await vscode.window.showTextDocument(document);
-                const run = vscode.l10n.t('Run in Console');
-                const copy = vscode.l10n.t('Copy Import Code');
-                while (true) {
-                    const action = await vscode.window.showInformationMessage(vscode.l10n.t('Import code is ready.'), run, copy);
-                    if (action === copy) {
-                        await vscode.env.clipboard.writeText(document.getText());
-                        continue;
+        this._disposables.push(
+            vscode.commands.registerCommand(CoreCommandIds.openSupervisorManager, () =>
+                this._supervisorManagerProvider.open(),
+            ),
+        );
+        this._disposables.push(
+            this._dataImporters,
+            vscode.commands.registerCommand(
+                CoreCommandIds.dataExplorerImport,
+                async (
+                    uri?: vscode.Uri,
+                    options: IDataImportOptions = {},
+                    currentView?: IDataImportView,
+                ) => {
+                    if (!vscode.workspace.isTrusted) {
+                        await vscode.commands.executeCommand('workbench.trust.manage');
+                        if (!vscode.workspace.isTrusted) {
+                            return;
+                        }
                     }
-                    if (action === run && document.getText()) {
-                        await this._consoleService.executeCode(chosen.importer.languageId, undefined, document.getText(),
-                            { source: 'data-import', metadata: { completenessVerified: true } }, true, true);
+                    const selected =
+                        (uri instanceof vscode.Uri ? uri : undefined) ??
+                        (
+                            await vscode.window.showOpenDialog({
+                                canSelectMany: false,
+                                title: vscode.l10n.t('Import Data'),
+                            })
+                        )?.[0];
+                    if (!selected) {
+                        return;
                     }
-                    break;
-                }
-            }),
+                    const remoteUri =
+                        vscode.workspace.workspaceFile?.scheme === 'vscode-remote'
+                            ? vscode.workspace.workspaceFile
+                            : vscode.workspace.workspaceFolders?.find(
+                                  (folder) => folder.uri.scheme === 'vscode-remote',
+                              )?.uri;
+                    const visibleToSession = vscode.env.remoteName
+                        ? selected.scheme === 'vscode-remote' &&
+                          !!remoteUri &&
+                          selected.authority.toLowerCase() === remoteUri.authority.toLowerCase()
+                        : selected.scheme === 'file';
+                    if (!visibleToSession) {
+                        await vscode.window.showInformationMessage(
+                            vscode.l10n.t('Choose a file on the runtime session machine.'),
+                        );
+                        return;
+                    }
+                    const explorer =
+                        await this._positronDataExplorerService.openWithDuckDB(selected);
+                    options = {
+                        hasHeaderRow: explorer.fileHasHeaderRow,
+                        sheetName: explorer.fileSelectedSheet,
+                        ...options,
+                    };
+                    if (!currentView && explorer.backendState) {
+                        currentView = await buildDataImportView(explorer.backendState, (indexes) =>
+                            explorer.getSchema(indexes),
+                        ).catch(() => undefined);
+                    }
+                    const filename = selected.path.split('/').at(-1) ?? 'data';
+                    const importers = await this.getDataImporters(
+                        filename.includes('.') ? filename.split('.').at(-1)! : '',
+                    );
+                    if (importers.length === 0) {
+                        await vscode.window.showInformationMessage(
+                            vscode.l10n.t('No data importer is available for this file.'),
+                        );
+                        return;
+                    }
+                    const preferredLanguage =
+                        this._sessionManager.foregroundSession?.runtimeMetadata.languageId;
+                    const orderedImporters = [...importers].sort(
+                        (left, right) =>
+                            Number(right.languageId === preferredLanguage) -
+                            Number(left.languageId === preferredLanguage),
+                    );
+                    const chosen = await vscode.window.showQuickPick(
+                        orderedImporters.map((importer) => ({
+                            label: importer.displayName,
+                            importer,
+                        })),
+                        { title: vscode.l10n.t('Import Data') },
+                    );
+                    if (!chosen) {
+                        return;
+                    }
+                    let defaultName =
+                        filename.replace(/\.[^.]+$/, '').replace(/[^\p{L}\p{N}_]/gu, '_') || 'data';
+                    if (/^[\p{N}]/u.test(defaultName)) {
+                        defaultName = `data_${defaultName}`;
+                    }
+                    if (chosen.importer.reservedNames?.includes(defaultName)) {
+                        defaultName += '_';
+                    }
+                    const variableName = await vscode.window.showInputBox({
+                        title: vscode.l10n.t('Variable Name'),
+                        value: defaultName,
+                        validateInput: (value) =>
+                            value.trim() ? undefined : vscode.l10n.t('Enter a variable name.'),
+                    });
+                    if (variableName === undefined) {
+                        return;
+                    }
+                    let view: IDataImportView | undefined;
+                    if (currentView) {
+                        const include = vscode.l10n.t('Include Filters and Sorting');
+                        const all = vscode.l10n.t('Import All Rows');
+                        const choice = await vscode.window.showQuickPick([include, all], {
+                            title: vscode.l10n.t('Import Data'),
+                        });
+                        if (choice === undefined) {
+                            return;
+                        }
+                        if (choice === include) {
+                            view = currentView;
+                        }
+                    }
+                    const generated = await this.generateDataImportCode(chosen.importer.id, {
+                        fileUri: selected,
+                        variableName,
+                        options,
+                        view,
+                    });
+                    if (!generated) {
+                        return;
+                    }
+                    if (generated.unsupported?.length) {
+                        await vscode.window.showWarningMessage(generated.unsupported.join('\n'));
+                    }
+                    const document = await vscode.workspace.openTextDocument({
+                        language: chosen.importer.languageId,
+                        content: generated.code,
+                    });
+                    await vscode.window.showTextDocument(document);
+                    const run = vscode.l10n.t('Run in Console');
+                    const copy = vscode.l10n.t('Copy Import Code');
+                    while (true) {
+                        const action = await vscode.window.showInformationMessage(
+                            vscode.l10n.t('Import code is ready.'),
+                            run,
+                            copy,
+                        );
+                        if (action === copy) {
+                            await vscode.env.clipboard.writeText(document.getText());
+                            continue;
+                        }
+                        if (action === run && document.getText()) {
+                            await this._consoleService.executeCode(
+                                chosen.importer.languageId,
+                                undefined,
+                                document.getText(),
+                                { source: 'data-import', metadata: { completenessVerified: true } },
+                                true,
+                                true,
+                            );
+                        }
+                        break;
+                    }
+                },
+            ),
         );
         // Register console actions (execute code, clear console, etc.)
         const consoleActions = registerConsoleActions(this._consoleService, this._outputChannel);
@@ -1442,9 +1625,15 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
                     position: { line: number; character: number },
                     token?: vscode.CancellationToken,
                 ) => {
-                    if (token?.isCancellationRequested) { throw new vscode.CancellationError(); }
-                    const document = await vscode.workspace.openTextDocument(vscode.Uri.parse(documentUri));
-                    const session = this._sessionManager.getConsoleSessionForLanguage(document.languageId);
+                    if (token?.isCancellationRequested) {
+                        throw new vscode.CancellationError();
+                    }
+                    const document = await vscode.workspace.openTextDocument(
+                        vscode.Uri.parse(documentUri),
+                    );
+                    const session = this._sessionManager.getConsoleSessionForLanguage(
+                        document.languageId,
+                    );
                     if (!session) {
                         return undefined;
                     }
@@ -1457,7 +1646,9 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
                         session,
                         this._outputChannel,
                     );
-                    if (token?.isCancellationRequested) { throw new vscode.CancellationError(); }
+                    if (token?.isCancellationRequested) {
+                        throw new vscode.CancellationError();
+                    }
                     if (!provider) {
                         return undefined;
                     }
@@ -1465,13 +1656,17 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
                     const tokenSource = new vscode.CancellationTokenSource();
                     const cancellation = token?.onCancellationRequested(() => tokenSource.cancel());
                     try {
-                        if (token?.isCancellationRequested) { throw new vscode.CancellationError(); }
+                        if (token?.isCancellationRequested) {
+                            throw new vscode.CancellationError();
+                        }
                         const statementRange = await provider.provideStatementRange(
                             document,
                             new vscode.Position(position.line, position.character),
-                            tokenSource.token
+                            tokenSource.token,
                         );
-                        if (token?.isCancellationRequested) { throw new vscode.CancellationError(); }
+                        if (token?.isCancellationRequested) {
+                            throw new vscode.CancellationError();
+                        }
                         if (!statementRange) {
                             return undefined;
                         }
@@ -1491,7 +1686,10 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
                             code: statementRange.code,
                         };
                     } catch (error) {
-                        if (token?.isCancellationRequested || error instanceof vscode.CancellationError) {
+                        if (
+                            token?.isCancellationRequested ||
+                            error instanceof vscode.CancellationError
+                        ) {
                             throw new vscode.CancellationError();
                         }
                         if (isStatementRangeSyntaxError(error)) {
@@ -1501,14 +1699,16 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
                                 line: error.line,
                             };
                         }
-                        this._outputChannel.debug(`[LspBridge] Failed to resolve statement range: ${getErrorMessage(error)}`);
+                        this._outputChannel.debug(
+                            `[LspBridge] Failed to resolve statement range: ${getErrorMessage(error)}`,
+                        );
                         return undefined;
                     } finally {
                         cancellation?.dispose();
                         tokenSource.dispose();
                     }
-                }
-            )
+                },
+            ),
         );
 
         this._registerTestCommands();
@@ -1519,24 +1719,28 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
                 try {
                     await this._startNewSessionFromDiscoveredRuntimes();
                 } catch (error) {
-                    this._outputChannel.error(`[Supervisor] Failed to create session: ${getErrorMessage(error)}`);
-                    void vscode.window.showErrorMessage(`Failed to create session: ${getErrorMessage(error)}`);
+                    this._outputChannel.error(
+                        `[Supervisor] Failed to create session: ${getErrorMessage(error)}`,
+                    );
+                    void vscode.window.showErrorMessage(
+                        `Failed to create session: ${getErrorMessage(error)}`,
+                    );
                 }
-            })
+            }),
         );
 
         // Duplicate Active Session command (Positron pattern when session exists)
         this._disposables.push(
             vscode.commands.registerCommand(CoreCommandIds.duplicateSession, async () => {
                 await this._duplicateActiveSession();
-            })
+            }),
         );
 
         // Quick Launch Session command (Positron-style dropdown equivalent)
         this._disposables.push(
             vscode.commands.registerCommand(CoreCommandIds.quickLaunchSession, async () => {
                 await this._quickLaunchSessionFromRecentRuntimes();
-            })
+            }),
         );
 
         // Interrupt Execution command
@@ -1554,7 +1758,7 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
                 } else {
                     vscode.window.showWarningMessage('No active session');
                 }
-            })
+            }),
         );
 
         // Clear Output command
@@ -1567,52 +1771,58 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
                         this._webviewManager.consoleProvider?.clearOutput(activeSessionId, 'user');
                     }
                 }
-            })
+            }),
         );
 
         // Show Supervisor Log command
         this._disposables.push(
             vscode.commands.registerCommand(CoreCommandIds.showSupervisorLog, () => {
                 this._sessionManager.showSupervisorLog();
-            })
+            }),
         );
 
         this._disposables.push(
             vscode.commands.registerCommand(CoreCommandIds.refreshRuntimeSessions, () => {
                 this._runtimeSessionsTreeProvider.refresh();
-            })
+            }),
         );
 
         // Open Plots Gallery command
         this._disposables.push(
-            vscode.commands.registerCommand(CoreCommandIds.openPlotsGallery, async (options?: { openInNewWindow?: boolean }) => {
-                await this._plotsGalleryEditorProvider.openGallery(options);
-            })
+            vscode.commands.registerCommand(
+                CoreCommandIds.openPlotsGallery,
+                async (options?: { openInNewWindow?: boolean }) => {
+                    await this._plotsGalleryEditorProvider.openGallery(options);
+                },
+            ),
         );
 
         // Open Plot in Editor command (requires plotId and plotData from webview)
         this._disposables.push(
-            vscode.commands.registerCommand(CoreCommandIds.openPlotInEditor, async (
-                plotId?: string,
-                plotData?: string | PlotEditorContent,
-                viewColumn?: vscode.ViewColumn,
-                moveToNewWindow?: boolean,
-            ) => {
-                if (plotId && plotData) {
-                    this._plotEditorProvider.openPlotInEditor(
-                        plotId,
-                        plotData,
-                        undefined,
-                        viewColumn,
-                        !moveToNewWindow,
-                    );
-                    if (moveToNewWindow) {
-                        await this._plotEditorProvider.markAsNewWindowPanel(plotId);
+            vscode.commands.registerCommand(
+                CoreCommandIds.openPlotInEditor,
+                async (
+                    plotId?: string,
+                    plotData?: string | PlotEditorContent,
+                    viewColumn?: vscode.ViewColumn,
+                    moveToNewWindow?: boolean,
+                ) => {
+                    if (plotId && plotData) {
+                        this._plotEditorProvider.openPlotInEditor(
+                            plotId,
+                            plotData,
+                            undefined,
+                            viewColumn,
+                            !moveToNewWindow,
+                        );
+                        if (moveToNewWindow) {
+                            await this._plotEditorProvider.markAsNewWindowPanel(plotId);
+                        }
+                    } else {
+                        vscode.window.showWarningMessage('No plot selected to open in editor');
                     }
-                } else {
-                    vscode.window.showWarningMessage('No plot selected to open in editor');
-                }
-            })
+                },
+            ),
         );
 
         this._disposables.push(
@@ -1620,10 +1830,14 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
                 try {
                     await this._packagesService.refreshPackages(undefined, true);
                 } catch (error) {
-                    this._outputChannel.warn(`[Packages] Refresh failed: ${getErrorMessage(error)}`);
-                    vscode.window.showErrorMessage(`Failed to refresh packages: ${getErrorMessage(error)}`);
+                    this._outputChannel.warn(
+                        `[Packages] Refresh failed: ${getErrorMessage(error)}`,
+                    );
+                    vscode.window.showErrorMessage(
+                        `Failed to refresh packages: ${getErrorMessage(error)}`,
+                    );
                 }
-            })
+            }),
         );
 
         this._disposables.push(
@@ -1631,10 +1845,14 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
                 try {
                     await this._packagesService.updateAllPackages();
                 } catch (error) {
-                    this._outputChannel.warn(`[Packages] Update all failed: ${getErrorMessage(error)}`);
-                    vscode.window.showErrorMessage(`Failed to update packages: ${getErrorMessage(error)}`);
+                    this._outputChannel.warn(
+                        `[Packages] Update all failed: ${getErrorMessage(error)}`,
+                    );
+                    vscode.window.showErrorMessage(
+                        `Failed to update packages: ${getErrorMessage(error)}`,
+                    );
                 }
-            })
+            }),
         );
 
         // Close active plot/gallery panel in auxiliary windows.
@@ -1648,253 +1866,293 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
                 if (this._plotsGalleryEditorProvider.closeActivePanel()) {
                     return;
                 }
-                this._outputChannel.debug('No active plots panel found to close in auxiliary window');
-            })
+                this._outputChannel.debug(
+                    'No active plots panel found to close in auxiliary window',
+                );
+            }),
         );
 
         // Data Explorer command aliases (keep command surface explicit in app registrations).
         this._disposables.push(
             vscode.commands.registerCommand(CoreCommandIds.dataExplorerCopy, () =>
-                vscode.commands.executeCommand(PositronDataExplorerCommandId.Copy)
-            )
+                vscode.commands.executeCommand(PositronDataExplorerCommandId.Copy),
+            ),
         );
         this._disposables.push(
             vscode.commands.registerCommand(CoreCommandIds.dataExplorerCopyTableData, () =>
-                vscode.commands.executeCommand(PositronDataExplorerCommandId.CopyTableData)
-            )
+                vscode.commands.executeCommand(PositronDataExplorerCommandId.CopyTableData),
+            ),
         );
         this._disposables.push(
             vscode.commands.registerCommand(CoreCommandIds.dataExplorerCollapseSummary, () =>
-                vscode.commands.executeCommand(PositronDataExplorerCommandId.CollapseSummary)
-            )
+                vscode.commands.executeCommand(PositronDataExplorerCommandId.CollapseSummary),
+            ),
         );
         this._disposables.push(
             vscode.commands.registerCommand(CoreCommandIds.dataExplorerExpandSummary, () =>
-                vscode.commands.executeCommand(PositronDataExplorerCommandId.ExpandSummary)
-            )
+                vscode.commands.executeCommand(PositronDataExplorerCommandId.ExpandSummary),
+            ),
         );
         this._disposables.push(
             vscode.commands.registerCommand(CoreCommandIds.dataExplorerSummaryOnLeft, () =>
-                vscode.commands.executeCommand(PositronDataExplorerCommandId.SummaryOnLeft)
-            )
+                vscode.commands.executeCommand(PositronDataExplorerCommandId.SummaryOnLeft),
+            ),
         );
         this._disposables.push(
             vscode.commands.registerCommand(CoreCommandIds.dataExplorerSummaryOnRight, () =>
-                vscode.commands.executeCommand(PositronDataExplorerCommandId.SummaryOnRight)
-            )
+                vscode.commands.executeCommand(PositronDataExplorerCommandId.SummaryOnRight),
+            ),
         );
         this._disposables.push(
             vscode.commands.registerCommand(CoreCommandIds.dataExplorerSummaryOnLeftActive, () =>
-                vscode.commands.executeCommand(PositronDataExplorerCommandId.SummaryOnLeft)
-            )
+                vscode.commands.executeCommand(PositronDataExplorerCommandId.SummaryOnLeft),
+            ),
         );
         this._disposables.push(
             vscode.commands.registerCommand(CoreCommandIds.dataExplorerSummaryOnRightActive, () =>
-                vscode.commands.executeCommand(PositronDataExplorerCommandId.SummaryOnRight)
-            )
+                vscode.commands.executeCommand(PositronDataExplorerCommandId.SummaryOnRight),
+            ),
         );
         this._disposables.push(
             vscode.commands.registerCommand(CoreCommandIds.dataExplorerClearColumnSorting, () =>
-                vscode.commands.executeCommand(PositronDataExplorerCommandId.ClearColumnSorting)
-            )
+                vscode.commands.executeCommand(PositronDataExplorerCommandId.ClearColumnSorting),
+            ),
         );
         this._disposables.push(
             vscode.commands.registerCommand(CoreCommandIds.dataExplorerConvertToCode, () =>
-                vscode.commands.executeCommand(PositronDataExplorerCommandId.ConvertToCode)
-            )
+                vscode.commands.executeCommand(PositronDataExplorerCommandId.ConvertToCode),
+            ),
         );
         this._disposables.push(
             vscode.commands.registerCommand(CoreCommandIds.dataExplorerOpenAsPlaintext, () =>
-                vscode.commands.executeCommand(PositronDataExplorerCommandId.OpenAsPlaintext)
-            )
+                vscode.commands.executeCommand(PositronDataExplorerCommandId.OpenAsPlaintext),
+            ),
         );
         this._disposables.push(
             vscode.commands.registerCommand(CoreCommandIds.dataExplorerOpenAsSpreadsheet, () =>
-                vscode.commands.executeCommand(PositronDataExplorerCommandId.OpenAsSpreadsheet)
-            )
+                vscode.commands.executeCommand(PositronDataExplorerCommandId.OpenAsSpreadsheet),
+            ),
         );
         this._disposables.push(
             vscode.commands.registerCommand(CoreCommandIds.dataExplorerToggleFileOptions, () =>
-                vscode.commands.executeCommand(PositronDataExplorerCommandId.ToggleFileOptions)
-            )
+                vscode.commands.executeCommand(PositronDataExplorerCommandId.ToggleFileOptions),
+            ),
         );
         this._disposables.push(
             vscode.commands.registerCommand(CoreCommandIds.dataExplorerSelectWorksheet, () =>
-                vscode.commands.executeCommand(PositronDataExplorerCommandId.SelectWorksheet)
-            )
+                vscode.commands.executeCommand(PositronDataExplorerCommandId.SelectWorksheet),
+            ),
         );
         this._disposables.push(
             vscode.commands.registerCommand(CoreCommandIds.dataExplorerMoveToNewWindow, () =>
-                vscode.commands.executeCommand(PositronDataExplorerCommandId.MoveToNewWindow)
-            )
+                vscode.commands.executeCommand(PositronDataExplorerCommandId.MoveToNewWindow),
+            ),
         );
         this._disposables.push(
             vscode.commands.registerCommand(CoreCommandIds.dataExplorerShowColumnContextMenu, () =>
-                vscode.commands.executeCommand(PositronDataExplorerCommandId.ShowColumnContextMenu)
-            )
+                vscode.commands.executeCommand(PositronDataExplorerCommandId.ShowColumnContextMenu),
+            ),
         );
         this._disposables.push(
             vscode.commands.registerCommand(CoreCommandIds.dataExplorerShowRowContextMenu, () =>
-                vscode.commands.executeCommand(PositronDataExplorerCommandId.ShowRowContextMenu)
-            )
+                vscode.commands.executeCommand(PositronDataExplorerCommandId.ShowRowContextMenu),
+            ),
         );
         this._disposables.push(
             vscode.commands.registerCommand(CoreCommandIds.dataExplorerShowCellContextMenu, () =>
-                vscode.commands.executeCommand(PositronDataExplorerCommandId.ShowCellContextMenu)
-            )
+                vscode.commands.executeCommand(PositronDataExplorerCommandId.ShowCellContextMenu),
+            ),
         );
 
         // Open file in Data Explorer using DuckDB-WASM (context menu on file explorer)
         this._disposables.push(
-            vscode.commands.registerCommand(CoreCommandIds.dataExplorerOpenFile, async (uri?: vscode.Uri) => {
-                if (!uri) {
-                    // If invoked from the command palette, prompt for a file
-                    const files = await vscode.window.showOpenDialog({
-                        canSelectFiles: true,
-                        canSelectMany: false,
-                        filters: {
-                            'Data Files': ['csv', 'tsv', 'parquet', 'parq'],
-                        },
-                        title: 'Open Data File in Data Explorer',
-                    });
-                    if (!files || files.length === 0) {
-                        return;
+            vscode.commands.registerCommand(
+                CoreCommandIds.dataExplorerOpenFile,
+                async (uri?: vscode.Uri) => {
+                    if (!uri) {
+                        // If invoked from the command palette, prompt for a file
+                        const files = await vscode.window.showOpenDialog({
+                            canSelectFiles: true,
+                            canSelectMany: false,
+                            filters: {
+                                'Data Files': ['csv', 'tsv', 'parquet', 'parq'],
+                            },
+                            title: 'Open Data File in Data Explorer',
+                        });
+                        if (!files || files.length === 0) {
+                            return;
+                        }
+                        uri = files[0];
                     }
-                    uri = files[0];
-                }
 
-                try {
-                    await this._positronDataExplorerService.openWithDuckDB(uri);
-                } catch (error) {
-                    this._outputChannel.error(`[DuckDB] Failed to open file: ${getErrorMessage(error)}`);
-                    vscode.window.showErrorMessage(`Failed to open file in Data Explorer: ${getErrorMessage(error)}`);
-                }
-            })
+                    try {
+                        await this._positronDataExplorerService.openWithDuckDB(uri);
+                    } catch (error) {
+                        this._outputChannel.error(
+                            `[DuckDB] Failed to open file: ${getErrorMessage(error)}`,
+                        );
+                        vscode.window.showErrorMessage(
+                            `Failed to open file in Data Explorer: ${getErrorMessage(error)}`,
+                        );
+                    }
+                },
+            ),
         );
     }
 
-
     private _registerTestCommands(): void {
         this._disposables.push(
-            vscode.commands.registerCommand(TestCommandIds.getRuntimeSnapshot, (): TestRuntimeSnapshot => {
-                const sessionId = this._sessionManager.activeSessionId;
-                const session = sessionId ? this._sessionManager.getSession(sessionId) : undefined;
-                const serializedState = sessionId
-                    ? this._consoleService.getSerializedState(sessionId)
-                    : undefined;
-                const clientManager = session?.clientManager;
+            vscode.commands.registerCommand(
+                TestCommandIds.getRuntimeSnapshot,
+                (): TestRuntimeSnapshot => {
+                    const sessionId = this._sessionManager.activeSessionId;
+                    const session = sessionId
+                        ? this._sessionManager.getSession(sessionId)
+                        : undefined;
+                    const serializedState = sessionId
+                        ? this._consoleService.getSerializedState(sessionId)
+                        : undefined;
+                    const clientManager = session?.clientManager;
 
-                return {
-                    activeSessionId: sessionId,
-                    sessionIds: this._sessionManager.sessions.map(entry => entry.sessionId),
-                    lastClearReason: sessionId
-                        ? this._webviewManager.consoleProvider?.getLastClearReason(sessionId)
-                        : undefined,
-                    serializedState,
-                    workingDirectory: session?.workingDirectory,
-                    lspState: session?.lsp.state,
-                    lspTransportKind: session?.lspTransportKind,
-                    clientInfo: clientManager
-                        ? {
-                            variablesClientId: clientManager.variablesClientId,
-                            uiClientId: clientManager.uiClientId,
-                            helpClientId: clientManager.helpClientId,
-                            clientIds: clientManager.clientInstances.map(client => client.getClientId()),
-                        }
-                        : undefined,
-                };
-            }),
-            vscode.commands.registerCommand(TestCommandIds.emitRuntimeEvent, (params: TestEmitRuntimeEventParams) => {
-                if (!params || typeof params.name !== 'string') {
-                    throw new Error('name is required');
-                }
+                    return {
+                        activeSessionId: sessionId,
+                        sessionIds: this._sessionManager.sessions.map((entry) => entry.sessionId),
+                        lastClearReason: sessionId
+                            ? this._webviewManager.consoleProvider?.getLastClearReason(sessionId)
+                            : undefined,
+                        serializedState,
+                        workingDirectory: session?.workingDirectory,
+                        lspState: session?.lsp.state,
+                        lspTransportKind: session?.lspTransportKind,
+                        clientInfo: clientManager
+                            ? {
+                                  variablesClientId: clientManager.variablesClientId,
+                                  uiClientId: clientManager.uiClientId,
+                                  helpClientId: clientManager.helpClientId,
+                                  clientIds: clientManager.clientInstances.map((client) =>
+                                      client.getClientId(),
+                                  ),
+                              }
+                            : undefined,
+                    };
+                },
+            ),
+            vscode.commands.registerCommand(
+                TestCommandIds.emitRuntimeEvent,
+                (params: TestEmitRuntimeEventParams) => {
+                    if (!params || typeof params.name !== 'string') {
+                        throw new Error('name is required');
+                    }
 
-                const runtimeEventName = params.name as UiFrontendEvent;
-                if (!Object.values(UiFrontendEvent).includes(runtimeEventName)) {
-                    throw new Error(`Unsupported runtime event: ${params.name}`);
-                }
+                    const runtimeEventName = params.name as UiFrontendEvent;
+                    if (!Object.values(UiFrontendEvent).includes(runtimeEventName)) {
+                        throw new Error(`Unsupported runtime event: ${params.name}`);
+                    }
 
-                const sessionId = params.sessionId ?? this._sessionManager.activeSessionId;
-                if (!sessionId) {
-                    throw new Error('No active session available');
-                }
+                    const sessionId = params.sessionId ?? this._sessionManager.activeSessionId;
+                    if (!sessionId) {
+                        throw new Error('No active session available');
+                    }
 
-                this._sessionManager.emitTestRuntimeEvent(sessionId, runtimeEventName, params.data ?? {});
-                return { sessionId, name: runtimeEventName };
-            }),
-            vscode.commands.registerCommand(TestCommandIds.simulateCommOpen, (params: TestSimulateCommOpenParams) => {
-                if (!params || typeof params.targetName !== 'string' || params.targetName.length === 0) {
-                    throw new Error('targetName is required');
-                }
+                    this._sessionManager.emitTestRuntimeEvent(
+                        sessionId,
+                        runtimeEventName,
+                        params.data ?? {},
+                    );
+                    return { sessionId, name: runtimeEventName };
+                },
+            ),
+            vscode.commands.registerCommand(
+                TestCommandIds.simulateCommOpen,
+                (params: TestSimulateCommOpenParams) => {
+                    if (
+                        !params ||
+                        typeof params.targetName !== 'string' ||
+                        params.targetName.length === 0
+                    ) {
+                        throw new Error('targetName is required');
+                    }
 
-                const sessionId = params.sessionId ?? this._sessionManager.activeSessionId;
-                if (!sessionId) {
-                    throw new Error('No active session available');
-                }
+                    const sessionId = params.sessionId ?? this._sessionManager.activeSessionId;
+                    if (!sessionId) {
+                        throw new Error('No active session available');
+                    }
 
-                const session = this._sessionManager.getSession(sessionId);
-                const manager = session?.clientManager;
-                if (!session || !manager) {
-                    throw new Error(`RuntimeClientManager is unavailable for session ${sessionId}`);
-                }
+                    const session = this._sessionManager.getSession(sessionId);
+                    const manager = session?.clientManager;
+                    if (!session || !manager) {
+                        throw new Error(
+                            `RuntimeClientManager is unavailable for session ${sessionId}`,
+                        );
+                    }
 
-                const commId = params.commId ?? `e2e-comm-open-${Date.now()}`;
-                const handled = session.emitRuntimeMessage({
-                    id: commId,
-                    event_clock: 0,
-                    parent_id: '',
-                    when: new Date().toISOString(),
-                    type: LanguageRuntimeMessageType.CommOpen,
-                    comm_id: commId,
-                    target_name: params.targetName,
-                    data: params.data ?? {},
-                    metadata: {},
-                });
-
-                return {
-                    handled,
-                    hasClient: !!manager.getClient(commId),
-                    clientIds: manager.clientInstances.map(client => client.getClientId()),
-                };
-            }),
-            vscode.commands.registerCommand(TestCommandIds.simulateCommData, (params: TestSimulateCommDataParams) => {
-                if (!params || typeof params.commId !== 'string' || params.commId.length === 0) {
-                    throw new Error('commId is required');
-                }
-
-                const sessionId = params.sessionId ?? this._sessionManager.activeSessionId;
-                if (!sessionId) {
-                    throw new Error('No active session available');
-                }
-
-                const session = this._sessionManager.getSession(sessionId);
-                const manager = session?.clientManager;
-                if (!session || !manager) {
-                    throw new Error(`RuntimeClientManager is unavailable for session ${sessionId}`);
-                }
-
-                let registration: vscode.Disposable | undefined;
-                if (params.register) {
-                    registration = manager.registerClientInstance(params.commId);
-                }
-
-                try {
+                    const commId = params.commId ?? `e2e-comm-open-${Date.now()}`;
                     const handled = session.emitRuntimeMessage({
-                        id: `${params.commId}-data`,
+                        id: commId,
                         event_clock: 0,
-                        parent_id: `${params.commId}-parent`,
+                        parent_id: '',
                         when: new Date().toISOString(),
-                        type: LanguageRuntimeMessageType.CommData,
-                        comm_id: params.commId,
+                        type: LanguageRuntimeMessageType.CommOpen,
+                        comm_id: commId,
+                        target_name: params.targetName,
                         data: params.data ?? {},
                         metadata: {},
                     });
 
-                    return { handled };
-                } finally {
-                    registration?.dispose();
-                }
-            }),
+                    return {
+                        handled,
+                        hasClient: !!manager.getClient(commId),
+                        clientIds: manager.clientInstances.map((client) => client.getClientId()),
+                    };
+                },
+            ),
+            vscode.commands.registerCommand(
+                TestCommandIds.simulateCommData,
+                (params: TestSimulateCommDataParams) => {
+                    if (
+                        !params ||
+                        typeof params.commId !== 'string' ||
+                        params.commId.length === 0
+                    ) {
+                        throw new Error('commId is required');
+                    }
+
+                    const sessionId = params.sessionId ?? this._sessionManager.activeSessionId;
+                    if (!sessionId) {
+                        throw new Error('No active session available');
+                    }
+
+                    const session = this._sessionManager.getSession(sessionId);
+                    const manager = session?.clientManager;
+                    if (!session || !manager) {
+                        throw new Error(
+                            `RuntimeClientManager is unavailable for session ${sessionId}`,
+                        );
+                    }
+
+                    let registration: vscode.Disposable | undefined;
+                    if (params.register) {
+                        registration = manager.registerClientInstance(params.commId);
+                    }
+
+                    try {
+                        const handled = session.emitRuntimeMessage({
+                            id: `${params.commId}-data`,
+                            event_clock: 0,
+                            parent_id: `${params.commId}-parent`,
+                            when: new Date().toISOString(),
+                            type: LanguageRuntimeMessageType.CommData,
+                            comm_id: params.commId,
+                            data: params.data ?? {},
+                            metadata: {},
+                        });
+
+                        return { handled };
+                    } finally {
+                        registration?.dispose();
+                    }
+                },
+            ),
             vscode.commands.registerCommand(TestCommandIds.clearConsoleAsUser, () => {
                 const instance = this._consoleService.activePositronConsoleInstance;
                 if (!instance) {
@@ -1905,35 +2163,47 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
                 this._webviewManager.consoleProvider?.clearOutput(instance.sessionId, 'user');
                 return { sessionId: instance.sessionId };
             }),
-            vscode.commands.registerCommand(TestCommandIds.setWorkingDirectory, async (params: TestSetWorkingDirectoryParams) => {
-                if (!params || typeof params.workingDirectory !== 'string' || params.workingDirectory.length === 0) {
-                    throw new Error('workingDirectory is required');
-                }
+            vscode.commands.registerCommand(
+                TestCommandIds.setWorkingDirectory,
+                async (params: TestSetWorkingDirectoryParams) => {
+                    if (
+                        !params ||
+                        typeof params.workingDirectory !== 'string' ||
+                        params.workingDirectory.length === 0
+                    ) {
+                        throw new Error('workingDirectory is required');
+                    }
 
-                const sessionId = params.sessionId ?? this._sessionManager.activeSessionId;
-                if (!sessionId) {
-                    throw new Error('No active session available');
-                }
+                    const sessionId = params.sessionId ?? this._sessionManager.activeSessionId;
+                    if (!sessionId) {
+                        throw new Error('No active session available');
+                    }
 
-                const session = this._sessionManager.getSession(sessionId);
-                if (!session) {
-                    throw new Error(`Session ${sessionId} not found`);
-                }
+                    const session = this._sessionManager.getSession(sessionId);
+                    if (!session) {
+                        throw new Error(`Session ${sessionId} not found`);
+                    }
 
-                await session.setWorkingDirectory(params.workingDirectory);
-                return {
-                    sessionId,
-                    workingDirectory: session.workingDirectory,
-                };
-            }),
-            vscode.commands.registerCommand(TestCommandIds.openConsoleCodeInEditor, async (params: TestOpenConsoleCodeInEditorParams) => {
-                if (!params || typeof params.code !== 'string') {
-                    throw new Error('code is required');
-                }
+                    await session.setWorkingDirectory(params.workingDirectory);
+                    return {
+                        sessionId,
+                        workingDirectory: session.workingDirectory,
+                    };
+                },
+            ),
+            vscode.commands.registerCommand(
+                TestCommandIds.openConsoleCodeInEditor,
+                async (params: TestOpenConsoleCodeInEditorParams) => {
+                    if (!params || typeof params.code !== 'string') {
+                        throw new Error('code is required');
+                    }
 
-                const success = await this._webviewManager.consoleProvider?.openCodeInEditor(params.code);
-                return { success: !!success };
-            })
+                    const success = await this._webviewManager.consoleProvider?.openCodeInEditor(
+                        params.code,
+                    );
+                    return { success: !!success };
+                },
+            ),
         );
     }
 
@@ -1987,7 +2257,9 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
                 await operation();
             } catch (error) {
                 errors.push(error);
-                this._outputChannel.warn(`[Supervisor] Failed to ${label} during shutdown: ${getErrorMessage(error)}`);
+                this._outputChannel.warn(
+                    `[Supervisor] Failed to ${label} during shutdown: ${getErrorMessage(error)}`,
+                );
             }
         };
 
@@ -1995,11 +2267,17 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
         await runStep('prepare plots', () => this._plotsService.prepareForShutdown());
         await runStep('save plot editors', () => this._plotEditorProvider.flushPersistedState());
         await runStep('save Console state', () => this._consoleService.flushPersistedState());
-        await runStep('save runtime sessions', () => this._runtimeStartupService.prepareForExtensionHostShutdown());
-        await runStep('detach runtime sessions', () => this._sessionManager.detachForExtensionHostShutdown());
+        await runStep('save runtime sessions', () =>
+            this._runtimeStartupService.prepareForExtensionHostShutdown(),
+        );
+        await runStep('detach runtime sessions', () =>
+            this._sessionManager.detachForExtensionHostShutdown(),
+        );
         await runStep('save surface state', () => this._surfaceLifecycle.whenPersisted());
 
-        await runStep('dispose language registrations', () => this._languageCapabilityRegistry.dispose());
+        await runStep('dispose language registrations', () =>
+            this._languageCapabilityRegistry.dispose(),
+        );
 
         // Keep logging available until all other resources have been released.
         for (const disposable of this._disposables) {

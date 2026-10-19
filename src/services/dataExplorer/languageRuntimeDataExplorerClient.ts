@@ -42,7 +42,7 @@ export enum DataExplorerClientStatus {
     Idle = 'idle',
     Computing = 'computing',
     Disconnected = 'disconnected',
-    Error = 'error'
+    Error = 'error',
 }
 
 /**
@@ -59,31 +59,31 @@ export const DATA_EXPLORER_DISCONNECTED_STATE: BackendState = {
     supported_features: {
         search_schema: {
             support_status: SupportStatus.Unsupported,
-            supported_types: []
+            supported_types: [],
         },
         set_column_filters: {
             support_status: SupportStatus.Unsupported,
-            supported_types: []
+            supported_types: [],
         },
         set_row_filters: {
             support_status: SupportStatus.Unsupported,
             supports_conditions: SupportStatus.Unsupported,
-            supported_types: []
+            supported_types: [],
         },
         get_column_profiles: {
             support_status: SupportStatus.Unsupported,
-            supported_types: []
+            supported_types: [],
         },
         set_sort_columns: { support_status: SupportStatus.Unsupported },
         export_data_selection: {
             support_status: SupportStatus.Unsupported,
-            supported_formats: []
+            supported_formats: [],
         },
         convert_to_code: {
             support_status: SupportStatus.Unsupported,
-            code_syntaxes: []
-        }
-    }
+            code_syntaxes: [],
+        },
+    },
 };
 
 /**
@@ -128,12 +128,15 @@ export class DataExplorerClientInstance implements vscode.Disposable {
     private readonly _profileFormatOptions = DEFAULT_PROFILE_FORMAT_OPTIONS;
 
     // Async task tracking for column profiles
-    private readonly _asyncTasks = new Map<string, {
-        resolve: (value: ColumnProfileResult[]) => void;
-        reject: (reason: Error) => void;
-        timeoutHandle: ReturnType<typeof setTimeout>;
-        cancellationDisposable?: vscode.Disposable;
-    }>();
+    private readonly _asyncTasks = new Map<
+        string,
+        {
+            resolve: (value: ColumnProfileResult[]) => void;
+            reject: (reason: Error) => void;
+            timeoutHandle: ReturnType<typeof setTimeout>;
+            cancellationDisposable?: vscode.Disposable;
+        }
+    >();
 
     // Event emitters
     private readonly _onDidClose = new vscode.EventEmitter<void>();
@@ -144,7 +147,7 @@ export class DataExplorerClientInstance implements vscode.Disposable {
 
     constructor(
         private readonly _comm: IDataExplorerComm,
-        private readonly _logChannel: vscode.LogOutputChannel
+        private readonly _logChannel: vscode.LogOutputChannel,
     ) {
         this._disposables.push(this._onDidClose);
         this._disposables.push(this._onDidSchemaUpdate);
@@ -159,7 +162,7 @@ export class DataExplorerClientInstance implements vscode.Disposable {
                 this.updateBackendState().then(() => {
                     this._onDidSchemaUpdate.fire({});
                 });
-            })
+            }),
         );
         this._disposables.push(
             this._comm.onDidDataUpdate(() => {
@@ -167,7 +170,7 @@ export class DataExplorerClientInstance implements vscode.Disposable {
                 this.updateBackendState().then(() => {
                     this._onDidDataUpdate.fire({});
                 });
-            })
+            }),
         );
         this._disposables.push(
             this._comm.onDidReturnColumnProfiles((event) => {
@@ -184,12 +187,12 @@ export class DataExplorerClientInstance implements vscode.Disposable {
                         pending.resolve(event.profiles || []);
                     }
                 }
-            })
+            }),
         );
         this._disposables.push(
             this._comm.onDidClose(() => {
                 this._notifyClosed();
-            })
+            }),
         );
     }
 
@@ -272,7 +275,7 @@ export class DataExplorerClientInstance implements vscode.Disposable {
 
         const backendPromise = this._runBackendTask(
             () => this._requestBackendState(),
-            () => DATA_EXPLORER_DISCONNECTED_STATE
+            () => DATA_EXPLORER_DISCONNECTED_STATE,
         );
         this._backendPromise = backendPromise;
 
@@ -304,7 +307,7 @@ export class DataExplorerClientInstance implements vscode.Disposable {
         }
         return this._runBackendTask(
             () => this._comm.getSchema(columnIndices),
-            () => ({ columns: [] })
+            () => ({ columns: [] }),
         );
     }
 
@@ -317,7 +320,7 @@ export class DataExplorerClientInstance implements vscode.Disposable {
         }
         return this._runBackendTask(
             () => this._comm.getDataValues(columns, this._dataFormatOptions),
-            () => ({ columns: [[]] })
+            () => ({ columns: [[]] }),
         );
     }
 
@@ -327,7 +330,7 @@ export class DataExplorerClientInstance implements vscode.Disposable {
     async getRowLabels(selection: ArraySelection): Promise<TableRowLabels> {
         return this._runBackendTask(
             () => this._comm.getRowLabels(selection, this._dataFormatOptions),
-            () => ({ row_labels: [[]] })
+            () => ({ row_labels: [[]] }),
         );
     }
 
@@ -337,7 +340,7 @@ export class DataExplorerClientInstance implements vscode.Disposable {
     async setRowFilters(filters: RowFilter[]): Promise<FilterResult> {
         return this._runBackendTask(
             () => this._comm.setRowFilters(filters),
-            () => ({ selected_num_rows: 0 })
+            () => ({ selected_num_rows: 0 }),
         );
     }
 
@@ -347,7 +350,7 @@ export class DataExplorerClientInstance implements vscode.Disposable {
     async setSortColumns(sortKeys: ColumnSortKey[]): Promise<void> {
         return this._runBackendTask(
             () => this._comm.setSortColumns(sortKeys),
-            () => { }
+            () => {},
         );
     }
 
@@ -357,33 +360,33 @@ export class DataExplorerClientInstance implements vscode.Disposable {
     async setColumnFilters(filters: ColumnFilter[]): Promise<void> {
         return this._runBackendTask(
             () => this._comm.setColumnFilters(filters),
-            () => { }
+            () => {},
         );
     }
 
     /**
      * Search schema
      */
-    async searchSchema(filters: ColumnFilter[], sortOrder: SearchSchemaSortOrder): Promise<SearchSchemaResult> {
+    async searchSchema(
+        filters: ColumnFilter[],
+        sortOrder: SearchSchemaSortOrder,
+    ): Promise<SearchSchemaResult> {
         return this._runBackendTask(
             () => this._comm.searchSchema(filters, sortOrder),
-            () => ({ matches: [] })
+            () => ({ matches: [] }),
         );
     }
 
     /**
      * Get column profiles (async with callback)
      */
-    async getColumnProfiles(
-        callbackId: string,
-        profiles: ColumnProfileRequest[]
-    ): Promise<void> {
+    async getColumnProfiles(callbackId: string, profiles: ColumnProfileRequest[]): Promise<void> {
         if (profiles.length === 0) {
             return;
         }
         return this._runBackendTask(
             () => this._comm.getColumnProfiles(callbackId, profiles, this._profileFormatOptions),
-            () => { }
+            () => {},
         );
     }
 
@@ -422,16 +425,15 @@ export class DataExplorerClientInstance implements vscode.Disposable {
                 cancellationDisposable?: vscode.Disposable;
             } = { resolve, reject, timeoutHandle };
             this._asyncTasks.set(callbackId, pendingTask);
-            pendingTask.cancellationDisposable =
-                token?.onCancellationRequested(() => {
-                    if (this._asyncTasks.get(callbackId) !== pendingTask) {
-                        return;
-                    }
-                    clearTimeout(timeoutHandle);
-                    pendingTask.cancellationDisposable?.dispose();
-                    this._asyncTasks.delete(callbackId);
-                    resolve([]);
-                });
+            pendingTask.cancellationDisposable = token?.onCancellationRequested(() => {
+                if (this._asyncTasks.get(callbackId) !== pendingTask) {
+                    return;
+                }
+                clearTimeout(timeoutHandle);
+                pendingTask.cancellationDisposable?.dispose();
+                this._asyncTasks.delete(callbackId);
+                resolve([]);
+            });
 
             if (token?.isCancellationRequested) {
                 clearTimeout(timeoutHandle);
@@ -460,10 +462,13 @@ export class DataExplorerClientInstance implements vscode.Disposable {
     /**
      * Export data selection
      */
-    async exportDataSelection(selection: TableSelection, format: ExportFormat): Promise<ExportedData> {
+    async exportDataSelection(
+        selection: TableSelection,
+        format: ExportFormat,
+    ): Promise<ExportedData> {
         return this._runBackendTask(
             () => this._comm.exportDataSelection(selection, format),
-            () => ({ data: '', format })
+            () => ({ data: '', format }),
         );
     }
 
@@ -474,7 +479,7 @@ export class DataExplorerClientInstance implements vscode.Disposable {
         await this._ensureConvertToCodeSupported();
         return this._runBackendTask(
             () => this._comm.suggestCodeSyntax(),
-            () => undefined
+            () => undefined,
         );
     }
 
@@ -498,30 +503,37 @@ export class DataExplorerClientInstance implements vscode.Disposable {
             supportedSyntaxes &&
             supportedSyntaxes.length > 0 &&
             !supportedSyntaxes.some(
-                syntax => syntax.code_syntax_name === desiredSyntax.code_syntax_name
+                (syntax) => syntax.code_syntax_name === desiredSyntax.code_syntax_name,
             )
         ) {
-            throw new Error(`Code syntax "${desiredSyntax.code_syntax_name}" is not supported by this backend.`);
+            throw new Error(
+                `Code syntax "${desiredSyntax.code_syntax_name}" is not supported by this backend.`,
+            );
         }
 
         return this._runBackendTask(
-            () => this._comm.convertToCode(
-                state.column_filters,
-                state.row_filters,
-                state.sort_keys,
-                desiredSyntax
-            ),
-            () => ({ converted_code: [''] })
+            () =>
+                this._comm.convertToCode(
+                    state.column_filters,
+                    state.row_filters,
+                    state.sort_keys,
+                    desiredSyntax,
+                ),
+            () => ({ converted_code: [''] }),
         );
     }
 
     /**
      * Set import options for file-based data sources.
      */
-    async setDatasetImportOptions(options: DatasetImportOptions): Promise<SetDatasetImportOptionsResult> {
+    async setDatasetImportOptions(
+        options: DatasetImportOptions,
+    ): Promise<SetDatasetImportOptionsResult> {
         return this._runBackendTask(
             () => this._comm.setDatasetImportOptions(options),
-            () => ({ error_message: 'The dataset is disconnected. File options were not changed.' })
+            () => ({
+                error_message: 'The dataset is disconnected. File options were not changed.',
+            }),
         );
     }
 
@@ -544,14 +556,16 @@ export class DataExplorerClientInstance implements vscode.Disposable {
         for (const [callbackId, pendingTask] of this._asyncTasks) {
             clearTimeout(pendingTask.timeoutHandle);
             pendingTask.cancellationDisposable?.dispose();
-            pendingTask.reject(new Error('Data Explorer client disposed while waiting for column profiles.'));
+            pendingTask.reject(
+                new Error('Data Explorer client disposed while waiting for column profiles.'),
+            );
             this._asyncTasks.delete(callbackId);
         }
         // Notify owners before disposing our event emitters. In particular, the
         // Data Explorer service removes the corresponding instance from its
         // registry in response to this event.
         this._notifyClosed();
-        this._disposables.forEach(d => d.dispose());
+        this._disposables.forEach((d) => d.dispose());
         this._comm.closeClient();
         this._comm.dispose();
     }
@@ -585,7 +599,7 @@ export class DataExplorerClientInstance implements vscode.Disposable {
                 }
                 this._logChannel.warn(
                     `DataExplorerClientInstance: get_state attempt ${attempt}/${BACKEND_STATE_MAX_ATTEMPTS} failed: ${getErrorSummary(error)}; retrying. ` +
-                    `details=${formatErrorForLogging(error)}`,
+                        `details=${formatErrorForLogging(error)}`,
                 );
             }
         }
@@ -595,7 +609,7 @@ export class DataExplorerClientInstance implements vscode.Disposable {
 
     private async _runBackendTask<T>(
         task: () => Promise<T>,
-        disconnectedResult: () => T
+        disconnectedResult: () => T,
     ): Promise<T> {
         if (this._status === DataExplorerClientStatus.Disconnected) {
             return disconnectedResult();
@@ -608,11 +622,7 @@ export class DataExplorerClientInstance implements vscode.Disposable {
             return await task();
         } finally {
             this._numPendingTasks -= 1;
-            if (
-                this._numPendingTasks === 0 &&
-                !this._disposed &&
-                !this._closeNotified
-            ) {
+            if (this._numPendingTasks === 0 && !this._disposed && !this._closeNotified) {
                 this._setStatus(DataExplorerClientStatus.Idle);
             }
         }
@@ -629,10 +639,14 @@ export class DataExplorerClientInstance implements vscode.Disposable {
             const timeoutHandle = setTimeout(() => {
                 disposable?.dispose();
                 const timeoutSeconds = Math.round(timeoutMs / 100) / 10;
-                reject(new Error(`Waiting for pending tasks timed out after ${timeoutSeconds} seconds`));
+                reject(
+                    new Error(
+                        `Waiting for pending tasks timed out after ${timeoutSeconds} seconds`,
+                    ),
+                );
             }, timeoutMs);
 
-            disposable = this.onDidStatusUpdate(status => {
+            disposable = this.onDidStatusUpdate((status) => {
                 if (status !== DataExplorerClientStatus.Idle) {
                     return;
                 }
@@ -644,10 +658,8 @@ export class DataExplorerClientInstance implements vscode.Disposable {
         });
     }
 
-    private async _ensureConvertToCodeSupported(
-        backendState?: BackendState
-    ): Promise<void> {
-        const state = backendState ?? await this.getBackendState();
+    private async _ensureConvertToCodeSupported(backendState?: BackendState): Promise<void> {
+        const state = backendState ?? (await this.getBackendState());
         if (state.supported_features.convert_to_code.support_status === SupportStatus.Unsupported) {
             throw new Error('Code syntax conversion is not supported by this backend.');
         }

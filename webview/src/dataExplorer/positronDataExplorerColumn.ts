@@ -4,15 +4,16 @@
 
 import { DataColumnAlignment } from '../dataGrid/interfaces';
 import type { SchemaColumn } from '../dataGrid/types';
-import { getEffectiveColumnDisplayType, shouldRightAlignDisplayType } from './columnDisplayTypeUtils';
+import {
+    getEffectiveColumnDisplayType,
+    shouldRightAlignDisplayType,
+} from './columnDisplayTypeUtils';
 
 /**
  * PositronDataExplorerColumn class.
  */
 export class PositronDataExplorerColumn {
-    constructor(
-        private readonly _columnSchema: SchemaColumn,
-    ) {}
+    constructor(private readonly _columnSchema: SchemaColumn) {}
 
     get columnSchema() {
         return this._columnSchema;

@@ -1,5 +1,5 @@
 <script lang="ts">
-    import type { Snippet } from "svelte";
+    import type { Snippet } from 'svelte';
 
     interface Props {
         primaryButton?: Snippet;
@@ -9,8 +9,7 @@
     let { primaryButton, secondaryButton }: Props = $props();
 
     const isWindows =
-        typeof navigator !== "undefined" &&
-        navigator.platform.toLowerCase().includes("win");
+        typeof navigator !== 'undefined' && navigator.platform.toLowerCase().includes('win');
 </script>
 
 {#if isWindows}

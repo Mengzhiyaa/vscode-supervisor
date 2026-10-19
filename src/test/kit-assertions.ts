@@ -41,13 +41,15 @@ export async function assertSelectedEditor(uri: vscode.Uri, text: string) {
         const actualPath = editor ? normalizeUri(editor.document.uri) : undefined;
 
         if (!editor || actualPath !== expectedPath) {
-            assert.fail(`Expected active editor for ${expectedPath}, but got ${actualPath ?? 'undefined'}`);
+            assert.fail(
+                `Expected active editor for ${expectedPath}, but got ${actualPath ?? 'undefined'}`,
+            );
         }
 
         assert.match(
             editor.document.getText(),
             new RegExp(text),
-            `Unexpected editor contents for ${uri.fsPath}:\n${editor.document.getText()}\n\nExpected:\n${text}`
+            `Unexpected editor contents for ${uri.fsPath}:\n${editor.document.getText()}\n\nExpected:\n${text}`,
         );
     });
 }

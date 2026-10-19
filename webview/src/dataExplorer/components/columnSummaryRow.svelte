@@ -3,8 +3,8 @@
   Port from Positron's columnSummaryCell.tsx for 1:1 UI replication
 -->
 <script lang="ts">
-    import { getDataExplorerContext } from "../positronDataExplorerContext";
-    import { localize } from "../nls";
+    import { getDataExplorerContext } from '../positronDataExplorerContext';
+    import { localize } from '../nls';
     import {
         canExpandSummaryForDisplayType,
         getEffectiveColumnDisplayType,
@@ -16,20 +16,20 @@
         isNumericDisplayType,
         isObjectDisplayType,
         isStringDisplayType,
-    } from "../columnDisplayTypeUtils";
-    import type { ColumnProfileViewResult } from "../columnProfileTypes";
-    import type { DataGridHoverManager } from "../../dataGrid/classes/dataGridInstance";
-    import ColumnProfileBoolean from "./columnProfileBoolean.svelte";
-    import ColumnProfileDate from "./columnProfileDate.svelte";
-    import ColumnProfileDatetime from "./columnProfileDatetime.svelte";
-    import ColumnProfileInteger from "./columnProfileInteger.svelte";
-    import ColumnProfileNumber from "./columnProfileNumber.svelte";
-    import ColumnProfileObject from "./columnProfileObject.svelte";
-    import ColumnProfileString from "./columnProfileString.svelte";
-    import ColumnNullPercent from "./columnNullPercent.svelte";
-    import VectorFrequencyTable from "./vectorFrequencyTable.svelte";
-    import VectorHistogram from "./vectorHistogram.svelte";
-    import { renderLeadingTrailingWhitespace } from "./tableDataCell";
+    } from '../columnDisplayTypeUtils';
+    import type { ColumnProfileViewResult } from '../columnProfileTypes';
+    import type { DataGridHoverManager } from '../../dataGrid/classes/dataGridInstance';
+    import ColumnProfileBoolean from './columnProfileBoolean.svelte';
+    import ColumnProfileDate from './columnProfileDate.svelte';
+    import ColumnProfileDatetime from './columnProfileDatetime.svelte';
+    import ColumnProfileInteger from './columnProfileInteger.svelte';
+    import ColumnProfileNumber from './columnProfileNumber.svelte';
+    import ColumnProfileObject from './columnProfileObject.svelte';
+    import ColumnProfileString from './columnProfileString.svelte';
+    import ColumnNullPercent from './columnNullPercent.svelte';
+    import VectorFrequencyTable from './vectorFrequencyTable.svelte';
+    import VectorHistogram from './vectorHistogram.svelte';
+    import { renderLeadingTrailingWhitespace } from './tableDataCell';
 
     interface Props {
         columnIndex: number;
@@ -77,18 +77,11 @@
         expanded = expandedProp ?? false;
     });
 
-    const effectiveType = $derived(
-        getEffectiveColumnDisplayType(typeDisplay, columnType),
-    );
+    const effectiveType = $derived(getEffectiveColumnDisplayType(typeDisplay, columnType));
     const resolvedProfileType = $derived.by(() =>
-        getEffectiveColumnDisplayType(
-            profile?.summary_stats?.type_display,
-            effectiveType,
-        ),
+        getEffectiveColumnDisplayType(profile?.summary_stats?.type_display, effectiveType),
     );
-    const dataTypeIconClass = $derived(
-        getSummaryDataTypeIcon(resolvedProfileType),
-    );
+    const dataTypeIconClass = $derived(getSummaryDataTypeIcon(resolvedProfileType));
     const isInteger = $derived(isIntegerDisplayType(resolvedProfileType));
     const isNumeric = $derived(isNumericDisplayType(resolvedProfileType));
     const isString = $derived(isStringDisplayType(resolvedProfileType));
@@ -96,9 +89,7 @@
     const isDateOnly = $derived(isDateDisplayType(resolvedProfileType));
     const isDateTime = $derived(isDatetimeDisplayType(resolvedProfileType));
     const isObject = $derived(isObjectDisplayType(resolvedProfileType));
-    const renderedColumnName = $derived.by(() =>
-        renderLeadingTrailingWhitespace(columnName),
-    );
+    const renderedColumnName = $derived.by(() => renderLeadingTrailingWhitespace(columnName));
     const summaryStatsSupported = $derived.by(() => {
         if (summaryStatsSupportedProp !== undefined) {
             return summaryStatsSupportedProp;
@@ -143,10 +134,11 @@
         return null;
     });
 
-    function renderNamePart(
-        part: string | { kind: "whitespace"; text: string },
-    ): { text: string; whitespace: boolean } {
-        if (typeof part === "string") {
+    function renderNamePart(part: string | { kind: 'whitespace'; text: string }): {
+        text: string;
+        whitespace: boolean;
+    } {
+        if (typeof part === 'string') {
             return { text: part, whitespace: false };
         }
 
@@ -221,8 +213,8 @@
             onclick={toggleExpanded}
             disabled={!summaryStatsSupported}
             title={expanded
-                ? localize("positron.columnSummary.collapse", "Collapse")
-                : localize("positron.columnSummary.expand", "Expand")}
+                ? localize('positron.columnSummary.collapse', 'Collapse')
+                : localize('positron.columnSummary.expand', 'Expand')}
         >
             {#if expanded}
                 <span class="expand-collapse-icon codicon codicon-chevron-down"></span>
@@ -250,9 +242,7 @@
         >
             {#each renderedColumnName as part, index (index)}
                 {@const renderedPart = renderNamePart(part)}
-                <span class:whitespace={renderedPart.whitespace}
-                    >{renderedPart.text}</span
-                >
+                <span class:whitespace={renderedPart.whitespace}>{renderedPart.text}</span>
             {/each}
         </div>
 
@@ -284,13 +274,7 @@
                         height="20.5"
                     >
                         <g>
-                            <rect
-                                class="x-axis"
-                                height="0.5"
-                                width="80"
-                                x="0"
-                                y="19.5"
-                            />
+                            <rect class="x-axis" height="0.5" width="80" x="0" y="19.5" />
                             <rect
                                 class="loading-indicator"
                                 height="6"
@@ -305,11 +289,7 @@
             </div>
         {/if}
 
-        <ColumnNullPercent
-            {nullPercent}
-            nullCount={profile?.null_count}
-            {hoverManager}
-        />
+        <ColumnNullPercent {nullPercent} nullCount={profile?.null_count} {hoverManager} />
 
         <div class="right-gutter"></div>
     </div>
@@ -334,25 +314,16 @@
                     {columnIndex}
                 />
             {:else if isString}
-                <ColumnProfileString
-                    instance={context.tableSchemaDataGridInstance}
-                    {columnIndex}
-                />
+                <ColumnProfileString instance={context.tableSchemaDataGridInstance} {columnIndex} />
             {:else if isDateOnly}
-                <ColumnProfileDate
-                    instance={context.tableSchemaDataGridInstance}
-                    {columnIndex}
-                />
+                <ColumnProfileDate instance={context.tableSchemaDataGridInstance} {columnIndex} />
             {:else if isDateTime}
                 <ColumnProfileDatetime
                     instance={context.tableSchemaDataGridInstance}
                     {columnIndex}
                 />
             {:else if isObject}
-                <ColumnProfileObject
-                    instance={context.tableSchemaDataGridInstance}
-                    {columnIndex}
-                />
+                <ColumnProfileObject instance={context.tableSchemaDataGridInstance} {columnIndex} />
             {/if}
         </div>
     {/if}
@@ -466,11 +437,7 @@
         grid-column: sparkline / missing-values;
     }
 
-    .column-summary
-        .basic-info
-        .column-sparkline
-        .loading-sparkline
-        .loading-indicator {
+    .column-summary .basic-info .column-sparkline .loading-sparkline .loading-indicator {
         fill: var(--vscode-positronDataExplorer-columnNullPercentGraphBackgroundFill);
         stroke: var(--vscode-positronDataExplorer-columnNullPercentGraphBackgroundStroke);
         opacity: 0.5;
@@ -510,9 +477,7 @@
         grid-column: sparkline-tabular-info / right-gutter;
     }
 
-    .column-summary
-        .column-profile-info
-        :global(.column-profile-expanded.column-profile-info) {
+    .column-summary .column-profile-info :global(.column-profile-expanded.column-profile-info) {
         display: grid;
         grid-template-rows:
             [sparkline] min-content
@@ -567,9 +532,7 @@
         font-variant-numeric: tabular-nums;
     }
 
-    .column-summary
-        .column-profile-info
-        :global(.tabular-info .values .value-placeholder) {
+    .column-summary .column-profile-info :global(.tabular-info .values .value-placeholder) {
         height: 20px;
     }
 

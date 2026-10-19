@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { onDestroy } from "svelte";
+    import { onDestroy } from 'svelte';
 
     interface Props {
         title: string;
@@ -63,11 +63,11 @@
         };
         disposeDrag = () => {
             disposeDrag = undefined;
-            body.removeEventListener("pointermove", handlePointerMove, false);
-            body.removeEventListener("pointerup", handlePointerUp, false);
-            body.removeEventListener("pointercancel", handlePointerCancel);
-            target.removeEventListener("lostpointercapture", handlePointerCancel);
-            window.removeEventListener("blur", cancelDrag);
+            body.removeEventListener('pointermove', handlePointerMove, false);
+            body.removeEventListener('pointerup', handlePointerUp, false);
+            body.removeEventListener('pointercancel', handlePointerCancel);
+            target.removeEventListener('lostpointercapture', handlePointerCancel);
+            window.removeEventListener('blur', cancelDrag);
             if (target.hasPointerCapture(pointerId)) {
                 target.releasePointerCapture(pointerId);
             }
@@ -75,11 +75,11 @@
         };
 
         target.setPointerCapture(pointerId);
-        body.addEventListener("pointermove", handlePointerMove, false);
-        body.addEventListener("pointerup", handlePointerUp, false);
-        body.addEventListener("pointercancel", handlePointerCancel);
-        target.addEventListener("lostpointercapture", handlePointerCancel);
-        window.addEventListener("blur", cancelDrag);
+        body.addEventListener('pointermove', handlePointerMove, false);
+        body.addEventListener('pointerup', handlePointerUp, false);
+        body.addEventListener('pointercancel', handlePointerCancel);
+        target.addEventListener('lostpointercapture', handlePointerCancel);
+        window.addEventListener('blur', cancelDrag);
     }
 </script>
 

@@ -2,7 +2,7 @@
   verticalSplitter.svelte - Resizable vertical splitter (Positron-style behavior parity)
 -->
 <script lang="ts">
-    import { onDestroy } from "svelte";
+    import { onDestroy } from 'svelte';
     const EXPAND_COLLAPSE_BUTTON_TOP = 4;
     const EXPAND_COLLAPSE_BUTTON_SIZE = 25;
 
@@ -29,10 +29,10 @@
     }
 
     let {
-        collapseAriaLabel = "Collapse",
+        collapseAriaLabel = 'Collapse',
         alwaysShowExpandCollapseButton = false,
         collapsible = false,
-        expandAriaLabel = "Expand",
+        expandAriaLabel = 'Expand',
         invert = false,
         isCollapsed = false,
         showSash = true,
@@ -40,8 +40,8 @@
         onCollapsedChanged,
         onInvert,
         onResize,
-        resizeAriaLabel = "Resize summary panel",
-        rootClass = "vertical-splitter",
+        resizeAriaLabel = 'Resize summary panel',
+        rootClass = 'vertical-splitter',
     }: Props = $props();
 
     let sashRef = $state<HTMLDivElement | undefined>(undefined);
@@ -67,11 +67,10 @@
     });
 
     const isMacintosh =
-        typeof navigator !== "undefined" &&
-        navigator.platform.toLowerCase().includes("mac");
+        typeof navigator !== 'undefined' && navigator.platform.toLowerCase().includes('mac');
 
     function getRootNumberVar(name: string, fallback: number): number {
-        if (typeof window === "undefined") {
+        if (typeof window === 'undefined') {
             return fallback;
         }
         const style = getComputedStyle(document.documentElement);
@@ -81,11 +80,11 @@
     }
 
     function getConfiguredSashSize(): number {
-        return getRootNumberVar("--vscode-sash-size", 4);
+        return getRootNumberVar('--vscode-sash-size', 4);
     }
 
     function getConfiguredHoverDelay(): number {
-        return getRootNumberVar("--vscode-sash-hoverDelay", 300);
+        return getRootNumberVar('--vscode-sash-hoverDelay', 300);
     }
 
     function syncConfigurationValues() {
@@ -110,11 +109,7 @@
         }, hoverDelay);
     }
 
-    function isPointInsideElement(
-        x: number,
-        y: number,
-        element?: HTMLElement,
-    ): boolean {
+    function isPointInsideElement(x: number, y: number, element?: HTMLElement): boolean {
         if (!element) {
             return false;
         }
@@ -160,7 +155,7 @@
             return;
         }
         const resizeParams = onBeginResize();
-        if (event.key === "Home") {
+        if (event.key === 'Home') {
             event.preventDefault();
             event.stopPropagation();
             if (collapsible) {
@@ -170,25 +165,25 @@
             }
             return;
         }
-        if (event.key === "End") {
+        if (event.key === 'End') {
             event.preventDefault();
             event.stopPropagation();
             setCollapsed(false);
             onResize(resizeParams.maximumWidth);
             return;
         }
-        if (event.key === "Enter") {
+        if (event.key === 'Enter') {
             event.preventDefault();
             event.stopPropagation();
             onInvert?.(!invert);
             return;
         }
-        if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") {
+        if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') {
             return;
         }
         event.preventDefault();
         event.stopPropagation();
-        const direction = event.key === "ArrowRight" ? 1 : -1;
+        const direction = event.key === 'ArrowRight' ? 1 : -1;
         const delta = direction * (event.shiftKey ? 50 : 10) * (invert ? -1 : 1);
         const width = Math.max(
             resizeParams.minimumWidth,
@@ -221,8 +216,7 @@
     }
 
     function handleSashPointerDown(event: PointerEvent) {
-        const isNonLeftMouseClick =
-            event.pointerType === "mouse" && event.buttons !== 1;
+        const isNonLeftMouseClick = event.pointerType === 'mouse' && event.buttons !== 1;
         if (isNonLeftMouseClick) {
             return;
         }
@@ -241,7 +235,7 @@
         const startingWidth = collapsed ? sashWidth : resizeParams.startingWidth;
         const startX = event.clientX;
         const target = document.body;
-        const styleElement = document.createElement("style");
+        const styleElement = document.createElement('style');
         target.appendChild(styleElement);
 
         const pointerMoveHandler = (moveEvent: PointerEvent) => {
@@ -252,17 +246,17 @@
             let newWidth = !invert ? startingWidth + delta : startingWidth - delta;
 
             let newCollapsed = false;
-            let cursor = isMacintosh ? "col-resize" : "ew-resize";
+            let cursor = isMacintosh ? 'col-resize' : 'ew-resize';
 
             if (collapsible && newWidth < resizeParams.minimumWidth / 2) {
                 newWidth = resizeParams.minimumWidth;
                 newCollapsed = true;
             } else if (newWidth < resizeParams.minimumWidth) {
                 newWidth = resizeParams.minimumWidth;
-                cursor = !invert ? "e-resize" : "w-resize";
+                cursor = !invert ? 'e-resize' : 'w-resize';
             } else if (newWidth > resizeParams.maximumWidth) {
                 newWidth = resizeParams.maximumWidth;
-                cursor = !invert ? "w-resize" : "e-resize";
+                cursor = !invert ? 'w-resize' : 'e-resize';
             }
 
             styleElement.textContent = `* { cursor: ${cursor} !important; }`;
@@ -285,18 +279,18 @@
 
         const cancelResize = () => disposeResize?.();
         disposeResize = () => {
-            target.removeEventListener("pointermove", pointerMoveHandler);
-            target.removeEventListener("pointerup", pointerUpHandler);
-            target.removeEventListener("pointercancel", cancelResize);
-            window.removeEventListener("blur", cancelResize);
+            target.removeEventListener('pointermove', pointerMoveHandler);
+            target.removeEventListener('pointerup', pointerUpHandler);
+            target.removeEventListener('pointercancel', cancelResize);
+            window.removeEventListener('blur', cancelResize);
             styleElement.remove();
             resizing = false;
             disposeResize = undefined;
         };
-        target.addEventListener("pointermove", pointerMoveHandler);
-        target.addEventListener("pointerup", pointerUpHandler, { once: true });
-        target.addEventListener("pointercancel", cancelResize, { once: true });
-        window.addEventListener("blur", cancelResize, { once: true });
+        target.addEventListener('pointermove', pointerMoveHandler);
+        target.addEventListener('pointerup', pointerUpHandler, { once: true });
+        target.addEventListener('pointercancel', cancelResize, { once: true });
+        window.addEventListener('blur', cancelResize, { once: true });
     }
 
     $effect(() => {
@@ -308,15 +302,14 @@
     });
 
     const showExpandCollapseButton = $derived(
-        collapsible &&
-            (alwaysShowExpandCollapseButton || hovering || resizing || collapsed),
+        collapsible && (alwaysShowExpandCollapseButton || hovering || resizing || collapsed),
     );
 
     const buttonChevronClass = $derived.by(() => {
         if (!collapsed) {
-            return !invert ? "codicon-chevron-left" : "codicon-chevron-right";
+            return !invert ? 'codicon-chevron-left' : 'codicon-chevron-right';
         }
-        return !invert ? "codicon-chevron-right" : "codicon-chevron-left";
+        return !invert ? 'codicon-chevron-right' : 'codicon-chevron-left';
     });
 
     const sashStyle = $derived.by(() => {
@@ -326,11 +319,7 @@
     });
 </script>
 
-<div
-    class="splitter-root {rootClass}"
-    class:collapsible
-    style={`width: ${splitterWidth}px;`}
->
+<div class="splitter-root {rootClass}" class:collapsible style={`width: ${splitterWidth}px;`}>
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
     <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
@@ -348,9 +337,7 @@
         aria-label={resizeAriaLabel}
         aria-valuemin={sashResizeParams.minimumWidth}
         aria-valuemax={sashResizeParams.maximumWidth}
-        aria-valuenow={collapsed
-            ? sashResizeParams.minimumWidth
-            : sashResizeParams.startingWidth}
+        aria-valuenow={collapsed ? sashResizeParams.minimumWidth : sashResizeParams.startingWidth}
         tabindex="0"
     >
         {#if showSash && (hovering || resizing)}
@@ -406,17 +393,11 @@
 
     .sash-indicator.hovering {
         transition: background-color 0.1s ease-out;
-        background-color: var(
-            --vscode-sash-hoverBorder,
-            var(--vscode-focusBorder)
-        );
+        background-color: var(--vscode-sash-hoverBorder, var(--vscode-focusBorder));
     }
 
     .sash-indicator.resizing {
-        background-color: var(
-            --vscode-sash-hoverBorder,
-            var(--vscode-focusBorder)
-        );
+        background-color: var(--vscode-sash-hoverBorder, var(--vscode-focusBorder));
     }
 
     .expand-collapse-button {
@@ -446,15 +427,8 @@
         align-items: center;
         box-sizing: border-box;
         justify-content: center;
-        color: var(
-            --vscode-positronSplitterExpandCollapseButton-foreground,
-            #3b79b3
-        );
-        border: 1px solid
-            var(
-                --vscode-positronSplitterExpandCollapseButton-foreground,
-                #3b79b3
-            );
+        color: var(--vscode-positronSplitterExpandCollapseButton-foreground, #3b79b3);
+        border: 1px solid var(--vscode-positronSplitterExpandCollapseButton-foreground, #3b79b3);
         background-color: var(
             --vscode-positronSplitterExpandCollapseButton-background,
             var(--vscode-editor-background)
@@ -466,10 +440,7 @@
             --vscode-positronSplitterExpandCollapseButton-background,
             var(--vscode-editor-background)
         );
-        background-color: var(
-            --vscode-positronSplitterExpandCollapseButton-foreground,
-            #3b79b3
-        );
+        background-color: var(--vscode-positronSplitterExpandCollapseButton-foreground, #3b79b3);
     }
 
     .expand-collapse-button:focus {

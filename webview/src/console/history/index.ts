@@ -1,6 +1,6 @@
 /**
  * index.ts
- * 
+ *
  * Re-exports for history module.
  */
 

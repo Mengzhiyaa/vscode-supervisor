@@ -1,9 +1,9 @@
 /**
  * historyPrefixMatchStrategy.ts
- * 
+ *
  * A history match strategy that matches the input at the beginning of the string.
  * Mirrors: positron/.../common/historyPrefixMatchStrategy.ts
- * 
+ *
  * This mimics RStudio's Cmd+Up history search mode.
  */
 
@@ -32,8 +32,10 @@ export class HistoryPrefixMatchStrategy extends HistoryMatchStrategy {
         for (const entry of this._entries) {
             // Duplicate suppression: Ignore this entry if it's the same as the
             // previous one or the same as the previous match
-            if (entry.input === previousInput ||
-                entry.input === matches[matches.length - 1]?.input) {
+            if (
+                entry.input === previousInput ||
+                entry.input === matches[matches.length - 1]?.input
+            ) {
                 continue;
             }
 
@@ -42,7 +44,7 @@ export class HistoryPrefixMatchStrategy extends HistoryMatchStrategy {
                 const match: HistoryMatch = {
                     input: entry.input,
                     highlightStart: 0,
-                    highlightEnd: input.length
+                    highlightEnd: input.length,
                 };
                 matches.push(match);
             }

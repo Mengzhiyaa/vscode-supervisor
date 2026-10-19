@@ -48,7 +48,10 @@ export interface LspTunnelState extends LspTunnelKey {
 
 export interface LspTunnelOpenDocument extends LspTunnelKey {
     uri: string;
-    selection?: { start: { line: number; character: number }; end: { line: number; character: number } };
+    selection?: {
+        start: { line: number; character: number };
+        end: { line: number; character: number };
+    };
 }
 
 export interface LspTunnelConfigurationChanged {
@@ -63,7 +66,10 @@ export interface LspTunnelAvailabilityChanged {
 }
 
 export function consoleLspModelUri(sessionId: string, languageId: string): string {
-    const suffix = languageId.trim().toLowerCase().replace(/[^a-z0-9_-]+/g, '-');
+    const suffix = languageId
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9_-]+/g, '-');
     return `inmemory://console/session-${encodeURIComponent(sessionId)}.${suffix || 'plaintext'}`;
 }
 
@@ -75,19 +81,31 @@ export function isLspJsonRpcMessage(value: unknown): value is LspJsonRpcMessage 
         return false;
     }
     const message = value as Record<string, unknown>;
-    if (message.jsonrpc !== '2.0' ||
-        ('id' in message && message.id !== null &&
+    if (
+        message.jsonrpc !== '2.0' ||
+        ('id' in message &&
+            message.id !== null &&
             typeof message.id !== 'string' &&
-            !(typeof message.id === 'number' && Number.isSafeInteger(message.id)))) {
+            !(typeof message.id === 'number' && Number.isSafeInteger(message.id)))
+    ) {
         return false;
     }
     if ('method' in message) {
-        return typeof message.method === 'string' && !('result' in message) && !('error' in message);
+        return (
+            typeof message.method === 'string' && !('result' in message) && !('error' in message)
+        );
     }
-    if (!('id' in message) || ('result' in message) === ('error' in message)) {
+    if (!('id' in message) || 'result' in message === 'error' in message) {
         return false;
     }
     const error = message.error as Record<string, unknown> | undefined;
-    return !('error' in message) || Boolean(error && typeof error === 'object' &&
-        Number.isInteger(error.code) && typeof error.message === 'string');
+    return (
+        !('error' in message) ||
+        Boolean(
+            error &&
+            typeof error === 'object' &&
+            Number.isInteger(error.code) &&
+            typeof error.message === 'string',
+        )
+    );
 }

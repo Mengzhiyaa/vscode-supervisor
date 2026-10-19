@@ -5,9 +5,9 @@
     Mirrors: positron/.../components/activityOutputPlot.tsx
 -->
 <script lang="ts">
-    import { localize } from "$lib/localization";
-    import type { ActivityItemOutputPlot } from "./classes";
-    import ConsoleOutputLines from "./ConsoleOutputLines.svelte";
+    import { localize } from '$lib/localization';
+    import type { ActivityItemOutputPlot } from './classes';
+    import ConsoleOutputLines from './ConsoleOutputLines.svelte';
 
     interface Props {
         activityItemOutputPlot: ActivityItemOutputPlot;
@@ -26,12 +26,12 @@
 <button
     class="activity-output-plot"
     onclick={handleClick}
-    title={localize("console.plot.select", "Select this plot in the Plots pane")}
+    title={localize('console.plot.select', 'Select this plot in the Plots pane')}
     type="button"
 >
     <img
         src={activityItemOutputPlot.plotUri}
-        alt={localize("console.plot.output", "Plot output")}
+        alt={localize('console.plot.output', 'Plot output')}
         class="plot-image"
     />
     <span class="inspect-icon codicon codicon-positron-search"></span>

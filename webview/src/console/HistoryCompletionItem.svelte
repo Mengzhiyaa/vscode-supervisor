@@ -5,7 +5,7 @@
     Mirrors: positron/.../components/historyCompletionItem.tsx
 -->
 <script lang="ts">
-    import type { HistoryMatch } from "./history";
+    import type { HistoryMatch } from './history';
 
     interface Props {
         match: HistoryMatch;
@@ -38,7 +38,7 @@
     class="history-completion-item"
     class:selected
     onclick={onSelected}
-    onkeydown={(e) => e.key === "Enter" && onSelected()}
+    onkeydown={(e) => e.key === 'Enter' && onSelected()}
     role="option"
     aria-selected={selected}
     tabindex="-1"
@@ -79,10 +79,7 @@
 
     .text-highlight {
         font-weight: bold;
-        color: var(
-            --vscode-editorLightBulb-foreground,
-            var(--vscode-editor-foreground)
-        );
+        color: var(--vscode-editorLightBulb-foreground, var(--vscode-editor-foreground));
     }
 
     .history-completion-item.selected .text-highlight {

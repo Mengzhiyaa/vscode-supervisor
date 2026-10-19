@@ -19,13 +19,7 @@ export function calculateVirtualRange(
     const safeHeight = Math.max(0, viewportHeight);
     const safeOverscan = Math.max(0, Math.trunc(overscan));
     return {
-        start: Math.max(
-            0,
-            Math.floor(safeOffset / rowHeight) - safeOverscan,
-        ),
-        end: Math.min(
-            itemCount,
-            Math.ceil((safeOffset + safeHeight) / rowHeight) + safeOverscan,
-        ),
+        start: Math.max(0, Math.floor(safeOffset / rowHeight) - safeOverscan),
+        end: Math.min(itemCount, Math.ceil((safeOffset + safeHeight) / rowHeight) + safeOverscan),
     };
 }

@@ -9,11 +9,7 @@ import { TableDataDataGridInstance } from './tableDataDataGridInstance';
 import { TableDataCache } from './common/tableDataCache';
 import { DataExplorerSchemaClient } from './common/dataExplorerSchemaClient';
 import type { BackendState, SchemaColumn } from '../dataGrid/types';
-import {
-    PositronDataExplorerLayout,
-    type ColumnValue,
-    type WebviewMessage,
-} from './types';
+import { PositronDataExplorerLayout, type ColumnValue, type WebviewMessage } from './types';
 
 type AugmentedBackendState = BackendState & {
     __ark_file_options?: {
@@ -28,10 +24,7 @@ type AugmentedBackendState = BackendState & {
     };
 };
 
-function mergeSchemaColumns(
-    existing: SchemaColumn[],
-    incoming: SchemaColumn[],
-): SchemaColumn[] {
+function mergeSchemaColumns(existing: SchemaColumn[], incoming: SchemaColumn[]): SchemaColumn[] {
     const merged = new Map(existing.map((column) => [column.column_index, column]));
     for (const column of incoming) {
         merged.set(column.column_index, column);
@@ -53,9 +46,7 @@ export class PositronDataExplorerInstance {
     readonly tableDataDataGridInstance: TableDataDataGridInstance;
     readonly tableSchemaDataGridInstance: TableSummaryDataGridInstance;
 
-    constructor(
-        private readonly _postMessage: (message: WebviewMessage) => void,
-    ) {
+    constructor(private readonly _postMessage: (message: WebviewMessage) => void) {
         this.stores = createDataExplorerStores();
         this.schemaClient = new DataExplorerSchemaClient(this._postMessage);
         this.tableDataCache = new TableDataCache();
@@ -77,10 +68,7 @@ export class PositronDataExplorerInstance {
     }
 
     get layout(): PositronDataExplorerLayout {
-        return (
-            get(this.stores.state).layout ??
-            PositronDataExplorerLayout.SummaryOnLeft
-        );
+        return get(this.stores.state).layout ?? PositronDataExplorerLayout.SummaryOnLeft;
     }
 
     set layout(layout: PositronDataExplorerLayout) {
@@ -125,7 +113,7 @@ export class PositronDataExplorerInstance {
     }
 
     expandSummary(): void {
-        this.summaryExpansionRequests.update(revision => revision + 1);
+        this.summaryExpansionRequests.update((revision) => revision + 1);
         this._setSummaryCollapsed(false, true);
     }
 
@@ -139,14 +127,14 @@ export class PositronDataExplorerInstance {
 
     handleSummaryCollapsedChanged(collapsed: boolean): void {
         if (this._receivedSummaryState && !collapsed && this.isSummaryCollapsed) {
-            this.summaryExpansionRequests.update(revision => revision + 1);
+            this.summaryExpansionRequests.update((revision) => revision + 1);
         }
         this._receivedSummaryState = true;
         this._setSummaryCollapsed(collapsed, false);
     }
 
     handleSummaryWidthChanged(summaryWidth: number): void {
-        this.stores.state.update(state => ({ ...state, summaryWidth }));
+        this.stores.state.update((state) => ({ ...state, summaryWidth }));
     }
 
     handleSelectionChanged(selection: {
@@ -202,10 +190,7 @@ export class PositronDataExplorerInstance {
         );
     }
 
-    handleSchema(params: {
-        columns: SchemaColumn[];
-        requestId?: number;
-    }): void {
+    handleSchema(params: { columns: SchemaColumn[]; requestId?: number }): void {
         if (!this.schemaClient.handleSchema(params)) {
             return;
         }
@@ -274,30 +259,23 @@ export class PositronDataExplorerInstance {
         }
     }
 
-    handleDataInvalidated(params: {
-        generation: number;
-        schemaChanged: boolean;
-    }): void {
+    handleDataInvalidated(params: { generation: number; schemaChanged: boolean }): void {
         if (params.generation <= this._lastInvalidationGeneration) {
             return;
         }
         this._lastInvalidationGeneration = params.generation;
         if (params.schemaChanged) {
             this.schemaClient.invalidateSchema();
-            this.stores.state.update(state => ({ ...state, schema: [] }));
+            this.stores.state.update((state) => ({ ...state, schema: [] }));
         }
         this.tableDataDataGridInstance.handleDataInvalidated(
             params.generation,
             params.schemaChanged,
         );
         if (params.schemaChanged) {
-            this.tableSchemaDataGridInstance.handleSchemaUpdated(
-                params.generation,
-            );
+            this.tableSchemaDataGridInstance.handleSchemaUpdated(params.generation);
         } else {
-            this.tableSchemaDataGridInstance.handleDataUpdated(
-                params.generation,
-            );
+            this.tableSchemaDataGridInstance.handleDataUpdated(params.generation);
         }
     }
 
@@ -339,8 +317,7 @@ export class PositronDataExplorerInstance {
         const fileOptions = backendState?.__ark_file_options;
         const windowState = backendState?.__ark_window_state;
         const schemaInvalidated =
-            previousState?.table_shape.num_columns !==
-                backendState?.table_shape.num_columns ||
+            previousState?.table_shape.num_columns !== backendState?.table_shape.num_columns ||
             (fileOptions?.fileHasHeaderRow !== undefined &&
                 fileOptions.fileHasHeaderRow !== previousFileHasHeaderRow);
         const codeSyntaxes =
@@ -363,17 +340,12 @@ export class PositronDataExplorerInstance {
                       recoverable: false,
                   }
                 : null,
-            supportsFileOptions:
-                fileOptions?.supportsFileOptions ?? state.supportsFileOptions,
-            fileHasHeaderRow:
-                fileOptions?.fileHasHeaderRow ?? state.fileHasHeaderRow,
-            fileAvailableSheets:
-                fileOptions?.availableSheets ?? state.fileAvailableSheets,
-            fileSelectedSheet:
-                fileOptions?.selectedSheet ?? state.fileSelectedSheet,
+            supportsFileOptions: fileOptions?.supportsFileOptions ?? state.supportsFileOptions,
+            fileHasHeaderRow: fileOptions?.fileHasHeaderRow ?? state.fileHasHeaderRow,
+            fileAvailableSheets: fileOptions?.availableSheets ?? state.fileAvailableSheets,
+            fileSelectedSheet: fileOptions?.selectedSheet ?? state.fileSelectedSheet,
             supportsOpenAsSpreadsheet:
-                fileOptions?.supportsOpenAsSpreadsheet ??
-                state.supportsOpenAsSpreadsheet,
+                fileOptions?.supportsOpenAsSpreadsheet ?? state.supportsOpenAsSpreadsheet,
             codeSyntaxes,
             inNewWindow: windowState?.inNewWindow ?? false,
         }));
@@ -384,10 +356,7 @@ export class PositronDataExplorerInstance {
             });
         }
 
-        this.tableSchemaDataGridInstance.handleBackendStateChanged(
-            previousState,
-            backendState,
-        );
+        this.tableSchemaDataGridInstance.handleBackendStateChanged(previousState, backendState);
 
         if (
             previousState &&
@@ -406,10 +375,7 @@ export class PositronDataExplorerInstance {
         return get(this.stores.state).fileHasHeaderRow;
     }
 
-    private _setLayout(
-        layout: PositronDataExplorerLayout,
-        notify: boolean,
-    ): void {
+    private _setLayout(layout: PositronDataExplorerLayout, notify: boolean): void {
         if (this.layout === layout) {
             return;
         }

@@ -5,9 +5,9 @@
     Mirrors: positron/.../components/historyBrowserPopup.tsx
 -->
 <script lang="ts">
-    import type { HistoryMatch } from "./history";
-    import HistoryCompletionItem from "./HistoryCompletionItem.svelte";
-    import { localize } from "$lib/localization";
+    import type { HistoryMatch } from './history';
+    import HistoryCompletionItem from './HistoryCompletionItem.svelte';
+    import { localize } from '$lib/localization';
 
     interface Props {
         /** The list of history items to display */
@@ -24,23 +24,16 @@
         onDismissed: () => void;
     }
 
-    let {
-        items,
-        selectedIndex,
-        bottomPx,
-        leftPx,
-        onSelected,
-        onDismissed,
-    }: Props = $props();
+    let { items, selectedIndex, bottomPx, leftPx, onSelected, onDismissed }: Props = $props();
 
     let popupRef: HTMLDivElement;
 
     // Scroll selected item into view when selection changes
     $effect(() => {
         if (popupRef) {
-            const selectedChild = popupRef.querySelector(".selected");
+            const selectedChild = popupRef.querySelector('.selected');
             if (selectedChild) {
-                selectedChild.scrollIntoView({ block: "nearest" });
+                selectedChild.scrollIntoView({ block: 'nearest' });
             }
         }
     });
@@ -53,10 +46,7 @@
         }
     }
 
-    const noMatchMessage = localize(
-        "console.history.noMatches",
-        "No matching history items",
-    );
+    const noMatchMessage = localize('console.history.noMatches', 'No matching history items');
 </script>
 
 <svelte:window onclick={handleWindowClick} />
@@ -67,7 +57,7 @@
     style:bottom="{bottomPx}px"
     style:left="{leftPx}px"
     role="listbox"
-    aria-label={localize("console.history.browser", "History browser")}
+    aria-label={localize('console.history.browser', 'History browser')}
 >
     {#if items.length === 0}
         <div class="no-results">{noMatchMessage}</div>

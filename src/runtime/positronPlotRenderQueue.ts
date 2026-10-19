@@ -14,7 +14,7 @@ import { PlotRenderFormat, type IntrinsicSize, type PlotMetadata } from './comms
 export enum OperationType {
     Render = 'render',
     GetIntrinsicSize = 'get_intrinsic_size',
-    GetMetadata = 'get_metadata'
+    GetMetadata = 'get_metadata',
 }
 
 /**
@@ -188,7 +188,10 @@ export class DeferredPlotOperation {
 export class DeferredRender {
     private readonly deferred: DeferredPromise<IRenderedPlot>;
 
-    constructor(public readonly renderRequest: RenderRequest, public readonly options: { preview?: boolean; onStart?: () => void } = {}) {
+    constructor(
+        public readonly renderRequest: RenderRequest,
+        public readonly options: { preview?: boolean; onStart?: () => void } = {},
+    ) {
         this.deferred = new DeferredPromise<IRenderedPlot>();
     }
 
@@ -233,7 +236,11 @@ export class DeferredRender {
 export interface IPlotComm {
     readonly clientId: string;
     onDidClose: vscode.Event<void>;
-    render(size: IPlotSize | undefined, pixelRatio: number, format: PlotRenderFormat): Promise<{
+    render(
+        size: IPlotSize | undefined,
+        pixelRatio: number,
+        format: PlotRenderFormat,
+    ): Promise<{
         data: string;
         mime_type: string;
     }>;
@@ -249,8 +256,8 @@ export class QueuedOperation {
     constructor(
         public readonly operation: DeferredPlotOperation,
         public readonly comm: IPlotComm,
-        public readonly onStart?: () => void) {
-    }
+        public readonly onStart?: () => void,
+    ) {}
 }
 
 /**
@@ -260,8 +267,8 @@ export class QueuedOperation {
 export class QueuedRender {
     constructor(
         public readonly render: DeferredRender,
-        public readonly comm: IPlotComm) {
-    }
+        public readonly comm: IPlotComm,
+    ) {}
 }
 
 /**
@@ -276,7 +283,7 @@ export enum RuntimeState {
     Busy = 'busy',
     Exiting = 'exiting',
     Exited = 'exited',
-    Offline = 'offline'
+    Offline = 'offline',
 }
 
 /**
@@ -329,10 +336,11 @@ export class PositronPlotRenderQueue implements vscode.Disposable {
      */
     private readonly _outputChannel: vscode.LogOutputChannel;
 
-    constructor(
-        private readonly _session: IRuntimeSession
-    ) {
-        this._outputChannel = vscode.window.createOutputChannel(`Plot Render Queue [${_session.sessionId}]`, { log: true });
+    constructor(private readonly _session: IRuntimeSession) {
+        this._outputChannel = vscode.window.createOutputChannel(
+            `Plot Render Queue [${_session.sessionId}]`,
+            { log: true },
+        );
         this._disposables.push(this._outputChannel);
 
         this.trace(`Initializing`);
@@ -349,8 +357,9 @@ export class PositronPlotRenderQueue implements vscode.Disposable {
                         this._activeOperation.operation.cancel();
                         this.trace(
                             `Runtime exited, cancelling active operation: ` +
-                            `${JSON.stringify(this._activeOperation.operation.operationRequest)} ` +
-                            `(${this._activeOperation.comm.clientId})`);
+                                `${JSON.stringify(this._activeOperation.operation.operationRequest)} ` +
+                                `(${this._activeOperation.comm.clientId})`,
+                        );
                         this._activeOperation = undefined;
                         this._isProcessing = false;
                     }
@@ -358,12 +367,13 @@ export class PositronPlotRenderQueue implements vscode.Disposable {
                         queuedOperation.operation.cancel();
                         this.trace(
                             `Runtime exited, cancelling operation: ` +
-                            `${JSON.stringify(queuedOperation.operation.operationRequest)} (${queuedOperation.comm.clientId})`);
+                                `${JSON.stringify(queuedOperation.operation.operationRequest)} (${queuedOperation.comm.clientId})`,
+                        );
                     });
                     this._queue.length = 0;
                     this.cleanupUnusedCloseListeners();
                 }
-            })
+            }),
         );
     }
 
@@ -373,7 +383,11 @@ export class PositronPlotRenderQueue implements vscode.Disposable {
      * @param request The operation request to queue
      * @param comm The comm to use for the operation
      */
-    public queueOperation(request: PlotOperationRequest, comm: IPlotComm, onStart?: () => void): DeferredPlotOperation {
+    public queueOperation(
+        request: PlotOperationRequest,
+        comm: IPlotComm,
+        onStart?: () => void,
+    ): DeferredPlotOperation {
         const deferredOperation = new DeferredPlotOperation(request);
         if (this._disposed) {
             deferredOperation.cancel();
@@ -386,8 +400,9 @@ export class PositronPlotRenderQueue implements vscode.Disposable {
 
         this.trace(
             `Received request for ${request.type} operation: ` +
-            JSON.stringify(request) +
-            ` (${comm.clientId}); queue length: ${this._queue.length})`);
+                JSON.stringify(request) +
+                ` (${comm.clientId}); queue length: ${this._queue.length})`,
+        );
 
         // If the session is idle or ready, start processing the queue.
         const state = this._session.getRuntimeState();
@@ -405,7 +420,9 @@ export class PositronPlotRenderQueue implements vscode.Disposable {
      */
     public queue(deferredRender: DeferredRender, comm: IPlotComm): DeferredRender {
         // Cancel and remove any existing render operations for the same plot
-        if (!deferredRender.options.preview) { this.cancelExistingOperations(comm, OperationType.Render); }
+        if (!deferredRender.options.preview) {
+            this.cancelExistingOperations(comm, OperationType.Render);
+        }
 
         // Convert render request to operation request for unified handling
         const operationRequest: PlotOperationRequest = {
@@ -413,21 +430,27 @@ export class PositronPlotRenderQueue implements vscode.Disposable {
             preview: deferredRender.options.preview,
             size: deferredRender.renderRequest.size,
             pixel_ratio: deferredRender.renderRequest.pixel_ratio,
-            format: deferredRender.renderRequest.format
+            format: deferredRender.renderRequest.format,
         };
 
-        const deferredOperation = this.queueOperation(operationRequest, comm, deferredRender.options.onStart);
+        const deferredOperation = this.queueOperation(
+            operationRequest,
+            comm,
+            deferredRender.options.onStart,
+        );
 
         // Bridge the operation result to the render result
-        deferredOperation.promise.then((result) => {
-            if (result && typeof result === 'object' && 'uri' in result) {
-                deferredRender.complete(result as IRenderedPlot);
-            } else {
-                deferredRender.error(new Error('Invalid render result'));
-            }
-        }).catch((err) => {
-            deferredRender.error(err);
-        });
+        deferredOperation.promise
+            .then((result) => {
+                if (result && typeof result === 'object' && 'uri' in result) {
+                    deferredRender.complete(result as IRenderedPlot);
+                } else {
+                    deferredRender.error(new Error('Invalid render result'));
+                }
+            })
+            .catch((err) => {
+                deferredRender.error(err);
+            });
 
         return deferredRender;
     }
@@ -442,15 +465,17 @@ export class PositronPlotRenderQueue implements vscode.Disposable {
         this.cancelExistingOperations(comm, OperationType.GetIntrinsicSize);
 
         const operationRequest: PlotOperationRequest = {
-            type: OperationType.GetIntrinsicSize
+            type: OperationType.GetIntrinsicSize,
         };
 
         const deferredOperation = this.queueOperation(operationRequest, comm);
         return deferredOperation.promise.then((result) => {
             if (result === null) {
                 return undefined; // No intrinsic size available
-            } else if (result === undefined ||
-                (typeof result === 'object' && 'width' in result && 'height' in result)) {
+            } else if (
+                result === undefined ||
+                (typeof result === 'object' && 'width' in result && 'height' in result)
+            ) {
                 return result as IntrinsicSize | undefined;
             } else {
                 throw new Error('Invalid intrinsic size result');
@@ -468,7 +493,7 @@ export class PositronPlotRenderQueue implements vscode.Disposable {
         this.cancelExistingOperations(comm, OperationType.GetMetadata);
 
         const operationRequest: PlotOperationRequest = {
-            type: OperationType.GetMetadata
+            type: OperationType.GetMetadata,
         };
 
         const deferredOperation = this.queueOperation(operationRequest, comm);
@@ -495,17 +520,20 @@ export class PositronPlotRenderQueue implements vscode.Disposable {
             const queuedOperation = this._queue[i];
 
             // Check if this is the same plot and operation type
-            if (queuedOperation.comm.clientId === comm.clientId &&
+            if (
+                queuedOperation.comm.clientId === comm.clientId &&
                 !queuedOperation.operation.operationRequest.preview &&
-                queuedOperation.operation.operationRequest.type === operationType) {
-
+                queuedOperation.operation.operationRequest.type === operationType
+            ) {
                 // Cancel the operation
                 queuedOperation.operation.cancel();
 
                 // Remove it from the queue
                 this._queue.splice(i, 1);
 
-                this.trace(`Cancelled existing ${operationType} operation for plot ${comm.clientId}`);
+                this.trace(
+                    `Cancelled existing ${operationType} operation for plot ${comm.clientId}`,
+                );
             }
         }
     }
@@ -521,7 +549,9 @@ export class PositronPlotRenderQueue implements vscode.Disposable {
 
         // The active operation is outside _queue. An empty queue must not
         // release the session lock while that operation is still running.
-        if (this._isProcessing) { return; }
+        if (this._isProcessing) {
+            return;
+        }
 
         // Nothing to do if the queue is empty.
         if (this._queue.length === 0) {
@@ -545,9 +575,11 @@ export class PositronPlotRenderQueue implements vscode.Disposable {
         this._activeOperation = queuedOperation;
         queuedOperation.onStart?.();
 
-        this.trace(`Processing ${queuedOperation.operation.operationRequest.type} request: ` +
-            `${JSON.stringify(queuedOperation.operation.operationRequest)} ` +
-            `(${queuedOperation.comm.clientId}); queue length: ${this._queue.length})`);
+        this.trace(
+            `Processing ${queuedOperation.operation.operationRequest.type} request: ` +
+                `${JSON.stringify(queuedOperation.operation.operationRequest)} ` +
+                `(${queuedOperation.comm.clientId}); queue length: ${this._queue.length})`,
+        );
 
         // Record the time that the operation started
         const startedTime = Date.now();
@@ -555,53 +587,67 @@ export class PositronPlotRenderQueue implements vscode.Disposable {
 
         if (operationRequest.type === OperationType.Render) {
             // Handle render operation
-            queuedOperation.comm.render(
-                operationRequest.size,
-                operationRequest.pixel_ratio!,
-                operationRequest.format!
-            ).then((response) => {
-                // The render was successful; record the render time
-                const finishedTime = Date.now();
-                const renderTimeMs = finishedTime - startedTime;
+            queuedOperation.comm
+                .render(
+                    operationRequest.size,
+                    operationRequest.pixel_ratio!,
+                    operationRequest.format!,
+                )
+                .then((response) => {
+                    // The render was successful; record the render time
+                    const finishedTime = Date.now();
+                    const renderTimeMs = finishedTime - startedTime;
 
-                // The server returned a rendered plot image; save it and resolve the promise
-                const uri = `data:${response.mime_type};base64,${padBase64(response.data)}`;
-                const renderResult: IRenderedPlot = {
-                    size: operationRequest.size,
-                    pixel_ratio: operationRequest.pixel_ratio!,
-                    format: operationRequest.format,
-                    uri,
-                    renderTimeMs
-                };
-                queuedOperation.operation.complete(renderResult);
-            }).catch((err) => {
-                queuedOperation.operation.error(err);
-            }).finally(() => {
-                this.finishOperation(queuedOperation);
-            });
+                    // The server returned a rendered plot image; save it and resolve the promise
+                    const uri = `data:${response.mime_type};base64,${padBase64(response.data)}`;
+                    const renderResult: IRenderedPlot = {
+                        size: operationRequest.size,
+                        pixel_ratio: operationRequest.pixel_ratio!,
+                        format: operationRequest.format,
+                        uri,
+                        renderTimeMs,
+                    };
+                    queuedOperation.operation.complete(renderResult);
+                })
+                .catch((err) => {
+                    queuedOperation.operation.error(err);
+                })
+                .finally(() => {
+                    this.finishOperation(queuedOperation);
+                });
         } else if (operationRequest.type === OperationType.GetIntrinsicSize) {
             // Handle intrinsic size operation
-            queuedOperation.comm.getIntrinsicSize().then((intrinsicSize) => {
-                queuedOperation.operation.complete(intrinsicSize);
-            }).catch((err) => {
-                // Handle the error
-                queuedOperation.operation.error(err);
-            }).finally(() => {
-                this.finishOperation(queuedOperation);
-            });
+            queuedOperation.comm
+                .getIntrinsicSize()
+                .then((intrinsicSize) => {
+                    queuedOperation.operation.complete(intrinsicSize);
+                })
+                .catch((err) => {
+                    // Handle the error
+                    queuedOperation.operation.error(err);
+                })
+                .finally(() => {
+                    this.finishOperation(queuedOperation);
+                });
         } else if (operationRequest.type === OperationType.GetMetadata) {
             // Handle metadata operation
-            queuedOperation.comm.getMetadata().then((metadata) => {
-                queuedOperation.operation.complete(metadata);
-            }).catch((err) => {
-                // Handle the error
-                queuedOperation.operation.error(err);
-            }).finally(() => {
-                this.finishOperation(queuedOperation);
-            });
+            queuedOperation.comm
+                .getMetadata()
+                .then((metadata) => {
+                    queuedOperation.operation.complete(metadata);
+                })
+                .catch((err) => {
+                    // Handle the error
+                    queuedOperation.operation.error(err);
+                })
+                .finally(() => {
+                    this.finishOperation(queuedOperation);
+                });
         } else {
             // Unknown operation type
-            queuedOperation.operation.error(new Error(`Unknown operation type: ${operationRequest.type}`));
+            queuedOperation.operation.error(
+                new Error(`Unknown operation type: ${operationRequest.type}`),
+            );
             this.finishOperation(queuedOperation);
         }
     }
@@ -688,7 +734,7 @@ export class PositronPlotRenderQueue implements vscode.Disposable {
      */
     private cleanupUnusedCloseListeners(): void {
         // Get all comm client IDs that currently have operations in the queue
-        const activeCommIds = new Set(this._queue.map(op => op.comm.clientId));
+        const activeCommIds = new Set(this._queue.map((op) => op.comm.clientId));
         if (this._activeOperation) {
             activeCommIds.add(this._activeOperation.comm.clientId);
         }
@@ -738,6 +784,6 @@ export class PositronPlotRenderQueue implements vscode.Disposable {
         this._commCloseListeners.clear();
 
         // Dispose other resources
-        this._disposables.forEach(d => d.dispose());
+        this._disposables.forEach((d) => d.dispose());
     }
 }

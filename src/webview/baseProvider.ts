@@ -14,8 +14,8 @@ export abstract class BaseWebviewProvider implements vscode.WebviewViewProvider 
     constructor(
         protected readonly _extensionUri: vscode.Uri,
         protected readonly _outputChannel: vscode.LogOutputChannel,
-        private readonly _getAdditionalLocalResourceRoots: () => readonly vscode.Uri[] = () => []
-    ) { }
+        private readonly _getAdditionalLocalResourceRoots: () => readonly vscode.Uri[] = () => [],
+    ) {}
 
     /**
      * Called when the webview view is resolved
@@ -23,7 +23,7 @@ export abstract class BaseWebviewProvider implements vscode.WebviewViewProvider 
     resolveWebviewView(
         webviewView: vscode.WebviewView,
         _context: vscode.WebviewViewResolveContext,
-        _token: vscode.CancellationToken
+        _token: vscode.CancellationToken,
     ): void | Thenable<void> {
         this._view = webviewView;
 
@@ -82,14 +82,14 @@ export abstract class BaseWebviewProvider implements vscode.WebviewViewProvider 
     protected abstract get _providerName(): string;
 
     /** Optional lifecycle hook for subclasses that hold surface attachments. */
-    protected _onDidDisposeWebviewView(): void { }
+    protected _onDidDisposeWebviewView(): void {}
 
     /**
      * Logs a message to the output channel.
      * Follows Positron's KallichoreSession.log() pattern:
      * - Truncates messages over 2048 characters
      * - Dispatches to appropriate log level method
-     * 
+     *
      * @param msg The message to log
      * @param logLevel The log level (default: Info)
      */
@@ -166,9 +166,7 @@ export abstract class BaseWebviewProvider implements vscode.WebviewViewProvider 
      * Gets the URI for a webview resource
      */
     protected _getWebviewUri(webview: vscode.Webview, ...pathSegments: string[]): vscode.Uri {
-        return webview.asWebviewUri(
-            vscode.Uri.joinPath(this._extensionUri, ...pathSegments)
-        );
+        return webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, ...pathSegments));
     }
 
     protected _serializeInlineScriptData(value: unknown): string {

@@ -10,7 +10,12 @@ import { JupyterShutdownReply } from './JupyterShutdownReply';
 import { JupyterShutdownRequest } from './JupyterShutdownRequest';
 
 export class ShutdownRequest extends JupyterRequest<JupyterShutdownRequest, JupyterShutdownReply> {
-	constructor(restart: boolean) {
-		super(JupyterMessageType.ShutdownRequest, { restart }, JupyterMessageType.ShutdownReply, JupyterChannel.Control);
-	}
+    constructor(restart: boolean) {
+        super(
+            JupyterMessageType.ShutdownRequest,
+            { restart },
+            JupyterMessageType.ShutdownReply,
+            JupyterChannel.Control,
+        );
+    }
 }

@@ -24,8 +24,8 @@ class ProxyServer implements vscode.Disposable {
         readonly targetOrigin: string,
         readonly externalUri: vscode.Uri,
         readonly proxyPath: string,
-        private readonly server: http.Server
-    ) { }
+        private readonly server: http.Server,
+    ) {}
 
     dispose(): void {
         this.server.close();
@@ -37,8 +37,8 @@ class HelpHtmlConfig {
         readonly styleDefaults?: string,
         readonly styleOverrides?: string,
         readonly script?: string,
-        public styles?: Record<string, string | number>
-    ) { }
+        public styles?: Record<string, string | number>,
+    ) {}
 
     resourcesLoaded(): boolean {
         return Boolean(this.styleDefaults || this.styleOverrides || this.script);
@@ -59,7 +59,7 @@ export class HelpProxyService implements vscode.Disposable {
 
     constructor(
         private readonly _extensionUri: vscode.Uri,
-        private readonly _outputChannel: vscode.LogOutputChannel
+        private readonly _outputChannel: vscode.LogOutputChannel,
     ) {
         this._helpHtmlConfig = this._loadHelpResources();
     }
@@ -86,7 +86,7 @@ export class HelpProxyService implements vscode.Disposable {
             return {
                 serverOrigin: existing.serverOrigin,
                 externalUri: existing.externalUri,
-                proxyPath: existing.proxyPath
+                proxyPath: existing.proxyPath,
             };
         }
 
@@ -108,10 +108,15 @@ export class HelpProxyService implements vscode.Disposable {
         }
     }
 
-    private async _startProxyServer(targetOrigin: string, isCurrent: () => boolean): Promise<HelpProxyInfo> {
+    private async _startProxyServer(
+        targetOrigin: string,
+        isCurrent: () => boolean,
+    ): Promise<HelpProxyInfo> {
         const server = http.createServer((req, res) => {
-            void this._handleProxyRequest(targetOrigin, req, res).catch(error => {
-                this._outputChannel.debug(`[HelpProxyService] Failed to prepare proxy request: ${getErrorMessage(error)}`);
+            void this._handleProxyRequest(targetOrigin, req, res).catch((error) => {
+                this._outputChannel.debug(
+                    `[HelpProxyService] Failed to prepare proxy request: ${getErrorMessage(error)}`,
+                );
                 if (!res.headersSent) {
                     res.writeHead(502);
                     res.end('Proxy error');
@@ -146,11 +151,13 @@ export class HelpProxyService implements vscode.Disposable {
         }
         const proxyPath = externalUri.path && externalUri.path !== '' ? externalUri.path : '/';
 
-        this._outputChannel.debug(`[HelpProxyService] Started help proxy ${serverOrigin} for ${targetOrigin}`);
+        this._outputChannel.debug(
+            `[HelpProxyService] Started help proxy ${serverOrigin} for ${targetOrigin}`,
+        );
 
         this._proxyServers.set(
             targetOrigin,
-            new ProxyServer(serverOrigin, targetOrigin, externalUri, proxyPath, server)
+            new ProxyServer(serverOrigin, targetOrigin, externalUri, proxyPath, server),
         );
 
         return { serverOrigin, externalUri, proxyPath };
@@ -181,14 +188,21 @@ export class HelpProxyService implements vscode.Disposable {
 
     private _loadHelpResources(): HelpHtmlConfig {
         try {
-            const scriptsPath = vscode.Uri.joinPath(this._extensionUri, 'resources', 'help', 'scripts_help.html');
+            const scriptsPath = vscode.Uri.joinPath(
+                this._extensionUri,
+                'resources',
+                'help',
+                'scripts_help.html',
+            );
             const scripts = fs.readFileSync(scriptsPath.fsPath, 'utf8');
             const styleDefaults = getStyleElement(scripts, 'help-style-defaults');
             const styleOverrides = getStyleElement(scripts, 'help-style-overrides');
             const script = getScriptElement(scripts, 'help-script');
             return new HelpHtmlConfig(styleDefaults, styleOverrides, script, {});
         } catch (error) {
-            this._outputChannel.error(`[HelpProxyService] Failed to load help resources: ${getErrorMessage(error)}`);
+            this._outputChannel.error(
+                `[HelpProxyService] Failed to load help resources: ${getErrorMessage(error)}`,
+            );
             return new HelpHtmlConfig();
         }
     }
@@ -196,7 +210,7 @@ export class HelpProxyService implements vscode.Disposable {
     private async _handleProxyRequest(
         targetOrigin: string,
         req: http.IncomingMessage,
-        res: http.ServerResponse
+        res: http.ServerResponse,
     ): Promise<void> {
         const proxy = this._proxyServers.get(targetOrigin);
         if (!proxy) {
@@ -238,33 +252,47 @@ export class HelpProxyService implements vscode.Disposable {
                 path: `${targetUrl.pathname}${targetUrl.search}`,
                 headers: {
                     ...headers,
-                    host: targetUrl.host
-                }
+                    host: targetUrl.host,
+                },
             },
             (proxyRes) => {
                 const chunks: Buffer[] = [];
-                proxyRes.on('data', chunk => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
+                proxyRes.on('data', (chunk) =>
+                    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)),
+                );
                 proxyRes.on('end', () => {
                     const buffer = Buffer.concat(chunks);
                     const contentType = String(proxyRes.headers['content-type'] || '');
 
                     let outputBuffer = buffer;
-                    if (contentType.includes('text/html') && this._helpHtmlConfig.resourcesLoaded()) {
-                        outputBuffer = this._rewriteHelpContent(buffer, contentType, proxy.proxyPath);
+                    if (
+                        contentType.includes('text/html') &&
+                        this._helpHtmlConfig.resourcesLoaded()
+                    ) {
+                        outputBuffer = this._rewriteHelpContent(
+                            buffer,
+                            contentType,
+                            proxy.proxyPath,
+                        );
                     }
 
-                    const responseHeaders = { ...proxyRes.headers } as Record<string, string | number | string[] | undefined>;
+                    const responseHeaders = { ...proxyRes.headers } as Record<
+                        string,
+                        string | number | string[] | undefined
+                    >;
                     delete responseHeaders['content-encoding'];
                     responseHeaders['content-length'] = Buffer.byteLength(outputBuffer);
 
                     res.writeHead(proxyRes.statusCode || 200, responseHeaders);
                     res.end(outputBuffer);
                 });
-            }
+            },
         );
 
         proxyReq.on('error', (error) => {
-            this._outputChannel.debug(`[HelpProxyService] Proxy request failed: ${getErrorMessage(error)}`);
+            this._outputChannel.debug(
+                `[HelpProxyService] Proxy request failed: ${getErrorMessage(error)}`,
+            );
             res.writeHead(502);
             res.end('Proxy error');
         });
@@ -276,7 +304,11 @@ export class HelpProxyService implements vscode.Disposable {
         }
     }
 
-    private _rewriteHelpContent(buffer: Buffer<ArrayBuffer>, contentType: string, proxyPath: string): Buffer<ArrayBuffer> {
+    private _rewriteHelpContent(
+        buffer: Buffer<ArrayBuffer>,
+        contentType: string,
+        proxyPath: string,
+    ): Buffer<ArrayBuffer> {
         if (!contentType.includes('text/html')) {
             return buffer;
         }
@@ -301,12 +333,12 @@ export class HelpProxyService implements vscode.Disposable {
             if (response.includes('<head>')) {
                 response = response.replace(
                     '<head>',
-                    `<head>\n${helpVars}\n${styleDefaults || ''}`
+                    `<head>\n${helpVars}\n${styleDefaults || ''}`,
                 );
 
                 response = response.replace(
                     '</head>',
-                    `${styleOverrides || ''}\n${script || ''}\n</head>`
+                    `${styleOverrides || ''}\n${script || ''}\n</head>`,
                 );
             } else {
                 response = `${helpVars}${styleDefaults || ''}${styleOverrides || ''}${script || ''}${response}`;
@@ -323,14 +355,11 @@ function rewriteUrlsWithProxyPath(content: string, proxyPath: string): string {
         return content;
     }
 
-    return content.replace(
-        /(src|href)="\/(?!\/)([^"]+)"/g,
-        (match, p1, p2) => {
-            const matchedPath = `/${p2}`;
-            if (matchedPath.startsWith(proxyPath)) {
-                return match;
-            }
-            return `${p1}="${proxyPath}/${p2}"`;
+    return content.replace(/(src|href)="\/(?!\/)([^"]+)"/g, (match, p1, p2) => {
+        const matchedPath = `/${p2}`;
+        if (matchedPath.startsWith(proxyPath)) {
+            return match;
         }
-    );
+        return `${p1}="${proxyPath}/${p2}"`;
+    });
 }

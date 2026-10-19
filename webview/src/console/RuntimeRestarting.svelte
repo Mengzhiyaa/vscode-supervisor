@@ -5,7 +5,7 @@
     Mirrors: positron/.../components/runtimeStarting.tsx + runtimeStarting.css
 -->
 <script lang="ts">
-    import type { RuntimeItemRestarting } from "./classes";
+    import type { RuntimeItemRestarting } from './classes';
 
     interface Props {
         runtimeItemRestarting: RuntimeItemRestarting;

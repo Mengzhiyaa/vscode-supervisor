@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { onMount } from "svelte";
+    import { onMount } from 'svelte';
     /**
      * ConfirmDialog.svelte
      * Confirmation dialog component for destructive actions like "Delete All Variables".
@@ -18,8 +18,8 @@
     let {
         title,
         message,
-        confirmLabel = "Delete",
-        cancelLabel = "Cancel",
+        confirmLabel = 'Delete',
+        cancelLabel = 'Cancel',
         onConfirm,
         onCancel,
     }: Props = $props();
@@ -28,12 +28,12 @@
     let cancelButton = $state<HTMLButtonElement | null>(null);
 
     function handleKeyDown(e: KeyboardEvent) {
-        if (e.key === "Escape") {
+        if (e.key === 'Escape') {
             e.preventDefault();
             onCancel();
-        } else if (e.key === "Tab" && overlay) {
+        } else if (e.key === 'Tab' && overlay) {
             e.preventDefault();
-            const buttons = Array.from(overlay.querySelectorAll<HTMLButtonElement>("button"));
+            const buttons = Array.from(overlay.querySelectorAll<HTMLButtonElement>('button'));
             const currentIndex = buttons.indexOf(document.activeElement as HTMLButtonElement);
             const nextIndex = e.shiftKey
                 ? (currentIndex - 1 + buttons.length) % buttons.length
@@ -43,9 +43,8 @@
     }
 
     onMount(() => {
-        const previousFocus = document.activeElement instanceof HTMLElement
-            ? document.activeElement
-            : null;
+        const previousFocus =
+            document.activeElement instanceof HTMLElement ? document.activeElement : null;
         cancelButton?.focus();
         return () => queueMicrotask(() => previousFocus?.focus());
     });

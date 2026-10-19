@@ -9,19 +9,19 @@
 </script>
 
 <script lang="ts">
-    import { onMount } from "svelte";
+    import { onMount } from 'svelte';
 
     const LAYOUT_OFFSET = 2;
     const LAYOUT_MARGIN = 10;
     const DEFAULT_FOCUSABLE_ELEMENT_SELECTORS =
         'a[href]:not([disabled]), button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
-    type PopupAlignment = "auto" | "left" | "right";
-    type PopupPosition = "auto" | "top" | "bottom";
-    type KeyboardNavigationStyle = "dialog" | "menu";
-    type PopupDimension = number | "auto";
-    type PopupMaxDimension = number | "none";
-    type PopupShadow = "top" | "bottom";
+    type PopupAlignment = 'auto' | 'left' | 'right';
+    type PopupPosition = 'auto' | 'top' | 'bottom';
+    type KeyboardNavigationStyle = 'dialog' | 'menu';
+    type PopupDimension = number | 'auto';
+    type PopupMaxDimension = number | 'none';
+    type PopupShadow = 'top' | 'bottom';
 
     interface Props {
         anchorElement: HTMLElement;
@@ -35,14 +35,14 @@
         keyboardNavigationStyle?: KeyboardNavigationStyle;
         focusableElementSelectors?: string;
         onClose?: () => void;
-        children?: import("svelte").Snippet;
+        children?: import('svelte').Snippet;
     }
 
     interface PopupLayout {
-        top: number | "auto";
-        right: number | "auto";
-        bottom: number | "auto";
-        left: number | "auto";
+        top: number | 'auto';
+        right: number | 'auto';
+        bottom: number | 'auto';
+        left: number | 'auto';
         width: PopupDimension;
         height: PopupDimension;
         minHeight: PopupDimension;
@@ -53,13 +53,13 @@
     let {
         anchorElement,
         width = 275,
-        height = "auto",
+        height = 'auto',
         minHeight,
         maxHeight = 400,
         fixedHeight = false,
-        popupAlignment = "auto",
-        popupPosition = "auto",
-        keyboardNavigationStyle = "dialog",
+        popupAlignment = 'auto',
+        popupPosition = 'auto',
+        keyboardNavigationStyle = 'dialog',
         focusableElementSelectors,
         onClose,
         children,
@@ -72,25 +72,22 @@
     function createPopupLayout(): PopupLayout {
         return {
             top: -10000,
-            right: "auto",
-            bottom: "auto",
+            right: 'auto',
+            bottom: 'auto',
             left: -10000,
             width,
             height,
-            minHeight: minHeight ?? "auto",
+            minHeight: minHeight ?? 'auto',
             maxHeight,
-            shadow: "bottom",
+            shadow: 'bottom',
         };
     }
 
     let popupLayout = $state<PopupLayout>(createPopupLayout());
 
     const popupStyle = $derived.by(() => {
-        const formatDimension = (
-            value: number | "auto" | "none",
-            fallback = "auto",
-        ) => {
-            if (typeof value === "number") {
+        const formatDimension = (value: number | 'auto' | 'none', fallback = 'auto') => {
+            if (typeof value === 'number') {
                 return `${value}px`;
             }
             return value ?? fallback;
@@ -104,8 +101,8 @@
             `width: ${formatDimension(popupLayout.width)}`,
             `height: ${formatDimension(popupLayout.height)}`,
             `min-height: ${formatDimension(popupLayout.minHeight)}`,
-            `max-height: ${formatDimension(popupLayout.maxHeight, "none")}`,
-        ].join("; ");
+            `max-height: ${formatDimension(popupLayout.maxHeight, 'none')}`,
+        ].join('; ');
     });
 
     function closePopup() {
@@ -119,39 +116,27 @@
 
         return Array.from(
             popupContainerRef.querySelectorAll<HTMLElement>(
-                focusableElementSelectors ??
-                    DEFAULT_FOCUSABLE_ELEMENT_SELECTORS,
+                focusableElementSelectors ?? DEFAULT_FOCUSABLE_ELEMENT_SELECTORS,
             ),
         );
     }
 
-    function navigateFocusableElements(
-        direction: "next" | "previous",
-        wrap: boolean,
-    ) {
+    function navigateFocusableElements(direction: 'next' | 'previous', wrap: boolean) {
         const focusableElements = getFocusableElements();
         if (focusableElements.length === 0) {
             return;
         }
 
         const firstFocusableElement = focusableElements[0];
-        const lastFocusableElement =
-            focusableElements[focusableElements.length - 1];
+        const lastFocusableElement = focusableElements[focusableElements.length - 1];
         const activeElement =
-            document.activeElement instanceof HTMLElement
-                ? document.activeElement
-                : null;
+            document.activeElement instanceof HTMLElement ? document.activeElement : null;
         const focusableElementIndex = activeElement
-            ? focusableElements.findIndex(
-                  (focusableElement) => focusableElement === activeElement,
-              )
+            ? focusableElements.findIndex((focusableElement) => focusableElement === activeElement)
             : -1;
 
-        if (direction === "next") {
-            if (
-                focusableElementIndex === -1 ||
-                (wrap && activeElement === lastFocusableElement)
-            ) {
+        if (direction === 'next') {
+            if (focusableElementIndex === -1 || (wrap && activeElement === lastFocusableElement)) {
                 firstFocusableElement.focus();
                 return;
             }
@@ -162,10 +147,7 @@
             return;
         }
 
-        if (
-            focusableElementIndex === -1 ||
-            (wrap && activeElement === firstFocusableElement)
-        ) {
+        if (focusableElementIndex === -1 || (wrap && activeElement === firstFocusableElement)) {
             lastFocusableElement.focus();
             return;
         }
@@ -177,7 +159,7 @@
 
     function constrainedMinHeight(availableHeight: number) {
         if (minHeight === undefined) {
-            return "auto" as const;
+            return 'auto' as const;
         }
 
         return Math.min(Math.max(availableHeight, 0), minHeight);
@@ -185,7 +167,7 @@
 
     function constrainedMaxHeight(availableHeight: number) {
         const safeAvailableHeight = Math.max(availableHeight, 0);
-        return typeof maxHeight === "number"
+        return typeof maxHeight === 'number'
             ? Math.min(safeAvailableHeight, maxHeight)
             : safeAvailableHeight;
     }
@@ -205,16 +187,16 @@
             }
 
             const nonTextInputTypes = new Set([
-                "button",
-                "checkbox",
-                "color",
-                "file",
-                "hidden",
-                "image",
-                "radio",
-                "range",
-                "reset",
-                "submit",
+                'button',
+                'checkbox',
+                'color',
+                'file',
+                'hidden',
+                'image',
+                'radio',
+                'range',
+                'reset',
+                'submit',
             ]);
 
             return !nonTextInputTypes.has(element.type);
@@ -244,23 +226,16 @@
         const nextPopupLayout = createPopupLayout();
 
         const numericWidth =
-            typeof width === "number"
+            typeof width === 'number'
                 ? width
-                : Math.max(
-                      popupRef.offsetWidth,
-                      popupChildrenRef.offsetWidth,
-                      anchorWidth,
-                  );
+                : Math.max(popupRef.offsetWidth, popupChildrenRef.offsetWidth, anchorWidth);
 
         const positionLeft = () => {
             nextPopupLayout.left = Math.max(
                 LAYOUT_MARGIN,
-                Math.min(
-                    anchorX,
-                    documentWidth - numericWidth - LAYOUT_MARGIN,
-                ),
+                Math.min(anchorX, documentWidth - numericWidth - LAYOUT_MARGIN),
             );
-            nextPopupLayout.right = "auto";
+            nextPopupLayout.right = 'auto';
         };
 
         const positionRight = () => {
@@ -271,12 +246,12 @@
                     documentWidth - numericWidth - LAYOUT_MARGIN,
                 ),
             );
-            nextPopupLayout.right = "auto";
+            nextPopupLayout.right = 'auto';
         };
 
-        if (popupAlignment === "left") {
+        if (popupAlignment === 'left') {
             positionLeft();
-        } else if (popupAlignment === "right") {
+        } else if (popupAlignment === 'right') {
             positionRight();
         } else if (leftAreaWidth > rightAreaWidth) {
             positionRight();
@@ -286,55 +261,44 @@
 
         const topAreaHeight = anchorY - LAYOUT_OFFSET - LAYOUT_MARGIN;
         const bottomAreaHeight =
-            documentHeight -
-            (anchorY + anchorHeight + LAYOUT_OFFSET + LAYOUT_MARGIN);
+            documentHeight - (anchorY + anchorHeight + LAYOUT_OFFSET + LAYOUT_MARGIN);
 
-        if (height === "auto") {
+        if (height === 'auto') {
             const layoutHeight = popupChildrenRef.offsetHeight + 2;
 
             const positionBottom = () => {
                 nextPopupLayout.top = anchorY + anchorHeight + LAYOUT_OFFSET;
-                nextPopupLayout.bottom = "auto";
+                nextPopupLayout.bottom = 'auto';
                 if (fixedHeight) {
                     nextPopupLayout.top = Math.min(
                         nextPopupLayout.top,
-                        documentHeight -
-                            popupChildren.offsetHeight -
-                            2 -
-                            LAYOUT_MARGIN,
+                        documentHeight - popupChildren.offsetHeight - 2 - LAYOUT_MARGIN,
                     );
                 } else {
-                    nextPopupLayout.minHeight = constrainedMinHeight(
-                        bottomAreaHeight,
-                    );
+                    nextPopupLayout.minHeight = constrainedMinHeight(bottomAreaHeight);
                     nextPopupLayout.maxHeight = constrainedMaxHeight(
-                        documentHeight -
-                            (nextPopupLayout.top as number) -
-                            LAYOUT_MARGIN,
+                        documentHeight - (nextPopupLayout.top as number) - LAYOUT_MARGIN,
                     );
                 }
-                nextPopupLayout.shadow = "bottom";
+                nextPopupLayout.shadow = 'bottom';
             };
 
             const positionTop = () => {
                 const drawHeight = Math.min(
                     topAreaHeight,
-                    typeof maxHeight === "number" ? maxHeight : layoutHeight,
+                    typeof maxHeight === 'number' ? maxHeight : layoutHeight,
                     layoutHeight,
                 );
-                nextPopupLayout.top = Math.max(
-                    anchorY - drawHeight - LAYOUT_OFFSET,
-                    LAYOUT_MARGIN,
-                );
-                nextPopupLayout.bottom = "auto";
+                nextPopupLayout.top = Math.max(anchorY - drawHeight - LAYOUT_OFFSET, LAYOUT_MARGIN);
+                nextPopupLayout.bottom = 'auto';
                 nextPopupLayout.minHeight = constrainedMinHeight(drawHeight);
                 nextPopupLayout.maxHeight = constrainedMaxHeight(drawHeight);
-                nextPopupLayout.shadow = "top";
+                nextPopupLayout.shadow = 'top';
             };
 
-            if (popupPosition === "bottom") {
+            if (popupPosition === 'bottom') {
                 positionBottom();
-            } else if (popupPosition === "top") {
+            } else if (popupPosition === 'top') {
                 positionTop();
             } else if (layoutHeight <= bottomAreaHeight) {
                 positionBottom();
@@ -348,31 +312,24 @@
         } else {
             const positionBottom = () => {
                 nextPopupLayout.top = anchorY + anchorHeight + LAYOUT_OFFSET;
-                nextPopupLayout.bottom = "auto";
-                nextPopupLayout.minHeight = constrainedMinHeight(
-                    bottomAreaHeight,
-                );
-                nextPopupLayout.maxHeight = constrainedMaxHeight(
-                    bottomAreaHeight,
-                );
-                nextPopupLayout.shadow = "bottom";
+                nextPopupLayout.bottom = 'auto';
+                nextPopupLayout.minHeight = constrainedMinHeight(bottomAreaHeight);
+                nextPopupLayout.maxHeight = constrainedMaxHeight(bottomAreaHeight);
+                nextPopupLayout.shadow = 'bottom';
             };
 
             const positionTop = () => {
                 const drawHeight = Math.min(topAreaHeight, height);
-                nextPopupLayout.top = Math.max(
-                    anchorY - drawHeight - LAYOUT_OFFSET,
-                    LAYOUT_MARGIN,
-                );
-                nextPopupLayout.bottom = "auto";
+                nextPopupLayout.top = Math.max(anchorY - drawHeight - LAYOUT_OFFSET, LAYOUT_MARGIN);
+                nextPopupLayout.bottom = 'auto';
                 nextPopupLayout.minHeight = constrainedMinHeight(drawHeight);
                 nextPopupLayout.maxHeight = constrainedMaxHeight(drawHeight);
-                nextPopupLayout.shadow = "top";
+                nextPopupLayout.shadow = 'top';
             };
 
-            if (popupPosition === "bottom") {
+            if (popupPosition === 'bottom') {
                 positionBottom();
-            } else if (popupPosition === "top") {
+            } else if (popupPosition === 'top') {
                 positionTop();
             } else if (bottomAreaHeight > topAreaHeight) {
                 positionBottom();
@@ -409,31 +366,26 @@
         }
 
         const activeElement =
-            document.activeElement instanceof HTMLElement
-                ? document.activeElement
-                : null;
+            document.activeElement instanceof HTMLElement ? document.activeElement : null;
 
         switch (event.key) {
-            case "Escape":
+            case 'Escape':
                 event.preventDefault();
                 event.stopPropagation();
                 closePopup();
                 break;
 
-            case "Tab":
-                if (keyboardNavigationStyle !== "dialog") {
+            case 'Tab':
+                if (keyboardNavigationStyle !== 'dialog') {
                     break;
                 }
                 event.preventDefault();
                 event.stopPropagation();
-                navigateFocusableElements(
-                    event.shiftKey ? "previous" : "next",
-                    true,
-                );
+                navigateFocusableElements(event.shiftKey ? 'previous' : 'next', true);
                 break;
 
-            case "ArrowUp":
-                if (keyboardNavigationStyle !== "menu") {
+            case 'ArrowUp':
+                if (keyboardNavigationStyle !== 'menu') {
                     break;
                 }
                 if (isTextEditableElement(activeElement)) {
@@ -441,11 +393,11 @@
                 }
                 event.preventDefault();
                 event.stopPropagation();
-                navigateFocusableElements("previous", false);
+                navigateFocusableElements('previous', false);
                 break;
 
-            case "ArrowDown":
-                if (keyboardNavigationStyle !== "menu") {
+            case 'ArrowDown':
+                if (keyboardNavigationStyle !== 'menu') {
                     break;
                 }
                 if (isTextEditableElement(activeElement)) {
@@ -453,7 +405,7 @@
                 }
                 event.preventDefault();
                 event.stopPropagation();
-                navigateFocusableElements("next", false);
+                navigateFocusableElements('next', false);
                 break;
         }
     }
@@ -505,7 +457,7 @@
             return;
         }
         // A child may mount before its parent during the same render.
-        const childIndex = popupStack.findIndex(popup => container.contains(popup));
+        const childIndex = popupStack.findIndex((popup) => container.contains(popup));
         if (childIndex === -1) {
             popupStack.push(container);
         } else {
@@ -524,14 +476,8 @@
     });
 </script>
 
-<svelte:document
-    onmousedowncapture={handleClickOutside}
-    onkeydowncapture={handleKeyDown}
-/>
-<svelte:window
-    onresizecapture={handleWindowChange}
-    onscrollcapture={handleWindowChange}
-/>
+<svelte:document onmousedowncapture={handleClickOutside} onkeydowncapture={handleKeyDown} />
+<svelte:window onresizecapture={handleWindowChange} onscrollcapture={handleWindowChange} />
 
 <div
     class="positron-modal-popup-container"
@@ -542,8 +488,8 @@
 >
     <div
         class="positron-modal-popup"
-        class:shadow-top={popupLayout.shadow === "top"}
-        class:shadow-bottom={popupLayout.shadow === "bottom"}
+        class:shadow-top={popupLayout.shadow === 'top'}
+        class:shadow-bottom={popupLayout.shadow === 'bottom'}
         bind:this={popupRef}
         style={popupStyle}
     >
@@ -573,24 +519,16 @@
         width: min-content;
         height: min-content;
         box-sizing: border-box;
-        color: var(
-            --vscode-positronModalDialog-foreground,
-            var(--vscode-editorWidget-foreground)
-        );
+        color: var(--vscode-positronModalDialog-foreground, var(--vscode-editorWidget-foreground));
         border: 1px solid
-            var(
-                --vscode-positronModalDialog-border,
-                var(--vscode-editorWidget-border)
-            );
+            var(--vscode-positronModalDialog-border, var(--vscode-editorWidget-border));
         background-color: var(
             --vscode-positronModalDialog-background,
             var(--vscode-editorWidget-background)
         );
     }
 
-    .positron-modal-popup-container
-        .positron-modal-popup
-        .positron-modal-popup-children {
+    .positron-modal-popup-container .positron-modal-popup .positron-modal-popup-children {
         width: 100%;
         height: 100%;
     }

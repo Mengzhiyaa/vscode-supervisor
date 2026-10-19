@@ -6,7 +6,7 @@ import {
     type Message,
     type MessageReader,
     type MessageWriter,
-    type Event
+    type Event,
 } from 'vscode-jsonrpc/browser';
 
 // Acquire VS Code API
@@ -33,7 +33,7 @@ const vscode = getVsCodeApi();
 // Helper to create a no-op event
 function createNoopEvent<T>(): Event<T> {
     return (_listener: (e: T) => any, _thisArgs?: any, _disposables?: Disposable[]): Disposable => {
-        return { dispose: () => { } };
+        return { dispose: () => {} };
     };
 }
 
@@ -105,7 +105,7 @@ class VscodeMessageReader implements MessageReader {
         return {
             dispose: () => {
                 this._callback = null;
-            }
+            },
         };
     }
 

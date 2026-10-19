@@ -2,7 +2,7 @@
   ColumnProfileExpanded.svelte - Compatibility wrapper for expanded column profiles
 -->
 <script lang="ts">
-    import { getDataExplorerContext } from "../positronDataExplorerContext";
+    import { getDataExplorerContext } from '../positronDataExplorerContext';
     import {
         getEffectiveColumnDisplayType,
         isBooleanDisplayType,
@@ -12,15 +12,15 @@
         isNumericDisplayType,
         isObjectDisplayType,
         isStringDisplayType,
-    } from "../columnDisplayTypeUtils";
-    import type { ColumnProfileViewResult } from "../columnProfileTypes";
-    import ColumnProfileBoolean from "./columnProfileBoolean.svelte";
-    import ColumnProfileDate from "./columnProfileDate.svelte";
-    import ColumnProfileDatetime from "./columnProfileDatetime.svelte";
-    import ColumnProfileInteger from "./columnProfileInteger.svelte";
-    import ColumnProfileNumber from "./columnProfileNumber.svelte";
-    import ColumnProfileObject from "./columnProfileObject.svelte";
-    import ColumnProfileString from "./columnProfileString.svelte";
+    } from '../columnDisplayTypeUtils';
+    import type { ColumnProfileViewResult } from '../columnProfileTypes';
+    import ColumnProfileBoolean from './columnProfileBoolean.svelte';
+    import ColumnProfileDate from './columnProfileDate.svelte';
+    import ColumnProfileDatetime from './columnProfileDatetime.svelte';
+    import ColumnProfileInteger from './columnProfileInteger.svelte';
+    import ColumnProfileNumber from './columnProfileNumber.svelte';
+    import ColumnProfileObject from './columnProfileObject.svelte';
+    import ColumnProfileString from './columnProfileString.svelte';
 
     interface Props {
         columnIndex: number;
@@ -30,19 +30,11 @@
         profile?: ColumnProfileViewResult;
     }
 
-    let {
-        columnIndex,
-        columnType,
-        typeDisplay,
-        resolvedTypeDisplay,
-        profile,
-    }: Props = $props();
+    let { columnIndex, columnType, typeDisplay, resolvedTypeDisplay, profile }: Props = $props();
 
     const { tableSchemaDataGridInstance } = getDataExplorerContext();
 
-    const effectiveType = $derived(
-        getEffectiveColumnDisplayType(typeDisplay, columnType),
-    );
+    const effectiveType = $derived(getEffectiveColumnDisplayType(typeDisplay, columnType));
     const profileDisplayType = $derived.by(() =>
         getEffectiveColumnDisplayType(
             resolvedTypeDisplay ?? profile?.summary_stats?.type_display,

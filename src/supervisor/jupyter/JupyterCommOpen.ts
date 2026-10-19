@@ -9,12 +9,12 @@
  * @link https://jupyter-client.readthedocs.io/en/stable/messaging.html#opening-a-comm
  */
 export interface JupyterCommOpen {
-	/** The ID of the comm (as a GUID) */
-	comm_id: string;
+    /** The ID of the comm (as a GUID) */
+    comm_id: string;
 
-	/** The name of the comm to open */
-	target_name: string;
+    /** The name of the comm to open */
+    target_name: string;
 
-	/** Additional data to use to initialize the comm */
-	data: Record<string, unknown>;
+    /** Additional data to use to initialize the comm */
+    data: Record<string, unknown>;
 }

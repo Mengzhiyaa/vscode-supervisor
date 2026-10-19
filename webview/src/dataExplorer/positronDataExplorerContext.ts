@@ -27,9 +27,7 @@ export interface PositronDataExplorerContext {
 export type DataExplorerContext = PositronDataExplorerContext;
 
 export function getPositronDataExplorerContext(): PositronDataExplorerContext {
-    const context = getContext<PositronDataExplorerContext>(
-        DATA_EXPLORER_CONTEXT_KEY,
-    );
+    const context = getContext<PositronDataExplorerContext>(DATA_EXPLORER_CONTEXT_KEY);
     if (!context) {
         throw new Error(
             'DataExplorer context not found. Ensure component is wrapped in PositronDataExplorer.',

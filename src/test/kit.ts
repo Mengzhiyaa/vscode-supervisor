@@ -27,7 +27,5 @@ export function normalizePath(p: string): string {
  * Normalize a vscode.Uri for robust comparison.
  */
 export function normalizeUri(uri: vscode.Uri): string {
-    return uri.scheme === 'file'
-        ? normalizePath(uri.fsPath)
-        : uri.toString();
+    return uri.scheme === 'file' ? normalizePath(uri.fsPath) : uri.toString();
 }

@@ -8,7 +8,7 @@
      * Licensed under the Elastic License 2.0. See LICENSE.txt for license information.
      */
 
-    import { ZoomLevel } from "./types";
+    import { ZoomLevel } from './types';
 
     /**
      * PanZoomImageProps interface matching Positron's PanZoomImageProps.
@@ -36,34 +36,28 @@
     let scrollStartY = 0;
 
     const isFit = $derived(zoom === ZoomLevel.Fit);
-    const adjustedWidth = $derived(
-        isFit ? naturalWidth : naturalWidth * zoom,
-    );
-    const adjustedHeight = $derived(
-        isFit ? naturalHeight : naturalHeight * zoom,
-    );
+    const adjustedWidth = $derived(isFit ? naturalWidth : naturalWidth * zoom);
+    const adjustedHeight = $derived(isFit ? naturalHeight : naturalHeight * zoom);
     const scrollableWidth = $derived(isFit ? width : adjustedWidth);
     const scrollableHeight = $derived(isFit ? height : adjustedHeight);
-    const imageWidth = $derived(isFit ? "100%" : `${adjustedWidth}px`);
-    const imageHeight = $derived(isFit ? "100%" : `${adjustedHeight}px`);
-    const imageCursor = $derived(
-        isFit ? "default" : isPanning ? "grabbing" : "grab",
-    );
+    const imageWidth = $derived(isFit ? '100%' : `${adjustedWidth}px`);
+    const imageHeight = $derived(isFit ? '100%' : `${adjustedHeight}px`);
+    const imageCursor = $derived(isFit ? 'default' : isPanning ? 'grabbing' : 'grab');
     const imagePosition = $derived.by(() => {
         const centeredHorizontally = adjustedWidth < width;
         const centeredVertically = adjustedHeight < height;
 
         return {
-            top: centeredVertically ? "50%" : "0",
-            left: centeredHorizontally ? "50%" : "0",
+            top: centeredVertically ? '50%' : '0',
+            left: centeredHorizontally ? '50%' : '0',
             transform:
                 centeredHorizontally && centeredVertically
-                    ? "translate(-50%, -50%)"
+                    ? 'translate(-50%, -50%)'
                     : centeredHorizontally
-                      ? "translate(-50%, 0)"
+                      ? 'translate(-50%, 0)'
                       : centeredVertically
-                        ? "translate(0, -50%)"
-                        : "none",
+                        ? 'translate(0, -50%)'
+                        : 'none',
         };
     });
 
@@ -112,7 +106,7 @@
     class="pan-zoom-image-scrollable"
     style:width="{width}px"
     style:height="{height}px"
-    style:overflow={isFit ? "hidden" : "auto"}
+    style:overflow={isFit ? 'hidden' : 'auto'}
     bind:this={scrollableElement}
     onmousedown={handleMouseDown}
     onmousemove={handleMouseMove}
@@ -132,7 +126,7 @@
             class="plot"
             style:width={imageWidth}
             style:height={imageHeight}
-            style:object-fit={isFit ? "contain" : null}
+            style:object-fit={isFit ? 'contain' : null}
             style:cursor={imageCursor}
             style:position="relative"
             style:top={imagePosition.top}
@@ -181,5 +175,4 @@
         display: block;
         user-select: none;
     }
-
 </style>

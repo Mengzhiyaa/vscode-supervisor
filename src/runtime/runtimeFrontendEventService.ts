@@ -26,8 +26,7 @@ export class RuntimeFrontendEventService implements vscode.Disposable {
     constructor(
         private readonly _sessionManager: Pick<IRuntimeSessionService, 'onDidReceiveRuntimeEvent'>,
         private readonly _outputChannel: vscode.LogOutputChannel,
-    ) {
-    }
+    ) {}
 
     initialize(): void {
         if (this._initialized) {
@@ -39,7 +38,9 @@ export class RuntimeFrontendEventService implements vscode.Disposable {
             this._sessionManager.onDidReceiveRuntimeEvent((runtimeEvent) => {
                 void this.handleRuntimeEvent(runtimeEvent).catch((error) => {
                     const message = getErrorMessage(error);
-                    this._outputChannel.warn(`[RuntimeFrontendEvent] Failed to handle ${runtimeEvent.event.name}: ${message}`);
+                    this._outputChannel.warn(
+                        `[RuntimeFrontendEvent] Failed to handle ${runtimeEvent.event.name}: ${message}`,
+                    );
                 });
             }),
         );
@@ -108,16 +109,19 @@ export class RuntimeFrontendEventService implements vscode.Disposable {
             return;
         }
 
-        const targetUri = event.kind === OpenEditorKind.Uri
-            ? vscode.Uri.parse(event.file)
-            : vscode.Uri.file(event.file);
+        const targetUri =
+            event.kind === OpenEditorKind.Uri
+                ? vscode.Uri.parse(event.file)
+                : vscode.Uri.file(event.file);
 
-        const targetLine = typeof event.line === 'number' && Number.isFinite(event.line)
-            ? Math.max(Math.trunc(event.line) - 1, 0)
-            : 0;
-        const targetColumn = typeof event.column === 'number' && Number.isFinite(event.column)
-            ? Math.max(Math.trunc(event.column) - 1, 0)
-            : 0;
+        const targetLine =
+            typeof event.line === 'number' && Number.isFinite(event.line)
+                ? Math.max(Math.trunc(event.line) - 1, 0)
+                : 0;
+        const targetColumn =
+            typeof event.column === 'number' && Number.isFinite(event.column)
+                ? Math.max(Math.trunc(event.column) - 1, 0)
+                : 0;
 
         const targetPosition = new vscode.Position(targetLine, targetColumn);
         const targetSelection = new vscode.Selection(targetPosition, targetPosition);
@@ -172,6 +176,6 @@ export class RuntimeFrontendEventService implements vscode.Disposable {
     }
 
     private _hasDirtyTextDocuments(): boolean {
-        return vscode.workspace.textDocuments.some(document => document.isDirty);
+        return vscode.workspace.textDocuments.some((document) => document.isDirty);
     }
 }

@@ -56,7 +56,10 @@ function isRelativeAssetPath(value: string): boolean {
     if (!value.trim() || path.posix.isAbsolute(value) || path.win32.isAbsolute(value)) {
         return false;
     }
-    return !value.replace(/\\/g, '/').split('/').some(segment => segment === '..');
+    return !value
+        .replace(/\\/g, '/')
+        .split('/')
+        .some((segment) => segment === '..');
 }
 
 function isUriWithin(root: vscode.Uri, candidate: vscode.Uri): boolean {
@@ -65,7 +68,10 @@ function isUriWithin(root: vscode.Uri, candidate: vscode.Uri): boolean {
     }
     const normalizedRoot = path.posix.normalize(root.path).replace(/\/$/, '');
     const normalizedCandidate = path.posix.normalize(candidate.path);
-    return normalizedCandidate === normalizedRoot || normalizedCandidate.startsWith(`${normalizedRoot}/`);
+    return (
+        normalizedCandidate === normalizedRoot ||
+        normalizedCandidate.startsWith(`${normalizedRoot}/`)
+    );
 }
 
 function uriParent(uri: vscode.Uri): vscode.Uri {
@@ -137,8 +143,9 @@ export class PassiveLanguageAssetCatalog implements vscode.Disposable {
 
         const selected: PassiveLanguageAssetEntry[] = [];
         for (const languageId of Array.from(candidates.keys()).sort()) {
-            const manifestCandidates = [...(candidates.get(languageId) ?? [])]
-                .sort((left, right) => left.ownerExtensionId.localeCompare(right.ownerExtensionId));
+            const manifestCandidates = [...(candidates.get(languageId) ?? [])].sort((left, right) =>
+                left.ownerExtensionId.localeCompare(right.ownerExtensionId),
+            );
             if (manifestCandidates.length > 0) {
                 selected.push(manifestCandidates[0]);
                 if (manifestCandidates.length > 1) {
@@ -146,7 +153,8 @@ export class PassiveLanguageAssetCatalog implements vscode.Disposable {
                         ownerExtensionId: manifestCandidates[0].ownerExtensionId,
                         languageId,
                         severity: 'warning',
-                        message: `Multiple manifest owners declared '${languageId}'; selected ` +
+                        message:
+                            `Multiple manifest owners declared '${languageId}'; selected ` +
                             `'${manifestCandidates[0].ownerExtensionId}' by stable owner ordering.`,
                     });
                 }
@@ -166,8 +174,11 @@ export class PassiveLanguageAssetCatalog implements vscode.Disposable {
         value: unknown,
         diagnostics: PassiveLanguageAssetDiagnostic[],
     ): PassiveLanguageAssetEntry | undefined {
-        if (!isRecord(value) || typeof value.languageId !== 'string' ||
-            !LANGUAGE_ID_PATTERN.test(value.languageId)) {
+        if (
+            !isRecord(value) ||
+            typeof value.languageId !== 'string' ||
+            !LANGUAGE_ID_PATTERN.test(value.languageId)
+        ) {
             diagnostics.push({
                 ownerExtensionId: extension.id,
                 severity: 'error',
@@ -223,24 +234,26 @@ export class PassiveLanguageAssetCatalog implements vscode.Disposable {
             }
         }
 
-        const monacoSupportModule = typeof assets?.monacoSupportModule === 'string'
-            ? resolve(assets.monacoSupportModule, 'monacoSupportModule')
-            : undefined;
+        const monacoSupportModule =
+            typeof assets?.monacoSupportModule === 'string'
+                ? resolve(assets.monacoSupportModule, 'monacoSupportModule')
+                : undefined;
         const grammarPath = assets?.textMateGrammar?.path;
-        const grammarUri = typeof grammarPath === 'string'
-            ? resolve(grammarPath, 'textMateGrammar.path')
-            : undefined;
+        const grammarUri =
+            typeof grammarPath === 'string'
+                ? resolve(grammarPath, 'textMateGrammar.path')
+                : undefined;
 
         if (roots.length === 0) {
-            for (const root of [monacoSupportModule, grammarUri].filter(
-                (uri): uri is vscode.Uri => !!uri,
-            ).map(uriParent)) {
-                if (!roots.some(existing => existing.toString() === root.toString())) {
+            for (const root of [monacoSupportModule, grammarUri]
+                .filter((uri): uri is vscode.Uri => !!uri)
+                .map(uriParent)) {
+                if (!roots.some((existing) => existing.toString() === root.toString())) {
                     roots.push(root);
                 }
             }
         }
-        if (monacoSupportModule && !roots.some(root => isUriWithin(root, monacoSupportModule))) {
+        if (monacoSupportModule && !roots.some((root) => isUriWithin(root, monacoSupportModule))) {
             diagnostics.push({
                 ownerExtensionId: extension.id,
                 languageId: declaration.languageId,
@@ -251,9 +264,10 @@ export class PassiveLanguageAssetCatalog implements vscode.Disposable {
         }
 
         const scopeName = assets?.textMateGrammar?.scopeName;
-        const textMateGrammar = grammarUri && typeof scopeName === 'string' && scopeName.trim()
-            ? { scopeName, grammarUri }
-            : undefined;
+        const textMateGrammar =
+            grammarUri && typeof scopeName === 'string' && scopeName.trim()
+                ? { scopeName, grammarUri }
+                : undefined;
         if (grammarUri && !textMateGrammar) {
             diagnostics.push({
                 ownerExtensionId: extension.id,
@@ -285,7 +299,8 @@ export class PassiveLanguageAssetCatalog implements vscode.Disposable {
             diagnostics: Object.freeze([...diagnostics]),
         });
         for (const diagnostic of diagnostics) {
-            const message = `[LanguageAssets] owner=${diagnostic.ownerExtensionId} ` +
+            const message =
+                `[LanguageAssets] owner=${diagnostic.ownerExtensionId} ` +
                 `language=${diagnostic.languageId ?? '-'} ${diagnostic.message}`;
             if (diagnostic.severity === 'error') {
                 this._log?.error(message);
@@ -300,15 +315,17 @@ export class PassiveLanguageAssetCatalog implements vscode.Disposable {
         entries: readonly PassiveLanguageAssetEntry[],
         diagnostics: PassiveLanguageAssetDiagnostic[],
     ): PassiveLanguageAssetEntry[] {
-        const result = entries.map(entry => ({
+        const result = entries.map((entry) => ({
             ...entry,
             assets: { ...entry.assets },
         }));
-        const stableIndices = result.map((_, index) => index).sort((left, right) => {
-            const leftKey = `${result[left].ownerExtensionId}:${result[left].languageId}`;
-            const rightKey = `${result[right].ownerExtensionId}:${result[right].languageId}`;
-            return leftKey.localeCompare(rightKey);
-        });
+        const stableIndices = result
+            .map((_, index) => index)
+            .sort((left, right) => {
+                const leftKey = `${result[left].ownerExtensionId}:${result[left].languageId}`;
+                const rightKey = `${result[right].ownerExtensionId}:${result[right].languageId}`;
+                return leftKey.localeCompare(rightKey);
+            });
         const moduleOwners = new Map<string, PassiveLanguageAssetEntry>();
         const scopeOwners = new Map<string, PassiveLanguageAssetEntry>();
 
@@ -323,7 +340,8 @@ export class PassiveLanguageAssetCatalog implements vscode.Disposable {
                         ownerExtensionId: entry.ownerExtensionId,
                         languageId: entry.languageId,
                         severity: 'warning',
-                        message: `Monaco module conflicts with '${owner.ownerExtensionId}/${owner.languageId}' ` +
+                        message:
+                            `Monaco module conflicts with '${owner.ownerExtensionId}/${owner.languageId}' ` +
                             'and was ignored.',
                     });
                     entry.assets = { ...entry.assets, monacoSupportModule: undefined };
@@ -340,7 +358,8 @@ export class PassiveLanguageAssetCatalog implements vscode.Disposable {
                         ownerExtensionId: entry.ownerExtensionId,
                         languageId: entry.languageId,
                         severity: 'warning',
-                        message: `TextMate scope '${grammar.scopeName}' conflicts with ` +
+                        message:
+                            `TextMate scope '${grammar.scopeName}' conflicts with ` +
                             `'${owner.ownerExtensionId}/${owner.languageId}' and was ignored.`,
                     });
                     entry.assets = { ...entry.assets, textMateGrammar: undefined };
@@ -350,10 +369,11 @@ export class PassiveLanguageAssetCatalog implements vscode.Disposable {
             }
         }
 
-        return result.map(entry => Object.freeze({
-            ...entry,
-            assets: Object.freeze(entry.assets),
-        }));
+        return result.map((entry) =>
+            Object.freeze({
+                ...entry,
+                assets: Object.freeze(entry.assets),
+            }),
+        );
     }
-
 }

@@ -22,9 +22,7 @@ export const POSITRON_DATA_EXPLORER_CUSTOM_EDITOR_OPTIONS = {
     webviewOptions: {
         retainContextWhenHidden: true,
     },
-} satisfies NonNullable<
-    Parameters<typeof vscode.window.registerCustomEditorProvider>[2]
->;
+} satisfies NonNullable<Parameters<typeof vscode.window.registerCustomEditorProvider>[2]>;
 
 /**
  * A lightweight CustomReadonlyEditorProvider that delegates to the existing
@@ -34,13 +32,15 @@ export const POSITRON_DATA_EXPLORER_CUSTOM_EDITOR_OPTIONS = {
  *   1. openCustomDocument() — we return a minimal CustomDocument
  *   2. resolveCustomEditor() — we open the file via DuckDB and attach to the panel
  */
-export class PositronDataExplorerCustomEditorProvider implements vscode.CustomReadonlyEditorProvider {
+export class PositronDataExplorerCustomEditorProvider
+    implements vscode.CustomReadonlyEditorProvider
+{
     public static readonly viewType = 'positron.dataExplorerEditor';
 
     constructor(
         private readonly _dataExplorerService: IPositronDataExplorerService,
         private readonly _editorProvider: PositronDataExplorerEditorProvider,
-        private readonly _logChannel: vscode.LogOutputChannel
+        private readonly _logChannel: vscode.LogOutputChannel,
     ) {}
 
     /**
@@ -58,7 +58,7 @@ export class PositronDataExplorerCustomEditorProvider implements vscode.CustomRe
      */
     async resolveCustomEditor(
         document: vscode.CustomDocument,
-        webviewPanel: vscode.WebviewPanel
+        webviewPanel: vscode.WebviewPanel,
     ): Promise<void> {
         const modelIdentifier = getDataExplorerIdentifier(document.uri);
         const identifier = modelIdentifier ?? `duckdb:${document.uri.toString()}`;
@@ -71,7 +71,7 @@ export class PositronDataExplorerCustomEditorProvider implements vscode.CustomRe
 
         try {
             this._logChannel.info(
-                `[DataExplorerCustomEditor] Opening file: ${document.uri.toString()}`
+                `[DataExplorerCustomEditor] Opening file: ${document.uri.toString()}`,
             );
 
             // Mark this identifier so the PositronDataExplorerEditorProvider's onDidCreateInstance
@@ -95,7 +95,7 @@ export class PositronDataExplorerCustomEditorProvider implements vscode.CustomRe
         } catch (error) {
             this._editorProvider.unmarkExternalPanel(identifier);
             this._logChannel.error(
-                `[DataExplorerCustomEditor] Failed to open file: ${getErrorMessage(error)}`
+                `[DataExplorerCustomEditor] Failed to open file: ${getErrorMessage(error)}`,
             );
             this._editorProvider.showError(webviewPanel, error);
         }

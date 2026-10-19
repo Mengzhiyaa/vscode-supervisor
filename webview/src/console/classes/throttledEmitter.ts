@@ -95,7 +95,7 @@ export class ThrottledEmitter<T> {
             return {
                 dispose: () => {
                     this._listeners.delete(listener);
-                }
+                },
             };
         };
     }
@@ -115,7 +115,7 @@ export class ThrottledEmitter<T> {
         // Update the throttle history.
         const now = Date.now();
         const cutoff = now - this._throttleInterval;
-        this._throttleHistory = this._throttleHistory.filter(time => time >= cutoff);
+        this._throttleHistory = this._throttleHistory.filter((time) => time >= cutoff);
         this._throttleHistory.push(now);
 
         // If the event is being throttled, set the last event and return.

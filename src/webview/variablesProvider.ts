@@ -76,7 +76,7 @@ export class VariablesViewProvider extends BaseWebviewProvider {
                 }),
                 this._sessionManager.onDidChangeSessionState(() => {
                     this._sendSessionInfoUpdate();
-                })
+                }),
             );
         }
     }
@@ -97,7 +97,7 @@ export class VariablesViewProvider extends BaseWebviewProvider {
     override resolveWebviewView(
         webviewView: vscode.WebviewView,
         context: vscode.WebviewViewResolveContext,
-        token: vscode.CancellationToken
+        token: vscode.CancellationToken,
     ): void | Thenable<void> {
         super.resolveWebviewView(webviewView, context, token);
 
@@ -132,13 +132,13 @@ export class VariablesViewProvider extends BaseWebviewProvider {
 
     private _subscribeToVariablesServiceEvents(): void {
         this._disposables.push(
-            this._variablesService.onDidStartPositronVariablesInstance(instance => {
+            this._variablesService.onDidStartPositronVariablesInstance((instance) => {
                 this._handleVariablesInstanceStarted(instance);
             }),
-            this._variablesService.onDidStopPositronVariablesInstance(instance => {
+            this._variablesService.onDidStopPositronVariablesInstance((instance) => {
                 this._handleVariablesInstanceStopped(instance);
             }),
-            this._variablesService.onDidChangeActivePositronVariablesInstance(instance => {
+            this._variablesService.onDidChangeActivePositronVariablesInstance((instance) => {
                 const sessionId = instance?.session.sessionId;
                 this._sendActiveVariablesInstanceChanged(sessionId);
                 this._sendSessionInfoUpdate();
@@ -149,12 +149,12 @@ export class VariablesViewProvider extends BaseWebviewProvider {
                     );
                 }
             }),
-            this._memoryUsageService.onDidUpdateMemoryUsage(snapshot => {
+            this._memoryUsageService.onDidUpdateMemoryUsage((snapshot) => {
                 this._sendMemoryUsageSnapshot(snapshot);
             }),
-            this._memoryUsageService.onDidChangeEnabled(enabled => {
+            this._memoryUsageService.onDidChangeEnabled((enabled) => {
                 this._sendMemoryUsageEnabled(enabled);
-            })
+            }),
         );
     }
 
@@ -175,7 +175,7 @@ export class VariablesViewProvider extends BaseWebviewProvider {
 
         const disposables: vscode.Disposable[] = [];
         disposables.push(
-            instance.onDidChangeEntries(entries => {
+            instance.onDidChangeEntries((entries) => {
                 this._handleEntriesChanged(instance, entries);
             }),
             instance.onDidChangeState(() => {
@@ -183,7 +183,7 @@ export class VariablesViewProvider extends BaseWebviewProvider {
             }),
             instance.onDidChangeStatus(() => {
                 this._sendVariablesInstanceUpdate(instance);
-            })
+            }),
         );
 
         this._instanceDisposables.set(sessionId, disposables);
@@ -197,7 +197,7 @@ export class VariablesViewProvider extends BaseWebviewProvider {
         const sessionId = instance.session.sessionId;
         const disposables = this._instanceDisposables.get(sessionId);
         if (disposables) {
-            disposables.forEach(d => d.dispose());
+            disposables.forEach((d) => d.dispose());
             this._instanceDisposables.delete(sessionId);
         }
 
@@ -225,7 +225,9 @@ export class VariablesViewProvider extends BaseWebviewProvider {
         this._sessionRevisions.set(sessionId, revision);
         // Keep inactive session data on the Extension Host. The Webview pulls
         // it through variables/listEntries when that session becomes active.
-        if (this._variablesService.activePositronVariablesInstance?.session.sessionId === sessionId) {
+        if (
+            this._variablesService.activePositronVariablesInstance?.session.sessionId === sessionId
+        ) {
             this.sendVariableEntriesChanged(currentEntries, sessionId);
         }
 
@@ -247,7 +249,7 @@ export class VariablesViewProvider extends BaseWebviewProvider {
 
         connection.onNotification(
             VariablesProtocol.VariablesContextKeysChangedNotification.type,
-            params => {
+            (params) => {
                 void vscode.commands.executeCommand(
                     'setContext',
                     ContextKeys.variablesFocused,
@@ -316,7 +318,7 @@ export class VariablesViewProvider extends BaseWebviewProvider {
                     const children = result.children ?? [];
                     return {
                         children: this._convertToProtocol(children, params.path),
-                        length: result.length
+                        length: result.length,
                     };
                 } catch (e) {
                     this._logVariableRequestError('inspect variable', e, sessionId, params.path);
@@ -326,21 +328,24 @@ export class VariablesViewProvider extends BaseWebviewProvider {
             return { children: [] };
         });
 
-        connection.onRequest(VariablesProtocol.SetActiveVariablesSessionRequest.type, async (params) => {
-            const sessionId = this._resolveSessionId(params.sessionId);
-            if (!sessionId) {
-                return;
-            }
+        connection.onRequest(
+            VariablesProtocol.SetActiveVariablesSessionRequest.type,
+            async (params) => {
+                const sessionId = this._resolveSessionId(params.sessionId);
+                if (!sessionId) {
+                    return;
+                }
 
-            if (this._sessionManager?.getSession(sessionId)) {
-                await this._sessionManager.focusSession(sessionId);
-            }
+                if (this._sessionManager?.getSession(sessionId)) {
+                    await this._sessionManager.focusSession(sessionId);
+                }
 
-            // Keep the variables service aligned even when the requested session
-            // is already the foreground session and sessionManager emits no change.
-            this._variablesService.setActivePositronVariablesSession(sessionId);
-            this._sendSessionInfoUpdate();
-        });
+                // Keep the variables service aligned even when the requested session
+                // is already the foreground session and sessionManager emits no change.
+                this._variablesService.setActivePositronVariablesSession(sessionId);
+                this._sendSessionInfoUpdate();
+            },
+        );
 
         connection.onRequest(VariablesProtocol.ListVariableEntriesRequest.type, async (params) => {
             const sessionId = this._resolveSessionId(params?.sessionId);
@@ -349,10 +354,10 @@ export class VariablesViewProvider extends BaseWebviewProvider {
             }
 
             const revision = this._sessionRevisions.get(sessionId) ?? 0;
-            const unchanged = params?.knownRevision !== undefined &&
-                params.knownRevision === revision;
+            const unchanged =
+                params?.knownRevision !== undefined && params.knownRevision === revision;
             return {
-                entries: unchanged ? [] : this._sessionEntries.get(sessionId) ?? [],
+                entries: unchanged ? [] : (this._sessionEntries.get(sessionId) ?? []),
                 revision,
                 unchanged,
             };
@@ -379,26 +384,30 @@ export class VariablesViewProvider extends BaseWebviewProvider {
             instance?.setFilterText(params.filterText);
         });
 
-        connection.onRequest(VariablesProtocol.SetVariablesHighlightRecentRequest.type, async (params) => {
-            const instance = this._variablesService.activePositronVariablesInstance;
-            if (!instance) {
-                return;
-            }
+        connection.onRequest(
+            VariablesProtocol.SetVariablesHighlightRecentRequest.type,
+            async (params) => {
+                const instance = this._variablesService.activePositronVariablesInstance;
+                if (!instance) {
+                    return;
+                }
 
-            instance.highlightRecent = params.highlightRecent;
-        });
+                instance.highlightRecent = params.highlightRecent;
+            },
+        );
 
-        connection.onRequest('variables/setReducedMotionPreference', async (
-            params: { reduced: boolean },
-        ) => {
-            this._motionReduced = params.reduced;
-            if (!params.reduced) {
-                return;
-            }
-            for (const instance of this._variablesService.positronVariablesInstances) {
-                instance.highlightRecent = false;
-            }
-        });
+        connection.onRequest(
+            'variables/setReducedMotionPreference',
+            async (params: { reduced: boolean }) => {
+                this._motionReduced = params.reduced;
+                if (!params.reduced) {
+                    return;
+                }
+                for (const instance of this._variablesService.positronVariablesInstances) {
+                    instance.highlightRecent = false;
+                }
+            },
+        );
 
         connection.onRequest(VariablesProtocol.ExpandVariableGroupRequest.type, async (params) => {
             const sessionId = this._resolveSessionId(params.sessionId);
@@ -406,17 +415,24 @@ export class VariablesViewProvider extends BaseWebviewProvider {
                 return;
             }
 
-            this._variablesService.getVariablesInstance(sessionId)?.expandVariableGroup(params.groupId);
+            this._variablesService
+                .getVariablesInstance(sessionId)
+                ?.expandVariableGroup(params.groupId);
         });
 
-        connection.onRequest(VariablesProtocol.CollapseVariableGroupRequest.type, async (params) => {
-            const sessionId = this._resolveSessionId(params.sessionId);
-            if (!sessionId) {
-                return;
-            }
+        connection.onRequest(
+            VariablesProtocol.CollapseVariableGroupRequest.type,
+            async (params) => {
+                const sessionId = this._resolveSessionId(params.sessionId);
+                if (!sessionId) {
+                    return;
+                }
 
-            this._variablesService.getVariablesInstance(sessionId)?.collapseVariableGroup(params.groupId);
-        });
+                this._variablesService
+                    .getVariablesInstance(sessionId)
+                    ?.collapseVariableGroup(params.groupId);
+            },
+        );
 
         connection.onRequest(VariablesProtocol.ExpandVariableItemRequest.type, async (params) => {
             const sessionId = this._resolveSessionId(params.sessionId);
@@ -424,7 +440,9 @@ export class VariablesViewProvider extends BaseWebviewProvider {
                 return;
             }
 
-            await this._variablesService.getVariablesInstance(sessionId)?.expandVariableItem(params.path);
+            await this._variablesService
+                .getVariablesInstance(sessionId)
+                ?.expandVariableItem(params.path);
         });
 
         connection.onRequest(VariablesProtocol.CollapseVariableItemRequest.type, async (params) => {
@@ -433,7 +451,9 @@ export class VariablesViewProvider extends BaseWebviewProvider {
                 return;
             }
 
-            this._variablesService.getVariablesInstance(sessionId)?.collapseVariableItem(params.path);
+            this._variablesService
+                .getVariablesInstance(sessionId)
+                ?.collapseVariableItem(params.path);
         });
 
         connection.onRequest('variables/refresh', async (params?: { sessionId?: string }) => {
@@ -445,101 +465,137 @@ export class VariablesViewProvider extends BaseWebviewProvider {
             await this._variablesService.getVariablesInstance(sessionId)?.requestRefresh();
         });
 
-        connection.onRequest('variables/clear', async (params?: { includeHidden?: boolean; sessionId?: string }) => {
-            const sessionId = this._resolveSessionId(params?.sessionId);
-            if (!sessionId) {
-                return;
-            }
-            const instance = this._variablesService.getVariablesInstance(sessionId);
-            if (instance) {
-                await instance.requestClear(params?.includeHidden ?? false);
-            }
-        });
-
-        connection.onRequest('variables/delete', async (params: { names: string[]; sessionId?: string }) => {
-            const sessionId = this._resolveSessionId(params.sessionId);
-            if (!sessionId) {
-                return;
-            }
-            const instance = this._variablesService.getVariablesInstance(sessionId);
-            if (instance) {
-                await instance.requestDelete(params.names);
-            }
-        });
-
-        connection.onRequest('variables/formatForClipboard', async (params: { name?: string; path?: string[]; format: string; sessionId?: string }) => {
-            const targetPath = params.path ?? (params.name ? [params.name] : []);
-            if (targetPath.length === 0) {
-                return '';
-            }
-
-            const sessionId = this._resolveSessionId(params.sessionId);
-            if (!sessionId) {
-                return '';
-            }
-            const instance = this._variablesService.getVariablesInstance(sessionId);
-            if (!instance) {
-                return '';
-            }
-
-            try {
-                return await instance.clipboardFormat(targetPath, params.format);
-            } catch (e) {
-                this._logVariableRequestError('format variable for clipboard', e, sessionId, targetPath);
-                void vscode.window.showErrorMessage(
-                    vscode.l10n.t('Unable to copy the variable: {0}', getErrorMessage(e)),
-                );
-                return '';
-            }
-        });
-
-        connection.onRequest('variables/view', async (params: { name?: string; path?: string[]; sessionId?: string }) => {
-            const targetPath = params.path ?? (params.name ? [params.name] : []);
-            if (targetPath.length === 0) {
-                return undefined;
-            }
-
-            const sessionId = this._resolveSessionId(params.sessionId);
-            if (!sessionId) {
-                return undefined;
-            }
-            const instance = this._variablesService.getVariablesInstance(sessionId);
-            if (!instance) {
-                return undefined;
-            }
-
-            try {
-                const existing = this._dataExplorerService?.getInstanceForVariablePath(
-                    sessionId,
-                    targetPath,
-                );
-                if (existing) {
-                    existing.requestFocus();
-                    return existing.identifier;
+        connection.onRequest(
+            'variables/clear',
+            async (params?: { includeHidden?: boolean; sessionId?: string }) => {
+                const sessionId = this._resolveSessionId(params?.sessionId);
+                if (!sessionId) {
+                    return;
                 }
-                return await instance.view(targetPath);
-            } catch (e) {
-                this._logVariableRequestError('open variable viewer', e, sessionId, targetPath);
-                void vscode.window.showErrorMessage(
-                    vscode.l10n.t('Unable to open the variable viewer: {0}', getErrorMessage(e)),
-                );
-                return undefined;
-            }
-        });
+                const instance = this._variablesService.getVariablesInstance(sessionId);
+                if (instance) {
+                    await instance.requestClear(params?.includeHidden ?? false);
+                }
+            },
+        );
+
+        connection.onRequest(
+            'variables/delete',
+            async (params: { names: string[]; sessionId?: string }) => {
+                const sessionId = this._resolveSessionId(params.sessionId);
+                if (!sessionId) {
+                    return;
+                }
+                const instance = this._variablesService.getVariablesInstance(sessionId);
+                if (instance) {
+                    await instance.requestDelete(params.names);
+                }
+            },
+        );
+
+        connection.onRequest(
+            'variables/formatForClipboard',
+            async (params: {
+                name?: string;
+                path?: string[];
+                format: string;
+                sessionId?: string;
+            }) => {
+                const targetPath = params.path ?? (params.name ? [params.name] : []);
+                if (targetPath.length === 0) {
+                    return '';
+                }
+
+                const sessionId = this._resolveSessionId(params.sessionId);
+                if (!sessionId) {
+                    return '';
+                }
+                const instance = this._variablesService.getVariablesInstance(sessionId);
+                if (!instance) {
+                    return '';
+                }
+
+                try {
+                    return await instance.clipboardFormat(targetPath, params.format);
+                } catch (e) {
+                    this._logVariableRequestError(
+                        'format variable for clipboard',
+                        e,
+                        sessionId,
+                        targetPath,
+                    );
+                    void vscode.window.showErrorMessage(
+                        vscode.l10n.t('Unable to copy the variable: {0}', getErrorMessage(e)),
+                    );
+                    return '';
+                }
+            },
+        );
+
+        connection.onRequest(
+            'variables/view',
+            async (params: { name?: string; path?: string[]; sessionId?: string }) => {
+                const targetPath = params.path ?? (params.name ? [params.name] : []);
+                if (targetPath.length === 0) {
+                    return undefined;
+                }
+
+                const sessionId = this._resolveSessionId(params.sessionId);
+                if (!sessionId) {
+                    return undefined;
+                }
+                const instance = this._variablesService.getVariablesInstance(sessionId);
+                if (!instance) {
+                    return undefined;
+                }
+
+                try {
+                    const existing = this._dataExplorerService?.getInstanceForVariablePath(
+                        sessionId,
+                        targetPath,
+                    );
+                    if (existing) {
+                        existing.requestFocus();
+                        return existing.identifier;
+                    }
+                    return await instance.view(targetPath);
+                } catch (e) {
+                    this._logVariableRequestError('open variable viewer', e, sessionId, targetPath);
+                    void vscode.window.showErrorMessage(
+                        vscode.l10n.t(
+                            'Unable to open the variable viewer: {0}',
+                            getErrorMessage(e),
+                        ),
+                    );
+                    return undefined;
+                }
+            },
+        );
     }
 
-    private _logVariableRequestError(action: string, error: unknown, sessionId: string, path?: string[]): void {
+    private _logVariableRequestError(
+        action: string,
+        error: unknown,
+        sessionId: string,
+        path?: string[],
+    ): void {
         this.log(
             `Failed to ${action}: ${getErrorMessage(error)}; ` +
-            `session=${JSON.stringify(sessionId)} path=${JSON.stringify(path ?? [])}; ` +
-            `details=${formatErrorForLogging(error)}`,
+                `session=${JSON.stringify(sessionId)} path=${JSON.stringify(path ?? [])}; ` +
+                `details=${formatErrorForLogging(error)}`,
             vscode.LogLevel.Warning,
         );
     }
 
     protected _getHtmlContent(webview: vscode.Webview): string {
         const scriptUri = this._getWebviewUri(webview, 'webview', 'dist', 'variables', 'index.js');
-        const commonStyleUri = this._getWebviewUri(webview, 'webview', 'dist', 'common', 'index.css');
+        const commonStyleUri = this._getWebviewUri(
+            webview,
+            'webview',
+            'dist',
+            'common',
+            'index.css',
+        );
         const styleUri = this._getWebviewUri(webview, 'webview', 'dist', 'variables', 'index.css');
         const nonce = this._getNonce();
 
@@ -561,17 +617,22 @@ export class VariablesViewProvider extends BaseWebviewProvider {
 </html>`;
     }
 
-
-    sendVariableEntriesChanged(entries: VariablesProtocol.VariableEntry[], sessionId?: string): void {
+    sendVariableEntriesChanged(
+        entries: VariablesProtocol.VariableEntry[],
+        sessionId?: string,
+    ): void {
         if (!sessionId || !this._webviewReady) {
             return;
         }
 
-        this._connection?.sendNotification(VariablesProtocol.VariableEntriesChangedNotification.type, {
-            sessionId,
-            entries,
-            revision: this._sessionRevisions.get(sessionId) ?? 0,
-        });
+        this._connection?.sendNotification(
+            VariablesProtocol.VariableEntriesChangedNotification.type,
+            {
+                sessionId,
+                entries,
+                revision: this._sessionRevisions.get(sessionId) ?? 0,
+            },
+        );
     }
 
     private _sendSessionInfoUpdate(): void {
@@ -606,7 +667,7 @@ export class VariablesViewProvider extends BaseWebviewProvider {
         this._sendSessionInfoUpdate();
         this._sendExistingVariablesInstanceNotifications();
         this._sendActiveVariablesInstanceChanged(
-            this._variablesService.activePositronVariablesInstance?.session.sessionId
+            this._variablesService.activePositronVariablesInstance?.session.sessionId,
         );
         const activeSessionId =
             this._variablesService.activePositronVariablesInstance?.session.sessionId;
@@ -652,7 +713,7 @@ export class VariablesViewProvider extends BaseWebviewProvider {
 
         this._connection.sendNotification(
             VariablesProtocol.VariablesInstanceStartedNotification.type,
-            { instance: payload }
+            { instance: payload },
         );
     }
 
@@ -665,7 +726,7 @@ export class VariablesViewProvider extends BaseWebviewProvider {
 
         this._connection.sendNotification(
             VariablesProtocol.VariablesInstanceStoppedNotification.type,
-            { sessionId }
+            { sessionId },
         );
     }
 
@@ -676,7 +737,7 @@ export class VariablesViewProvider extends BaseWebviewProvider {
 
         this._connection.sendNotification(
             VariablesProtocol.ActiveVariablesInstanceChangedNotification.type,
-            { sessionId }
+            { sessionId },
         );
     }
 
@@ -685,10 +746,9 @@ export class VariablesViewProvider extends BaseWebviewProvider {
             return;
         }
 
-        this._connection.sendNotification(
-            VariablesProtocol.MemoryUsageUpdatedNotification.type,
-            { snapshot }
-        );
+        this._connection.sendNotification(VariablesProtocol.MemoryUsageUpdatedNotification.type, {
+            snapshot,
+        });
     }
 
     private _sendMemoryUsageEnabled(enabled: boolean): void {
@@ -698,7 +758,7 @@ export class VariablesViewProvider extends BaseWebviewProvider {
 
         this._connection.sendNotification(
             VariablesProtocol.MemoryUsageEnabledChangedNotification.type,
-            { enabled }
+            { enabled },
         );
     }
 
@@ -710,8 +770,11 @@ export class VariablesViewProvider extends BaseWebviewProvider {
         return sessionId;
     }
 
-    private _convertToProtocol(variables: Variable[], parentPath: string[] = []): VariablesProtocol.Variable[] {
-        return variables.map(v => ({
+    private _convertToProtocol(
+        variables: Variable[],
+        parentPath: string[] = [],
+    ): VariablesProtocol.Variable[] {
+        return variables.map((v) => ({
             name: this._getProtocolName(v),
             path: [...parentPath, v.access_key],
             type: v.display_type,
@@ -719,7 +782,7 @@ export class VariablesViewProvider extends BaseWebviewProvider {
             size: v.size,
             hasChildren: v.has_children,
             kind: v.kind,
-            hasViewer: v.has_viewer
+            hasViewer: v.has_viewer,
         }));
     }
 
@@ -743,7 +806,7 @@ export class VariablesViewProvider extends BaseWebviewProvider {
                 size: item.size,
                 hasChildren: item.hasChildren,
                 kind: item.kind,
-                hasViewer: item.hasViewer
+                hasViewer: item.hasViewer,
             });
         };
 
@@ -760,7 +823,9 @@ export class VariablesViewProvider extends BaseWebviewProvider {
         return results;
     }
 
-    private _convertVariableEntriesToProtocol(entries: VariablesTreeEntry[]): VariablesProtocol.VariableEntry[] {
+    private _convertVariableEntriesToProtocol(
+        entries: VariablesTreeEntry[],
+    ): VariablesProtocol.VariableEntry[] {
         const results: VariablesProtocol.VariableEntry[] = [];
 
         for (const entry of entries) {
@@ -769,7 +834,7 @@ export class VariablesViewProvider extends BaseWebviewProvider {
                     type: 'group' as const,
                     id: entry.id,
                     title: entry.title,
-                    isExpanded: entry.isExpanded
+                    isExpanded: entry.isExpanded,
                 });
                 continue;
             }
@@ -789,7 +854,7 @@ export class VariablesViewProvider extends BaseWebviewProvider {
                     hasChildren: entry.hasChildren,
                     hasViewer: entry.hasViewer,
                     isRecent: entry.isRecent,
-                    updatedTime: entry.updatedTime
+                    updatedTime: entry.updatedTime,
                 });
                 continue;
             }
@@ -799,15 +864,13 @@ export class VariablesViewProvider extends BaseWebviewProvider {
                     type: 'overflow' as const,
                     id: entry.id,
                     indentLevel: entry.indentLevel,
-                    overflowValues: entry.overflowValues
+                    overflowValues: entry.overflowValues,
                 });
             }
         }
 
         return results;
     }
-
-
 
     private _getProtocolName(variable: Variable): string {
         return variable.display_name || variable.access_key;

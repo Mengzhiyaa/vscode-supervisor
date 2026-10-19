@@ -16,7 +16,7 @@ import {
     VariablesTreeGroup,
     VariablesTreeOverflow,
     Variable,
-    type VariablesClientInstance
+    type VariablesClientInstance,
 } from './interfaces/variablesService';
 import { RuntimeSession } from '../../runtime/session';
 import { RuntimeClientInstance } from '../../runtime/RuntimeClientInstance';
@@ -25,12 +25,9 @@ import {
     VariablesClientInstance as RuntimeVariablesClientInstance,
     PositronVariablesList,
     PositronVariablesUpdate,
-    createVariablesClient
+    createVariablesClient,
 } from '../../runtime/VariablesClientInstance';
-import {
-    RuntimeClientType,
-    RuntimeState,
-} from '../../internal/runtimeTypes';
+import { RuntimeClientType, RuntimeState } from '../../internal/runtimeTypes';
 
 /**
  * VariableItem class for internal state management.
@@ -79,7 +76,7 @@ class VariableItem implements VariablesTreeItem {
             return this;
         }
 
-        const childItem = this.childItems?.find(item => item.accessKey === path[0]);
+        const childItem = this.childItems?.find((item) => item.accessKey === path[0]);
         return childItem?.locateVariableItem(path.slice(1));
     }
 
@@ -112,8 +109,8 @@ class VariableOverflow implements VariablesTreeOverflow {
     constructor(
         public readonly id: string,
         public readonly indentLevel: number,
-        public readonly overflowValues: number
-    ) { }
+        public readonly overflowValues: number,
+    ) {}
 }
 
 /**
@@ -124,8 +121,8 @@ class VariableGroup implements VariablesTreeGroup {
         public readonly id: string,
         public readonly title: string,
         public isExpanded: boolean,
-        public variableItems: VariablesTreeItem[]
-    ) { }
+        public variableItems: VariablesTreeItem[],
+    ) {}
 }
 
 /**
@@ -167,7 +164,7 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
 
     constructor(
         private _session: RuntimeSession,
-        private readonly _outputChannel: vscode.LogOutputChannel
+        private readonly _outputChannel: vscode.LogOutputChannel,
     ) {
         const reduceMotion = vscode.workspace
             .getConfiguration('workbench')
@@ -178,11 +175,19 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
     }
 
     //#region IPositronVariablesInstance Implementation
-    get session(): RuntimeSession { return this._session; }
-    get state(): RuntimeClientState { return this._state; }
-    get status(): RuntimeClientStatus { return this._status; }
+    get session(): RuntimeSession {
+        return this._session;
+    }
+    get state(): RuntimeClientState {
+        return this._state;
+    }
+    get status(): RuntimeClientStatus {
+        return this._status;
+    }
 
-    get grouping(): PositronVariablesGrouping { return this._grouping; }
+    get grouping(): PositronVariablesGrouping {
+        return this._grouping;
+    }
     set grouping(value: PositronVariablesGrouping) {
         if (this._grouping !== value) {
             this._grouping = value;
@@ -190,7 +195,9 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
         }
     }
 
-    get sorting(): PositronVariablesSorting { return this._sorting; }
+    get sorting(): PositronVariablesSorting {
+        return this._sorting;
+    }
     set sorting(value: PositronVariablesSorting) {
         if (this._sorting !== value) {
             this._sorting = value;
@@ -198,7 +205,9 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
         }
     }
 
-    get highlightRecent(): boolean { return this._highlightRecent; }
+    get highlightRecent(): boolean {
+        return this._highlightRecent;
+    }
     set highlightRecent(value: boolean) {
         if (this._highlightRecent !== value) {
             this._highlightRecent = value;
@@ -222,13 +231,15 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
         const refreshId = ++this._refreshId;
         const revision = this._dataRevision;
         try {
-            const list = await this._runWithClientRequest(client => client.requestRefresh());
+            const list = await this._runWithClientRequest((client) => client.requestRefresh());
             // A newer refresh or kernel notification is authoritative.
             if (refreshId === this._refreshId && revision === this._dataRevision) {
                 await this.processList(list);
             }
         } catch (error) {
-            if (error instanceof vscode.CancellationError) { return; }
+            if (error instanceof vscode.CancellationError) {
+                return;
+            }
             await this._notifyRequestError('refreshing', error);
             throw error;
         }
@@ -242,11 +253,13 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
         }
 
         try {
-            await this._runWithClientRequest(client =>
-                client.requestClear(includeHiddenVariables)
+            await this._runWithClientRequest((client) =>
+                client.requestClear(includeHiddenVariables),
             );
         } catch (error) {
-            if (error instanceof vscode.CancellationError) { return; }
+            if (error instanceof vscode.CancellationError) {
+                return;
+            }
             await this._notifyRequestError('clearing', error);
             throw error;
         }
@@ -262,7 +275,9 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
 
         const revision = this._dataRevision;
         try {
-            const update = await this._runWithClientRequest(client => client.requestDelete(names));
+            const update = await this._runWithClientRequest((client) =>
+                client.requestDelete(names),
+            );
             if (revision === this._dataRevision) {
                 await this.processUpdate(update);
             } else {
@@ -271,7 +286,9 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
                 await this.requestRefresh();
             }
         } catch (error) {
-            if (error instanceof vscode.CancellationError) { return; }
+            if (error instanceof vscode.CancellationError) {
+                return;
+            }
             await this._notifyRequestError('deleting', error);
             throw error;
         }
@@ -294,19 +311,25 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
     async expandVariableItem(path: string[]): Promise<void> {
         const pathString = JSON.stringify(path);
         const variableItem = this.locateVariableItem(path);
-        if (!variableItem || this._expandedPaths.has(pathString)) { return; }
+        if (!variableItem || this._expandedPaths.has(pathString)) {
+            return;
+        }
         const epoch = this._clientEpoch;
         this._expandedPaths.add(pathString);
         try {
             await this.loadChildItems(variableItem, true);
         } catch (error) {
-            if (error instanceof vscode.CancellationError || epoch !== this._clientEpoch) { return; }
+            if (error instanceof vscode.CancellationError || epoch !== this._clientEpoch) {
+                return;
+            }
             this._expandedPaths.delete(pathString);
             this.fireEntriesChanged();
             await this._notifyRequestError('expanding', error);
             throw error;
         }
-        if (epoch === this._clientEpoch) { this.fireEntriesChanged(); }
+        if (epoch === this._clientEpoch) {
+            this.fireEntriesChanged();
+        }
     }
 
     collapseVariableItem(path: string[]): void {
@@ -324,9 +347,15 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
         }
     }
 
-    hasFilterText(): boolean { return this._filterText !== ''; }
-    getFilterText(): string { return this._filterText; }
-    focusElement(): void { this._onFocusElementEmitter.fire(); }
+    hasFilterText(): boolean {
+        return this._filterText !== '';
+    }
+    getFilterText(): string {
+        return this._filterText;
+    }
+    focusElement(): void {
+        this._onFocusElementEmitter.fire();
+    }
 
     async list(): Promise<Variable[]> {
         if (!this._variablesClient) {
@@ -334,7 +363,7 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
             return [];
         }
 
-        const list = await this._runWithClientRequest(client => client.list());
+        const list = await this._runWithClientRequest((client) => client.list());
         return Array.isArray(list) ? list : (list.variables ?? []);
     }
 
@@ -344,7 +373,7 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
             return { children: [], length: 0 };
         }
 
-        const result = await this._runWithClientRequest(client => client.inspect(path));
+        const result = await this._runWithClientRequest((client) => client.inspect(path));
         return {
             children: result.children ?? [],
             length: result.length ?? 0,
@@ -357,9 +386,7 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
             return '';
         }
 
-        return this._runWithClientRequest(client =>
-            client.clipboardFormat(path, format)
-        );
+        return this._runWithClientRequest((client) => client.clipboardFormat(path, format));
     }
 
     async view(path: string[]): Promise<string | undefined> {
@@ -368,15 +395,17 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
             return undefined;
         }
 
-        return this._runWithClientRequest(client => client.view(path));
+        return this._runWithClientRequest((client) => client.view(path));
     }
 
-    getClientInstance(): VariablesClientInstance | undefined { return this._variablesClient; }
+    getClientInstance(): VariablesClientInstance | undefined {
+        return this._variablesClient;
+    }
 
     dispose(): void {
         this.detachFromSession();
         this._disposeRuntimeDisposables();
-        this._disposables.forEach(d => d.dispose());
+        this._disposables.forEach((d) => d.dispose());
         this._onDidChangeEntriesEmitter.dispose();
         this._onDidChangeStateEmitter.dispose();
         this._onDidChangeStatusEmitter.dispose();
@@ -392,7 +421,7 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
      */
     setRuntimeSession(session: RuntimeSession): void {
         this._outputChannel.debug(
-            `[VariablesInstance] Rebinding session ${this._session.sessionId} to ${session.sessionId}`
+            `[VariablesInstance] Rebinding session ${this._session.sessionId} to ${session.sessionId}`,
         );
         this.detachFromSession();
         this._disposeRuntimeDisposables();
@@ -402,16 +431,18 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
 
     updateVariables(variables: Variable[]): void {
         this._dataRevision++;
-        this._variableItems.forEach(item => { item.isRecent = false; });
+        this._variableItems.forEach((item) => {
+            item.isRecent = false;
+        });
 
         for (const variable of variables) {
             this._variableItems.set(
                 variable.access_key,
-                this.createVariableItem(variable, [], this._highlightRecent)
+                this.createVariableItem(variable, [], this._highlightRecent),
             );
         }
 
-        const newKeys = new Set(variables.map(v => v.access_key));
+        const newKeys = new Set(variables.map((v) => v.access_key));
         for (const key of this._variableItems.keys()) {
             if (!newKeys.has(key)) {
                 this._variableItems.delete(key);
@@ -439,7 +470,7 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
     //#region Private Methods
     private attachToSession(): void {
         this._outputChannel.debug(
-            `[VariablesInstance] Attaching to session ${this._session.sessionId} (state=${this._session.state}, clientManager=${this._session.clientManager ? 'yes' : 'no'})`
+            `[VariablesInstance] Attaching to session ${this._session.sessionId} (state=${this._session.state}, clientManager=${this._session.clientManager ? 'yes' : 'no'})`,
         );
         this._state = RuntimeClientState.Opening;
         this._status = RuntimeClientStatus.Disconnected;
@@ -452,19 +483,19 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
             this._attachToClientManager(this._session.clientManager, 'attach');
         } else {
             this._outputChannel.debug(
-                `[VariablesInstance] Waiting for client manager for session ${this._session.sessionId}`
+                `[VariablesInstance] Waiting for client manager for session ${this._session.sessionId}`,
             );
         }
 
         this._runtimeDisposables.push(
-            this._session.onDidCreateClientManager(manager => {
+            this._session.onDidCreateClientManager((manager) => {
                 this._attachToClientManager(manager, 'clientManagerCreated');
             }),
-            this._session.onDidChangeRuntimeState(state => {
+            this._session.onDidChangeRuntimeState((state) => {
                 if (state === RuntimeState.Exited) {
                     this.detachFromSession();
                 }
-            })
+            }),
         );
     }
 
@@ -507,15 +538,15 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
         this._updateClientRequestStatus();
 
         this._clientDisposables.push(
-            this._variablesClient.onDidReceiveList(list => {
+            this._variablesClient.onDidReceiveList((list) => {
                 void this.processList(list);
             }),
-            this._variablesClient.onDidReceiveUpdate(update => {
+            this._variablesClient.onDidReceiveUpdate((update) => {
                 void this.processUpdate(update);
             }),
-            client.onDidChangeClientState(state => {
+            client.onDidChangeClientState((state) => {
                 this._syncClientState(state);
-            })
+            }),
         );
 
         // Kick off an initial refresh to populate data
@@ -562,7 +593,7 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
     }
 
     private _disposeRuntimeDisposables(): void {
-        this._runtimeDisposables.forEach(d => d.dispose());
+        this._runtimeDisposables.forEach((d) => d.dispose());
         this._runtimeDisposables = [];
         this._clientHandlerRegistered = false;
     }
@@ -571,14 +602,14 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
         this._clientEpoch++;
         this._refreshId++;
         this._pendingClientRequests = 0;
-        this._clientDisposables.forEach(d => d.dispose());
+        this._clientDisposables.forEach((d) => d.dispose());
         this._clientDisposables = [];
     }
 
     private _attachToClientManager(manager: RuntimeClientManager, reason: string): void {
         if (!this._clientHandlerRegistered) {
             this._outputChannel.debug(
-                `[VariablesInstance] Registering variables client handler for session ${this._session.sessionId} (${reason})`
+                `[VariablesInstance] Registering variables client handler for session ${this._session.sessionId} (${reason})`,
             );
             this._runtimeDisposables.push(
                 manager.registerClientHandler({
@@ -586,8 +617,8 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
                     callback: (client, _params) => {
                         this._handleVariablesClient(client);
                         return true;
-                    }
-                })
+                    },
+                }),
             );
             this._clientHandlerRegistered = true;
         }
@@ -597,7 +628,7 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
             const existingClient = manager.getClient(existingClientId);
             if (existingClient) {
                 this._outputChannel.debug(
-                    `[VariablesInstance] Found existing variables client ${existingClientId} for session ${this._session.sessionId} (${reason})`
+                    `[VariablesInstance] Found existing variables client ${existingClientId} for session ${this._session.sessionId} (${reason})`,
                 );
                 this._handleVariablesClient(existingClient);
             }
@@ -607,13 +638,13 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
     private _warnMissingClient(action: string): void {
         if (this._warnedMissingClient) {
             this._outputChannel.debug(
-                `[VariablesInstance] Ignoring ${action}; variables client not available`
+                `[VariablesInstance] Ignoring ${action}; variables client not available`,
             );
             return;
         }
         this._warnedMissingClient = true;
         this._outputChannel.warn(
-            `[VariablesInstance] Ignoring ${action}; variables client not available`
+            `[VariablesInstance] Ignoring ${action}; variables client not available`,
         );
     }
 
@@ -624,24 +655,30 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
         }
 
         this.setStatus(
-            this._pendingClientRequests > 0
-                ? RuntimeClientStatus.Busy
-                : RuntimeClientStatus.Idle
+            this._pendingClientRequests > 0 ? RuntimeClientStatus.Busy : RuntimeClientStatus.Idle,
         );
     }
 
-    private async _runWithClientRequest<T>(action: (client: RuntimeVariablesClientInstance) => Promise<T>): Promise<T> {
+    private async _runWithClientRequest<T>(
+        action: (client: RuntimeVariablesClientInstance) => Promise<T>,
+    ): Promise<T> {
         const client = this._variablesClient;
         const epoch = this._clientEpoch;
-        if (!client) { throw new vscode.CancellationError(); }
+        if (!client) {
+            throw new vscode.CancellationError();
+        }
         this._pendingClientRequests++;
         this._updateClientRequestStatus();
         try {
             const result = await action(client);
-            if (epoch !== this._clientEpoch) { throw new vscode.CancellationError(); }
+            if (epoch !== this._clientEpoch) {
+                throw new vscode.CancellationError();
+            }
             return result;
         } catch (error) {
-            if (epoch !== this._clientEpoch) { throw new vscode.CancellationError(); }
+            if (epoch !== this._clientEpoch) {
+                throw new vscode.CancellationError();
+            }
             throw error;
         } finally {
             // An old request must not decrement a replacement client's counter.
@@ -674,7 +711,9 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
     private async processUpdate(update: PositronVariablesUpdate): Promise<void> {
         const epoch = this._clientEpoch;
         const revision = ++this._dataRevision;
-        this._variableItems.forEach(item => { item.isRecent = false; });
+        this._variableItems.forEach((item) => {
+            item.isRecent = false;
+        });
 
         const promises: Promise<void>[] = [];
         for (const assigned of update.assigned) {
@@ -718,10 +757,12 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
 
     private getFilteredItems(): VariableItem[] {
         const items = Array.from(this._variableItems.values());
-        if (!this._filterText) {return items;}
+        if (!this._filterText) {
+            return items;
+        }
         try {
             const regex = new RegExp(this._filterText, 'i');
-            return items.filter(item => regex.test(item.displayName));
+            return items.filter((item) => regex.test(item.displayName));
         } catch {
             // An unfinished regular expression must not break the Variables model.
             return [];
@@ -747,7 +788,7 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
     private createVariableItem(
         variable: Variable,
         parentPath: string[] = [],
-        isRecent: boolean = false
+        isRecent: boolean = false,
     ): VariableItem {
         return new VariableItem(variable, parentPath, isRecent);
     }
@@ -776,12 +817,18 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
         const epoch = this._clientEpoch;
         const request = {};
         this._childLoads.set(variableItem, request);
-        const isCurrent = () => epoch === this._clientEpoch &&
-            this._childLoads.get(variableItem) === request && this.isPathExpanded(variableItem.path) &&
+        const isCurrent = () =>
+            epoch === this._clientEpoch &&
+            this._childLoads.get(variableItem) === request &&
+            this.isPathExpanded(variableItem.path) &&
             (!reportErrors || this.locateVariableItem(variableItem.path) === variableItem);
         try {
-            const inspected = await this._runWithClientRequest(client => client.inspect(variableItem.path));
-            if (!isCurrent()) { return; }
+            const inspected = await this._runWithClientRequest((client) =>
+                client.inspect(variableItem.path),
+            );
+            if (!isCurrent()) {
+                return;
+            }
             const childItems: VariableItem[] = [];
             const promises: Promise<void>[] = [];
 
@@ -795,26 +842,30 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
             }
 
             await Promise.all(promises);
-            if (!isCurrent()) { return; }
+            if (!isCurrent()) {
+                return;
+            }
 
             variableItem.childItems = childItems;
             variableItem.totalChildren = inspected.length ?? childItems.length;
-            const overflowValues = Math.max(
-                variableItem.totalChildren - childItems.length,
-                0
-            );
-            variableItem.overflowEntry = overflowValues > 0
-                ? new VariableOverflow(
-                    `${variableItem.id}::overflow`,
-                    variableItem.indentLevel + 1,
-                    overflowValues
-                )
-                : undefined;
+            const overflowValues = Math.max(variableItem.totalChildren - childItems.length, 0);
+            variableItem.overflowEntry =
+                overflowValues > 0
+                    ? new VariableOverflow(
+                          `${variableItem.id}::overflow`,
+                          variableItem.indentLevel + 1,
+                          overflowValues,
+                      )
+                    : undefined;
         } catch (error) {
-            if (!isCurrent() || error instanceof vscode.CancellationError) { return; }
-            if (reportErrors) { throw error; }
+            if (!isCurrent() || error instanceof vscode.CancellationError) {
+                return;
+            }
+            if (reportErrors) {
+                throw error;
+            }
             this._outputChannel.warn(
-                `[VariablesInstance] Failed to load children for ${JSON.stringify(variableItem.path)}: ${formatErrorForLogging(error)}`
+                `[VariablesInstance] Failed to load children for ${JSON.stringify(variableItem.path)}: ${formatErrorForLogging(error)}`,
             );
             variableItem.childItems = [];
             variableItem.overflowEntry = undefined;
@@ -822,36 +873,128 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
     }
 
     private groupByKind(items: VariableItem[]): VariablesTreeEntry[] {
-        const groups: Record<string, VariableItem[]> = { data: [], values: [], functions: [], classes: [] };
+        const groups: Record<string, VariableItem[]> = {
+            data: [],
+            values: [],
+            functions: [],
+            classes: [],
+        };
         for (const item of items) {
-            if (item.kind === 'table') {groups.data.push(item);}
-            else if (item.kind === 'function') {groups.functions.push(item);}
-            else if (item.kind === 'class') {groups.classes.push(item);}
-            else {groups.values.push(item);}
+            if (item.kind === 'table') {
+                groups.data.push(item);
+            } else if (item.kind === 'function') {
+                groups.functions.push(item);
+            } else if (item.kind === 'class') {
+                groups.classes.push(item);
+            } else {
+                groups.values.push(item);
+            }
         }
 
         const entries: VariablesTreeEntry[] = [];
-        if (groups.data.length > 0) {entries.push(new VariableGroup('group/data', 'Data', !this._collapsedGroupIds.has('group/data'), this.sortItems(groups.data)));}
-        if (groups.values.length > 0) {entries.push(new VariableGroup('group/values', 'Values', !this._collapsedGroupIds.has('group/values'), this.sortItems(groups.values)));}
-        if (groups.functions.length > 0) {entries.push(new VariableGroup('group/functions', 'Functions', !this._collapsedGroupIds.has('group/functions'), this.sortItems(groups.functions)));}
-        if (groups.classes.length > 0) {entries.push(new VariableGroup('group/classes', 'Classes', !this._collapsedGroupIds.has('group/classes'), this.sortItems(groups.classes)));}
+        if (groups.data.length > 0) {
+            entries.push(
+                new VariableGroup(
+                    'group/data',
+                    'Data',
+                    !this._collapsedGroupIds.has('group/data'),
+                    this.sortItems(groups.data),
+                ),
+            );
+        }
+        if (groups.values.length > 0) {
+            entries.push(
+                new VariableGroup(
+                    'group/values',
+                    'Values',
+                    !this._collapsedGroupIds.has('group/values'),
+                    this.sortItems(groups.values),
+                ),
+            );
+        }
+        if (groups.functions.length > 0) {
+            entries.push(
+                new VariableGroup(
+                    'group/functions',
+                    'Functions',
+                    !this._collapsedGroupIds.has('group/functions'),
+                    this.sortItems(groups.functions),
+                ),
+            );
+        }
+        if (groups.classes.length > 0) {
+            entries.push(
+                new VariableGroup(
+                    'group/classes',
+                    'Classes',
+                    !this._collapsedGroupIds.has('group/classes'),
+                    this.sortItems(groups.classes),
+                ),
+            );
+        }
         return entries;
     }
 
     private groupBySize(items: VariableItem[]): VariablesTreeEntry[] {
-        const groups: Record<string, VariableItem[]> = { small: [], medium: [], large: [], veryLarge: [] };
+        const groups: Record<string, VariableItem[]> = {
+            small: [],
+            medium: [],
+            large: [],
+            veryLarge: [],
+        };
         for (const item of items) {
-            if (item.size < 1_000) {groups.small.push(item);}
-            else if (item.size < 10_000) {groups.medium.push(item);}
-            else if (item.size < 1_000_000) {groups.large.push(item);}
-            else {groups.veryLarge.push(item);}
+            if (item.size < 1_000) {
+                groups.small.push(item);
+            } else if (item.size < 10_000) {
+                groups.medium.push(item);
+            } else if (item.size < 1_000_000) {
+                groups.large.push(item);
+            } else {
+                groups.veryLarge.push(item);
+            }
         }
 
         const entries: VariablesTreeEntry[] = [];
-        if (groups.small.length > 0) {entries.push(new VariableGroup('group/small', 'Small', !this._collapsedGroupIds.has('group/small'), this.sortItems(groups.small)));}
-        if (groups.medium.length > 0) {entries.push(new VariableGroup('group/medium', 'Medium', !this._collapsedGroupIds.has('group/medium'), this.sortItems(groups.medium)));}
-        if (groups.large.length > 0) {entries.push(new VariableGroup('group/large', 'Large', !this._collapsedGroupIds.has('group/large'), this.sortItems(groups.large)));}
-        if (groups.veryLarge.length > 0) {entries.push(new VariableGroup('group/very-large', 'Very Large', !this._collapsedGroupIds.has('group/very-large'), this.sortItems(groups.veryLarge)));}
+        if (groups.small.length > 0) {
+            entries.push(
+                new VariableGroup(
+                    'group/small',
+                    'Small',
+                    !this._collapsedGroupIds.has('group/small'),
+                    this.sortItems(groups.small),
+                ),
+            );
+        }
+        if (groups.medium.length > 0) {
+            entries.push(
+                new VariableGroup(
+                    'group/medium',
+                    'Medium',
+                    !this._collapsedGroupIds.has('group/medium'),
+                    this.sortItems(groups.medium),
+                ),
+            );
+        }
+        if (groups.large.length > 0) {
+            entries.push(
+                new VariableGroup(
+                    'group/large',
+                    'Large',
+                    !this._collapsedGroupIds.has('group/large'),
+                    this.sortItems(groups.large),
+                ),
+            );
+        }
+        if (groups.veryLarge.length > 0) {
+            entries.push(
+                new VariableGroup(
+                    'group/very-large',
+                    'Very Large',
+                    !this._collapsedGroupIds.has('group/very-large'),
+                    this.sortItems(groups.veryLarge),
+                ),
+            );
+        }
         return entries;
     }
 
@@ -859,21 +1002,24 @@ export class PositronVariablesInstance implements IPositronVariablesInstance {
         const message = getErrorMessage(error);
         this._outputChannel.warn(
             `[VariablesInstance] Error ${action} variables: ${message}; ` +
-            `session=${this._session.sessionId}; details=${formatErrorForLogging(error)}`,
+                `session=${this._session.sessionId}; details=${formatErrorForLogging(error)}`,
         );
         void vscode.window.showErrorMessage(`Error ${action} variables: ${message}`);
     }
 
     private fireEntriesChanged(): void {
-        const flattened = this._entries.flatMap(entry => {
+        const flattened = this._entries.flatMap((entry) => {
             if (entry instanceof VariableGroup) {
                 entry.isExpanded = !this._collapsedGroupIds.has(entry.id);
                 if (!entry.isExpanded) {
                     return [entry];
                 }
-                return [entry, ...(entry.variableItems as VariableItem[]).flatMap(item =>
-                    item.flatten((path: string[]) => this.isPathExpanded(path))
-                )];
+                return [
+                    entry,
+                    ...(entry.variableItems as VariableItem[]).flatMap((item) =>
+                        item.flatten((path: string[]) => this.isPathExpanded(path)),
+                    ),
+                ];
             }
 
             if (entry instanceof VariableItem) {

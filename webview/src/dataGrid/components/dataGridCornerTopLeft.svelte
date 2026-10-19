@@ -3,12 +3,12 @@
   Port from Positron's dataGridCornerTopLeft.tsx
 -->
 <script lang="ts">
-    import VerticalSplitter from "../../dataExplorer/components/splitters/verticalSplitter.svelte";
-    import { getPositronDataGridContext } from "../positronDataGridContext";
+    import VerticalSplitter from '../../dataExplorer/components/splitters/verticalSplitter.svelte';
+    import { getPositronDataGridContext } from '../positronDataGridContext';
 
     const { instance } = getPositronDataGridContext();
 
-    const tooltipText = "Scroll to top-left";
+    const tooltipText = 'Scroll to top-left';
 
     async function handleClick(event?: MouseEvent) {
         if (event?.target instanceof Element && event.target.closest('[role="separator"]')) {
@@ -53,7 +53,7 @@
         if (event.target !== event.currentTarget) {
             return;
         }
-        if (event.key === "Enter" || event.key === " ") {
+        if (event.key === 'Enter' || event.key === ' ') {
             event.preventDefault();
             void handleClick();
         }
@@ -70,7 +70,9 @@
                     maximumWidth: maximumRowHeadersWidth,
                     startingWidth: rowHeadersWidth,
                 })}
-                onResize={(width) => { void instance.setRowHeadersWidth(width); }}
+                onResize={(width) => {
+                    void instance.setRowHeadersWidth(width);
+                }}
             />
         </div>
     {/if}
@@ -99,20 +101,13 @@
         position: absolute;
         box-sizing: border-box;
         border-right: 1px solid
-            var(
-                --vscode-positronDataGrid-border,
-                var(--vscode-editorGroup-border)
-            );
+            var(--vscode-positronDataGrid-border, var(--vscode-editorGroup-border));
         border-bottom: 1px solid
-            var(
-                --vscode-positronDataGrid-border,
-                var(--vscode-editorGroup-border)
-            );
+            var(--vscode-positronDataGrid-border, var(--vscode-editorGroup-border));
     }
 
     .data-grid-corner-top-left .data-grid-vertical-splitter {
         grid-column: splitter / end-columns;
         align-self: stretch;
     }
-
 </style>

@@ -1,19 +1,19 @@
 <script lang="ts">
-    import { onMount } from "svelte";
-    import { getRpcConnection } from "$lib/rpc/client";
-    import UrlActionBar from "./UrlActionBar.svelte";
-    import HtmlActionBar from "./HtmlActionBar.svelte";
-    import BasicActionBar from "./BasicActionBar.svelte";
-    import type { ViewerOpenTarget } from "./ViewerOpenMenuButton.svelte";
-    import { localize } from "$lib/localization";
+    import { onMount } from 'svelte';
+    import { getRpcConnection } from '$lib/rpc/client';
+    import UrlActionBar from './UrlActionBar.svelte';
+    import HtmlActionBar from './HtmlActionBar.svelte';
+    import BasicActionBar from './BasicActionBar.svelte';
+    import type { ViewerOpenTarget } from './ViewerOpenMenuButton.svelte';
+    import { localize } from '$lib/localization';
 
     interface ViewerShowParams {
         url: string;
         title?: string;
         height?: number;
         sessionId?: string;
-        kind?: "url" | "html";
-        mode?: "load" | "sync" | "traverse";
+        kind?: 'url' | 'html';
+        mode?: 'load' | 'sync' | 'traverse';
         documentId?: string;
         navigationKey?: string;
     }
@@ -23,18 +23,18 @@
     let frameUrl = $state<string | null>(null);
     let activeDocumentId: string | undefined;
     let pendingNavigationKey: string | undefined;
-    let title = $state<string>("");
+    let title = $state<string>('');
     let height = $state<number | undefined>();
-    let kind = $state<"url" | "html" | "basic">("basic");
+    let kind = $state<'url' | 'html' | 'basic'>('basic');
     let canNavigateBack = $state(false);
     let canNavigateForward = $state(false);
     let interruptible = $state(false);
     let interrupting = $state(false);
-    let loadState = $state<"idle" | "loading" | "ready" | "error">("idle");
-    let defaultOpenTarget = $state<ViewerOpenTarget>("browser");
+    let loadState = $state<'idle' | 'loading' | 'ready' | 'error'>('idle');
+    let defaultOpenTarget = $state<ViewerOpenTarget>('browser');
     let iframeEl = $state<HTMLIFrameElement | null>(null);
     let findVisible = $state(false);
-    let findValue = $state("");
+    let findValue = $state('');
     let findHasResult = $state(true);
     let bridgeAvailable = $state(false);
     let bridgeProbeTimer: ReturnType<typeof setTimeout> | undefined;
@@ -46,26 +46,18 @@
             return;
         }
 
-        if (
-            (event.ctrlKey || event.metaKey) &&
-            !event.altKey &&
-            event.key.toLowerCase() === "f"
-        ) {
+        if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 'f') {
             event.preventDefault();
             showFind();
             return;
         }
 
-        if (kind !== "url") {
+        if (kind !== 'url') {
             return;
         }
 
-        if (
-            (event.ctrlKey || event.metaKey) &&
-            event.key.toLowerCase() === "l"
-        ) {
-            const input =
-                document.querySelector<HTMLInputElement>(".url-bar");
+        if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'l') {
+            const input = document.querySelector<HTMLInputElement>('.url-bar');
             if (input) {
                 event.preventDefault();
                 input.focus();
@@ -77,10 +69,10 @@
         if (!event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
             return;
         }
-        if (event.key === "ArrowLeft" && canNavigateBack) {
+        if (event.key === 'ArrowLeft' && canNavigateBack) {
             event.preventDefault();
             handleBack();
-        } else if (event.key === "ArrowRight" && canNavigateForward) {
+        } else if (event.key === 'ArrowRight' && canNavigateForward) {
             event.preventDefault();
             handleForward();
         }
@@ -95,22 +87,22 @@
             url?: string;
             title?: string;
             found?: boolean;
-            navigationType?: "load" | "push" | "replace" | "traverse";
+            navigationType?: 'load' | 'push' | 'replace' | 'traverse';
             documentId?: string;
             navigationKey?: string;
         };
         switch (message?.id) {
-            case "supervisor-viewer-ready":
+            case 'supervisor-viewer-ready':
                 bridgeAvailable = true;
                 if (bridgeProbeTimer) clearTimeout(bridgeProbeTimer);
                 break;
-            case "supervisor-viewer-location":
+            case 'supervisor-viewer-location':
                 if (message.url) {
                     activeDocumentId = message.documentId;
                     pendingNavigationKey = undefined;
                     currentUrl = message.url;
                     title = message.title || title;
-                    connection.sendNotification("viewer/didNavigate", {
+                    connection.sendNotification('viewer/didNavigate', {
                         url: message.url,
                         title: message.title,
                         navigationType: message.navigationType,
@@ -119,18 +111,18 @@
                     });
                 }
                 break;
-            case "supervisor-viewer-navigate":
+            case 'supervisor-viewer-navigate':
                 if (message.url) handleNavigate(message.url);
                 break;
-            case "supervisor-viewer-traverse-failed":
+            case 'supervisor-viewer-traverse-failed':
                 if (message.navigationKey === pendingNavigationKey && currentUrl) {
                     loadFrame(currentUrl);
                 }
                 break;
-            case "supervisor-viewer-show-find":
+            case 'supervisor-viewer-show-find':
                 showFind();
                 break;
-            case "supervisor-viewer-find-result":
+            case 'supervisor-viewer-find-result':
                 bridgeAvailable = true;
                 findHasResult = Boolean(message.found);
                 break;
@@ -139,82 +131,85 @@
 
     onMount(() => {
         const subscriptions = [
-        connection.onNotification("viewer/show", (params: ViewerShowParams) => {
-            currentUrl = params.url;
-            title = params.title || "";
-            height = params.height;
-            kind = params.kind || "basic";
-            if (params.mode === 'sync') {
-                return;
-            }
-            if (params.mode === 'traverse' && bridgeAvailable && params.documentId === activeDocumentId && params.navigationKey) {
-                pendingNavigationKey = params.navigationKey;
-                postToFrame({
-                    id: 'supervisor-viewer-traverse',
-                    documentId: params.documentId,
-                    navigationKey: params.navigationKey,
-                });
-                return;
-            }
-            loadFrame(params.url);
-            // The extension resolves interrupt capability from the source
-            // runtime/terminal state; URL previews are not inherently stoppable.
-            interruptible = false;
-            interrupting = false;
-        }),
+            connection.onNotification('viewer/show', (params: ViewerShowParams) => {
+                currentUrl = params.url;
+                title = params.title || '';
+                height = params.height;
+                kind = params.kind || 'basic';
+                if (params.mode === 'sync') {
+                    return;
+                }
+                if (
+                    params.mode === 'traverse' &&
+                    bridgeAvailable &&
+                    params.documentId === activeDocumentId &&
+                    params.navigationKey
+                ) {
+                    pendingNavigationKey = params.navigationKey;
+                    postToFrame({
+                        id: 'supervisor-viewer-traverse',
+                        documentId: params.documentId,
+                        navigationKey: params.navigationKey,
+                    });
+                    return;
+                }
+                loadFrame(params.url);
+                // The extension resolves interrupt capability from the source
+                // runtime/terminal state; URL previews are not inherently stoppable.
+                interruptible = false;
+                interrupting = false;
+            }),
 
-        connection.onNotification("viewer/updateInterruptState", (params: {
-            interruptible: boolean;
-            interrupting: boolean;
-        }) => {
-            interruptible = params.interruptible;
-            interrupting = params.interrupting;
-        }),
+            connection.onNotification(
+                'viewer/updateInterruptState',
+                (params: { interruptible: boolean; interrupting: boolean }) => {
+                    interruptible = params.interruptible;
+                    interrupting = params.interrupting;
+                },
+            ),
 
-        connection.onNotification("viewer/updateNavState", (params: {
-            canNavigateBack: boolean;
-            canNavigateForward: boolean;
-        }) => {
-            canNavigateBack = params.canNavigateBack;
-            canNavigateForward = params.canNavigateForward;
-        }),
+            connection.onNotification(
+                'viewer/updateNavState',
+                (params: { canNavigateBack: boolean; canNavigateForward: boolean }) => {
+                    canNavigateBack = params.canNavigateBack;
+                    canNavigateForward = params.canNavigateForward;
+                },
+            ),
 
-        connection.onNotification("viewer/focus", () => {
-            focusPreview();
-        }),
+            connection.onNotification('viewer/focus', () => {
+                focusPreview();
+            }),
 
-        connection.onNotification("viewer/find", () => {
-            showFind();
-        }),
+            connection.onNotification('viewer/find', () => {
+                showFind();
+            }),
         ];
 
         // This request also tells the host it can safely publish the current preview.
-        void connection.sendRequest("viewer/getDefaultOpenTarget", {}).then((result) => {
+        void connection.sendRequest('viewer/getDefaultOpenTarget', {}).then((result) => {
             defaultOpenTarget = (result as { target: ViewerOpenTarget }).target;
         });
 
         return () => {
             if (bridgeProbeTimer) clearTimeout(bridgeProbeTimer);
-            subscriptions.forEach(subscription => subscription.dispose());
+            subscriptions.forEach((subscription) => subscription.dispose());
         };
     });
 
-    const iframeHeight = $derived(
-        height && height > 0 ? `${height}px` : "100%",
-    );
+    const iframeHeight = $derived(height && height > 0 ? `${height}px` : '100%');
 
     // --- Action handlers that notify the extension ---
     function handleNavigate(url: string) {
-        connection.sendNotification("viewer/navigate", { url });
+        connection.sendNotification('viewer/navigate', { url });
     }
     function handleBack() {
-        connection.sendNotification("viewer/navigateBack", {});
+        connection.sendNotification('viewer/navigateBack', {});
     }
     function handleForward() {
-        connection.sendNotification("viewer/navigateForward", {});
+        connection.sendNotification('viewer/navigateForward', {});
     }
     function handleReload() {
-        connection.sendNotification("viewer/reload", {});
+        connection.sendNotification('viewer/reload', {});
     }
     function handleClear() {
         currentUrl = null;
@@ -227,30 +222,32 @@
         findValue = '';
         bridgeAvailable = false;
         if (bridgeProbeTimer) clearTimeout(bridgeProbeTimer);
-        title = "";
-        kind = "basic";
-        loadState = "idle";
+        title = '';
+        kind = 'basic';
+        loadState = 'idle';
         pendingFocus = false;
-        connection.sendNotification("viewer/clear", {});
+        connection.sendNotification('viewer/clear', {});
     }
     function handleOpenInBrowser() {
-        connection.sendNotification("viewer/openInBrowser", {});
+        connection.sendNotification('viewer/openInBrowser', {});
     }
     async function handleOpen(target: ViewerOpenTarget) {
-        const result = await connection.sendRequest("viewer/open", { target }) as { success: boolean };
+        const result = (await connection.sendRequest('viewer/open', { target })) as {
+            success: boolean;
+        };
         if (result.success) {
             defaultOpenTarget = target;
         }
     }
     function handleInterrupt() {
         interrupting = true;
-        connection.sendNotification("viewer/interrupt", {});
+        connection.sendNotification('viewer/interrupt', {});
     }
 
     function handleFrameLoaded() {
-        loadState = "ready";
+        loadState = 'ready';
         bridgeAvailable = false;
-        postToFrame({ id: "supervisor-viewer-ping" });
+        postToFrame({ id: 'supervisor-viewer-ping' });
         bridgeProbeTimer = setTimeout(() => {
             bridgeAvailable = false;
         }, 500);
@@ -268,19 +265,19 @@
     }
 
     function handleFrameError() {
-        loadState = "error";
+        loadState = 'error';
     }
 
     function postToFrame(message: Record<string, unknown>) {
-        iframeEl?.contentWindow?.postMessage(message, "*");
+        iframeEl?.contentWindow?.postMessage(message, '*');
     }
 
     function focusPreview() {
         pendingFocus = true;
-        if (loadState !== "ready" || !iframeEl) return;
+        if (loadState !== 'ready' || !iframeEl) return;
         pendingFocus = false;
         iframeEl?.focus();
-        postToFrame({ id: "supervisor-viewer-focus" });
+        postToFrame({ id: 'supervisor-viewer-focus' });
     }
 
     function showFind() {
@@ -288,7 +285,7 @@
         pendingFocus = false;
         findVisible = true;
         setTimeout(() => {
-            const input = document.getElementById("viewer-find-input") as HTMLInputElement | null;
+            const input = document.getElementById('viewer-find-input') as HTMLInputElement | null;
             input?.focus();
             input?.select();
         }, 0);
@@ -296,51 +293,48 @@
 
     function closeFind() {
         findVisible = false;
-        findValue = "";
+        findValue = '';
         findHasResult = true;
-        postToFrame({ id: "supervisor-viewer-find", value: "" });
+        postToFrame({ id: 'supervisor-viewer-find', value: '' });
         focusPreview();
     }
 
     function updateFind(value: string) {
         findValue = value;
         findHasResult = true;
-        postToFrame({ id: "supervisor-viewer-find", value });
+        postToFrame({ id: 'supervisor-viewer-find', value });
     }
 
     function findNext() {
-        postToFrame({ id: "supervisor-viewer-find-next", value: findValue });
+        postToFrame({ id: 'supervisor-viewer-find-next', value: findValue });
     }
 
     function findPrevious() {
-        postToFrame({ id: "supervisor-viewer-find-previous", value: findValue });
+        postToFrame({ id: 'supervisor-viewer-find-previous', value: findValue });
     }
 
     function handleFindKeydown(event: KeyboardEvent) {
-        if (event.key === "Enter") {
+        if (event.key === 'Enter') {
             event.preventDefault();
             event.shiftKey ? findPrevious() : findNext();
-        } else if (event.key === "Escape") {
+        } else if (event.key === 'Escape') {
             event.preventDefault();
             closeFind();
         }
     }
 </script>
 
-<svelte:window
-    onkeydown={handleKeyboardShortcut}
-    onmessage={handleFrameMessage}
-/>
+<svelte:window onkeydown={handleKeyboardShortcut} onmessage={handleFrameMessage} />
 
 <div
     class="viewer-root"
     role="region"
     aria-label={localize('viewer.region', 'Viewer')}
-    aria-busy={loadState === "loading"}
+    aria-busy={loadState === 'loading'}
 >
     {#if currentUrl}
         <!-- Toolbar: choose based on kind -->
-        {#if kind === "url"}
+        {#if kind === 'url'}
             <UrlActionBar
                 url={currentUrl}
                 {canNavigateBack}
@@ -357,7 +351,7 @@
                 oninterrupt={handleInterrupt}
                 onfind={showFind}
             />
-        {:else if kind === "html"}
+        {:else if kind === 'html'}
             <HtmlActionBar
                 {title}
                 onreload={handleReload}
@@ -367,10 +361,7 @@
                 onfind={showFind}
             />
         {:else}
-            <BasicActionBar
-                {title}
-                onclear={handleClear}
-            />
+            <BasicActionBar {title} onclear={handleClear} />
         {/if}
 
         <div class="viewer-content">
@@ -392,45 +383,75 @@
                     />
                     <span class="find-status" role="status" aria-live="polite">
                         {#if !bridgeAvailable}
-                            {localize('viewer.findUnavailable', 'Find is unavailable for this content')}
+                            {localize(
+                                'viewer.findUnavailable',
+                                'Find is unavailable for this content',
+                            )}
                         {:else if findValue && !findHasResult}
                             {localize('common.noResults', 'No results')}
                         {/if}
                     </span>
-                    <button type="button" class="find-action" onclick={findPrevious} aria-label={localize('common.previousMatch', 'Previous match')} title={localize('common.previousMatch', 'Previous match')}>
+                    <button
+                        type="button"
+                        class="find-action"
+                        onclick={findPrevious}
+                        aria-label={localize('common.previousMatch', 'Previous match')}
+                        title={localize('common.previousMatch', 'Previous match')}
+                    >
                         <span class="codicon codicon-arrow-up" aria-hidden="true"></span>
                     </button>
-                    <button type="button" class="find-action" onclick={findNext} aria-label={localize('common.nextMatch', 'Next match')} title={localize('common.nextMatch', 'Next match')}>
+                    <button
+                        type="button"
+                        class="find-action"
+                        onclick={findNext}
+                        aria-label={localize('common.nextMatch', 'Next match')}
+                        title={localize('common.nextMatch', 'Next match')}
+                    >
                         <span class="codicon codicon-arrow-down" aria-hidden="true"></span>
                     </button>
-                    <button type="button" class="find-action" onclick={closeFind} aria-label={localize('common.close', 'Close')} title={localize('common.close', 'Close')}>
+                    <button
+                        type="button"
+                        class="find-action"
+                        onclick={closeFind}
+                        aria-label={localize('common.close', 'Close')}
+                        title={localize('common.close', 'Close')}
+                    >
                         <span class="codicon codicon-close" aria-hidden="true"></span>
                     </button>
                 </div>
             {/if}
             {#key reloadVersion}
-            <iframe
-                class="viewer-frame"
-                bind:this={iframeEl}
-                src={frameUrl ?? undefined}
-                style="height: {iframeHeight};"
-                title={title || "Viewer"}
-                onload={handleFrameLoaded}
-                onerror={handleFrameError}
-            ></iframe>
+                <iframe
+                    class="viewer-frame"
+                    bind:this={iframeEl}
+                    src={frameUrl ?? undefined}
+                    style="height: {iframeHeight};"
+                    title={title || 'Viewer'}
+                    onload={handleFrameLoaded}
+                    onerror={handleFrameError}
+                ></iframe>
             {/key}
-            {#if loadState === "loading"}
+            {#if loadState === 'loading'}
                 <div class="viewer-progress" aria-hidden="true"><span></span></div>
                 <div class="screen-reader-status" role="status" aria-live="polite">
                     {localize('viewer.loading', 'Loading preview')}
                 </div>
-            {:else if loadState === "error"}
+            {:else if loadState === 'error'}
                 <div class="viewer-error" role="alert">
                     <span class="codicon codicon-warning" aria-hidden="true"></span>
                     <strong>{localize('viewer.unableToLoad', 'Unable to load preview')}</strong>
-                    <span>{localize('viewer.unavailableHint', 'The content may no longer be available.')}</span>
-                    <button type="button" onclick={handleReload}>{localize('viewer.tryAgain', 'Try Again')}</button>
-                    <button type="button" onclick={handleOpenInBrowser}>{localize('common.openInBrowser', 'Open in Browser')}</button>
+                    <span
+                        >{localize(
+                            'viewer.unavailableHint',
+                            'The content may no longer be available.',
+                        )}</span
+                    >
+                    <button type="button" onclick={handleReload}
+                        >{localize('viewer.tryAgain', 'Try Again')}</button
+                    >
+                    <button type="button" onclick={handleOpenInBrowser}
+                        >{localize('common.openInBrowser', 'Open in Browser')}</button
+                    >
                 </div>
             {/if}
         </div>
@@ -440,9 +461,14 @@
             <div class="placeholder-icon">
                 <span class="codicon codicon-preview"></span>
             </div>
-            <div class="placeholder-text">{localize('viewer.noPreview', 'No preview to display')}</div>
+            <div class="placeholder-text">
+                {localize('viewer.noPreview', 'No preview to display')}
+            </div>
             <div class="placeholder-hint">
-                {localize('viewer.noPreviewHint', 'Run code that produces HTML output to see it here')}
+                {localize(
+                    'viewer.noPreviewHint',
+                    'Run code that produces HTML output to see it here',
+                )}
             </div>
         </div>
     {/if}
@@ -636,8 +662,12 @@
     }
 
     @keyframes viewer-progress {
-        from { transform: translateX(-110%); }
-        to { transform: translateX(320%); }
+        from {
+            transform: translateX(-110%);
+        }
+        to {
+            transform: translateX(320%);
+        }
     }
 
     @media (prefers-reduced-motion: reduce) {

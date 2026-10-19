@@ -1,6 +1,17 @@
 import { expect, test } from '@playwright/test';
-import { PlotsMethods, SMALL_PNG_DATA_URI, SessionMethods, createPreviewFixtureUrl, createSession, registerPlotsDefaults } from '../harness/domains';
-import { clearClipboardRecords, getClipboardRecords, installClipboardMock } from '../harness/browser';
+import {
+    PlotsMethods,
+    SMALL_PNG_DATA_URI,
+    SessionMethods,
+    createPreviewFixtureUrl,
+    createSession,
+    registerPlotsDefaults,
+} from '../harness/domains';
+import {
+    clearClipboardRecords,
+    getClipboardRecords,
+    installClipboardMock,
+} from '../harness/browser';
 import { openWebviewPage } from '../harness/page';
 
 test('plots loads initial history and renders a static plot', async ({ page }) => {
@@ -57,7 +68,9 @@ test('plots emits HTML lifecycle events and clear requests for HTML plots', asyn
     const claimRequest = backend.requests(PlotsMethods.claimHtmlPlot)[0];
     expect(claimRequest.params).toEqual({ plotId: 'plot-html' });
 
-    await expect.poll(() => backend.notificationCount(PlotsMethods.layoutHtmlPlot)).toBeGreaterThan(0);
+    await expect
+        .poll(() => backend.notificationCount(PlotsMethods.layoutHtmlPlot))
+        .toBeGreaterThan(0);
     const layoutNotification = backend.notifications(PlotsMethods.layoutHtmlPlot)[0];
     expect(layoutNotification.params).toMatchObject({
         plotId: 'plot-html',
@@ -80,7 +93,9 @@ test('plots emits HTML lifecycle events and clear requests for HTML plots', asyn
     await expect.poll(async () => (await clearRequest).method).toBe(PlotsMethods.clear);
 });
 
-test('plots requests initial preferences and uses the preferred editor target from the backend', async ({ page }) => {
+test('plots requests initial preferences and uses the preferred editor target from the backend', async ({
+    page,
+}) => {
     const backend = await openWebviewPage(page, 'plots', {
         configure: (mockBackend) => {
             registerPlotsDefaults(mockBackend, {
@@ -115,22 +130,31 @@ test('plots requests initial preferences and uses the preferred editor target fr
     });
 
     await expect.poll(() => backend.requestCount(PlotsMethods.getHistoryState)).toBeGreaterThan(0);
-    await expect.poll(() => backend.requestCount(PlotsMethods.getDarkFilterMode)).toBeGreaterThan(0);
-    await expect.poll(() => backend.requestCount(PlotsMethods.getPreferredEditorTarget)).toBeGreaterThan(0);
+    await expect
+        .poll(() => backend.requestCount(PlotsMethods.getDarkFilterMode))
+        .toBeGreaterThan(0);
+    await expect
+        .poll(() => backend.requestCount(PlotsMethods.getPreferredEditorTarget))
+        .toBeGreaterThan(0);
     await expect(page.locator('.plots-container')).toHaveClass(/history-right/);
     await expect(page.locator('.plots-container')).toHaveClass(/dark-filter-off/);
 
     await page.getByRole('button', { name: 'Open in...', exact: true }).click();
-    const sideTarget = page.getByRole('menuitemcheckbox', { name: 'Open in editor tab to the Side', exact: true });
+    const sideTarget = page.getByRole('menuitemcheckbox', {
+        name: 'Open in editor tab to the Side',
+        exact: true,
+    });
     await expect(sideTarget).toBeChecked();
-    const menuStyle = await page.getByRole('menu').evaluate(element => {
+    const menuStyle = await page.getByRole('menu').evaluate((element) => {
         const style = getComputedStyle(element);
         return { position: style.position, borderStyle: style.borderStyle, padding: style.padding };
     });
     expect(menuStyle.position).toBe('fixed');
     expect(menuStyle.borderStyle).toBe('solid');
     expect(menuStyle.padding).toBe('4px');
-    await expect(page.getByRole('menuitemcheckbox', { name: 'Open in editor tab', exact: true })).not.toBeChecked();
+    await expect(
+        page.getByRole('menuitemcheckbox', { name: 'Open in editor tab', exact: true }),
+    ).not.toBeChecked();
 
     const openInEditor = backend.waitForNextRequest(PlotsMethods.openInEditor);
     await sideTarget.click();
@@ -173,48 +197,69 @@ test('plots sends save, editor, gallery, and code action requests', async ({ pag
     const openInEditorRequest = backend.waitForNextRequest(PlotsMethods.openInEditor);
     await page.getByRole('button', { name: 'Open in...', exact: true }).click();
     await page.getByRole('menuitemcheckbox', { name: 'Open in editor tab', exact: true }).click();
-    await expect.poll(async () => (await openInEditorRequest).params).toEqual({
-        plotId: 'plot-1',
-        viewColumn: 'active',
-    });
+    await expect
+        .poll(async () => (await openInEditorRequest).params)
+        .toEqual({
+            plotId: 'plot-1',
+            viewColumn: 'active',
+        });
 
     const openInNewWindowRequest = backend.waitForNextRequest(PlotsMethods.openInNewWindow);
     await page.getByRole('button', { name: 'Open in...', exact: true }).click();
     await page.getByRole('menuitemcheckbox', { name: 'Open in new window', exact: true }).click();
-    await expect.poll(async () => (await openInNewWindowRequest).params).toEqual({
-        plotId: 'plot-1',
-    });
+    await expect
+        .poll(async () => (await openInNewWindowRequest).params)
+        .toEqual({
+            plotId: 'plot-1',
+        });
 
     const runCodeAgainRequest = backend.waitForNextRequest(PlotsMethods.runCodeAgain);
     await page.getByLabel('Plot code actions').click();
     await page.getByText('Run Code Again').click();
-    await expect.poll(async () => (await runCodeAgainRequest).params).toEqual({
-        plotId: 'plot-1',
-        code: 'plot(cars)',
-        sessionId: 'session-1',
-        languageId: 'r',
-    });
+    await expect
+        .poll(async () => (await runCodeAgainRequest).params)
+        .toEqual({
+            plotId: 'plot-1',
+            code: 'plot(cars)',
+            sessionId: 'session-1',
+            languageId: 'r',
+        });
 
     const openOriginFileRequest = backend.waitForNextRequest(PlotsMethods.openOriginFile);
     await page.getByLabel('Plot code actions').click();
     await page.getByText('Open Source File').click();
-    await expect.poll(async () => (await openOriginFileRequest).params).toEqual({
-        plotId: 'plot-1',
-    });
+    await expect
+        .poll(async () => (await openOriginFileRequest).params)
+        .toEqual({
+            plotId: 'plot-1',
+        });
 
     const galleryRequest = backend.waitForNextRequest(PlotsMethods.openGalleryInNewWindow);
     await page.getByRole('button', { name: 'Open in...', exact: true }).click();
-    await expect(page.getByRole('menuitemcheckbox', { name: 'Open in new window', exact: true })).toBeChecked();
-    await page.getByRole('menuitemcheckbox', { name: 'Open plots gallery in new window', exact: true }).click();
+    await expect(
+        page.getByRole('menuitemcheckbox', { name: 'Open in new window', exact: true }),
+    ).toBeChecked();
+    await page
+        .getByRole('menuitemcheckbox', { name: 'Open plots gallery in new window', exact: true })
+        .click();
     await galleryRequest;
 
     await page.getByRole('button', { name: 'Open in...', exact: true }).click();
-    await expect(page.getByRole('menuitemcheckbox', { name: 'Open plots gallery in new window', exact: true })).toBeChecked();
-    await expect(page.getByRole('menuitemcheckbox', { name: 'Open in new window', exact: true })).not.toBeChecked();
+    await expect(
+        page.getByRole('menuitemcheckbox', {
+            name: 'Open plots gallery in new window',
+            exact: true,
+        }),
+    ).toBeChecked();
+    await expect(
+        page.getByRole('menuitemcheckbox', { name: 'Open in new window', exact: true }),
+    ).not.toBeChecked();
     await page.keyboard.press('Escape');
 });
 
-test('plots releases html plot claims when switching away and applies sizing policy change notifications', async ({ page }) => {
+test('plots releases html plot claims when switching away and applies sizing policy change notifications', async ({
+    page,
+}) => {
     const backend = await openWebviewPage(page, 'plots', {
         configure: (mockBackend) => {
             registerPlotsDefaults(mockBackend, {
@@ -273,10 +318,14 @@ test('plots releases html plot claims when switching away and applies sizing pol
         ],
         customSize: { width: 640, height: 480 },
     });
-    await expect(page.getByLabel("Set how the plot's shape and size are determined")).toContainText('Fill');
+    await expect(page.getByLabel("Set how the plot's shape and size are determined")).toContainText(
+        'Fill',
+    );
 });
 
-test('plots keeps notification-driven state in sync for selection, history, render, and removal', async ({ page }) => {
+test('plots keeps notification-driven state in sync for selection, history, render, and removal', async ({
+    page,
+}) => {
     const backend = await openWebviewPage(page, 'plots', {
         configure: (mockBackend) => {
             registerPlotsDefaults(mockBackend, {
@@ -362,19 +411,26 @@ test('plots keeps notification-driven state in sync for selection, history, rend
         renderTimeMs: 10,
         renderVersion: 2,
     });
-    await expect(page.locator('.selected-plot img.plot')).toHaveAttribute('src', SMALL_PNG_DATA_URI);
+    await expect(page.locator('.selected-plot img.plot')).toHaveAttribute(
+        'src',
+        SMALL_PNG_DATA_URI,
+    );
 
     await backend.notify(PlotsMethods.removed, {
         plotIds: ['plot-static'],
         sessionId: 'session-1',
     });
-    await expect(page.locator('.plot-thumbnail-name-text').filter({ hasText: 'Static Plot' })).toHaveCount(0);
+    await expect(
+        page.locator('.plot-thumbnail-name-text').filter({ hasText: 'Static Plot' }),
+    ).toHaveCount(0);
 
     await backend.notify(PlotsMethods.cleared);
     await expect(page.locator('.plot-thumbnail')).toHaveCount(0);
 });
 
-test('plots applies the host auto fallback when intrinsic size is unavailable', async ({ page }) => {
+test('plots applies the host auto fallback when intrinsic size is unavailable', async ({
+    page,
+}) => {
     const backend = await openWebviewPage(page, 'plots', {
         configure: (mockBackend) => {
             registerPlotsDefaults(mockBackend, {
@@ -404,16 +460,21 @@ test('plots applies the host auto fallback when intrinsic size is unavailable', 
     });
 
     await expect.poll(() => backend.requestCount(PlotsMethods.render)).toBeGreaterThan(0);
-    await expect(page.getByLabel("Set how the plot's shape and size are determined")).toContainText('Auto');
+    await expect(page.getByLabel("Set how the plot's shape and size are determined")).toContainText(
+        'Auto',
+    );
     await expect(page.locator('.selected-plot img.plot')).toBeVisible();
 
-    const renderFlow = backend.requests()
-        .filter(request => [
-            PlotsMethods.getIntrinsicSize,
-            PlotsMethods.selectSizingPolicy,
-            PlotsMethods.render,
-        ].includes(request.method))
-        .map(request => ({ method: request.method, params: request.params }));
+    const renderFlow = backend
+        .requests()
+        .filter((request) =>
+            [
+                PlotsMethods.getIntrinsicSize,
+                PlotsMethods.selectSizingPolicy,
+                PlotsMethods.render,
+            ].includes(request.method),
+        )
+        .map((request) => ({ method: request.method, params: request.params }));
 
     expect(renderFlow.slice(0, 1)).toEqual([
         {
@@ -446,20 +507,23 @@ test('plots keeps host-provided intrinsic sizing while rendering', async ({ page
     });
 
     await expect.poll(() => backend.requestCount(PlotsMethods.render)).toBeGreaterThan(0);
-    await expect(page.getByLabel("Set how the plot's shape and size are determined")).toContainText('Intrinsic');
+    await expect(page.getByLabel("Set how the plot's shape and size are determined")).toContainText(
+        'Intrinsic',
+    );
     await expect(page.locator('.selected-plot img.plot')).toBeVisible();
 
-    const renderFlow = backend.requests()
-        .filter(request => [
-            PlotsMethods.getIntrinsicSize,
-            PlotsMethods.selectSizingPolicy,
-            PlotsMethods.render,
-        ].includes(request.method))
-        .map(request => request.method);
+    const renderFlow = backend
+        .requests()
+        .filter((request) =>
+            [
+                PlotsMethods.getIntrinsicSize,
+                PlotsMethods.selectSizingPolicy,
+                PlotsMethods.render,
+            ].includes(request.method),
+        )
+        .map((request) => request.method);
 
-    expect(renderFlow.slice(0, 1)).toEqual([
-        PlotsMethods.render,
-    ]);
+    expect(renderFlow.slice(0, 1)).toEqual([PlotsMethods.render]);
     expect(backend.requestCount(PlotsMethods.getIntrinsicSize)).toBe(0);
     expect(backend.requestCount(PlotsMethods.selectSizingPolicy)).toBe(0);
 });
@@ -516,7 +580,9 @@ test('plots surfaces dynamic render failures instead of using cached data', asyn
     expect(backend.requestCount(PlotsMethods.render)).toBeGreaterThan(0);
 });
 
-test('plots sends zoom, dark filter, sizing, custom size, source navigation, delete, and viewport messages', async ({ page }) => {
+test('plots sends zoom, dark filter, sizing, custom size, source navigation, delete, and viewport messages', async ({
+    page,
+}) => {
     const backend = await openWebviewPage(page, 'plots', {
         configure: (mockBackend) => {
             registerPlotsDefaults(mockBackend, {
@@ -568,7 +634,9 @@ test('plots sends zoom, dark filter, sizing, custom size, source navigation, del
         zoomLevel: 1,
     });
 
-    await expect.poll(() => backend.notificationCount(PlotsMethods.viewportChanged)).toBeGreaterThan(0);
+    await expect
+        .poll(() => backend.notificationCount(PlotsMethods.viewportChanged))
+        .toBeGreaterThan(0);
 
     const zoomRequest = backend.waitForNextRequest(PlotsMethods.selectZoom);
     await page.getByLabel('Set the plot zoom').click();
@@ -627,19 +695,23 @@ test('plots sends zoom, dark filter, sizing, custom size, source navigation, del
     expect((await deleteRequest).params).toEqual({ plotId: 'plot-1' });
 });
 
-test('plots rerenders when an existing custom size changes without resizing the viewport', async ({ page }) => {
+test('plots rerenders when an existing custom size changes without resizing the viewport', async ({
+    page,
+}) => {
     const backend = await openWebviewPage(page, 'plots', {
         configure: (mockBackend) => {
             registerPlotsDefaults(mockBackend, {
-                plots: [{
-                    id: 'plot-custom',
-                    sessionId: 'session-1',
-                    kind: 'dynamic',
-                    sizingPolicyId: 'custom',
-                    customSize: { width: 640, height: 480 },
-                    initialData: SMALL_PNG_DATA_URI,
-                    initialRenderSettings: { width: 640, height: 480, pixelRatio: 1 },
-                }],
+                plots: [
+                    {
+                        id: 'plot-custom',
+                        sessionId: 'session-1',
+                        kind: 'dynamic',
+                        sizingPolicyId: 'custom',
+                        customSize: { width: 640, height: 480 },
+                        initialData: SMALL_PNG_DATA_URI,
+                        initialRenderSettings: { width: 640, height: 480, pixelRatio: 1 },
+                    },
+                ],
                 selectedPlotId: 'plot-custom',
             });
         },
@@ -647,7 +719,11 @@ test('plots rerenders when an existing custom size changes without resizing the 
     await expect(page.locator('img.plot')).toBeVisible();
     const viewport = await page.locator('.selected-plot').boundingBox();
 
-    for (const size of [{ width: 1400, height: 400 }, { width: 1000, height: 500 }, { width: 640, height: 480 }]) {
+    for (const size of [
+        { width: 1400, height: 400 },
+        { width: 1000, height: 500 },
+        { width: 640, height: 480 },
+    ]) {
         await page.getByLabel("Set how the plot's shape and size are determined").click();
         await page.getByText(/Custom Size/).click();
         await page.getByLabel('Width (px)', { exact: true }).fill(String(size.width));
@@ -670,21 +746,43 @@ test('plots rerenders when an existing custom size changes without resizing the 
     expect((await render).params).toMatchObject({ width: 1200, height: 600 });
 });
 
-test('plots converts physical custom size units and preserves size when switching units', async ({ page }) => {
+test('plots converts physical custom size units and preserves size when switching units', async ({
+    page,
+}) => {
     const backend = await openWebviewPage(page, 'plots', {
-        configure: (mockBackend) => registerPlotsDefaults(mockBackend, {
-            plots: [{ id: 'plot-units', kind: 'dynamic', sizingPolicyId: 'custom', customSize: { width: 960, height: 480 } }],
-            selectedPlotId: 'plot-units',
-        }),
+        configure: (mockBackend) =>
+            registerPlotsDefaults(mockBackend, {
+                plots: [
+                    {
+                        id: 'plot-units',
+                        kind: 'dynamic',
+                        sizingPolicyId: 'custom',
+                        customSize: { width: 960, height: 480 },
+                    },
+                ],
+                selectedPlotId: 'plot-units',
+            }),
     });
     await expect(page.locator('img.plot')).toBeVisible();
     await page.getByLabel("Set how the plot's shape and size are determined").click();
     await page.getByText(/Custom Size/).click();
     const dialog = page.getByRole('dialog');
-    for (const [unit, width, height] of [['in', 10, 5], ['cm', 25.4, 12.7], ['mm', 254, 127]] as const) {
+    for (const [unit, width, height] of [
+        ['in', 10, 5],
+        ['cm', 25.4, 12.7],
+        ['mm', 254, 127],
+    ] as const) {
         await dialog.getByLabel('Unit', { exact: true }).selectOption(unit);
-        await expect.poll(async () => Number(await dialog.getByLabel(`Width (${unit})`, { exact: true }).inputValue())).toBeCloseTo(width, 6);
-        await expect.poll(async () => Number(await dialog.getByLabel(`Height (${unit})`, { exact: true }).inputValue())).toBeCloseTo(height, 6);
+        await expect
+            .poll(async () =>
+                Number(await dialog.getByLabel(`Width (${unit})`, { exact: true }).inputValue()),
+            )
+            .toBeCloseTo(width, 6);
+        await expect
+            .poll(async () =>
+                Number(await dialog.getByLabel(`Height (${unit})`, { exact: true }).inputValue()),
+            )
+            .toBeCloseTo(height, 6);
         await expect(dialog.getByText('Render size: 960 × 480 px')).toBeVisible();
     }
     await dialog.getByLabel('Unit', { exact: true }).selectOption('px');
@@ -708,12 +806,22 @@ test('plots converts physical custom size units and preserves size when switchin
     await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
 });
 
-test('plots rejects invalid custom sizes and resets cancelled edits on reopening', async ({ page }) => {
+test('plots rejects invalid custom sizes and resets cancelled edits on reopening', async ({
+    page,
+}) => {
     const backend = await openWebviewPage(page, 'plots', {
-        configure: (mockBackend) => registerPlotsDefaults(mockBackend, {
-            plots: [{ id: 'plot-validation', kind: 'dynamic', sizingPolicyId: 'custom', customSize: { width: 800, height: 600 } }],
-            selectedPlotId: 'plot-validation',
-        }),
+        configure: (mockBackend) =>
+            registerPlotsDefaults(mockBackend, {
+                plots: [
+                    {
+                        id: 'plot-validation',
+                        kind: 'dynamic',
+                        sizingPolicyId: 'custom',
+                        customSize: { width: 800, height: 600 },
+                    },
+                ],
+                selectedPlotId: 'plot-validation',
+            }),
     });
     await expect(page.locator('img.plot')).toBeVisible();
     await page.getByLabel("Set how the plot's shape and size are determined").click();
@@ -738,7 +846,10 @@ test('plots rejects invalid custom sizes and resets cancelled edits on reopening
     expect(backend.requestCount(PlotsMethods.setCustomSize)).toBe(0);
 });
 
-test('plots prefers the browser clipboard when available and falls back to extension copy when unavailable', async ({ page, browserName }) => {
+test('plots prefers the browser clipboard when available and falls back to extension copy when unavailable', async ({
+    page,
+    browserName,
+}) => {
     void browserName;
     await installClipboardMock(page);
     const backend = await openWebviewPage(page, 'plots', {
@@ -768,15 +879,19 @@ test('plots prefers the browser clipboard when available and falls back to exten
     const copyCountBefore = backend.requestCount(PlotsMethods.copy);
     await page.getByLabel('Copy plot to clipboard').click();
     await expect.poll(() => backend.requestCount(PlotsMethods.copy)).toBe(copyCountBefore);
-    await expect.poll(() => getClipboardRecords(page)).toEqual([
-        {
-            kind: 'write',
-            itemCount: 1,
-        },
-    ]);
+    await expect
+        .poll(() => getClipboardRecords(page))
+        .toEqual([
+            {
+                kind: 'write',
+                itemCount: 1,
+            },
+        ]);
 });
 
-test('plots falls back to extension copy and supports closing gallery auxiliary windows', async ({ page }) => {
+test('plots falls back to extension copy and supports closing gallery auxiliary windows', async ({
+    page,
+}) => {
     await installClipboardMock(page, 'unsupported');
     await page.addInitScript(() => {
         (
@@ -818,7 +933,9 @@ test('plots falls back to extension copy and supports closing gallery auxiliary 
     await closeAuxPanel;
 });
 
-test('plots correctly associates plots with sessions and updates on session removal', async ({ page }) => {
+test('plots correctly associates plots with sessions and updates on session removal', async ({
+    page,
+}) => {
     const backend = await openWebviewPage(page, 'plots', {
         configure: (mockBackend) => {
             registerPlotsDefaults(mockBackend, {
@@ -886,7 +1003,9 @@ test('plots correctly associates plots with sessions and updates on session remo
     await expect(page.locator('img.plot')).toBeVisible();
 });
 
-test('plots routes code actions to the correct session for cross-session plots', async ({ page }) => {
+test('plots routes code actions to the correct session for cross-session plots', async ({
+    page,
+}) => {
     const backend = await openWebviewPage(page, 'plots', {
         configure: (mockBackend) => {
             registerPlotsDefaults(mockBackend, {

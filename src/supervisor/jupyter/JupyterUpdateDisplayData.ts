@@ -9,23 +9,23 @@
  * @link https://jupyter-client.readthedocs.io/en/latest/messaging.html#update-display-data
  */
 export interface JupyterUpdateDisplayData {
-	/**
-	 * The data dict contains key/value pairs, where the keys are MIME
-	 * types and the values are the raw data of the representation in that
-	 * format. */
-	data: Record<string, unknown>;
+    /**
+     * The data dict contains key/value pairs, where the keys are MIME
+     * types and the values are the raw data of the representation in that
+     * format. */
+    data: Record<string, unknown>;
 
-	/** Any metadata that describes the data. */
-	metadata: Record<string, unknown>;
+    /** Any metadata that describes the data. */
+    metadata: Record<string, unknown>;
 
-	/**
-	 * Any information not to be persisted to a notebook or other environment
-	 * Intended to live only during a kernel session
-	 */
-	transient: {
-		/** The identifier of the display to update. */
-		display_id: string;
+    /**
+     * Any information not to be persisted to a notebook or other environment
+     * Intended to live only during a kernel session
+     */
+    transient: {
+        /** The identifier of the display to update. */
+        display_id: string;
 
-		[key: string]: unknown;
-	};
+        [key: string]: unknown;
+    };
 }

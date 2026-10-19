@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { onDestroy, onMount } from "svelte";
+    import { onDestroy, onMount } from 'svelte';
 
     interface VerticalSplitterResizeParams {
         minimumWidth: number;
@@ -15,11 +15,7 @@
 
     const KEYBOARD_RESIZE_STEP = 8;
 
-    let {
-        onBeginResize,
-        onResize,
-        showSash = true,
-    }: Props = $props();
+    let { onBeginResize, onResize, showSash = true }: Props = $props();
 
     let sashRef = $state<HTMLButtonElement | undefined>();
     let hovering = $state(false);
@@ -30,9 +26,8 @@
     onDestroy(() => disposeResize?.());
 
     const isMacintosh =
-        typeof navigator !== "undefined" &&
-        navigator.platform.toLowerCase().includes("mac");
-    const resizeCursor = isMacintosh ? "col-resize" : "ew-resize";
+        typeof navigator !== 'undefined' && navigator.platform.toLowerCase().includes('mac');
+    const resizeCursor = isMacintosh ? 'col-resize' : 'ew-resize';
 
     onMount(() => {
         sashWidth = getSashWidth();
@@ -41,7 +36,7 @@
     function getSashWidth(): number {
         const style = getComputedStyle(document.documentElement);
         const configuredSashSize = Number.parseInt(
-            style.getPropertyValue("--vscode-sash-size"),
+            style.getPropertyValue('--vscode-sash-size'),
             10,
         );
         if (Number.isNaN(configuredSashSize) || configuredSashSize <= 0) {
@@ -60,7 +55,7 @@
     }
 
     function handleKeyDown(event: KeyboardEvent) {
-        if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") {
+        if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') {
             return;
         }
 
@@ -68,13 +63,10 @@
         event.stopPropagation();
 
         const resizeParams = onBeginResize();
-        const delta = event.key === "ArrowRight" ? KEYBOARD_RESIZE_STEP : -KEYBOARD_RESIZE_STEP;
+        const delta = event.key === 'ArrowRight' ? KEYBOARD_RESIZE_STEP : -KEYBOARD_RESIZE_STEP;
         const width = Math.max(
             resizeParams.minimumWidth,
-            Math.min(
-                resizeParams.maximumWidth,
-                resizeParams.startingWidth + delta,
-            ),
+            Math.min(resizeParams.maximumWidth, resizeParams.startingWidth + delta),
         );
 
         onResize(width);
@@ -91,8 +83,7 @@
     }
 
     function handlePointerDown(event: PointerEvent) {
-        const isNonLeftMouseClick =
-            event.pointerType === "mouse" && event.buttons !== 1;
+        const isNonLeftMouseClick = event.pointerType === 'mouse' && event.buttons !== 1;
         if (isNonLeftMouseClick) {
             return;
         }
@@ -107,7 +98,7 @@
         const startX = event.clientX;
         const pointerId = event.pointerId;
         const target = document.body;
-        const styleElement = document.createElement("style");
+        const styleElement = document.createElement('style');
         target.appendChild(styleElement);
 
         const pointerMoveHandler = (moveEvent: PointerEvent) => {
@@ -126,10 +117,10 @@
                 cursor = resizeCursor;
             } else if (width < resizeParams.minimumWidth) {
                 width = resizeParams.minimumWidth;
-                cursor = "e-resize";
+                cursor = 'e-resize';
             } else if (width > resizeParams.maximumWidth) {
                 width = resizeParams.maximumWidth;
-                cursor = "w-resize";
+                cursor = 'w-resize';
             }
 
             styleElement.textContent = `* { cursor: ${cursor} !important; }`;
@@ -153,11 +144,11 @@
         };
         disposeResize = () => {
             disposeResize = undefined;
-            target.removeEventListener("pointermove", pointerMoveHandler);
-            target.removeEventListener("pointerup", pointerUpHandler);
-            target.removeEventListener("pointercancel", pointerCancelHandler);
-            target.removeEventListener("lostpointercapture", pointerCancelHandler);
-            window.removeEventListener("blur", cancelResize);
+            target.removeEventListener('pointermove', pointerMoveHandler);
+            target.removeEventListener('pointerup', pointerUpHandler);
+            target.removeEventListener('pointercancel', pointerCancelHandler);
+            target.removeEventListener('lostpointercapture', pointerCancelHandler);
+            window.removeEventListener('blur', cancelResize);
             styleElement.remove();
             resizing = false;
             hovering = false;
@@ -168,11 +159,11 @@
 
         resizing = true;
         target.setPointerCapture(event.pointerId);
-        target.addEventListener("pointermove", pointerMoveHandler);
-        target.addEventListener("pointerup", pointerUpHandler);
-        target.addEventListener("pointercancel", pointerCancelHandler);
-        target.addEventListener("lostpointercapture", pointerCancelHandler);
-        window.addEventListener("blur", cancelResize);
+        target.addEventListener('pointermove', pointerMoveHandler);
+        target.addEventListener('pointerup', pointerUpHandler);
+        target.addEventListener('pointercancel', pointerCancelHandler);
+        target.addEventListener('lostpointercapture', pointerCancelHandler);
+        window.addEventListener('blur', cancelResize);
     }
 </script>
 
@@ -191,8 +182,8 @@
         {#if showSash && (hovering || resizing)}
             <div
                 class="sash-indicator"
-                class:hovering={hovering}
-                class:resizing={resizing}
+                class:hovering
+                class:resizing
                 style="width: {Math.max(2, Math.trunc(sashWidth / 2))}px;"
             ></div>
         {/if}
@@ -206,10 +197,7 @@
         position: relative;
         flex-shrink: 0;
         background-origin: border-box;
-        background: var(
-            --vscode-positronVariables-border,
-            var(--vscode-panel-border)
-        );
+        background: var(--vscode-positronVariables-border, var(--vscode-panel-border));
     }
 
     .sash {

@@ -17,6 +17,8 @@ docs/**
 package-lock.json
 tsconfig.json
 eslint.config.mjs
+.prettierrc.json
+.prettierignore
 esbuild.mjs
 webpack.config.js
 scripts/**

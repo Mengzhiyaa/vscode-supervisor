@@ -10,7 +10,7 @@ suite('Extension Test Suite', () => {
     });
 
     test('Test kit temp dir cleanup', async () => {
-        await testKit.withDisposables(async disposables => {
+        await testKit.withDisposables(async (disposables) => {
             const [dir, disposable] = testKit.makeTempDir('supervisor-test');
             disposables.push(disposable);
             assert.ok(fs.existsSync(dir), 'Expected temp directory to exist');

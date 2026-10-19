@@ -62,7 +62,10 @@ function createEventStub<T>(): vscode.Event<T> {
 suite('[Unit] console service restored session placeholders', () => {
     test('creates hydrated provisional consoles and preserves them when reconnect fails', async () => {
         const sessionId = 'restored-r-session';
-        const onSessionRestoreFailure = new vscode.EventEmitter<{ sessionId: string; error: Error }>();
+        const onSessionRestoreFailure = new vscode.EventEmitter<{
+            sessionId: string;
+            error: Error;
+        }>();
         const context = makeContext({
             [`vscode-supervisor.console.state.${sessionId}`]: {
                 version: 2,
@@ -88,36 +91,38 @@ suite('[Unit] console service restored session placeholders', () => {
             makeNoopLogChannel(),
             context,
             {
-                getRestoredSessions: async () => [{
-                    sessionName: 'Restored R',
-                    runtimeMetadata: {
-                        runtimeId: 'r-restore',
-                        runtimeName: 'R 4.4.1',
-                        runtimePath: '/usr/bin/R',
-                        runtimeVersion: '0.0.1',
-                        runtimeShortName: '4.4.1',
-                        runtimeSource: 'system',
-                        languageId: 'r',
-                        languageName: 'R',
-                        languageVersion: '4.4.1',
-                    },
-                    metadata: {
-                        sessionId,
+                getRestoredSessions: async () => [
+                    {
                         sessionName: 'Restored R',
-                        sessionMode: 'console',
+                        runtimeMetadata: {
+                            runtimeId: 'r-restore',
+                            runtimeName: 'R 4.4.1',
+                            runtimePath: '/usr/bin/R',
+                            runtimeVersion: '0.0.1',
+                            runtimeShortName: '4.4.1',
+                            runtimeSource: 'system',
+                            languageId: 'r',
+                            languageName: 'R',
+                            languageVersion: '4.4.1',
+                        },
+                        metadata: {
+                            sessionId,
+                            sessionName: 'Restored R',
+                            sessionMode: 'console',
+                        },
+                        sessionState: 'ready',
+                        workingDirectory: '/tmp/restored',
+                        hasConsole: true,
+                        lastUsed: Date.now(),
                     },
-                    sessionState: 'ready',
-                    workingDirectory: '/tmp/restored',
-                    hasConsole: true,
-                    lastUsed: Date.now(),
-                }],
+                ],
                 onSessionRestoreFailure: onSessionRestoreFailure.event,
             } as any,
         );
 
         let publishedWorkingDirectory: string | undefined;
         let publishedInputHistory: readonly string[] | undefined;
-        const published = service.onDidStartPositronConsoleInstance(instance => {
+        const published = service.onDidStartPositronConsoleInstance((instance) => {
             publishedWorkingDirectory = instance.workingDirectory;
             publishedInputHistory = [...instance.inputHistory];
         });

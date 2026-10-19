@@ -5,8 +5,8 @@
     Mirrors: positron/.../components/consoleOutputLines.tsx
 -->
 <script lang="ts">
-    import ConsoleOutputLine from "./ConsoleOutputLine.svelte";
-    import type { OutputLine } from "./classes";
+    import ConsoleOutputLine from './ConsoleOutputLine.svelte';
+    import type { OutputLine } from './classes';
 
     interface ConsoleOutputLinesProps {
         outputLines: readonly OutputLine[];

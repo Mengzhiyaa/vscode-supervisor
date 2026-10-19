@@ -95,19 +95,12 @@ function getBlockAncestor(node: Node): Element | null {
  * elements so that regex `.` won't match across visual lines (consistent
  * with VS Code's search behavior).
  */
-export function findMatchesInDOM(
-    container: HTMLElement,
-    regex: RegExp,
-): SearchMatch[] {
+export function findMatchesInDOM(container: HTMLElement, regex: RegExp): SearchMatch[] {
     const matches: SearchMatch[] = [];
 
     // Collect all text nodes in order
     const textNodes: Text[] = [];
-    const walker = document.createTreeWalker(
-        container,
-        NodeFilter.SHOW_TEXT,
-        null,
-    );
+    const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null);
 
     let node: Text | null;
     while ((node = walker.nextNode() as Text | null)) {
@@ -126,7 +119,7 @@ export function findMatchesInDOM(
     interface TextNodeInfo {
         node: Text;
         start: number; // Start offset in the concatenated string
-        end: number;   // End offset in the concatenated string
+        end: number; // End offset in the concatenated string
     }
 
     const nodeInfos: TextNodeInfo[] = [];
@@ -180,10 +173,7 @@ export function findMatchesInDOM(
         ) {
             startNodeInfoIndex += 1;
         }
-        while (
-            endNodeInfoIndex < nodeInfos.length &&
-            matchEnd > nodeInfos[endNodeInfoIndex].end
-        ) {
+        while (endNodeInfoIndex < nodeInfos.length && matchEnd > nodeInfos[endNodeInfoIndex].end) {
             endNodeInfoIndex += 1;
         }
 
@@ -200,14 +190,8 @@ export function findMatchesInDOM(
         ) {
             try {
                 const range = document.createRange();
-                range.setStart(
-                    startNodeInfo.node,
-                    matchStart - startNodeInfo.start,
-                );
-                range.setEnd(
-                    endNodeInfo.node,
-                    matchEnd - endNodeInfo.start,
-                );
+                range.setStart(startNodeInfo.node, matchStart - startNodeInfo.start);
+                range.setEnd(endNodeInfo.node, matchEnd - endNodeInfo.start);
 
                 matches.push({
                     range,
@@ -291,10 +275,7 @@ export function clearHighlights(owner?: object): void {
 /**
  * Scrolls the currently highlighted match into view.
  */
-export function scrollCurrentMatchIntoView(
-    matches: SearchMatch[],
-    currentIndex: number,
-): void {
+export function scrollCurrentMatchIntoView(matches: SearchMatch[], currentIndex: number): void {
     if (currentIndex < 0 || currentIndex >= matches.length) {
         return;
     }
@@ -303,9 +284,7 @@ export function scrollCurrentMatchIntoView(
     const rect = match.range.getBoundingClientRect();
 
     // Find the scrollable console-instance container
-    const container = match.range.startContainer.parentElement?.closest(
-        '.console-instance',
-    );
+    const container = match.range.startContainer.parentElement?.closest('.console-instance');
 
     if (!container) {
         return;

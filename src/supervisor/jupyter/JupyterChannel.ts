@@ -4,9 +4,9 @@
  *--------------------------------------------------------------------------------------------*/
 
 export enum JupyterChannel {
-	Shell = 'shell',
-	Control = 'control',
-	Stdin = 'stdin',
-	IOPub = 'iopub',
-	Heartbeat = 'heartbeat'
+    Shell = 'shell',
+    Control = 'control',
+    Stdin = 'stdin',
+    IOPub = 'iopub',
+    Heartbeat = 'heartbeat',
 }

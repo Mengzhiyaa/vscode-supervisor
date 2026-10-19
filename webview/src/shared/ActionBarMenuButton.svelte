@@ -4,9 +4,7 @@
   Corresponds to Positron's ActionBarMenuButton.
 -->
 <script lang="ts">
-    import ContextMenu, {
-        type ContextMenuEntry,
-    } from './ContextMenu.svelte';
+    import ContextMenu, { type ContextMenuEntry } from './ContextMenu.svelte';
 
     interface MenuItem {
         id: string;
@@ -64,11 +62,7 @@
         if (disabled) return;
 
         const entries = buildMenuEntries();
-        if (
-            !entries.some(
-                (entry) => !('separator' in entry && entry.separator),
-            )
-        ) {
+        if (!entries.some((entry) => !('separator' in entry && entry.separator))) {
             return;
         }
 
@@ -156,7 +150,7 @@
         {disabled}
         title={tooltip || ariaLabel || label || ''}
         aria-label={ariaLabel || label || ''}
-        aria-expanded={menuVisible ? "true" : undefined}
+        aria-expanded={menuVisible ? 'true' : undefined}
         aria-haspopup="menu"
         onmousedown={handleMouseDown}
         onclick={handleClick}
@@ -164,8 +158,7 @@
     >
         <div aria-hidden="true" class="action-bar-button-face">
             {#if icon}
-                <span
-                    class="action-bar-button-icon action-bar-menu-icon codicon codicon-{icon}"
+                <span class="action-bar-button-icon action-bar-menu-icon codicon codicon-{icon}"
                 ></span>
             {/if}
             {#if label}

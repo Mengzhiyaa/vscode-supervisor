@@ -47,15 +47,21 @@ suite('[Unit] variables lifecycle', () => {
         ];
 
         assert.deepStrictEqual(
-            [...items].sort(compareVariableItemsByName).map(item => `${item.displayName}:${item.size}`),
+            [...items]
+                .sort(compareVariableItemsByName)
+                .map((item) => `${item.displayName}:${item.size}`),
             ['x2:1', 'x2:10', 'x10:5'],
         );
         assert.deepStrictEqual(
-            [...items].sort(compareVariableItemsBySize).map(item => `${item.displayName}:${item.size}`),
+            [...items]
+                .sort(compareVariableItemsBySize)
+                .map((item) => `${item.displayName}:${item.size}`),
             ['x2:10', 'x10:5', 'x2:1'],
         );
         assert.deepStrictEqual(
-            [...items].sort(compareVariableItemsByRecent).map(item => `${item.updatedTime}:${item.displayName}`),
+            [...items]
+                .sort(compareVariableItemsByRecent)
+                .map((item) => `${item.updatedTime}:${item.displayName}`),
             ['200:x2', '100:x2', '100:x10'],
         );
     });
@@ -77,12 +83,10 @@ suite('[Unit] variables lifecycle', () => {
 
         const groups = (instance as any).groupBySize(items);
 
-        assert.deepStrictEqual(groups.map((group: any) => group.title), [
-            'Small',
-            'Medium',
-            'Large',
-            'Very Large',
-        ]);
+        assert.deepStrictEqual(
+            groups.map((group: any) => group.title),
+            ['Small', 'Medium', 'Large', 'Very Large'],
+        );
         assert.deepStrictEqual(
             groups.map((group: any) => group.variableItems[0].id),
             ['small', 'medium', 'large', 'very-large'],
@@ -92,7 +96,9 @@ suite('[Unit] variables lifecycle', () => {
     test('rebinds the model through a full detach and attach sequence', () => {
         const oldSession = { sessionId: 'session-1' } as any;
         const newSession = { sessionId: 'session-1' } as any;
-        const instance = Object.create(PositronVariablesInstance.prototype) as PositronVariablesInstance;
+        const instance = Object.create(
+            PositronVariablesInstance.prototype,
+        ) as PositronVariablesInstance;
         const calls: string[] = [];
         Object.assign(instance as any, {
             _session: oldSession,

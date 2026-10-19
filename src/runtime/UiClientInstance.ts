@@ -19,7 +19,7 @@ import {
     OpenWorkspaceEvent,
     SetEditorSelectionsEvent,
     OpenWithSystemEvent,
-    ClearWebviewPreloadsEvent
+    ClearWebviewPreloadsEvent,
 } from './comms/positronUiComm';
 
 /**

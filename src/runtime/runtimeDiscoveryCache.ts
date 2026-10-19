@@ -4,8 +4,7 @@ import * as vscode from 'vscode';
 import type { LanguageRuntimeMetadata, RuntimeRootSignature } from '../api';
 
 export const RUNTIME_DISCOVERY_CACHE_SCHEMA_VERSION = 2;
-export const RUNTIME_DISCOVERY_CACHE_STORAGE_KEY =
-    `vscode-supervisor.runtimeDiscoveryCache.v${RUNTIME_DISCOVERY_CACHE_SCHEMA_VERSION}`;
+export const RUNTIME_DISCOVERY_CACHE_STORAGE_KEY = `vscode-supervisor.runtimeDiscoveryCache.v${RUNTIME_DISCOVERY_CACHE_SCHEMA_VERSION}`;
 
 const RUNTIME_DISCOVERY_CACHE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 const BUCKET_SEPARATOR = '::';
@@ -99,7 +98,7 @@ export class RuntimeDiscoveryCache {
         return {
             extensionId,
             languageId,
-            entries: bucket.entries.filter(entry => entry.firstSeen >= cutoff),
+            entries: bucket.entries.filter((entry) => entry.firstSeen >= cutoff),
             lastFullDiscovery: bucket.lastFullDiscovery,
             discoveryRootSignature: bucket.discoveryRootSignature,
         };
@@ -117,7 +116,7 @@ export class RuntimeDiscoveryCache {
         }
         const previous = this._buckets.get(bucketKey(extensionId, languageId));
         const previousByPath = new Map(
-            (previous?.entries ?? []).map(entry => [entry.metadata.runtimePath, entry]),
+            (previous?.entries ?? []).map((entry) => [entry.metadata.runtimePath, entry]),
         );
         const now = Date.now();
         const entries: CachedRuntime[] = [];
@@ -161,7 +160,8 @@ export class RuntimeDiscoveryCache {
     ): Promise<void> {
         const key = bucketKey(extensionId, languageId);
         const bucket = this._buckets.get(key);
-        const index = bucket?.entries.findIndex(entry => entry.metadata.runtimePath === runtimePath) ?? -1;
+        const index =
+            bucket?.entries.findIndex((entry) => entry.metadata.runtimePath === runtimePath) ?? -1;
         if (!bucket || index < 0) {
             return;
         }
@@ -191,15 +191,19 @@ export class RuntimeDiscoveryCache {
                 },
             };
         } catch (error) {
-            this._outputChannel.trace(`[Runtime cache] stat failed for ${runtimePath}: ${getErrorMessage(error)}`);
+            this._outputChannel.trace(
+                `[Runtime cache] stat failed for ${runtimePath}: ${getErrorMessage(error)}`,
+            );
             return undefined;
         }
     }
 
     fingerprintsEqual(left: RuntimeFingerprint, right: RuntimeFingerprint): boolean {
-        return left.size === right.size &&
+        return (
+            left.size === right.size &&
             left.mtimeMs === right.mtimeMs &&
-            left.ctimeMs === right.ctimeMs;
+            left.ctimeMs === right.ctimeMs
+        );
     }
 
     private _isRootSignature(value: unknown): value is RuntimeRootSignature {
@@ -207,13 +211,18 @@ export class RuntimeDiscoveryCache {
             return false;
         }
         const candidate = value as Partial<RuntimeRootSignature>;
-        return (candidate.opaque === undefined || typeof candidate.opaque === 'string') &&
-            Array.isArray(candidate.entries) && candidate.entries.every(entry => {
-            return !!entry &&
-                typeof entry.path === 'string' &&
-                typeof entry.exists === 'boolean' &&
-                typeof entry.mtimeMs === 'number';
-        });
+        return (
+            (candidate.opaque === undefined || typeof candidate.opaque === 'string') &&
+            Array.isArray(candidate.entries) &&
+            candidate.entries.every((entry) => {
+                return (
+                    !!entry &&
+                    typeof entry.path === 'string' &&
+                    typeof entry.exists === 'boolean' &&
+                    typeof entry.mtimeMs === 'number'
+                );
+            })
+        );
     }
 
     private async _persist(): Promise<void> {
@@ -228,7 +237,10 @@ export class RuntimeDiscoveryCache {
         const write = this._writeChain.then(() =>
             this._state.update(RUNTIME_DISCOVERY_CACHE_STORAGE_KEY, payload),
         );
-        this._writeChain = write.then(() => undefined, () => undefined);
+        this._writeChain = write.then(
+            () => undefined,
+            () => undefined,
+        );
         await write;
     }
 }

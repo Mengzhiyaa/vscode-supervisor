@@ -5,16 +5,16 @@
     Mirrors: positron/.../components/runtimeActivity.tsx
 -->
 <script lang="ts">
-    import { localize } from "$lib/localization";
-    import ActivityInput from "./ActivityInput.svelte";
-    import ActivityOutputStream from "./ActivityOutputStream.svelte";
-    import ActivityErrorStream from "./ActivityErrorStream.svelte";
-    import ActivityErrorMessage from "./ActivityErrorMessage.svelte";
-    import ActivityErrorSuggestion from "./ActivityErrorSuggestion.svelte";
-    import ActivityOutputHtml from "./ActivityOutputHtml.svelte";
-    import ActivityOutputMessage from "./ActivityOutputMessage.svelte";
-    import ActivityOutputPlot from "./ActivityOutputPlot.svelte";
-    import ActivityPrompt from "./ActivityPrompt.svelte";
+    import { localize } from '$lib/localization';
+    import ActivityInput from './ActivityInput.svelte';
+    import ActivityOutputStream from './ActivityOutputStream.svelte';
+    import ActivityErrorStream from './ActivityErrorStream.svelte';
+    import ActivityErrorMessage from './ActivityErrorMessage.svelte';
+    import ActivityErrorSuggestion from './ActivityErrorSuggestion.svelte';
+    import ActivityOutputHtml from './ActivityOutputHtml.svelte';
+    import ActivityOutputMessage from './ActivityOutputMessage.svelte';
+    import ActivityOutputPlot from './ActivityOutputPlot.svelte';
+    import ActivityPrompt from './ActivityPrompt.svelte';
     import {
         RuntimeItemActivity,
         ActivityItemInput,
@@ -26,7 +26,7 @@
         ActivityItemOutputMessage,
         ActivityItemOutputPlot,
         ActivityItemPrompt,
-    } from "./classes";
+    } from './classes';
 
     interface Props {
         runtimeItemActivity: RuntimeItemActivity;
@@ -38,7 +38,7 @@
 
     let {
         runtimeItemActivity,
-        languageId = "plaintext",
+        languageId = 'plaintext',
         languageAssetsVersion = 0,
         charWidth = 0,
         sessionId,
@@ -46,9 +46,7 @@
     let activityItemsStore = $derived(runtimeItemActivity.activityItemsStore);
 
     // Pre-filter visible items using $derived for better reactivity and performance
-    let visibleActivityItems = $derived(
-        $activityItemsStore.filter((item) => !item.isHidden),
-    );
+    let visibleActivityItems = $derived($activityItemsStore.filter((item) => !item.isHidden));
 </script>
 
 <div class="runtime-activity" data-execution-id={runtimeItemActivity.id}>
@@ -69,10 +67,7 @@
         {:else if activityItem instanceof ActivityItemErrorMessage}
             <ActivityErrorMessage activityItemErrorMessage={activityItem} />
         {:else if activityItem instanceof ActivityItemErrorSuggestion}
-            <ActivityErrorSuggestion
-                activityItemErrorSuggestion={activityItem}
-                {sessionId}
-            />
+            <ActivityErrorSuggestion activityItemErrorSuggestion={activityItem} {sessionId} />
         {:else if activityItem instanceof ActivityItemOutputHtml}
             <ActivityOutputHtml activityItemOutputHtml={activityItem} />
         {:else if activityItem instanceof ActivityItemOutputMessage}
@@ -84,7 +79,7 @@
         {:else}
             <!-- Unknown activity item type -->
             <div class="activity-item-unknown">
-                {localize("console.activityItemUnknown", "Unknown activity item")}
+                {localize('console.activityItemUnknown', 'Unknown activity item')}
             </div>
         {/if}
     {/each}

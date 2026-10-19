@@ -5,18 +5,18 @@
     Mirrors: positron/.../components/consoleInstanceItems.tsx
 -->
 <script lang="ts">
-    import { localize } from "$lib/localization";
-    import ConsoleOutputLines from "./ConsoleOutputLines.svelte";
-    import RuntimeActivity from "./RuntimeActivity.svelte";
-    import RuntimeStarted from "./RuntimeStarted.svelte";
-    import RuntimeStarting from "./RuntimeStarting.svelte";
-    import RuntimeStartup from "./RuntimeStartup.svelte";
-    import RuntimeOffline from "./RuntimeOffline.svelte";
-    import RuntimePendingInput from "./RuntimePendingInput.svelte";
-    import RuntimeRestartButton from "./RuntimeRestartButton.svelte";
-    import RuntimeRestarting from "./RuntimeRestarting.svelte";
-    import RuntimeStartupFailure from "./RuntimeStartupFailure.svelte";
-    import type { ConsoleInstanceModel } from "./models/consoleInstance";
+    import { localize } from '$lib/localization';
+    import ConsoleOutputLines from './ConsoleOutputLines.svelte';
+    import RuntimeActivity from './RuntimeActivity.svelte';
+    import RuntimeStarted from './RuntimeStarted.svelte';
+    import RuntimeStarting from './RuntimeStarting.svelte';
+    import RuntimeStartup from './RuntimeStartup.svelte';
+    import RuntimeOffline from './RuntimeOffline.svelte';
+    import RuntimePendingInput from './RuntimePendingInput.svelte';
+    import RuntimeRestartButton from './RuntimeRestartButton.svelte';
+    import RuntimeRestarting from './RuntimeRestarting.svelte';
+    import RuntimeStartupFailure from './RuntimeStartupFailure.svelte';
+    import type { ConsoleInstanceModel } from './models/consoleInstance';
     import {
         RuntimeItemActivity,
         RuntimeItemStarted,
@@ -30,7 +30,7 @@
         RuntimeItemStartupFailure,
         RuntimeItemRestarting,
         RuntimeItemRestartButton,
-    } from "./classes";
+    } from './classes';
 
     interface Props {
         consoleInstance: ConsoleInstanceModel;
@@ -52,12 +52,12 @@
     $effect(() => {
         const state = consoleInstance.state;
         showExitingBanner = false;
-        if (state !== "exiting") {
+        if (state !== 'exiting') {
             return;
         }
 
         const timer = setTimeout(() => {
-            if (consoleInstance.state === "exiting") {
+            if (consoleInstance.state === 'exiting') {
                 showExitingBanner = true;
             }
         }, 500);
@@ -71,12 +71,11 @@
     const disconnected = $derived(consoleInstance.disconnected);
     const languageId = $derived(consoleInstance.languageId);
     const languageName = $derived(
-        consoleInstance.runtimeName || consoleInstance.sessionName || "R",
+        consoleInstance.runtimeName || consoleInstance.sessionName || 'R',
     );
 
     function formatTraceTimestamp(timestamp: Date): string {
-        const toTwoDigits = (value: number) =>
-            value < 10 ? `0${value}` : `${value}`;
+        const toTwoDigits = (value: number) => (value < 10 ? `0${value}` : `${value}`);
         const toFourDigits = (value: number) =>
             value < 10
                 ? `000${value}`
@@ -87,10 +86,8 @@
                     : `${value}`;
 
         return `${toTwoDigits(timestamp.getHours())}:${toTwoDigits(
-                timestamp.getMinutes(),
-            )}:${toTwoDigits(timestamp.getSeconds())}.${toFourDigits(
-                timestamp.getMilliseconds(),
-            )}`;
+            timestamp.getMinutes(),
+        )}:${toTwoDigits(timestamp.getSeconds())}.${toFourDigits(timestamp.getMilliseconds())}`;
     }
 </script>
 
@@ -101,7 +98,7 @@
         <div class="console-item-starting exiting-banner">
             <div class="left-bar"></div>
             <div class="exiting-message">
-                {localize("console.sessionExiting", "{0} exiting...", consoleInstance.sessionName)}
+                {localize('console.sessionExiting', '{0} exiting...', consoleInstance.sessionName)}
             </div>
         </div>
     {/if}
@@ -120,15 +117,9 @@
         {:else if runtimeItem instanceof RuntimeItemStartup}
             <RuntimeStartup runtimeItemStartup={runtimeItem} />
         {:else if runtimeItem instanceof RuntimeItemOffline}
-            <RuntimeOffline
-                runtimeItemOffline={runtimeItem}
-                {onReconnect}
-            />
+            <RuntimeOffline runtimeItemOffline={runtimeItem} {onReconnect} />
         {:else if runtimeItem instanceof RuntimeItemPendingInput}
-            <RuntimePendingInput
-                runtimeItemPendingInput={runtimeItem}
-                {charWidth}
-            />
+            <RuntimePendingInput runtimeItemPendingInput={runtimeItem} {charWidth} />
         {:else if runtimeItem instanceof RuntimeItemRestarting}
             <RuntimeRestarting runtimeItemRestarting={runtimeItem} />
         {:else if runtimeItem instanceof RuntimeItemStarting}
@@ -140,11 +131,7 @@
                 </div>
                 <!-- Restart button for exited sessions -->
                 {#if onRestart}
-                    <RuntimeRestartButton
-                        {languageName}
-                        disabled={false}
-                        onrestart={onRestart}
-                    />
+                    <RuntimeRestartButton {languageName} disabled={false} onrestart={onRestart} />
                 {/if}
             </div>
         {:else if runtimeItem instanceof RuntimeItemTrace}
@@ -169,7 +156,7 @@
         {:else}
             <!-- Handle other RuntimeItem types in future -->
             <div class="runtime-item-unknown">
-                {localize("console.runtimeItemUnknown", "Unknown runtime item type")}
+                {localize('console.runtimeItemUnknown', 'Unknown runtime item type')}
             </div>
         {/if}
     {/each}
@@ -177,7 +164,7 @@
     {#if disconnected}
         <div class="console-item-starting disconnected-banner">
             <span class="codicon codicon-loading codicon-modifier-spin"></span>
-            <span>{localize("console.extensionsRestarting", "Extensions restarting...")}</span>
+            <span>{localize('console.extensionsRestarting', 'Extensions restarting...')}</span>
         </div>
     {/if}
 </div>
@@ -261,5 +248,4 @@
         align-self: stretch;
         background: var(--vscode-progressBar-background);
     }
-
 </style>

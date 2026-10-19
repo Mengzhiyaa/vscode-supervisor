@@ -9,17 +9,17 @@ import { SocketMessage } from './SocketMessage';
  * Represents a status message from the kernel.
  */
 export interface KernelMessageStatus extends SocketMessage {
-	status: string;
+    status: string;
 }
 
 /**
  * Represents a message from the kernel containing output.
  */
 export interface KernelOutputMessage extends SocketMessage {
-	/**
-	 * A 2-element array containing the stream name and the output text.
-	 */
-	output: [string, string];
+    /**
+     * A 2-element array containing the stream name and the output text.
+     */
+    output: [string, string];
 }
 
 /** A supervisor-side execution announcement, preceding its Jupyter messages. */

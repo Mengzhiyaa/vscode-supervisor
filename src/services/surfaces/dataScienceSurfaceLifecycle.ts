@@ -39,7 +39,7 @@ export class DataScienceSurfaceLifecycle implements vscode.Disposable {
         private readonly _plotsService: PositronPlotsService,
         private readonly _dataExplorerService: IPositronDataExplorerService,
         private readonly _outputChannel: vscode.LogOutputChannel,
-    ) { }
+    ) {}
 
     initialize(): void {
         if (this._initialized) {
@@ -48,7 +48,7 @@ export class DataScienceSurfaceLifecycle implements vscode.Disposable {
         this._initialized = true;
 
         this._disposables.push(
-            this._sessionManager.onDidDeleteRuntimeSession(sessionId => {
+            this._sessionManager.onDidDeleteRuntimeSession((sessionId) => {
                 const disposed = this._lifecycle.disposeSession(sessionId);
                 if (disposed > 0) {
                     this._outputChannel.debug(
@@ -56,13 +56,17 @@ export class DataScienceSurfaceLifecycle implements vscode.Disposable {
                     );
                 }
             }),
-            this._plotsService.onDidEmitPlot(plot => this._registerPlot(plot)),
-            this._plotsService.onDidRemovePlot(plot => this._unregisterPlot(plot)),
-            this._plotsService.onDidSelectPlot(plotId => this._selectPlot(plotId)),
-            this._plotsService.onDidReplacePlots(plots => this._replacePlots(plots)),
-            this._dataExplorerService.onDidCreateInstance(instance => this._registerDataExplorer(instance)),
-            this._dataExplorerService.onDidCloseInstance(identifier => this._unregisterDataExplorer(identifier)),
-            this._lifecycle.onDidChange(event => {
+            this._plotsService.onDidEmitPlot((plot) => this._registerPlot(plot)),
+            this._plotsService.onDidRemovePlot((plot) => this._unregisterPlot(plot)),
+            this._plotsService.onDidSelectPlot((plotId) => this._selectPlot(plotId)),
+            this._plotsService.onDidReplacePlots((plots) => this._replacePlots(plots)),
+            this._dataExplorerService.onDidCreateInstance((instance) =>
+                this._registerDataExplorer(instance),
+            ),
+            this._dataExplorerService.onDidCloseInstance((identifier) =>
+                this._unregisterDataExplorer(identifier),
+            ),
+            this._lifecycle.onDidChange((event) => {
                 if (
                     event.type !== 'disposed' ||
                     event.model.kind !== SurfaceModelKind.DataExplorer ||
@@ -126,20 +130,23 @@ export class DataScienceSurfaceLifecycle implements vscode.Disposable {
 
         this._plotSubscriptions.get(plot.id)?.dispose();
         if (plot.onDidUpdateMetadata) {
-            this._plotSubscriptions.set(plot.id, plot.onDidUpdateMetadata(metadata => {
-                this._lifecycle.updateModel(modelId, {
-                    resourceId: plot.id,
-                    title: metadata.name ?? 'Plot',
-                    outputId: metadata.output_id,
-                    payload: {
-                        plotId: plot.id,
-                        plotKind: metadata.kind,
-                        htmlUri: metadata.html_uri,
-                        executionId: metadata.execution_id,
-                        sessionId: metadata.session_id,
-                    },
-                });
-            }));
+            this._plotSubscriptions.set(
+                plot.id,
+                plot.onDidUpdateMetadata((metadata) => {
+                    this._lifecycle.updateModel(modelId, {
+                        resourceId: plot.id,
+                        title: metadata.name ?? 'Plot',
+                        outputId: metadata.output_id,
+                        payload: {
+                            plotId: plot.id,
+                            plotKind: metadata.kind,
+                            htmlUri: metadata.html_uri,
+                            executionId: metadata.execution_id,
+                            sessionId: metadata.session_id,
+                        },
+                    });
+                }),
+            );
         }
     }
 
@@ -155,8 +162,8 @@ export class DataScienceSurfaceLifecycle implements vscode.Disposable {
             if (this._disposed) {
                 return;
             }
-            const replacement = this._plotsService.positronPlotInstances.find(candidate =>
-                this._plotModelId(candidate) === modelId,
+            const replacement = this._plotsService.positronPlotInstances.find(
+                (candidate) => this._plotModelId(candidate) === modelId,
             );
             if (!replacement) {
                 this._lifecycle.disposeModel(modelId, 'plot-removed');
@@ -170,7 +177,9 @@ export class DataScienceSurfaceLifecycle implements vscode.Disposable {
         if (!plotId) {
             return;
         }
-        const plot = this._plotsService.positronPlotInstances.find(candidate => candidate.id === plotId);
+        const plot = this._plotsService.positronPlotInstances.find(
+            (candidate) => candidate.id === plotId,
+        );
         if (plot && !this._plotModelIds.has(plot.id)) {
             this._registerPlot(plot);
         }
@@ -187,18 +196,18 @@ export class DataScienceSurfaceLifecycle implements vscode.Disposable {
     }
 
     private _replacePlots(plots: readonly IPositronPlotClient[]): void {
-        const currentIds = new Set(plots.map(plot => plot.id));
+        const currentIds = new Set(plots.map((plot) => plot.id));
         for (const [plotId, modelId] of [...this._plotModelIds]) {
             if (!currentIds.has(plotId)) {
                 this._plotModelIds.delete(plotId);
                 this._plotSubscriptions.get(plotId)?.dispose();
                 this._plotSubscriptions.delete(plotId);
-                if (![...plots].some(plot => this._plotModelId(plot) === modelId)) {
+                if (![...plots].some((plot) => this._plotModelId(plot) === modelId)) {
                     this._lifecycle.disposeModel(modelId, 'plot-history-replaced');
                 }
             }
         }
-        plots.forEach(plot => this._registerPlot(plot));
+        plots.forEach((plot) => this._registerPlot(plot));
         const selectedPlotId = this._plotsService.selectedPlotId;
         if (selectedPlotId) {
             this._selectPlot(selectedPlotId);
@@ -216,7 +225,9 @@ export class DataScienceSurfaceLifecycle implements vscode.Disposable {
             title: instance.displayName,
             source: {
                 kind: isFile ? SurfaceSourceKind.File : SurfaceSourceKind.Runtime,
-                id: isFile ? instance.identifier.slice('duckdb:'.length) : (instance.sessionId ?? instance.identifier),
+                id: isFile
+                    ? instance.identifier.slice('duckdb:'.length)
+                    : (instance.sessionId ?? instance.identifier),
                 sessionId: instance.sessionId,
                 stop: instance.sessionId
                     ? async () => this._sessionManager.interruptSession(instance.sessionId!)
@@ -267,11 +278,11 @@ export class DataScienceSurfaceLifecycle implements vscode.Disposable {
         this._disposed = true;
         this._plotsPaneAttachment?.dispose();
         this._plotsPaneAttachment = undefined;
-        this._plotSubscriptions.forEach(disposable => disposable.dispose());
+        this._plotSubscriptions.forEach((disposable) => disposable.dispose());
         this._plotSubscriptions.clear();
-        this._dataExplorerSubscriptions.forEach(disposable => disposable.dispose());
+        this._dataExplorerSubscriptions.forEach((disposable) => disposable.dispose());
         this._dataExplorerSubscriptions.clear();
-        this._disposables.forEach(disposable => disposable.dispose());
+        this._disposables.forEach((disposable) => disposable.dispose());
         this._lifecycle.detachOwner(CoordinatorOwnerId);
     }
 }

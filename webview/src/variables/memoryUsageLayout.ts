@@ -45,7 +45,10 @@ export function getMemoryMeterSizing(
     return { layout: 'hidden', width: 0, showWarning: false };
 }
 
-export function getMemoryMeterLayout(availableWidth: number, lowMemory: boolean): MemoryMeterLayout {
+export function getMemoryMeterLayout(
+    availableWidth: number,
+    lowMemory: boolean,
+): MemoryMeterLayout {
     return getMemoryMeterSizing(availableWidth, lowMemory).layout;
 }
 

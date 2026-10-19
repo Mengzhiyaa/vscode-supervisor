@@ -1,18 +1,16 @@
 <script lang="ts">
-    import { onDestroy, tick } from "svelte";
+    import { onDestroy, tick } from 'svelte';
     /**
      * ConsoleTab.svelte - Individual session tab component
      * Based on Positron's ConsoleTab in consoleTabList.tsx
      */
-    import ContextMenu, {
-        type ContextMenuEntry,
-    } from "../shared/ContextMenu.svelte";
-    import type { ConsoleState } from "../types/console";
-    import ConsoleInstanceState from "./ConsoleInstanceState.svelte";
-    import RuntimeIcon from "./RuntimeIcon.svelte";
-    import ResourceUsageGraph from "./ResourceUsageGraph.svelte";
-    import ResourceUsageStats from "./ResourceUsageStats.svelte";
-    import { localize } from "$lib/localization";
+    import ContextMenu, { type ContextMenuEntry } from '../shared/ContextMenu.svelte';
+    import type { ConsoleState } from '../types/console';
+    import ConsoleInstanceState from './ConsoleInstanceState.svelte';
+    import RuntimeIcon from './RuntimeIcon.svelte';
+    import ResourceUsageGraph from './ResourceUsageGraph.svelte';
+    import ResourceUsageStats from './ResourceUsageStats.svelte';
+    import { localize } from '$lib/localization';
 
     interface ResourceUsage {
         cpu_percent: number;
@@ -24,7 +22,7 @@
         name: string;
         runtimeName: string;
         languageId?: string;
-        sessionMode: "console" | "notebook" | "background";
+        sessionMode: 'console' | 'notebook' | 'background';
         createdTimestamp: number;
         state: ConsoleState;
         runtimePath?: string;
@@ -58,10 +56,7 @@
         onSelect: () => void;
         onDelete: () => Promise<void>;
         onRename: (newName: string) => void;
-        onSessionNameHiddenChange?: (
-            sessionId: string,
-            hidden: boolean,
-        ) => void;
+        onSessionNameHiddenChange?: (sessionId: string, hidden: boolean) => void;
         onToggleResourceMonitor?: () => void;
     } = $props();
 
@@ -69,10 +64,7 @@
     let isRenaming = $state(false);
     // svelte-ignore state_referenced_locally
     let editName = $state(
-        session.name ||
-            session.runtimeVersion ||
-            session.runtimeName ||
-            "Session",
+        session.name || session.runtimeVersion || session.runtimeName || 'Session',
     );
     let deleteDisabled = $state(false);
     // svelte-ignore non_reactive_update
@@ -80,7 +72,7 @@
     // svelte-ignore non_reactive_update
     let tabRef: HTMLDivElement;
     let sessionNameRef = $state<HTMLParagraphElement>();
-    let fittedSessionName = $state("");
+    let fittedSessionName = $state('');
 
     // Context menu state
     let showContextMenu = $state(false);
@@ -90,8 +82,8 @@
     // Minimum width for showing delete button
     const MINIMUM_ACTION_TAB_WIDTH = 110;
     const RESOURCE_GRAPH_HEIGHT = 24;
-    const deleteSessionLabel = localize("console.deleteSession", "Delete Session");
-    const renameLabel = localize("console.rename", "Rename...");
+    const deleteSessionLabel = localize('console.deleteSession', 'Delete Session');
+    const renameLabel = localize('console.rename', 'Rename...');
 
     // Computed values for resource usage
     let graphWidth = $derived(Math.max(0, width - 20));
@@ -104,40 +96,37 @@
         active &&
             showResourceMonitor &&
             resourceUsageHistory.length > 0 &&
-            session.state !== "exited",
+            session.state !== 'exited',
     );
     let primarySessionName = $derived(
-        session.name ||
-            session.runtimeVersion ||
-            session.runtimeName ||
-            "Session",
+        session.name || session.runtimeVersion || session.runtimeName || 'Session',
     );
     const sessionNameIsCutShort = $derived(
         hideSessionName || fittedSessionName !== primarySessionName,
     );
-    const showResourceMonitorLabel = $derived(localize("console.showResourceMonitor", "Show Resource Monitor"));
-    const contextMenuEntries = $derived.by(
-        (): ContextMenuEntry[] => [
-            {
-                label: renameLabel,
-                icon: "edit",
-                onSelected: () => startRename(),
-            },
-            {
-                label: deleteSessionLabel,
-                icon: "trash",
-                disabled: deleteDisabled,
-                onSelected: () => {
-                    void deleteSession();
-                },
-            },
-            {
-                label: showResourceMonitorLabel,
-                checked: showResourceMonitor,
-                onSelected: () => onToggleResourceMonitor(),
-            },
-        ],
+    const showResourceMonitorLabel = $derived(
+        localize('console.showResourceMonitor', 'Show Resource Monitor'),
     );
+    const contextMenuEntries = $derived.by((): ContextMenuEntry[] => [
+        {
+            label: renameLabel,
+            icon: 'edit',
+            onSelected: () => startRename(),
+        },
+        {
+            label: deleteSessionLabel,
+            icon: 'trash',
+            disabled: deleteDisabled,
+            onSelected: () => {
+                void deleteSession();
+            },
+        },
+        {
+            label: showResourceMonitorLabel,
+            checked: showResourceMonitor,
+            onSelected: () => onToggleResourceMonitor(),
+        },
+    ]);
 
     function fitSessionName(
         name: string,
@@ -164,7 +153,7 @@
             }
             length = end - 1;
         }
-        return "";
+        return '';
     }
 
     $effect(() => {
@@ -175,26 +164,18 @@
             if (!sessionNameRef) {
                 return;
             }
-            const measureElement = document.createElement("span");
-            measureElement.style.position = "absolute";
-            measureElement.style.visibility = "hidden";
-            measureElement.style.whiteSpace = "pre";
+            const measureElement = document.createElement('span');
+            measureElement.style.position = 'absolute';
+            measureElement.style.visibility = 'hidden';
+            measureElement.style.whiteSpace = 'pre';
             sessionNameRef.appendChild(measureElement);
             try {
-                const availableWidth =
-                    sessionNameRef.getBoundingClientRect().width;
-                fittedSessionName = fitSessionName(
-                    primarySessionName,
-                    availableWidth,
-                    (text) => {
-                        measureElement.textContent = text;
-                        return measureElement.getBoundingClientRect().width;
-                    },
-                );
-                onSessionNameHiddenChange(
-                    session.id,
-                    fittedSessionName.length === 0,
-                );
+                const availableWidth = sessionNameRef.getBoundingClientRect().width;
+                fittedSessionName = fitSessionName(primarySessionName, availableWidth, (text) => {
+                    measureElement.textContent = text;
+                    return measureElement.getBoundingClientRect().width;
+                });
+                onSessionNameHiddenChange(session.id, fittedSessionName.length === 0);
             } finally {
                 measureElement.remove();
             }
@@ -218,8 +199,7 @@
      * Handle context menu (right-click)
      */
     function handleMouseDown(e: MouseEvent) {
-        const isContextMenuTrigger =
-            e.button === 2 || (e.button === 0 && e.ctrlKey);
+        const isContextMenuTrigger = e.button === 2 || (e.button === 0 && e.ctrlKey);
         if (!isContextMenuTrigger) {
             closeContextMenu();
             return;
@@ -252,7 +232,7 @@
         try {
             await onDelete();
         } catch (error) {
-            console.error("Failed to delete session:", error);
+            console.error('Failed to delete session:', error);
         } finally {
             // Cancellation and failures leave the tab mounted and retryable.
             deleteDisabled = false;
@@ -275,7 +255,7 @@
     }
 
     function handleDeleteKeyDown(e: KeyboardEvent) {
-        if (e.key !== "Enter") {
+        if (e.key !== 'Enter') {
             return;
         }
 
@@ -314,8 +294,8 @@
     function getInputSelectionRange() {
         if (
             !inputRef ||
-            typeof inputRef.selectionStart !== "number" ||
-            typeof inputRef.selectionEnd !== "number"
+            typeof inputRef.selectionStart !== 'number' ||
+            typeof inputRef.selectionEnd !== 'number'
         ) {
             return undefined;
         }
@@ -337,13 +317,13 @@
      * Handle input keydown
      */
     async function handleInputKeyDown(e: KeyboardEvent) {
-        if (e.key === "Enter") {
+        if (e.key === 'Enter') {
             e.preventDefault();
             submitRename();
             return;
         }
 
-        if (e.key === "Escape") {
+        if (e.key === 'Escape') {
             e.preventDefault();
             editName = primarySessionName;
             isRenaming = false;
@@ -357,14 +337,14 @@
             return;
         }
 
-        if (key === "a") {
+        if (key === 'a') {
             e.preventDefault();
             e.stopPropagation();
             inputRef?.select();
             return;
         }
 
-        if (key === "c" || key === "x") {
+        if (key === 'c' || key === 'x') {
             e.preventDefault();
             e.stopPropagation();
 
@@ -378,30 +358,28 @@
             try {
                 await navigator.clipboard.writeText(selectedText);
             } catch (error) {
-                console.warn("Failed to write rename selection to clipboard:", error);
+                console.warn('Failed to write rename selection to clipboard:', error);
                 return;
             }
 
-            if (key === "x") {
-                editName =
-                    editName.slice(0, selection.start) +
-                    editName.slice(selection.end);
+            if (key === 'x') {
+                editName = editName.slice(0, selection.start) + editName.slice(selection.end);
                 restoreInputSelection(selection.start);
             }
 
             return;
         }
 
-        if (key === "v") {
+        if (key === 'v') {
             e.preventDefault();
             e.stopPropagation();
 
-            let clipboardText = "";
+            let clipboardText = '';
 
             try {
                 clipboardText = await navigator.clipboard.readText();
             } catch (error) {
-                console.warn("Failed to read clipboard for rename input:", error);
+                console.warn('Failed to read clipboard for rename input:', error);
                 return;
             }
 
@@ -412,9 +390,7 @@
             }
 
             editName =
-                editName.slice(0, selection.start) +
-                clipboardText +
-                editName.slice(selection.end);
+                editName.slice(0, selection.start) + clipboardText + editName.slice(selection.end);
             restoreInputSelection(selection.start + clipboardText.length);
         }
     }
@@ -423,7 +399,7 @@
      * Handle tab keydown for rename shortcut
      */
     function handleTabKeyDown(e: KeyboardEvent) {
-        if (e.key === "F2" && !isRenaming) {
+        if (e.key === 'F2' && !isRenaming) {
             e.preventDefault();
             startRename();
         }
@@ -439,9 +415,7 @@
     aria-selected={active}
     aria-controls="console-panel-{session.id}"
     aria-label={session.name}
-    title={sessionNameIsCutShort && !isRenaming
-        ? primarySessionName
-        : undefined}
+    title={sessionNameIsCutShort && !isRenaming ? primarySessionName : undefined}
     data-testid="console-tab-{session.id}"
     onclick={handleClick}
     onmousedown={handleMouseDown}
@@ -473,7 +447,7 @@
         {:else}
             <!-- Positron style: Tab title is session label (rename target) -->
             <p class="session-name" bind:this={sessionNameRef}>
-                {hideSessionName ? "" : fittedSessionName}
+                {hideSessionName ? '' : fittedSessionName}
             </p>
 
             {#if width > MINIMUM_ACTION_TAB_WIDTH}
@@ -640,5 +614,4 @@
         margin-top: 4px;
         container-type: inline-size;
     }
-
 </style>

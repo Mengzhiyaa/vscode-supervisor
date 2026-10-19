@@ -8,18 +8,18 @@
  * rejected externally.
  */
 export class PromiseHandles<T> {
-	resolve!: (value: T | Promise<T>) => void;
+    resolve!: (value: T | Promise<T>) => void;
 
-	reject!: (error: unknown) => void;
+    reject!: (error: unknown) => void;
 
-	promise: Promise<T>;
+    promise: Promise<T>;
 
-	constructor() {
-		this.promise = new Promise((resolve, reject) => {
-			this.resolve = resolve;
-			this.reject = reject;
-		});
-	}
+    constructor() {
+        this.promise = new Promise((resolve, reject) => {
+            this.resolve = resolve;
+            this.reject = reject;
+        });
+    }
 }
 
 /**
@@ -28,48 +28,48 @@ export class PromiseHandles<T> {
  */
 
 export class Barrier {
-	private _isOpen: boolean;
-	private _isCancelled = false;
-	private _promise: Promise<boolean>;
-	private _completePromise!: (v: boolean) => void;
-	private _errorPromise!: (err: Error) => void;
+    private _isOpen: boolean;
+    private _isCancelled = false;
+    private _promise: Promise<boolean>;
+    private _completePromise!: (v: boolean) => void;
+    private _errorPromise!: (err: Error) => void;
 
-	constructor() {
-		this._isOpen = false;
-		this._promise = new Promise<boolean>((c, e) => {
-			this._completePromise = c;
-			this._errorPromise = e;
-		});
-		this._promise.catch(() => undefined);
-	}
+    constructor() {
+        this._isOpen = false;
+        this._promise = new Promise<boolean>((c, e) => {
+            this._completePromise = c;
+            this._errorPromise = e;
+        });
+        this._promise.catch(() => undefined);
+    }
 
-	isOpen(): boolean {
-		return this._isOpen;
-	}
+    isOpen(): boolean {
+        return this._isOpen;
+    }
 
-	isCancelled(): boolean {
-		return this._isCancelled;
-	}
+    isCancelled(): boolean {
+        return this._isCancelled;
+    }
 
-	open(): void {
-		if (this._isCancelled) {
-			return;
-		}
-		this._isOpen = true;
-		this._completePromise(true);
-	}
+    open(): void {
+        if (this._isCancelled) {
+            return;
+        }
+        this._isOpen = true;
+        this._completePromise(true);
+    }
 
-	cancel(error: Error): void {
-		this._isOpen = false;
-		this._isCancelled = true;
-		this._errorPromise(error);
-		this._promise = Promise.reject(error);
-		this._promise.catch(() => undefined);
-	}
+    cancel(error: Error): void {
+        this._isOpen = false;
+        this._isCancelled = true;
+        this._errorPromise(error);
+        this._promise = Promise.reject(error);
+        this._promise.catch(() => undefined);
+    }
 
-	wait(): Promise<boolean> {
-		return this._promise;
-	}
+    wait(): Promise<boolean> {
+        return this._promise;
+    }
 }
 
 /**
@@ -82,11 +82,9 @@ export class Barrier {
  *
  * @returns The wrapped promise
  */
-export function withTimeout<T>(promise: Promise<T>,
-	timeout: number,
-	message: string): Promise<T> {
-	return Promise.race([
-		promise,
-		new Promise<T>((_, reject) => setTimeout(() => reject(new Error(message)), timeout))
-	]);
+export function withTimeout<T>(promise: Promise<T>, timeout: number, message: string): Promise<T> {
+    return Promise.race([
+        promise,
+        new Promise<T>((_, reject) => setTimeout(() => reject(new Error(message)), timeout)),
+    ]);
 }

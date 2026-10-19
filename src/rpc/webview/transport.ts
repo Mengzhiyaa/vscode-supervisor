@@ -6,7 +6,7 @@ import {
     Disposable,
     Message,
     MessageReader,
-    MessageWriter
+    MessageWriter,
 } from 'vscode-jsonrpc/node';
 
 /**
@@ -48,7 +48,7 @@ export class WebviewMessageReader extends AbstractMessageReader implements Messa
         return {
             dispose: () => {
                 this._callback = null;
-            }
+            },
         };
     }
 

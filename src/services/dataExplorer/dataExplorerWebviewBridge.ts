@@ -120,10 +120,7 @@ interface DataUpdateCoordinator {
 
 const dataUpdateCoordinators = new WeakMap<object, DataUpdateCoordinator>();
 
-function normalizeColumnDisplayType(
-    typeDisplay: string | undefined,
-    typeName?: string,
-): string {
+function normalizeColumnDisplayType(typeDisplay: string | undefined, typeName?: string): string {
     return (typeDisplay ?? typeName ?? '').trim().toLowerCase();
 }
 
@@ -197,9 +194,7 @@ function matchesColumnSchemaSearch(
         columnSchema.description,
     ];
 
-    return haystacks.some((value) =>
-        normalizeSearchValue(value).includes(normalizedSearchText),
-    );
+    return haystacks.some((value) => normalizeSearchValue(value).includes(normalizedSearchText));
 }
 
 function sortSchemaColumns(
@@ -243,27 +238,23 @@ export class DataExplorerWebviewBridge {
     private readonly _disposables: vscode.Disposable[] = [];
     private _surfaceVisible: boolean;
     private _pendingInvalidation: { generation: number; schemaChanged: boolean } | undefined;
-    private readonly _profileRequestTokens = new Map<
-        number,
-        vscode.CancellationTokenSource
-    >();
+    private readonly _profileRequestTokens = new Map<number, vscode.CancellationTokenSource>();
 
     constructor(private readonly _options: DataExplorerWebviewBridgeOptions) {
         const { instance } = _options;
         this._surfaceVisible = _options.panel.visible;
         this._disposables.push(
-            instance.onDidChangeUiState(state => {
+            instance.onDidChangeUiState((state) => {
                 this._notifyLayoutChanged(state.layout);
                 this._notifySummaryCollapsedChanged(state.summaryCollapsed);
                 this._notifySummaryWidthChanged(state.summaryWidth);
             }),
-            instance.onDidChangeForegroundLoading(isLoading => {
-                _options.connection.sendNotification(
-                    DataExplorerLoadingNotification.type,
-                    { isLoading },
-                );
+            instance.onDidChangeForegroundLoading((isLoading) => {
+                _options.connection.sendNotification(DataExplorerLoadingNotification.type, {
+                    isLoading,
+                });
             }),
-            instance.onDidInvalidateData(event => {
+            instance.onDidInvalidateData((event) => {
                 if (this._surfaceVisible) {
                     _options.connection.sendNotification(
                         DataExplorerDataInvalidatedNotification.type,
@@ -285,7 +276,7 @@ export class DataExplorerWebviewBridge {
                 }
             }),
             instance.onDidClose(() => this.sendBackendStateUpdate()),
-            instance.onDidChangeSelection(selection => {
+            instance.onDidChangeSelection((selection) => {
                 if (selection) {
                     _options.connection.sendNotification(
                         DataExplorerSelectionChangedNotification.type,
@@ -333,9 +324,7 @@ export class DataExplorerWebviewBridge {
 
         connection.onNotification(DataExplorerSetLayoutNotification.type, (params) => {
             logChannel.debug('[DataExplorerEditor] Received: dataExplorer/setLayout');
-            const layout = this._isLayoutState(params.layout)
-                ? params.layout
-                : 'SummaryOnLeft';
+            const layout = this._isLayoutState(params.layout) ? params.layout : 'SummaryOnLeft';
             instance.setLayout(layout);
             if (panel.active) {
                 this._options.onSyncActiveContexts();
@@ -343,9 +332,7 @@ export class DataExplorerWebviewBridge {
         });
 
         connection.onNotification(DataExplorerSetSummaryCollapsedNotification.type, (params) => {
-            logChannel.debug(
-                '[DataExplorerEditor] Received: dataExplorer/setSummaryCollapsed',
-            );
+            logChannel.debug('[DataExplorerEditor] Received: dataExplorer/setSummaryCollapsed');
             instance.setSummaryCollapsed(!!params.collapsed);
             if (panel.active) {
                 this._options.onSyncActiveContexts();
@@ -446,14 +433,10 @@ export class DataExplorerWebviewBridge {
 
                 if (params.pinnedColumns && params.pinnedColumns.length > 0) {
                     const pinned = params.pinnedColumns.filter(
-                        (index) =>
-                            index >= 0 &&
-                            index < backendState.table_shape.num_columns,
+                        (index) => index >= 0 && index < backendState.table_shape.num_columns,
                     );
                     const pinnedSet = new Set(pinned);
-                    const rest = columnIndices.filter(
-                        (index) => !pinnedSet.has(index),
-                    );
+                    const rest = columnIndices.filter((index) => !pinnedSet.has(index));
                     columnIndices = [...pinned, ...rest];
                 }
                 connection.sendNotification(DataExplorerSummarySchemaNotification.type, {
@@ -464,14 +447,11 @@ export class DataExplorerWebviewBridge {
                     requestId: params.requestId,
                 });
             } catch (error) {
-                connection.sendNotification(
-                    DataExplorerSummarySchemaNotification.type,
-                    {
-                        columns: [],
-                        columnIndices: [],
-                        requestId: params.requestId,
-                    },
-                );
+                connection.sendNotification(DataExplorerSummarySchemaNotification.type, {
+                    columns: [],
+                    columnIndices: [],
+                    requestId: params.requestId,
+                });
                 this._sendError(getErrorMessage(error), 'searchSchema', {
                     requestId: params.requestId,
                 });
@@ -482,17 +462,14 @@ export class DataExplorerWebviewBridge {
     private _registerColumnProfileHandlers(): void {
         const { connection, instance, logChannel } = this._options;
 
-        connection.onNotification(
-            DataExplorerCancelColumnProfilesNotification.type,
-            (params) => {
-                for (const requestId of params.requestIds) {
-                    const tokenSource = this._profileRequestTokens.get(requestId);
-                    tokenSource?.cancel();
-                    tokenSource?.dispose();
-                    this._profileRequestTokens.delete(requestId);
-                }
-            },
-        );
+        connection.onNotification(DataExplorerCancelColumnProfilesNotification.type, (params) => {
+            for (const requestId of params.requestIds) {
+                const tokenSource = this._profileRequestTokens.get(requestId);
+                tokenSource?.cancel();
+                tokenSource?.dispose();
+                this._profileRequestTokens.delete(requestId);
+            }
+        });
 
         connection.onNotification(
             DataExplorerRequestColumnProfilesNotification.type,
@@ -508,72 +485,61 @@ export class DataExplorerWebviewBridge {
                     if (!this._surfaceVisible) {
                         return;
                     }
-                    const backendState =
-                        await instance.clientInstance.getBackendState();
+                    const backendState = await instance.clientInstance.getBackendState();
                     if (tokenSource.token.isCancellationRequested) {
                         return;
                     }
                     const supportsProfiles =
-                        backendState.supported_features.get_column_profiles
-                            .support_status === SupportStatus.Supported;
+                        backendState.supported_features.get_column_profiles.support_status ===
+                        SupportStatus.Supported;
                     if (!supportsProfiles) {
-                        connection.sendNotification(
-                            DataExplorerColumnProfilesNotification.type,
-                            {
-                                profiles: params.columnIndices.map((columnIndex) => ({
-                                    columnIndex,
-                                    profile: undefined,
-                                })),
-                                error:
-                                    'Column profiles are not supported by this backend.',
-                                requestId: params.requestId,
-                                generation: params.generation,
-                            },
-                        );
+                        connection.sendNotification(DataExplorerColumnProfilesNotification.type, {
+                            profiles: params.columnIndices.map((columnIndex) => ({
+                                columnIndex,
+                                profile: undefined,
+                            })),
+                            error: 'Column profiles are not supported by this backend.',
+                            requestId: params.requestId,
+                            generation: params.generation,
+                        });
                         return;
                     }
 
                     const supportedTypes =
-                        backendState.supported_features.get_column_profiles
-                            .supported_types ?? [];
+                        backendState.supported_features.get_column_profiles.supported_types ?? [];
                     const supportedProfileTypes = new Set(
                         supportedTypes
                             .filter(
                                 (typeSupport) =>
-                                    typeSupport.support_status ===
-                                    SupportStatus.Supported,
+                                    typeSupport.support_status === SupportStatus.Supported,
                             )
                             .map((typeSupport) => typeSupport.profile_type),
                     );
-                    const expandedColumnIndices = new Set(
-                        params.expandedColumnIndices ?? [],
-                    );
+                    const expandedColumnIndices = new Set(params.expandedColumnIndices ?? []);
 
                     const schema = await instance.getSchema(params.columnIndices);
                     if (tokenSource.token.isCancellationRequested) {
                         return;
                     }
                     const requests = this._buildColumnProfileRequests(
-                        params.columnIndices, schema.columns, expandedColumnIndices, supportedProfileTypes,
+                        params.columnIndices,
+                        schema.columns,
+                        expandedColumnIndices,
+                        supportedProfileTypes,
                     );
 
                     const requestsWithProfiles = requests.filter(
                         (request) => request.profiles.length > 0,
                     );
                     if (requestsWithProfiles.length === 0) {
-                        connection.sendNotification(
-                            DataExplorerColumnProfilesNotification.type,
-                            {
-                                profiles: params.columnIndices.map(
-                                    (columnIndex) => ({
-                                        columnIndex,
-                                        profile: undefined,
-                                    }),
-                                ),
-                                requestId: params.requestId,
-                                generation: params.generation,
-                            },
-                        );
+                        connection.sendNotification(DataExplorerColumnProfilesNotification.type, {
+                            profiles: params.columnIndices.map((columnIndex) => ({
+                                columnIndex,
+                                profile: undefined,
+                            })),
+                            requestId: params.requestId,
+                            generation: params.generation,
+                        });
                         return;
                     }
 
@@ -599,35 +565,26 @@ export class DataExplorerWebviewBridge {
                         columnIndex,
                         profile: resultByIndex.get(columnIndex),
                     }));
-                    connection.sendNotification(
-                        DataExplorerColumnProfilesNotification.type,
-                        {
-                            profiles,
-                            requestId: params.requestId,
-                            generation: params.generation,
-                        },
-                    );
+                    connection.sendNotification(DataExplorerColumnProfilesNotification.type, {
+                        profiles,
+                        requestId: params.requestId,
+                        generation: params.generation,
+                    });
                 } catch (error) {
                     if (!this._profileRequestTokens.has(params.requestId)) {
                         return;
                     }
-                    connection.sendNotification(
-                        DataExplorerColumnProfilesNotification.type,
-                        {
-                            profiles: params.columnIndices.map((columnIndex) => ({
-                                columnIndex,
-                                profile: undefined,
-                            })),
-                            error: getErrorMessage(error),
-                            requestId: params.requestId,
-                            generation: params.generation,
-                        },
-                    );
+                    connection.sendNotification(DataExplorerColumnProfilesNotification.type, {
+                        profiles: params.columnIndices.map((columnIndex) => ({
+                            columnIndex,
+                            profile: undefined,
+                        })),
+                        error: getErrorMessage(error),
+                        requestId: params.requestId,
+                        generation: params.generation,
+                    });
                 } finally {
-                    if (
-                        this._profileRequestTokens.get(params.requestId) ===
-                        tokenSource
-                    ) {
+                    if (this._profileRequestTokens.get(params.requestId) === tokenSource) {
                         tokenSource.dispose();
                         this._profileRequestTokens.delete(params.requestId);
                     }
@@ -642,8 +599,8 @@ export class DataExplorerWebviewBridge {
         expandedColumnIndices: ReadonlySet<number>,
         supportedProfileTypes: ReadonlySet<ColumnProfileType>,
     ): ColumnProfileRequest[] {
-        const schemaByIndex = new Map(schema.map(column => [column.column_index, column]));
-        return columnIndices.map(columnIndex => {
+        const schemaByIndex = new Map(schema.map((column) => [column.column_index, column]));
+        return columnIndices.map((columnIndex) => {
             const column = schemaByIndex.get(columnIndex);
             const expanded = expandedColumnIndices.has(columnIndex);
             const type = normalizeColumnDisplayType(column?.type_display, column?.type_name);
@@ -651,23 +608,38 @@ export class DataExplorerWebviewBridge {
             if (expanded && supportedProfileTypes.has(ColumnProfileType.SummaryStats)) {
                 profiles.push({ profile_type: ColumnProfileType.SummaryStats });
             }
-            if (isNumericColumnDisplayType(type) && supportedProfileTypes.has(ColumnProfileType.SmallHistogram)) {
+            if (
+                isNumericColumnDisplayType(type) &&
+                supportedProfileTypes.has(ColumnProfileType.SmallHistogram)
+            ) {
                 profiles.push({
                     profile_type: ColumnProfileType.SmallHistogram,
-                    params: { method: ColumnHistogramParamsMethod.FreedmanDiaconis, num_bins: SMALL_HISTOGRAM_NUM_BINS },
+                    params: {
+                        method: ColumnHistogramParamsMethod.FreedmanDiaconis,
+                        num_bins: SMALL_HISTOGRAM_NUM_BINS,
+                    },
                 });
                 if (expanded) {
                     profiles.push({
                         profile_type: ColumnProfileType.LargeHistogram,
-                        params: { method: ColumnHistogramParamsMethod.FreedmanDiaconis, num_bins: LARGE_HISTOGRAM_NUM_BINS },
+                        params: {
+                            method: ColumnHistogramParamsMethod.FreedmanDiaconis,
+                            num_bins: LARGE_HISTOGRAM_NUM_BINS,
+                        },
                     });
                 }
-            } else if (isBooleanColumnDisplayType(type) && supportedProfileTypes.has(ColumnProfileType.SmallFrequencyTable)) {
+            } else if (
+                isBooleanColumnDisplayType(type) &&
+                supportedProfileTypes.has(ColumnProfileType.SmallFrequencyTable)
+            ) {
                 profiles.push({
                     profile_type: ColumnProfileType.SmallFrequencyTable,
                     params: { limit: BOOLEAN_FREQUENCY_TABLE_LIMIT },
                 });
-            } else if (isStringColumnDisplayType(type) && supportedProfileTypes.has(ColumnProfileType.SmallFrequencyTable)) {
+            } else if (
+                isStringColumnDisplayType(type) &&
+                supportedProfileTypes.has(ColumnProfileType.SmallFrequencyTable)
+            ) {
                 profiles.push({
                     profile_type: ColumnProfileType.SmallFrequencyTable,
                     params: { limit: SMALL_FREQUENCY_TABLE_LIMIT },
@@ -723,19 +695,14 @@ export class DataExplorerWebviewBridge {
             }
         });
 
-        connection.onNotification(
-            DataExplorerClearFiltersNotification.type,
-            async () => {
-                logChannel.debug(
-                    '[DataExplorerEditor] Received: dataExplorer/clearFilters',
-                );
-                try {
-                    await this._mutateRowFilters(() => []);
-                } catch (error) {
-                    this._sendError(getErrorMessage(error), 'clearFilters');
-                }
-            },
-        );
+        connection.onNotification(DataExplorerClearFiltersNotification.type, async () => {
+            logChannel.debug('[DataExplorerEditor] Received: dataExplorer/clearFilters');
+            try {
+                await this._mutateRowFilters(() => []);
+            } catch (error) {
+                this._sendError(getErrorMessage(error), 'clearFilters');
+            }
+        });
 
         connection.onNotification(DataExplorerAddFilterNotification.type, async (params) => {
             logChannel.debug('[DataExplorerEditor] Received: dataExplorer/addFilter');
@@ -754,8 +721,7 @@ export class DataExplorerWebviewBridge {
             try {
                 await this._mutateRowFilters((currentFilters) =>
                     currentFilters.map((filter) =>
-                        filter.filter_id ===
-                        (params.filter as RowFilter).filter_id
+                        filter.filter_id === (params.filter as RowFilter).filter_id
                             ? (params.filter as RowFilter)
                             : filter,
                     ),
@@ -769,9 +735,7 @@ export class DataExplorerWebviewBridge {
             logChannel.debug('[DataExplorerEditor] Received: dataExplorer/removeFilter');
             try {
                 await this._mutateRowFilters((currentFilters) =>
-                    currentFilters.filter(
-                        (filter) => filter.filter_id !== params.filterId,
-                    ),
+                    currentFilters.filter((filter) => filter.filter_id !== params.filterId),
                 );
             } catch (error) {
                 this._sendError(getErrorMessage(error), 'removeFilter');
@@ -782,124 +746,104 @@ export class DataExplorerWebviewBridge {
     private _registerClipboardSelectionHandler(): void {
         const { connection, instance, logChannel } = this._options;
 
-        connection.onNotification(
-            DataExplorerCopyToClipboardNotification.type,
-            async (params) => {
-                logChannel.debug(
-                    '[DataExplorerEditor] Received: dataExplorer/copyToClipboard',
-                );
-                try {
-                    const backendState = instance.backendState;
-                    const totalRows = backendState?.table_shape.num_rows ?? 0;
-                    const totalColumns =
-                        backendState?.table_shape.num_columns ?? 0;
+        connection.onNotification(DataExplorerCopyToClipboardNotification.type, async (params) => {
+            logChannel.debug('[DataExplorerEditor] Received: dataExplorer/copyToClipboard');
+            try {
+                const backendState = instance.backendState;
+                const totalRows = backendState?.table_shape.num_rows ?? 0;
+                const totalColumns = backendState?.table_shape.num_columns ?? 0;
 
-                    let selection: { kind: string; selection: unknown };
-                    let selectedCells = 0;
+                let selection: { kind: string; selection: unknown };
+                let selectedCells = 0;
 
-                    if (
-                        params.selectionType === 'cell' &&
-                        params.columnIndex !== undefined &&
-                        params.rowIndex !== undefined
-                    ) {
-                        selection = {
-                            kind: TableSelectionKind.SingleCell,
-                            selection: {
-                                column_index: params.columnIndex,
-                                row_index: params.rowIndex,
-                            },
-                        };
-                        selectedCells = 1;
-                    } else if (
-                        params.selectionType === 'cells' &&
-                        params.columnIndexes &&
-                        params.rowIndexes
-                    ) {
-                        selection = {
-                            kind: TableSelectionKind.CellIndices,
-                            selection: {
-                                column_indices: params.columnIndexes,
-                                row_indices: params.rowIndexes,
-                            },
-                        };
-                        selectedCells =
-                            params.columnIndexes.length *
-                            params.rowIndexes.length;
-                    } else if (
-                        params.selectionType === 'columns' &&
-                        params.columnIndexes
-                    ) {
-                        selection = {
-                            kind: TableSelectionKind.ColumnIndices,
-                            selection: {
-                                indices: params.columnIndexes,
-                            },
-                        };
-                        selectedCells = params.columnIndexes.length * totalRows;
-                    } else if (
-                        params.selectionType === 'rows' &&
-                        params.rowIndexes
-                    ) {
-                        selection = {
-                            kind: TableSelectionKind.RowIndices,
-                            selection: {
-                                indices: params.rowIndexes,
-                            },
-                        };
-                        selectedCells = params.rowIndexes.length * totalColumns;
-                    } else {
-                        logChannel.warn(
-                            '[DataExplorerEditor] Invalid clipboard selection',
-                        );
-                        return;
-                    }
-
-                    if (!selectedCells) {
-                        vscode.window.showInformationMessage(
-                            'There is nothing to copy to the clipboard.',
-                        );
-                        return;
-                    }
-
-                    if (selectedCells > MAX_CLIPBOARD_CELLS) {
-                        vscode.window.showErrorMessage(
-                            'There is too much data selected to copy to the clipboard.',
-                        );
-                        return;
-                    }
-
-                    const exported =
-                        await instance.clientInstance.exportDataSelection(
-                            selection as never,
-                            ExportFormat.Tsv,
-                        );
-
-                    if (exported.data) {
-                        await vscode.env.clipboard.writeText(exported.data);
-                        logChannel.info('[DataExplorerEditor] Copied to clipboard');
-                    }
-                } catch (error) {
-                    logChannel.error(`[DataExplorerEditor] Copy failed: ${getErrorMessage(error)}`);
-                    this._sendError(`Copy failed: ${getErrorMessage(error)}`, 'copy', {
-                        presentation: 'notification',
-                    });
+                if (
+                    params.selectionType === 'cell' &&
+                    params.columnIndex !== undefined &&
+                    params.rowIndex !== undefined
+                ) {
+                    selection = {
+                        kind: TableSelectionKind.SingleCell,
+                        selection: {
+                            column_index: params.columnIndex,
+                            row_index: params.rowIndex,
+                        },
+                    };
+                    selectedCells = 1;
+                } else if (
+                    params.selectionType === 'cells' &&
+                    params.columnIndexes &&
+                    params.rowIndexes
+                ) {
+                    selection = {
+                        kind: TableSelectionKind.CellIndices,
+                        selection: {
+                            column_indices: params.columnIndexes,
+                            row_indices: params.rowIndexes,
+                        },
+                    };
+                    selectedCells = params.columnIndexes.length * params.rowIndexes.length;
+                } else if (params.selectionType === 'columns' && params.columnIndexes) {
+                    selection = {
+                        kind: TableSelectionKind.ColumnIndices,
+                        selection: {
+                            indices: params.columnIndexes,
+                        },
+                    };
+                    selectedCells = params.columnIndexes.length * totalRows;
+                } else if (params.selectionType === 'rows' && params.rowIndexes) {
+                    selection = {
+                        kind: TableSelectionKind.RowIndices,
+                        selection: {
+                            indices: params.rowIndexes,
+                        },
+                    };
+                    selectedCells = params.rowIndexes.length * totalColumns;
+                } else {
+                    logChannel.warn('[DataExplorerEditor] Invalid clipboard selection');
+                    return;
                 }
-            },
-        );
+
+                if (!selectedCells) {
+                    vscode.window.showInformationMessage(
+                        'There is nothing to copy to the clipboard.',
+                    );
+                    return;
+                }
+
+                if (selectedCells > MAX_CLIPBOARD_CELLS) {
+                    vscode.window.showErrorMessage(
+                        'There is too much data selected to copy to the clipboard.',
+                    );
+                    return;
+                }
+
+                const exported = await instance.clientInstance.exportDataSelection(
+                    selection as never,
+                    ExportFormat.Tsv,
+                );
+
+                if (exported.data) {
+                    await vscode.env.clipboard.writeText(exported.data);
+                    logChannel.info('[DataExplorerEditor] Copied to clipboard');
+                }
+            } catch (error) {
+                logChannel.error(`[DataExplorerEditor] Copy failed: ${getErrorMessage(error)}`);
+                this._sendError(`Copy failed: ${getErrorMessage(error)}`, 'copy', {
+                    presentation: 'notification',
+                });
+            }
+        });
     }
 
     private _registerExportHandlers(): void {
         const { connection, instance, logChannel } = this._options;
 
         connection.onNotification(DataExplorerCopyTableDataNotification.type, async () => {
-            logChannel.debug(
-                '[DataExplorerEditor] Received: dataExplorer/copyTableData',
-            );
+            logChannel.debug('[DataExplorerEditor] Received: dataExplorer/copyTableData');
             try {
                 const backendState = await instance.clientInstance.getBackendState();
                 const supportStatus =
-                    backendState.supported_features.export_data_selection
-                        .support_status;
+                    backendState.supported_features.export_data_selection.support_status;
                 await vscode.window.withProgress(
                     {
                         location: vscode.ProgressLocation.Notification,
@@ -933,9 +877,8 @@ export class DataExplorerWebviewBridge {
                             tableData = await instance.getTableDataTsv(
                                 token,
                                 (completedRows, totalRows) => {
-                                    const nextProgress = totalRows > 0
-                                        ? (completedRows / totalRows) * 100
-                                        : 100;
+                                    const nextProgress =
+                                        totalRows > 0 ? (completedRows / totalRows) * 100 : 100;
                                     progress.report({
                                         increment: nextProgress - reportedProgress,
                                         message: `${completedRows} / ${totalRows} rows`,
@@ -951,35 +894,25 @@ export class DataExplorerWebviewBridge {
                     },
                 );
 
-                vscode.window.showInformationMessage(
-                    'Table data copied to the clipboard.',
-                );
-                logChannel.info(
-                    '[DataExplorerEditor] Copied table data to clipboard',
-                );
+                vscode.window.showInformationMessage('Table data copied to the clipboard.');
+                logChannel.info('[DataExplorerEditor] Copied table data to clipboard');
             } catch (error) {
                 logChannel.error(
                     `[DataExplorerEditor] Copy table data failed: ${getErrorMessage(error)}`,
                 );
-                vscode.window.showErrorMessage(
-                    `Copy table data failed: ${getErrorMessage(error)}`,
-                );
+                vscode.window.showErrorMessage(`Copy table data failed: ${getErrorMessage(error)}`);
             }
         });
 
         connection.onNotification(DataExplorerExportDataNotification.type, async (params) => {
             logChannel.debug('[DataExplorerEditor] Received: dataExplorer/exportData');
             try {
-                const format =
-                    params.format === 'csv' ? ExportFormat.Csv : ExportFormat.Tsv;
+                const format = params.format === 'csv' ? ExportFormat.Csv : ExportFormat.Tsv;
                 const extension = params.format === 'csv' ? 'csv' : 'tsv';
-                const filterName =
-                    params.format === 'csv' ? 'CSV Files' : 'TSV Files';
+                const filterName = params.format === 'csv' ? 'CSV Files' : 'TSV Files';
 
                 const saveUri = await vscode.window.showSaveDialog({
-                    defaultUri: vscode.Uri.file(
-                        `${instance.displayName}.${extension}`,
-                    ),
+                    defaultUri: vscode.Uri.file(`${instance.displayName}.${extension}`),
                     filters: {
                         [filterName]: [extension],
                         'All Files': ['*'],
@@ -1013,16 +946,9 @@ export class DataExplorerWebviewBridge {
                     throw new Error('No data returned from export');
                 }
 
-                await vscode.workspace.fs.writeFile(
-                    saveUri,
-                    Buffer.from(exported.data, 'utf-8'),
-                );
-                vscode.window.showInformationMessage(
-                    `Data exported to ${saveUri.fsPath}`,
-                );
-                logChannel.info(
-                    `[DataExplorerEditor] Exported data to ${saveUri.fsPath}`,
-                );
+                await vscode.workspace.fs.writeFile(saveUri, Buffer.from(exported.data, 'utf-8'));
+                vscode.window.showInformationMessage(`Data exported to ${saveUri.fsPath}`);
+                logChannel.info(`[DataExplorerEditor] Exported data to ${saveUri.fsPath}`);
             } catch (error) {
                 logChannel.error(`[DataExplorerEditor] Export failed: ${getErrorMessage(error)}`);
                 vscode.window.showErrorMessage(`Export failed: ${getErrorMessage(error)}`);
@@ -1033,26 +959,21 @@ export class DataExplorerWebviewBridge {
     private _registerCodeNavigationHandlers(): void {
         const { connection, instance, logChannel } = this._options;
 
-        connection.onNotification(
-            DataExplorerMoveToNewWindowNotification.type,
-            async () => {
-                logChannel.debug(
-                    '[DataExplorerEditor] Received: dataExplorer/moveToNewWindow',
+        connection.onNotification(DataExplorerMoveToNewWindowNotification.type, async () => {
+            logChannel.debug('[DataExplorerEditor] Received: dataExplorer/moveToNewWindow');
+            if (this._options.isInstanceInNewWindow()) {
+                return;
+            }
+            try {
+                await this._options.onMoveToNewWindow();
+            } catch (error) {
+                this._sendError(
+                    `Failed to move editor to new window: ${getErrorMessage(error)}`,
+                    'moveToNewWindow',
+                    { presentation: 'notification' },
                 );
-                if (this._options.isInstanceInNewWindow()) {
-                    return;
-                }
-                try {
-                    await this._options.onMoveToNewWindow();
-                } catch (error) {
-                    this._sendError(
-                        `Failed to move editor to new window: ${getErrorMessage(error)}`,
-                        'moveToNewWindow',
-                        { presentation: 'notification' },
-                    );
-                }
-            },
-        );
+            }
+        });
 
         connection.onNotification(
             DataExplorerRequestConvertToCodePreviewNotification.type,
@@ -1061,50 +982,36 @@ export class DataExplorerWebviewBridge {
                     '[DataExplorerEditor] Received: dataExplorer/requestConvertToCodePreview',
                 );
                 try {
-                    const backendState =
-                        await instance.clientInstance.getBackendState(true);
+                    const backendState = await instance.clientInstance.getBackendState(true);
                     const availableSyntaxes =
-                        backendState.supported_features.convert_to_code
-                            .code_syntaxes ?? [];
+                        backendState.supported_features.convert_to_code.code_syntaxes ?? [];
                     const desiredSyntax = availableSyntaxes.find(
-                        (syntax) =>
-                            syntax.code_syntax_name === params.desiredSyntax,
+                        (syntax) => syntax.code_syntax_name === params.desiredSyntax,
                     );
 
                     if (!desiredSyntax) {
-                        throw new Error(
-                            `Unsupported code syntax: ${params.desiredSyntax}`,
-                        );
+                        throw new Error(`Unsupported code syntax: ${params.desiredSyntax}`);
                     }
 
-                    const converted =
-                        await instance.clientInstance.convertToCode(desiredSyntax);
-                    connection.sendNotification(
-                        DataExplorerConvertToCodePreviewNotification.type,
-                        {
-                            desiredSyntax: params.desiredSyntax,
-                            requestId: params.requestId,
-                            code: converted.converted_code.join('\n'),
-                        },
-                    );
+                    const converted = await instance.clientInstance.convertToCode(desiredSyntax);
+                    connection.sendNotification(DataExplorerConvertToCodePreviewNotification.type, {
+                        desiredSyntax: params.desiredSyntax,
+                        requestId: params.requestId,
+                        code: converted.converted_code.join('\n'),
+                    });
                 } catch (error) {
-                    connection.sendNotification(
-                        DataExplorerConvertToCodePreviewNotification.type,
-                        {
-                            desiredSyntax: params.desiredSyntax,
-                            requestId: params.requestId,
-                            code: '',
-                            error: getErrorMessage(error),
-                        },
-                    );
+                    connection.sendNotification(DataExplorerConvertToCodePreviewNotification.type, {
+                        desiredSyntax: params.desiredSyntax,
+                        requestId: params.requestId,
+                        code: '',
+                        error: getErrorMessage(error),
+                    });
                 }
             },
         );
 
         connection.onNotification(DataExplorerRunConvertToCodeNotification.type, async (params) => {
-            logChannel.debug(
-                '[DataExplorerEditor] Received: dataExplorer/runConvertToCode',
-            );
+            logChannel.debug('[DataExplorerEditor] Received: dataExplorer/runConvertToCode');
             try {
                 if (!params.desiredSyntax?.trim()) {
                     throw new Error('No code syntax was selected.');
@@ -1113,14 +1020,10 @@ export class DataExplorerWebviewBridge {
                 const syntax: CodeSyntaxName = {
                     code_syntax_name: params.desiredSyntax,
                 };
-                const converted = await instance.clientInstance.convertToCode(
-                    syntax,
-                );
+                const converted = await instance.clientInstance.convertToCode(syntax);
                 const code = converted.converted_code.join('\n').trim();
                 if (!code) {
-                    throw new Error(
-                        'No code was generated for the current view.',
-                    );
+                    throw new Error('No code was generated for the current view.');
                 }
 
                 await vscode.env.clipboard.writeText(code);
@@ -1128,9 +1031,13 @@ export class DataExplorerWebviewBridge {
                     `Converted to ${params.desiredSyntax} code and copied to clipboard.`,
                 );
             } catch (error) {
-                this._sendError(`Convert to code failed: ${getErrorMessage(error)}`, 'convertToCode', {
-                    presentation: 'notification',
-                });
+                this._sendError(
+                    `Convert to code failed: ${getErrorMessage(error)}`,
+                    'convertToCode',
+                    {
+                        presentation: 'notification',
+                    },
+                );
             }
         });
     }
@@ -1139,15 +1046,17 @@ export class DataExplorerWebviewBridge {
         const { connection, instance, logChannel } = this._options;
 
         connection.onNotification(DataExplorerOpenAsPlaintextNotification.type, async () => {
-            logChannel.debug(
-                '[DataExplorerEditor] Received: dataExplorer/openAsPlaintext',
-            );
+            logChannel.debug('[DataExplorerEditor] Received: dataExplorer/openAsPlaintext');
             try {
                 await this._options.openAsPlaintext();
             } catch (error) {
-                this._sendError(`Open as plain text failed: ${getErrorMessage(error)}`, 'openAsPlaintext', {
-                    presentation: 'notification',
-                });
+                this._sendError(
+                    `Open as plain text failed: ${getErrorMessage(error)}`,
+                    'openAsPlaintext',
+                    {
+                        presentation: 'notification',
+                    },
+                );
             }
         });
 
@@ -1156,48 +1065,45 @@ export class DataExplorerWebviewBridge {
             try {
                 await this._options.openAsSpreadsheet();
             } catch (error) {
-                this._sendError(`Open as spreadsheet failed: ${getErrorMessage(error)}`, 'openAsSpreadsheet', {
-                    presentation: 'notification',
-                });
+                this._sendError(
+                    `Open as spreadsheet failed: ${getErrorMessage(error)}`,
+                    'openAsSpreadsheet',
+                    {
+                        presentation: 'notification',
+                    },
+                );
             }
         });
 
-        connection.onNotification(
-            DataExplorerApplyFileOptionsNotification.type,
-            async (params) => {
-                logChannel.debug(
-                    '[DataExplorerEditor] Received: dataExplorer/applyFileOptions',
-                );
-                try {
-                    if (!instance.supportsFileOptions) {
-                        throw new Error(
-                            'File options are not supported by this dataset.',
-                        );
-                    }
-                    const options: DatasetImportOptions = {
-                        has_header_row: params.hasHeaderRow,
-                        sheet_name: params.sheetName,
-                    };
-                    await instance.runWithForegroundLoading(async () => {
-                        const result = await instance.setDatasetImportOptions(options);
-                        if (result.error_message) {
-                            throw new Error(result.error_message);
-                        }
-                        await instance.clientInstance.updateBackendState();
-                        await this.sendInitialize();
-                    });
-                } catch (error) {
-                    if (error instanceof vscode.CancellationError) {
-                        return;
-                    }
-                    this._sendError(
-                        `File options update failed: ${getErrorMessage(error)}`,
-                        'applyFileOptions',
-                        { presentation: 'notification' },
-                    );
+        connection.onNotification(DataExplorerApplyFileOptionsNotification.type, async (params) => {
+            logChannel.debug('[DataExplorerEditor] Received: dataExplorer/applyFileOptions');
+            try {
+                if (!instance.supportsFileOptions) {
+                    throw new Error('File options are not supported by this dataset.');
                 }
-            },
-        );
+                const options: DatasetImportOptions = {
+                    has_header_row: params.hasHeaderRow,
+                    sheet_name: params.sheetName,
+                };
+                await instance.runWithForegroundLoading(async () => {
+                    const result = await instance.setDatasetImportOptions(options);
+                    if (result.error_message) {
+                        throw new Error(result.error_message);
+                    }
+                    await instance.clientInstance.updateBackendState();
+                    await this.sendInitialize();
+                });
+            } catch (error) {
+                if (error instanceof vscode.CancellationError) {
+                    return;
+                }
+                this._sendError(
+                    `File options update failed: ${getErrorMessage(error)}`,
+                    'applyFileOptions',
+                    { presentation: 'notification' },
+                );
+            }
+        });
     }
 
     sendBackendStateUpdate(): void {
@@ -1206,10 +1112,9 @@ export class DataExplorerWebviewBridge {
             return;
         }
 
-        this._options.connection.sendNotification(
-            DataExplorerBackendStateNotification.type,
-            { state },
-        );
+        this._options.connection.sendNotification(DataExplorerBackendStateNotification.type, {
+            state,
+        });
     }
 
     setSurfaceVisible(visible: boolean): void {
@@ -1246,12 +1151,9 @@ export class DataExplorerWebviewBridge {
         connection.sendNotification(DataExplorerLayoutChangedNotification.type, {
             layout: uiState.layout,
         });
-        connection.sendNotification(
-            DataExplorerSummaryCollapsedChangedNotification.type,
-            {
-                collapsed: uiState.summaryCollapsed,
-            },
-        );
+        connection.sendNotification(DataExplorerSummaryCollapsedChangedNotification.type, {
+            collapsed: uiState.summaryCollapsed,
+        });
         connection.sendNotification(DataExplorerSummaryWidthChangedNotification.type, {
             summaryWidth: uiState.summaryWidth,
         });
@@ -1266,10 +1168,9 @@ export class DataExplorerWebviewBridge {
             schemaChanged: true,
         });
 
-        const backendState = instance.backendState ??
-            (this._isBackendDisconnected()
-                ? DATA_EXPLORER_DISCONNECTED_STATE
-                : undefined);
+        const backendState =
+            instance.backendState ??
+            (this._isBackendDisconnected() ? DATA_EXPLORER_DISCONNECTED_STATE : undefined);
         if (backendState) {
             connection.sendNotification(DataExplorerMetadataNotification.type, {
                 displayName: backendState.display_name,
@@ -1303,9 +1204,7 @@ export class DataExplorerWebviewBridge {
             const numRows = backendState.table_shape.num_rows;
             const columns = [...new Set(request.columns)].filter(
                 (columnIndex) =>
-                    Number.isInteger(columnIndex) &&
-                    columnIndex >= 0 &&
-                    columnIndex < numColumns,
+                    Number.isInteger(columnIndex) && columnIndex >= 0 && columnIndex < numColumns,
             );
             const rowIndices =
                 request.rowIndices === undefined
@@ -1313,9 +1212,7 @@ export class DataExplorerWebviewBridge {
                     : [...new Set(request.rowIndices)]
                           .filter(
                               (rowIndex) =>
-                                  Number.isInteger(rowIndex) &&
-                                  rowIndex >= 0 &&
-                                  rowIndex < numRows,
+                                  Number.isInteger(rowIndex) && rowIndex >= 0 && rowIndex < numRows,
                           )
                           .sort((left, right) => left - right);
             const displayStartRow =
@@ -1327,10 +1224,7 @@ export class DataExplorerWebviewBridge {
                     ? rowIndices.length > 0
                         ? rowIndices[rowIndices.length - 1] + 1
                         : displayStartRow
-                    : Math.max(
-                          displayStartRow,
-                          Math.min(request.endRow, numRows),
-                      );
+                    : Math.max(displayStartRow, Math.min(request.endRow, numRows));
 
             if (columns.length === 0) {
                 connection.sendNotification(DataExplorerDataNotification.type, {
@@ -1369,8 +1263,10 @@ export class DataExplorerWebviewBridge {
                     column_index: columnIndex,
                     spec: rowSelection,
                 }));
-                const tableData =
-                    await instance.getDataValues(columnSelections, request.generation);
+                const tableData = await instance.getDataValues(
+                    columnSelections,
+                    request.generation,
+                );
                 if (!canPublish()) {
                     return;
                 }
@@ -1378,12 +1274,8 @@ export class DataExplorerWebviewBridge {
             }
 
             let rowLabels: string[] | undefined;
-            if (
-                backendState.has_row_labels &&
-                rowSelection
-            ) {
-                const rowLabelResult =
-                    await instance.clientInstance.getRowLabels(rowSelection);
+            if (backendState.has_row_labels && rowSelection) {
+                const rowLabelResult = await instance.clientInstance.getRowLabels(rowSelection);
                 if (!canPublish()) {
                     return;
                 }
@@ -1416,7 +1308,7 @@ export class DataExplorerWebviewBridge {
         } catch (error) {
             logChannel.error(
                 `[DataExplorerEditor] Error fetching data: ${getErrorSummary(error)}; ` +
-                `details=${formatErrorForLogging(error)}`,
+                    `details=${formatErrorForLogging(error)}`,
             );
             this._sendError(getErrorSummary(error), 'requestData', {
                 requestId: request.requestId,
@@ -1426,10 +1318,7 @@ export class DataExplorerWebviewBridge {
 
     async sendDataFromLastRequest(shouldPublish: () => boolean = () => true): Promise<void> {
         const lastRequest = this._options.instance.lastDataRequest;
-        if (
-            !lastRequest ||
-            lastRequest.generation !== this._options.instance.dataGeneration
-        ) {
+        if (!lastRequest || lastRequest.generation !== this._options.instance.dataGeneration) {
             return;
         }
 
@@ -1443,26 +1332,25 @@ export class DataExplorerWebviewBridge {
         coordinator.pending = { bridge: this, request };
         instance.setLastDataRequest(request);
         if (!coordinator.promise) {
-            coordinator.promise = instance.runWithForegroundLoading(async () => {
-                while (coordinator.pending) {
-                    const current = coordinator.pending;
-                    coordinator.pending = undefined;
-                    await current.bridge.sendData(
-                        current.request,
-                        () => coordinator.pending === undefined,
-                    );
-                }
-            }).finally(() => {
-                coordinator.promise = undefined;
-            });
+            coordinator.promise = instance
+                .runWithForegroundLoading(async () => {
+                    while (coordinator.pending) {
+                        const current = coordinator.pending;
+                        coordinator.pending = undefined;
+                        await current.bridge.sendData(
+                            current.request,
+                            () => coordinator.pending === undefined,
+                        );
+                    }
+                })
+                .finally(() => {
+                    coordinator.promise = undefined;
+                });
         }
         return coordinator.promise;
     }
 
-    invalidateData(
-        schemaChanged: boolean,
-        shouldPublish: () => boolean = () => true,
-    ): number {
+    invalidateData(schemaChanged: boolean, shouldPublish: () => boolean = () => true): number {
         if (!shouldPublish()) {
             return this._options.instance.dataGeneration;
         }
@@ -1479,14 +1367,14 @@ export class DataExplorerWebviewBridge {
             tokenSource.dispose();
         }
         this._profileRequestTokens.clear();
-        this._disposables.forEach(disposable => disposable.dispose());
+        this._disposables.forEach((disposable) => disposable.dispose());
     }
 
     private _buildAugmentedBackendState() {
         const { instance } = this._options;
         const disconnected = this._isBackendDisconnected();
-        const backendState = instance.backendState ??
-            (disconnected ? DATA_EXPLORER_DISCONNECTED_STATE : undefined);
+        const backendState =
+            instance.backendState ?? (disconnected ? DATA_EXPLORER_DISCONNECTED_STATE : undefined);
         if (!backendState) {
             return null;
         }
@@ -1517,8 +1405,9 @@ export class DataExplorerWebviewBridge {
     }
 
     private _isBackendDisconnected(): boolean {
-        return this._options.instance.clientInstance.status ===
-            DataExplorerClientStatus.Disconnected;
+        return (
+            this._options.instance.clientInstance.status === DataExplorerClientStatus.Disconnected
+        );
     }
 
     private async _refreshInitialBackendState(): Promise<void> {
@@ -1528,16 +1417,15 @@ export class DataExplorerWebviewBridge {
         } catch (error) {
             logChannel.error(
                 `[DataExplorerEditor] Backend state update failed: ${getErrorSummary(error)}; ` +
-                `details=${formatErrorForLogging(error)}`,
+                    `details=${formatErrorForLogging(error)}`,
             );
         }
     }
 
     private _notifyLayoutChanged(layout: DataExplorerLayoutState): void {
-        this._options.connection.sendNotification(
-            DataExplorerLayoutChangedNotification.type,
-            { layout },
-        );
+        this._options.connection.sendNotification(DataExplorerLayoutChangedNotification.type, {
+            layout,
+        });
     }
 
     private _notifySummaryCollapsedChanged(collapsed: boolean): void {
@@ -1588,9 +1476,10 @@ export class DataExplorerWebviewBridge {
         } = {},
     ): void {
         if (options.presentation === 'notification') {
-            const showMessage = options.severity === 'warning'
-                ? vscode.window.showWarningMessage
-                : vscode.window.showErrorMessage;
+            const showMessage =
+                options.severity === 'warning'
+                    ? vscode.window.showWarningMessage
+                    : vscode.window.showErrorMessage;
             void showMessage(message);
             return;
         }

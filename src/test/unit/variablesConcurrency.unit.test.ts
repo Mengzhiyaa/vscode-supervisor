@@ -2,22 +2,42 @@ import * as assert from 'assert';
 import * as vscode from 'vscode';
 import { PositronVariablesInstance } from '../../services/variables/variablesInstance';
 import { RuntimeState } from '../../internal/runtimeTypes';
-import { RuntimeClientState, RuntimeClientStatus } from '../../services/variables/interfaces/variablesService';
+import {
+    RuntimeClientState,
+    RuntimeClientStatus,
+} from '../../services/variables/interfaces/variablesService';
 import type { RuntimeSession } from '../../runtime/session';
 import { VariableKind, type Variable } from '../../runtime/comms/positronVariablesComm';
 
 function deferred<T>() {
     let resolve!: (value: T) => void;
     let reject!: (error: Error) => void;
-    const promise = new Promise<T>((yes, no) => { resolve = yes; reject = no; });
+    const promise = new Promise<T>((yes, no) => {
+        resolve = yes;
+        reject = no;
+    });
     return { promise, resolve, reject };
 }
 function variable(name: string, children = false): Variable {
-    return { access_key: name, display_name: name, display_value: name, display_type: 'list', type_info: '', kind: VariableKind.Collection, length: 1, size: 1, has_children: children, has_viewer: false, is_truncated: false, updated_time: 0 };
+    return {
+        access_key: name,
+        display_name: name,
+        display_value: name,
+        display_type: 'list',
+        type_info: '',
+        kind: VariableKind.Collection,
+        length: 1,
+        size: 1,
+        has_children: children,
+        has_viewer: false,
+        is_truncated: false,
+        updated_time: 0,
+    };
 }
 function session(): RuntimeSession {
     return {
-        sessionId: 'same-session-id', state: RuntimeState.Idle,
+        sessionId: 'same-session-id',
+        state: RuntimeState.Idle,
         onDidCreateClientManager: () => new vscode.Disposable(() => undefined),
         onDidChangeRuntimeState: () => new vscode.Disposable(() => undefined),
     } as unknown as RuntimeSession;
@@ -28,7 +48,10 @@ suite('[Unit] Variables asynchronous state', () => {
     let log: vscode.LogOutputChannel;
     let notifications: string[];
     const showError = vscode.window.showErrorMessage;
-    const client = (overrides: Record<string, unknown>) => ({ dispose: () => undefined, ...overrides });
+    const client = (overrides: Record<string, unknown>) => ({
+        dispose: () => undefined,
+        ...overrides,
+    });
     const attach = (value: unknown) => {
         Object.assign(instance, { _variablesClient: value });
         instance.setState(RuntimeClientState.Connected);
@@ -38,9 +61,16 @@ suite('[Unit] Variables asynchronous state', () => {
         log = vscode.window.createOutputChannel('Variables concurrency tests', { log: true });
         instance = new PositronVariablesInstance(session(), log);
         notifications = [];
-        vscode.window.showErrorMessage = async (message: string) => { notifications.push(message); return undefined; };
+        vscode.window.showErrorMessage = async (message: string) => {
+            notifications.push(message);
+            return undefined;
+        };
     });
-    teardown(() => { instance.dispose(); log.dispose(); vscode.window.showErrorMessage = showError; });
+    teardown(() => {
+        instance.dispose();
+        log.dispose();
+        vscode.window.showErrorMessage = showError;
+    });
 
     test('an old refresh cannot repopulate a restarted session or clear its busy state', async () => {
         const old = deferred<{ data: Variable[] }>();
@@ -56,7 +86,10 @@ suite('[Unit] Variables asynchronous state', () => {
         assert.strictEqual(instance.status, RuntimeClientStatus.Busy);
         current.resolve({ data: [variable('current')] });
         await currentRequest;
-        assert.deepStrictEqual(instance.variableItems.map(item => item.displayName), ['current']);
+        assert.deepStrictEqual(
+            instance.variableItems.map((item) => item.displayName),
+            ['current'],
+        );
         assert.strictEqual(instance.status, RuntimeClientStatus.Idle);
     });
 
@@ -87,7 +120,14 @@ suite('[Unit] Variables asynchronous state', () => {
         const clear = instance.requestClear(false);
         instance.setRuntimeSession(session());
         let refreshes = 0;
-        attach(client({ requestRefresh: async () => { refreshes++; return { data: [] }; } }));
+        attach(
+            client({
+                requestRefresh: async () => {
+                    refreshes++;
+                    return { data: [] };
+                },
+            }),
+        );
         pending.resolve();
         await clear;
         assert.strictEqual(refreshes, 0);
@@ -108,7 +148,9 @@ suite('[Unit] Variables asynchronous state', () => {
         const pending = deferred<{ data: Variable[] }>();
         attach(client({ requestRefresh: () => pending.promise }));
         const refresh = instance.requestRefresh();
-        (instance as unknown as { _syncClientState(state: RuntimeClientState): void })._syncClientState(RuntimeClientState.Closing);
+        (
+            instance as unknown as { _syncClientState(state: RuntimeClientState): void }
+        )._syncClientState(RuntimeClientState.Closing);
         pending.resolve({ data: [variable('too-late')] });
         await refresh;
         assert.strictEqual(instance.variableItems.length, 0);
@@ -118,10 +160,15 @@ suite('[Unit] Variables asynchronous state', () => {
     test('a delayed delete reply reconciles a variable reassigned while the request was pending', async () => {
         const pending = deferred<{ assigned: []; removed: string[] }>();
         let refreshes = 0;
-        attach(client({
-            requestDelete: () => pending.promise,
-            requestRefresh: async () => { refreshes++; return { data: [variable('root')] }; },
-        }));
+        attach(
+            client({
+                requestDelete: () => pending.promise,
+                requestRefresh: async () => {
+                    refreshes++;
+                    return { data: [variable('root')] };
+                },
+            }),
+        );
         instance.updateVariables([variable('root')]);
         const deletion = instance.requestDelete(['root']);
         instance.updateVariables([variable('root')]);
@@ -133,10 +180,16 @@ suite('[Unit] Variables asynchronous state', () => {
 
     test('a failed inspection is visible and can be retried without collapsing first', async () => {
         let attempts = 0;
-        attach(client({ inspect: async () => {
-            if (++attempts === 1) { throw new Error('inspect failed'); }
-            return { children: [variable('child')], length: 4 };
-        } }));
+        attach(
+            client({
+                inspect: async () => {
+                    if (++attempts === 1) {
+                        throw new Error('inspect failed');
+                    }
+                    return { children: [variable('child')], length: 4 };
+                },
+            }),
+        );
         instance.updateVariables([variable('root', true)]);
         await assert.rejects(instance.expandVariableItem(['root']), /inspect failed/);
         assert.strictEqual(notifications.length, 1);

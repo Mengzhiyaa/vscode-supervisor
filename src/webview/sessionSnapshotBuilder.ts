@@ -21,27 +21,25 @@ export class SessionSnapshotBuilder {
     constructor(
         private readonly _sessionManager?: RuntimeSessionService,
         private readonly _consoleService?: PositronConsoleService,
-    ) { }
+    ) {}
 
     buildBaseSessions(): SessionProtocol.SessionInfo[] {
         return (this._sessionManager?.sessions ?? [])
-            .map(session => this._buildBaseSessionInfo(session))
+            .map((session) => this._buildBaseSessionInfo(session))
             .sort(compareSessionCreationTime);
     }
 
     buildSessionsWithConsoleOverlay(): SessionProtocol.SessionInfo[] {
         const sessions = this.buildBaseSessions();
-        const sessionsById = new Map(sessions.map(session => [session.id, session]));
+        const sessionsById = new Map(sessions.map((session) => [session.id, session]));
 
         if (!this._consoleService) {
             return sessions;
         }
 
-        const overlaidSessions = sessions.map(session => {
+        const overlaidSessions = sessions.map((session) => {
             const instance = this._consoleService?.getConsoleInstance(session.id);
-            const overlaid = instance
-                ? this._applyConsoleOverlay(session, instance)
-                : session;
+            const overlaid = instance ? this._applyConsoleOverlay(session, instance) : session;
             sessionsById.set(overlaid.id, overlaid);
             return overlaid;
         });
@@ -59,13 +57,13 @@ export class SessionSnapshotBuilder {
 
     resolveForegroundConsoleSessionId(
         sessions: SessionProtocol.SessionInfo[],
-        candidateIds: Array<string | undefined>
+        candidateIds: Array<string | undefined>,
     ): string | undefined {
         if (sessions.length === 0) {
             return undefined;
         }
 
-        const sessionsById = new Map(sessions.map(session => [session.id, session]));
+        const sessionsById = new Map(sessions.map((session) => [session.id, session]));
         for (const candidateId of candidateIds) {
             const candidate = candidateId ? sessionsById.get(candidateId) : undefined;
             if (candidate && isPreferredForegroundConsoleSessionCandidate(candidate)) {
@@ -80,13 +78,15 @@ export class SessionSnapshotBuilder {
             }
         }
 
-        return sessions.find(isPreferredForegroundConsoleSessionCandidate)?.id ??
-            sessions.find(isForegroundConsoleSessionCandidate)?.id;
+        return (
+            sessions.find(isPreferredForegroundConsoleSessionCandidate)?.id ??
+            sessions.find(isForegroundConsoleSessionCandidate)?.id
+        );
     }
 
     resolveActiveSessionId(
         sessions: SessionProtocol.SessionInfo[],
-        candidateIds: Array<string | undefined>
+        candidateIds: Array<string | undefined>,
     ): string | undefined {
         return this.resolveForegroundConsoleSessionId(sessions, candidateIds);
     }
@@ -130,15 +130,16 @@ export class SessionSnapshotBuilder {
             runtimePath: instance.runtimeMetadata.runtimePath || session.runtimePath,
             runtimeVersion: instance.runtimeMetadata.languageVersion || session.runtimeVersion,
             runtimeSource: instance.runtimeMetadata.runtimeSource || session.runtimeSource,
-            base64EncodedIconSvg: instance.runtimeMetadata.base64EncodedIconSvg || session.base64EncodedIconSvg,
+            base64EncodedIconSvg:
+                instance.runtimeMetadata.base64EncodedIconSvg || session.base64EncodedIconSvg,
             promptActive: instance.promptActive,
             runtimeAttached: instance.runtimeAttached,
             ...(languageId ? { languageId } : {}),
             ...(instance.runtimeMetadata.runtimeDisplayPath || session.runtimeDisplayPath
                 ? {
-                    runtimeDisplayPath:
-                        instance.runtimeMetadata.runtimeDisplayPath || session.runtimeDisplayPath,
-                }
+                      runtimeDisplayPath:
+                          instance.runtimeMetadata.runtimeDisplayPath || session.runtimeDisplayPath,
+                  }
                 : {}),
         };
     }
@@ -197,13 +198,13 @@ export function isPreferredForegroundConsoleSessionCandidate(
 }
 
 export function mapConsoleStateToSessionState(
-    state: PositronConsoleState
+    state: PositronConsoleState,
 ): SessionProtocol.SessionInfo['state'] {
     return positronConsoleStateToConsoleState(state);
 }
 
 export function mapRuntimeStateToSessionState(
-    state: RuntimeState
+    state: RuntimeState,
 ): SessionProtocol.SessionInfo['state'] {
     return runtimeStateToConsoleState(state);
 }

@@ -5,16 +5,16 @@
     Mirrors: positron/.../components/activityInput.tsx
 -->
 <script lang="ts">
-    import { localize } from "$lib/localization";
-    import { onMount } from "svelte";
-    import { monaco, ensureMonacoRuntime } from "$lib/monaco/setup";
+    import { localize } from '$lib/localization';
+    import { onMount } from 'svelte';
+    import { monaco, ensureMonacoRuntime } from '$lib/monaco/setup';
     import {
         ensureLanguageTextMateTokenizerReady,
         loadLanguageMonacoSupportModule,
-    } from "$lib/monaco/languageSupport";
-    import { colorizeActivityInputLines } from "$lib/monaco/activityInputColorizer";
-    import { ActivityItemInput, ActivityItemInputState } from "./classes";
-    import OutputRun from "./OutputRun.svelte";
+    } from '$lib/monaco/languageSupport';
+    import { colorizeActivityInputLines } from '$lib/monaco/activityInputColorizer';
+    import { ActivityItemInput, ActivityItemInputState } from './classes';
+    import OutputRun from './OutputRun.svelte';
 
     interface Props {
         activityItemInput: ActivityItemInput;
@@ -25,7 +25,7 @@
 
     let {
         activityItemInput,
-        languageId = "plaintext",
+        languageId = 'plaintext',
         languageAssetsVersion = 0,
         charWidth = 0,
     }: Props = $props();
@@ -80,7 +80,7 @@
         for (const line of activityItemInput.codeOutputLines) {
             const runs = line.outputRuns;
             if (runs.length === 0) {
-                lines.push("");
+                lines.push('');
             } else if (runs.length === 1 && runs[0].format === undefined) {
                 lines.push(runs[0].text);
             } else {
@@ -96,9 +96,7 @@
      * The space is handled by CSS padding-right.
      */
     function getPromptText(index: number): string {
-        return index === 0
-            ? activityItemInput.inputPrompt
-            : activityItemInput.continuationPrompt;
+        return index === 0 ? activityItemInput.inputPrompt : activityItemInput.continuationPrompt;
     }
 
     // Tokenize and colorize using Monaco (Positron 1:1 path)
@@ -115,16 +113,11 @@
         try {
             await ensureMonacoRuntime();
 
-            const languageSupport =
-                await loadLanguageMonacoSupportModule(languageId);
+            const languageSupport = await loadLanguageMonacoSupportModule(languageId);
             languageSupport?.registerLanguage(monaco);
             await ensureLanguageTextMateTokenizerReady(monaco, languageId);
 
-            const result = await colorizeActivityInputLines(
-                monaco,
-                plainLines,
-                languageId,
-            );
+            const result = await colorizeActivityInputLines(monaco, plainLines, languageId);
 
             // Ignore stale async results.
             if (currentVersion !== colorizeVersion) {
@@ -134,7 +127,7 @@
             colorizedLines = result;
             isColorized = result.length > 0;
         } catch (e) {
-            console.warn("Failed to colorize code:", e);
+            console.warn('Failed to colorize code:', e);
             colorizedLines = [];
             isColorized = false;
         }
@@ -159,17 +152,19 @@
     class="activity-input"
     class:executing={inputState === ActivityItemInputState.Executing}
     class:cancelled={inputState === ActivityItemInputState.Cancelled}
-    class:unknown-after-reload={inputState ===
-        ActivityItemInputState.UnknownAfterReload}
+    class:unknown-after-reload={inputState === ActivityItemInputState.UnknownAfterReload}
     title={inputState === ActivityItemInputState.UnknownAfterReload
-        ? "Execution state could not be confirmed after reload. The code was not re-run."
+        ? 'Execution state could not be confirmed after reload. The code was not re-run.'
         : undefined}
 >
     <div class="progress-bar"></div>
     {#if activityItemInput.attribution}
         <div class="execution-attribution">
-            {localize("console.input.executedBy", "Executed by {0}",
-                activityItemInput.attribution.agentName || activityItemInput.attribution.source)}
+            {localize(
+                'console.input.executedBy',
+                'Executed by {0}',
+                activityItemInput.attribution.agentName || activityItemInput.attribution.source,
+            )}
         </div>
     {/if}
 
@@ -177,8 +172,7 @@
         <!-- Colorized output using Monaco tokenization -->
         {#each colorizedLines as html, lineIndex}
             <div class="input-line">
-                <span class="prompt" style:width={promptWidthPx}
-                    >{getPromptText(lineIndex)}</span
+                <span class="prompt" style:width={promptWidthPx}>{getPromptText(lineIndex)}</span
                 ><span class="code colorized">{@html html}</span>
             </div>
         {/each}
@@ -186,11 +180,12 @@
         <!-- Fallback: Plain text output -->
         {#each activityItemInput.codeOutputLines as line, lineIndex (line.id)}
             <div class="input-line">
-                <span class="prompt" style:width={promptWidthPx}
-                    >{getPromptText(lineIndex)}</span
-                ><span class="code">{#each line.outputRuns as run (run.id)}<OutputRun
-                        outputRun={run}
-                    />{/each}</span>
+                <span class="prompt" style:width={promptWidthPx}>{getPromptText(lineIndex)}</span
+                ><span class="code"
+                    >{#each line.outputRuns as run (run.id)}<OutputRun
+                            outputRun={run}
+                        />{/each}</span
+                >
             </div>
         {/each}
     {/if}
@@ -286,15 +281,11 @@
     :global(.activity-input.revealed) .progress-bar {
         background-color: var(--vscode-focusBorder);
         opacity: 0;
-        animation: positronActivityInput-revealFadeInOut 2s ease-in-out 1
-            forwards;
+        animation: positronActivityInput-revealFadeInOut 2s ease-in-out 1 forwards;
     }
 
     .activity-input.cancelled {
-        color: var(
-            --vscode-positronActionBar-disabledForeground,
-            var(--vscode-disabledForeground)
-        );
+        color: var(--vscode-positronActionBar-disabledForeground, var(--vscode-disabledForeground));
     }
 
     .code {

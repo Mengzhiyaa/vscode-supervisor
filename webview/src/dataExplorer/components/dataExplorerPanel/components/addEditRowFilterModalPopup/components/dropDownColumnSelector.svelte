@@ -3,24 +3,22 @@
   Port from Positron's dropDownColumnSelector.tsx
 -->
 <script lang="ts">
-    import type { SchemaColumn } from "../../../../../../dataGrid/types";
-    import { getColumnTypeIcon } from "../../../utility/columnSchemaUtilities";
-    import ColumnSelectorPopup from "./columnSelectorModalPopup.svelte";
+    import type { SchemaColumn } from '../../../../../../dataGrid/types';
+    import { getColumnTypeIcon } from '../../../utility/columnSchemaUtilities';
+    import ColumnSelectorPopup from './columnSelectorModalPopup.svelte';
 
     interface Props {
         columns: SchemaColumn[];
         totalColumns: number;
         title?: string;
         selectedColumnSchema?: SchemaColumn;
-        onSelectedColumnSchemaChanged: (
-            selectedColumnSchema: SchemaColumn,
-        ) => void;
+        onSelectedColumnSchemaChanged: (selectedColumnSchema: SchemaColumn) => void;
     }
 
     let {
         columns,
         totalColumns,
-        title = "Select Column",
+        title = 'Select Column',
         selectedColumnSchema = undefined,
         onSelectedColumnSchemaChanged,
     }: Props = $props();
@@ -94,11 +92,7 @@
     {:else}
         <div class="column-schema-title">
             <div class="left-gutter"></div>
-            <div
-                class="data-type-icon codicon {getColumnTypeIcon(
-                    selectedColumnSchema,
-                )}"
-            ></div>
+            <div class="data-type-icon codicon {getColumnTypeIcon(selectedColumnSchema)}"></div>
             <div class="column-name">{selectedColumnSchema.column_name}</div>
             <div class="right-gutter"></div>
         </div>

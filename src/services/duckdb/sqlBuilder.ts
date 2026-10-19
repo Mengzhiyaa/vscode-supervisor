@@ -50,13 +50,13 @@ export function escapeValue(value: string): string {
  * Returns empty string if no filters.
  */
 export function buildWhereClause(filters: RowFilter[]): string {
-    const activeFilters = filters.filter(f => f.is_valid !== false);
+    const activeFilters = filters.filter((f) => f.is_valid !== false);
     if (activeFilters.length === 0) {
         return '';
     }
 
-    const conditions = activeFilters.map(f => filterToSql(f));
-    const validConditions = conditions.filter(c => c !== '');
+    const conditions = activeFilters.map((f) => filterToSql(f));
+    const validConditions = conditions.filter((c) => c !== '');
     if (validConditions.length === 0) {
         return '';
     }
@@ -85,28 +85,38 @@ function filterToSql(filter: RowFilter): string {
             return `${col} != ''`;
         case RowFilterType.Compare: {
             const params = filter.params as FilterComparison;
-            if (!params) { return ''; }
+            if (!params) {
+                return '';
+            }
             return `${col} ${params.op} ${escapeValue(params.value)}`;
         }
         case RowFilterType.Between: {
             const params = filter.params as FilterBetween;
-            if (!params) { return ''; }
+            if (!params) {
+                return '';
+            }
             return `${col} BETWEEN ${escapeValue(params.left_value)} AND ${escapeValue(params.right_value)}`;
         }
         case RowFilterType.NotBetween: {
             const params = filter.params as FilterBetween;
-            if (!params) { return ''; }
+            if (!params) {
+                return '';
+            }
             return `${col} NOT BETWEEN ${escapeValue(params.left_value)} AND ${escapeValue(params.right_value)}`;
         }
         case RowFilterType.Search: {
             const params = filter.params as FilterTextSearch;
-            if (!params) { return ''; }
+            if (!params) {
+                return '';
+            }
             return textSearchToSql(col, params);
         }
         case RowFilterType.SetMembership: {
             const params = filter.params as FilterSetMembership;
-            if (!params) { return ''; }
-            const valueList = params.values.map(v => escapeValue(v)).join(', ');
+            if (!params) {
+                return '';
+            }
+            const valueList = params.values.map((v) => escapeValue(v)).join(', ');
             const op = params.inclusive ? 'IN' : 'NOT IN';
             return `${col} ${op} (${valueList})`;
         }
@@ -153,20 +163,21 @@ function escapeLike(value: string): string {
 /**
  * Build an ORDER BY clause from sort keys.
  */
-export function buildOrderByClause(
-    sortKeys: ColumnSortKey[],
-    schema: ColumnSchema[]
-): string {
+export function buildOrderByClause(sortKeys: ColumnSortKey[], schema: ColumnSchema[]): string {
     if (sortKeys.length === 0) {
         return '';
     }
 
-    const clauses = sortKeys.map(key => {
-        const col = schema[key.column_index];
-        if (!col) { return ''; }
-        const dir = key.ascending ? 'ASC' : 'DESC';
-        return `${escapeIdentifier(col.column_name)} ${dir}`;
-    }).filter(c => c !== '');
+    const clauses = sortKeys
+        .map((key) => {
+            const col = schema[key.column_index];
+            if (!col) {
+                return '';
+            }
+            const dir = key.ascending ? 'ASC' : 'DESC';
+            return `${escapeIdentifier(col.column_name)} ${dir}`;
+        })
+        .filter((c) => c !== '');
 
     if (clauses.length === 0) {
         return '';
@@ -188,12 +199,14 @@ export function buildSelectQuery(
     schema: ColumnSchema[],
     filters: RowFilter[],
     sortKeys: ColumnSortKey[],
-    formatOptions?: FormatOptions
+    formatOptions?: FormatOptions,
 ): string {
     // Build column list
-    const colExprs = columns.map(col => {
+    const colExprs = columns.map((col) => {
         const colSchema = schema[col.column_index];
-        if (!colSchema) { return '*'; }
+        if (!colSchema) {
+            return '*';
+        }
         const colName = escapeIdentifier(colSchema.column_name);
 
         // Build row range extraction
@@ -221,7 +234,7 @@ export function buildSelectQuery(
         where,
         orderBy,
         limitOffset,
-    ].filter(p => p !== '');
+    ].filter((p) => p !== '');
 
     return parts.join(' ');
 }
@@ -229,16 +242,11 @@ export function buildSelectQuery(
 /**
  * Build a COUNT query with optional filters.
  */
-export function buildCountQuery(
-    tableName: string,
-    filters: RowFilter[]
-): string {
+export function buildCountQuery(tableName: string, filters: RowFilter[]): string {
     const where = buildWhereClause(filters);
-    const parts = [
-        `SELECT COUNT(*) AS cnt`,
-        `FROM ${escapeIdentifier(tableName)}`,
-        where,
-    ].filter(p => p !== '');
+    const parts = [`SELECT COUNT(*) AS cnt`, `FROM ${escapeIdentifier(tableName)}`, where].filter(
+        (p) => p !== '',
+    );
 
     return parts.join(' ');
 }
@@ -251,7 +259,7 @@ export function buildExportQuery(
     selection: TableSelection,
     schema: ColumnSchema[],
     filters: RowFilter[],
-    sortKeys: ColumnSortKey[]
+    sortKeys: ColumnSortKey[],
 ): string {
     const where = buildWhereClause(filters);
     const orderBy = buildOrderByClause(sortKeys, schema);
@@ -260,14 +268,18 @@ export function buildExportQuery(
         case TableSelectionKind.SingleCell: {
             const cell = selection.selection as DataSelectionSingleCell;
             const col = schema[cell.column_index];
-            if (!col) { return `SELECT * FROM ${escapeIdentifier(tableName)} LIMIT 0`; }
+            if (!col) {
+                return `SELECT * FROM ${escapeIdentifier(tableName)} LIMIT 0`;
+            }
             return `SELECT ${escapeIdentifier(col.column_name)} FROM ${escapeIdentifier(tableName)} ${where} ${orderBy} LIMIT 1 OFFSET ${cell.row_index}`;
         }
         case TableSelectionKind.CellRange: {
             const range = selection.selection as DataSelectionCellRange;
             const cols = [];
             for (let i = range.first_column_index; i <= range.last_column_index; i++) {
-                if (schema[i]) { cols.push(escapeIdentifier(schema[i].column_name)); }
+                if (schema[i]) {
+                    cols.push(escapeIdentifier(schema[i].column_name));
+                }
             }
             const colList = cols.length > 0 ? cols.join(', ') : '*';
             const rowCount = range.last_row_index - range.first_row_index + 1;
@@ -277,7 +289,9 @@ export function buildExportQuery(
             const range = selection.selection as DataSelectionColumnRange;
             const cols = [];
             for (let i = range.first_index; i <= range.last_index; i++) {
-                if (schema[i]) { cols.push(escapeIdentifier(schema[i].column_name)); }
+                if (schema[i]) {
+                    cols.push(escapeIdentifier(schema[i].column_name));
+                }
             }
             const colList = cols.length > 0 ? cols.join(', ') : '*';
             return `SELECT ${colList} FROM ${escapeIdentifier(tableName)} ${where} ${orderBy}`;

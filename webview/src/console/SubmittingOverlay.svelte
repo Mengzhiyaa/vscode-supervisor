@@ -1,31 +1,25 @@
 <script lang="ts">
-    import { localize } from "$lib/localization";
+    import { localize } from '$lib/localization';
 
-    let { visible, onCancel }: { visible: boolean; onCancel: () => void } =
-        $props();
+    let { visible, onCancel }: { visible: boolean; onCancel: () => void } = $props();
 
-    const label = $derived(
-        localize("console.submitting", "Submitting..."),
-    );
+    const label = $derived(localize('console.submitting', 'Submitting...'));
 </script>
 
 {#if visible}
     <div class="console-submitting-overlay-anchor">
-        <div
-            class="console-submitting-overlay"
-            data-testid="console-submitting-overlay"
-        >
+        <div class="console-submitting-overlay" data-testid="console-submitting-overlay">
             <span aria-label={label} class="label" role="status">
                 {#each Array.from(label) as character, index (`${index}-${character}`)}
                     <span
                         aria-hidden="true"
                         class="label-character"
-                        style:animation-delay={`${index * 80}ms`}
-                    >{character}</span>
+                        style:animation-delay={`${index * 80}ms`}>{character}</span
+                    >
                 {/each}
             </span>
             <button type="button" class="cancel" onclick={onCancel}>
-                {localize("common.cancel", "Cancel")}
+                {localize('common.cancel', 'Cancel')}
             </button>
         </div>
     </div>
@@ -53,7 +47,11 @@
         color: var(--vscode-editorWidget-foreground);
         border: 1px solid var(--vscode-editorWidget-border, transparent);
         box-shadow: 0 2px 8px var(--vscode-widget-shadow);
-        font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+        font-family:
+            system-ui,
+            -apple-system,
+            BlinkMacSystemFont,
+            sans-serif;
         font-size: 12px;
     }
 

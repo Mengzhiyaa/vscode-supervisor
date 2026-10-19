@@ -3,11 +3,11 @@
   Port from Positron's columnProfileString.tsx
 -->
 <script lang="ts">
-    import { localize } from "../nls";
-    import type { TableSummaryDataGridInstance } from "../tableSummaryDataGridInstance";
-    import ColumnProfileNullCountValue from "./columnProfileNullCountValue.svelte";
-    import ColumnProfileSparklines from "./columnProfileSparklines.svelte";
-    import StatsValue from "./statsValue.svelte";
+    import { localize } from '../nls';
+    import type { TableSummaryDataGridInstance } from '../tableSummaryDataGridInstance';
+    import ColumnProfileNullCountValue from './columnProfileNullCountValue.svelte';
+    import ColumnProfileSparklines from './columnProfileSparklines.svelte';
+    import StatsValue from './statsValue.svelte';
 
     interface Props {
         instance: TableSummaryDataGridInstance;
@@ -18,23 +18,16 @@
 
     const columnProfiles = $derived(instance.columnProfiles);
     const profile = $derived($columnProfiles.get(columnIndex));
-    const columnFrequencyTable = $derived(
-        profile?.large_frequency_table,
-    );
-    const stats = $derived(
-        profile?.summary_stats?.string_stats,
-    );
+    const columnFrequencyTable = $derived(profile?.large_frequency_table);
+    const stats = $derived(profile?.summary_stats?.string_stats);
 
-    const missingLabel = localize("positronMissing", "Missing");
-    const emptyLabel = localize("positronEmpty", "Empty");
-    const uniqueLabel = localize("positronUnique", "Unique");
+    const missingLabel = localize('positronMissing', 'Missing');
+    const emptyLabel = localize('positronEmpty', 'Empty');
+    const uniqueLabel = localize('positronUnique', 'Unique');
 </script>
 
 <div class="column-profile-expanded column-profile-info">
-    <ColumnProfileSparklines
-        {columnFrequencyTable}
-        hoverManager={instance.hoverManager}
-    />
+    <ColumnProfileSparklines {columnFrequencyTable} hoverManager={instance.hoverManager} />
 
     <div class="tabular-info">
         <div class="labels">

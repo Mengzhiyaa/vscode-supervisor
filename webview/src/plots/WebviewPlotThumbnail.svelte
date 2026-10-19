@@ -3,7 +3,7 @@
   1:1 Positron replication - Thumbnail for webview-based plot
 -->
 <script lang="ts">
-    import PlaceholderThumbnail from "./PlaceholderThumbnail.svelte";
+    import PlaceholderThumbnail from './PlaceholderThumbnail.svelte';
 
     // Props using Svelte 5 runes
     interface Props {
@@ -12,11 +12,7 @@
         cachedThumbnailUri?: string;
     }
 
-    let {
-        plotId,
-        thumbnailUri,
-        cachedThumbnailUri,
-    }: Props = $props();
+    let { plotId, thumbnailUri, cachedThumbnailUri }: Props = $props();
 
     // svelte-ignore state_referenced_locally
     let currentUri = $state(thumbnailUri || cachedThumbnailUri);
@@ -27,7 +23,6 @@
             currentUri = thumbnailUri || cachedThumbnailUri;
         }
     });
-
 
     let altText = $derived(`Plot ${plotId}`);
 </script>

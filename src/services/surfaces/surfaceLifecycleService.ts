@@ -36,7 +36,8 @@ export enum SurfaceSourceKind {
 
 export type SurfaceModelRetention = 'transient' | 'retain-on-detach' | 'persistent';
 export type SurfaceModelState = 'created' | 'restored' | 'attached' | 'detached';
-export type SurfaceDetachReason = 'replaced' | 'surface-disposed' | 'model-disposed' | 'owner-disposed';
+export type SurfaceDetachReason =
+    'replaced' | 'surface-disposed' | 'model-disposed' | 'owner-disposed';
 export type SurfaceRestoreLayer = 'descriptor' | 'backend' | 'surface';
 export type SurfaceRestoreLayerState = 'pending' | 'ready' | 'failed';
 
@@ -119,7 +120,15 @@ export interface SurfaceModelSnapshot {
 }
 
 export interface SurfaceLifecycleEvent {
-    readonly type: 'created' | 'restored' | 'updated' | 'attached' | 'detached' | 'disposed' | 'stop-requested' | 'restore-state-changed';
+    readonly type:
+        | 'created'
+        | 'restored'
+        | 'updated'
+        | 'attached'
+        | 'detached'
+        | 'disposed'
+        | 'stop-requested'
+        | 'restore-state-changed';
     readonly model: SurfaceModelSnapshot;
     readonly attachment?: SurfaceAttachmentSnapshot;
     readonly reason?: string;
@@ -179,7 +188,7 @@ interface PersistedSurfaceModel {
 
 /** Produces a stable, collision-safe model ID from semantic identity parts. */
 export function createSurfaceModelId(kind: SurfaceModelKind, ...identity: string[]): string {
-    return [kind, ...identity].map(value => encodeURIComponent(value)).join(':');
+    return [kind, ...identity].map((value) => encodeURIComponent(value)).join(':');
 }
 
 /**
@@ -205,7 +214,7 @@ export class SurfaceLifecycleService implements vscode.Disposable {
         private readonly _workspaceState: vscode.Memento,
         private readonly _outputChannel: vscode.LogOutputChannel,
         private readonly _storageKey: string = DefaultStorageKey,
-    ) { }
+    ) {}
 
     async initialize(): Promise<void> {
         if (this._initialized) {
@@ -323,7 +332,12 @@ export class SurfaceLifecycleService implements vscode.Disposable {
 
     updateModel(
         modelId: string,
-        patch: Partial<Pick<SurfaceModelDescriptor, 'resourceId' | 'title' | 'source' | 'outputId' | 'retention' | 'payload'>>,
+        patch: Partial<
+            Pick<
+                SurfaceModelDescriptor,
+                'resourceId' | 'title' | 'source' | 'outputId' | 'retention' | 'payload'
+            >
+        >,
     ): SurfaceModelSnapshot | undefined {
         const model = this._models.get(modelId);
         if (!model) {
@@ -423,7 +437,9 @@ export class SurfaceLifecycleService implements vscode.Disposable {
         try {
             model.ownedResource?.dispose();
         } catch (error) {
-            this._outputChannel.warn(`[SurfaceLifecycle] Failed to dispose resource for ${modelId}: ${getErrorMessage(error)}`);
+            this._outputChannel.warn(
+                `[SurfaceLifecycle] Failed to dispose resource for ${modelId}: ${getErrorMessage(error)}`,
+            );
         }
         this._onDidChangeEmitter.fire({
             type: 'disposed',
@@ -438,9 +454,9 @@ export class SurfaceLifecycleService implements vscode.Disposable {
 
     disposeSession(sessionId: string, reason: string = 'session-disposed'): number {
         const modelIds = [...this._models.values()]
-            .filter(model => model.source.sessionId === sessionId)
-            .map(model => model.id);
-        modelIds.forEach(modelId => this.disposeModel(modelId, reason));
+            .filter((model) => model.source.sessionId === sessionId)
+            .map((model) => model.id);
+        modelIds.forEach((modelId) => this.disposeModel(modelId, reason));
         return modelIds.length;
     }
 
@@ -468,13 +484,16 @@ export class SurfaceLifecycleService implements vscode.Disposable {
 
     getModels(kind?: SurfaceModelKind): readonly SurfaceModelSnapshot[] {
         return [...this._models.values()]
-            .filter(model => !kind || model.kind === kind)
-            .map(model => this._snapshot(model));
+            .filter((model) => !kind || model.kind === kind)
+            .map((model) => this._snapshot(model));
     }
 
-    findModelByResource(kind: SurfaceModelKind, resourceId: string): SurfaceModelSnapshot | undefined {
-        const model = [...this._models.values()].find(candidate =>
-            candidate.kind === kind && candidate.resourceId === resourceId,
+    findModelByResource(
+        kind: SurfaceModelKind,
+        resourceId: string,
+    ): SurfaceModelSnapshot | undefined {
+        const model = [...this._models.values()].find(
+            (candidate) => candidate.kind === kind && candidate.resourceId === resourceId,
         );
         return model ? this._snapshot(model) : undefined;
     }
@@ -502,7 +521,9 @@ export class SurfaceLifecycleService implements vscode.Disposable {
             throw new Error(`Registered surface model '${modelId}' must have a ready descriptor`);
         }
         if (layer === 'surface' && state === 'ready' && model.attachments.size === 0) {
-            throw new Error(`Surface model '${modelId}' cannot be surface-ready without an attachment`);
+            throw new Error(
+                `Surface model '${modelId}' cannot be surface-ready without an attachment`,
+            );
         }
         if (layer === 'surface' && state !== 'ready' && model.attachments.size > 0) {
             throw new Error(`Attached surface model '${modelId}' must remain surface-ready`);
@@ -594,7 +615,9 @@ export class SurfaceLifecycleService implements vscode.Disposable {
     assertConsistency(): void {
         const issues = this.getConsistencyIssues();
         if (issues.length > 0) {
-            throw new Error(`Surface lifecycle consistency assertion failed: ${issues.map(issue => issue.message).join(' ')}`);
+            throw new Error(
+                `Surface lifecycle consistency assertion failed: ${issues.map((issue) => issue.message).join(' ')}`,
+            );
         }
     }
 
@@ -688,17 +711,20 @@ export class SurfaceLifecycleService implements vscode.Disposable {
             return;
         }
         const tokens = [...this._models.values()]
-            .filter((model): model is MutableSurfaceModel & { retention: 'persistent' } =>
-                model.retention === 'persistent',
+            .filter(
+                (model): model is MutableSurfaceModel & { retention: 'persistent' } =>
+                    model.retention === 'persistent',
             )
             .sort((left, right) => right.updatedAt - left.updatedAt)
             .slice(0, MaxPersistedModels)
-            .map(model => this._toRestoreToken(model));
+            .map((model) => this._toRestoreToken(model));
         this._persistChain = this._persistChain
             .catch(() => undefined)
             .then(() => this._workspaceState.update(this._storageKey, tokens))
-            .catch(error => {
-                this._outputChannel.warn(`[SurfaceLifecycle] Failed to persist restore tokens: ${getErrorMessage(error)}`);
+            .catch((error) => {
+                this._outputChannel.warn(
+                    `[SurfaceLifecycle] Failed to persist restore tokens: ${getErrorMessage(error)}`,
+                );
             });
     }
 
@@ -776,7 +802,9 @@ export class SurfaceLifecycleService implements vscode.Disposable {
     }
 }
 
-function cloneRecord(value: Readonly<Record<string, unknown>> | undefined): Record<string, unknown> {
+function cloneRecord(
+    value: Readonly<Record<string, unknown>> | undefined,
+): Record<string, unknown> {
     if (!value) {
         return {};
     }

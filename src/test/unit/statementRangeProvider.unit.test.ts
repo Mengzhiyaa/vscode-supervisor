@@ -1,9 +1,6 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
-import {
-    type ILanguageStatementRangeProvider,
-    LanguageLspState,
-} from '../../api';
+import { type ILanguageStatementRangeProvider, LanguageLspState } from '../../api';
 import { resolveStatementRangeProvider } from '../../runtime/statementRange';
 
 function makeNoopLogChannel(warnings: string[]): vscode.LogOutputChannel {
@@ -45,17 +42,20 @@ suite('[Unit] statement range provider lifecycle', () => {
         let currentLsp = startingLsp;
         let waitCalls = 0;
 
-        const resolved = await resolveStatementRangeProvider({
-            get lsp() {
-                return currentLsp;
-            },
-            activateLsp: async () => undefined,
-            waitLsp: async () => {
-                waitCalls += 1;
-                currentLsp = runningLsp;
-                return runningLsp;
-            },
-        } as any, makeNoopLogChannel([]));
+        const resolved = await resolveStatementRangeProvider(
+            {
+                get lsp() {
+                    return currentLsp;
+                },
+                activateLsp: async () => undefined,
+                waitLsp: async () => {
+                    waitCalls += 1;
+                    currentLsp = runningLsp;
+                    return runningLsp;
+                },
+            } as any,
+            makeNoopLogChannel([]),
+        );
 
         assert.strictEqual(waitCalls, 1);
         assert.strictEqual(resolved, provider);
@@ -71,15 +71,18 @@ suite('[Unit] statement range provider lifecycle', () => {
         };
         let activateCalls = 0;
 
-        const resolved = await resolveStatementRangeProvider({
-            lsp,
-            activateLsp: async () => {
-                activateCalls += 1;
-                lsp.state = LanguageLspState.Running;
-                lsp.statementRangeProvider = provider;
-            },
-            waitLsp: async () => lsp,
-        } as any, makeNoopLogChannel([]));
+        const resolved = await resolveStatementRangeProvider(
+            {
+                lsp,
+                activateLsp: async () => {
+                    activateCalls += 1;
+                    lsp.state = LanguageLspState.Running;
+                    lsp.statementRangeProvider = provider;
+                },
+                waitLsp: async () => lsp,
+            } as any,
+            makeNoopLogChannel([]),
+        );
 
         assert.strictEqual(activateCalls, 0);
         assert.strictEqual(resolved, undefined);

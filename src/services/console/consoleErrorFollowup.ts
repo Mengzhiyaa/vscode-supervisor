@@ -30,7 +30,9 @@ export interface ConsoleErrorFollowupServiceLike {
     ): Promise<readonly ConsoleErrorSuggestion[]>;
 }
 
-export class ConsoleErrorFollowupService implements ConsoleErrorFollowupServiceLike, vscode.Disposable {
+export class ConsoleErrorFollowupService
+    implements ConsoleErrorFollowupServiceLike, vscode.Disposable
+{
     private readonly _providers = new Set<ConsoleErrorSuggestionProvider>();
 
     registerProvider(provider: ConsoleErrorSuggestionProvider): vscode.Disposable {
@@ -43,7 +45,7 @@ export class ConsoleErrorFollowupService implements ConsoleErrorFollowupServiceL
         token: vscode.CancellationToken,
     ): Promise<readonly ConsoleErrorSuggestion[]> {
         const suggestions = await Promise.all(
-            [...this._providers].map(async provider => {
+            [...this._providers].map(async (provider) => {
                 try {
                     return token.isCancellationRequested
                         ? []
@@ -65,7 +67,10 @@ export class ConsoleErrorFollowupService implements ConsoleErrorFollowupServiceL
 
 interface ConsolePackageInstance {
     readonly packages: readonly LanguageRuntimePackage[];
-    searchPackages(query: string, token?: vscode.CancellationToken): Promise<LanguageRuntimePackage[]>;
+    searchPackages(
+        query: string,
+        token?: vscode.CancellationToken,
+    ): Promise<LanguageRuntimePackage[]>;
     installPackages(packages: PackageSpec[], token?: vscode.CancellationToken): Promise<void>;
 }
 
@@ -76,7 +81,9 @@ export interface ConsolePackageService {
 const PythonMissingModulePattern = /No module named ['"]([^'"]+)['"]/;
 const RMissingPackagePattern = /there is no package called ['"\u2018]([^'"\u2019]+)['"\u2019]/;
 
-export function extractMissingPackageName(error: Pick<ConsoleError, 'languageId' | 'message'>): string | undefined {
+export function extractMissingPackageName(
+    error: Pick<ConsoleError, 'languageId' | 'message'>,
+): string | undefined {
     if (error.languageId === 'python') {
         return PythonMissingModulePattern.exec(error.message)?.[1]?.split('.')[0];
     }
@@ -98,7 +105,11 @@ export class MissingPackageErrorProvider implements ConsoleErrorSuggestionProvid
         error: ConsoleError,
         token: vscode.CancellationToken,
     ): Promise<readonly ConsoleErrorSuggestion[]> {
-        if (!vscode.workspace.getConfiguration('packages').get<boolean>('suggestInstallOnError', true)) {
+        if (
+            !vscode.workspace
+                .getConfiguration('packages')
+                .get<boolean>('suggestInstallOnError', true)
+        ) {
             return [];
         }
 
@@ -109,24 +120,27 @@ export class MissingPackageErrorProvider implements ConsoleErrorSuggestionProvid
         }
 
         const normalizedName = referencedName.toLocaleLowerCase();
-        if (instance.packages.some(pkg => pkg.name.toLocaleLowerCase() === normalizedName)) {
+        if (instance.packages.some((pkg) => pkg.name.toLocaleLowerCase() === normalizedName)) {
             return [];
         }
 
         const candidates = await instance.searchPackages(referencedName, token);
-        const installablePackage = candidates.find(pkg =>
-            pkg.name.toLocaleLowerCase() === normalizedName ||
-            pkg.displayName?.toLocaleLowerCase() === normalizedName,
+        const installablePackage = candidates.find(
+            (pkg) =>
+                pkg.name.toLocaleLowerCase() === normalizedName ||
+                pkg.displayName?.toLocaleLowerCase() === normalizedName,
         );
         if (!installablePackage || token.isCancellationRequested) {
             return [];
         }
 
-        return [{
-            id: `install-package:${installablePackage.name}`,
-            iconId: 'lightbulb',
-            label: vscode.l10n.t('Install {0}', installablePackage.name),
-            run: () => instance.installPackages([{ name: installablePackage.name }], token),
-        }];
+        return [
+            {
+                id: `install-package:${installablePackage.name}`,
+                iconId: 'lightbulb',
+                label: vscode.l10n.t('Install {0}', installablePackage.name),
+                run: () => instance.installPackages([{ name: installablePackage.name }], token),
+            },
+        ];
     }
 }

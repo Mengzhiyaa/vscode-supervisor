@@ -9,9 +9,9 @@
  * @link https://jupyter-client.readthedocs.io/en/stable/messaging.html#code-inputs
  */
 export interface JupyterExecuteInput {
-	/** The code to be executed */
-	code: string;
+    /** The code to be executed */
+    code: string;
 
-	/** The count of executions */
-	execution_count: number;
+    /** The count of executions */
+    execution_count: number;
 }

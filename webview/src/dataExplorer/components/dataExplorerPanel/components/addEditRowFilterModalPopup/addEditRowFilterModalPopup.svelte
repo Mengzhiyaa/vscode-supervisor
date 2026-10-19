@@ -3,7 +3,7 @@
   Port from Positron's addEditRowFilterModalPopup.tsx
 -->
 <script lang="ts">
-    import { onMount } from "svelte";
+    import { onMount } from 'svelte';
     import {
         RowFilterDescrType,
         RowFilterCondition,
@@ -20,14 +20,14 @@
         filterTypeRequiresValue,
         filterTypeRequiresRange,
         type RowFilterDescriptor,
-    } from "./rowFilterDescriptor";
-    import type { SchemaColumn } from "../../../../../dataGrid/types";
-    import ModalPopup from "../../../../../shared/ModalPopup.svelte";
-    import DropDownColumnSelector from "./components/dropDownColumnSelector.svelte";
+    } from './rowFilterDescriptor';
+    import type { SchemaColumn } from '../../../../../dataGrid/types';
+    import ModalPopup from '../../../../../shared/ModalPopup.svelte';
+    import DropDownColumnSelector from './components/dropDownColumnSelector.svelte';
     import DropDownListBox, {
         type DropDownListBoxEntry,
-    } from "../../../../../shared/DropDownListBox.svelte";
-    import RowFilterParameter from "./components/rowFilterParameter.svelte";
+    } from '../../../../../shared/DropDownListBox.svelte';
+    import RowFilterParameter from './components/rowFilterParameter.svelte';
     import {
         getEffectiveColumnDisplayType,
         isBooleanDisplayType,
@@ -36,8 +36,8 @@
         isNumericDisplayType,
         isStringDisplayType,
         isTimeDisplayType,
-    } from "../../../../columnDisplayTypeUtils";
-    import { localize } from "../../../../nls";
+    } from '../../../../columnDisplayTypeUtils';
+    import { localize } from '../../../../nls';
 
     interface FocusableComponent {
         focus: () => void;
@@ -67,49 +67,46 @@
         return (
             selectedColumn ??
             (editFilter
-                ? columns.find(
-                      (column) =>
-                          column.column_index === editFilter.schema.column_index,
-                  ) ?? editFilter.schema
+                ? (columns.find(
+                      (column) => column.column_index === editFilter.schema.column_index,
+                  ) ?? editFilter.schema)
                 : undefined)
         );
     }
 
     function getInitialFirstValue(): string {
         if (!editFilter) {
-            return "";
+            return '';
         }
 
-        if ("value" in editFilter) {
+        if ('value' in editFilter) {
             return (editFilter as { value: string }).value;
         }
 
-        if ("lowerLimit" in editFilter) {
+        if ('lowerLimit' in editFilter) {
             return (editFilter as { lowerLimit: string }).lowerLimit;
         }
 
-        return "";
+        return '';
     }
 
     function getInitialSecondValue(): string {
         if (!editFilter) {
-            return "";
+            return '';
         }
 
-        if ("upperLimit" in editFilter) {
+        if ('upperLimit' in editFilter) {
             return (editFilter as { upperLimit: string }).upperLimit;
         }
 
-        return "";
+        return '';
     }
 
     function getInitialSelectedColumnSchema(): SchemaColumn | undefined {
         return resolveInitialColumn();
     }
 
-    function getInitialSelectedFilterType():
-        | RowFilterDescrType
-        | undefined {
+    function getInitialSelectedFilterType(): RowFilterDescrType | undefined {
         return editFilter?.descrType;
     }
 
@@ -117,18 +114,13 @@
         return editFilter?.props.errorMessage;
     }
 
-    let selectedColumnSchema = $state<SchemaColumn | undefined>(
-        getInitialSelectedColumnSchema(),
-    );
-    let selectedFilterType = $state<RowFilterDescrType | undefined>(
-        getInitialSelectedFilterType(),
-    );
+    let selectedColumnSchema = $state<SchemaColumn | undefined>(getInitialSelectedColumnSchema());
+    let selectedFilterType = $state<RowFilterDescrType | undefined>(getInitialSelectedFilterType());
     let firstValue = $state(getInitialFirstValue());
     let secondValue = $state(getInitialSecondValue());
     let errorText = $state<string | undefined>(getInitialErrorText());
 
-    let dropDownColumnSelectorRef =
-        $state<FocusableComponent | null>(null);
+    let dropDownColumnSelectorRef = $state<FocusableComponent | null>(null);
     let dropDownConditionRef = $state<FocusableComponent | null>(null);
     let firstParameterRef = $state<FocusableComponent | null>(null);
     let secondParameterRef = $state<FocusableComponent | null>(null);
@@ -160,10 +152,7 @@
     };
 
     $effect(() => {
-        if (
-            selectedColumnSchema &&
-            previousSelectedColumnSchema !== selectedColumnSchema
-        ) {
+        if (selectedColumnSchema && previousSelectedColumnSchema !== selectedColumnSchema) {
             focusConditionSelector();
         }
 
@@ -171,10 +160,7 @@
     });
 
     $effect(() => {
-        if (
-            selectedFilterType &&
-            previousSelectedFilterType !== selectedFilterType
-        ) {
+        if (selectedFilterType && previousSelectedFilterType !== selectedFilterType) {
             focusFirstParameter();
         }
 
@@ -215,16 +201,13 @@
     }
 
     function clearFilterValuesAndErrorText() {
-        firstValue = "";
-        secondValue = "";
+        firstValue = '';
+        secondValue = '';
         errorText = undefined;
     }
 
     function displayType(columnSchema: SchemaColumn): string {
-        return getEffectiveColumnDisplayType(
-            columnSchema.type_display,
-            columnSchema.type_name,
-        );
+        return getEffectiveColumnDisplayType(columnSchema.type_display, columnSchema.type_name);
     }
 
     function isStringType(columnSchema: SchemaColumn): boolean {
@@ -237,11 +220,7 @@
 
     function isDateLikeType(columnSchema: SchemaColumn): boolean {
         const type = displayType(columnSchema);
-        return (
-            isDateDisplayType(type) ||
-            isDatetimeDisplayType(type) ||
-            isTimeDisplayType(type)
-        );
+        return isDateDisplayType(type) || isDatetimeDisplayType(type) || isTimeDisplayType(type);
     }
 
     function isNumericType(columnSchema: SchemaColumn): boolean {
@@ -257,86 +236,68 @@
 
         entries.push({
             identifier: RowFilterDescrType.IS_NULL,
-            title: localize(
-                "positron.addEditRowFilter.conditionIsNull",
-                "is missing",
-            ),
+            title: localize('positron.addEditRowFilter.conditionIsNull', 'is missing'),
         });
 
         entries.push({
             identifier: RowFilterDescrType.IS_NOT_NULL,
-            title: localize(
-                "positron.addEditRowFilter.conditionIsNotNull",
-                "is not missing",
-            ),
+            title: localize('positron.addEditRowFilter.conditionIsNotNull', 'is not missing'),
         });
 
         entries.push({
             identifier: RowFilterDescrType.IS_NULL,
-            title: "",
+            title: '',
             isSeparator: true,
         });
 
         if (isStringType(selectedColumnSchema)) {
             entries.push({
                 identifier: RowFilterDescrType.SEARCH_CONTAINS,
-                title: localize(
-                    "positron.addEditRowFilter.conditionSearchContains",
-                    "contains",
-                ),
+                title: localize('positron.addEditRowFilter.conditionSearchContains', 'contains'),
             });
 
             entries.push({
                 identifier: RowFilterDescrType.SEARCH_NOT_CONTAINS,
                 title: localize(
-                    "positron.addEditRowFilter.conditionSearchNotContains",
-                    "does not contain",
+                    'positron.addEditRowFilter.conditionSearchNotContains',
+                    'does not contain',
                 ),
             });
 
             entries.push({
                 identifier: RowFilterDescrType.SEARCH_STARTS_WITH,
                 title: localize(
-                    "positron.addEditRowFilter.conditionSearchStartsWith",
-                    "starts with",
+                    'positron.addEditRowFilter.conditionSearchStartsWith',
+                    'starts with',
                 ),
             });
 
             entries.push({
                 identifier: RowFilterDescrType.SEARCH_ENDS_WITH,
-                title: localize(
-                    "positron.addEditRowFilter.conditionSearchEndsWith",
-                    "ends with",
-                ),
+                title: localize('positron.addEditRowFilter.conditionSearchEndsWith', 'ends with'),
             });
 
             entries.push({
                 identifier: RowFilterDescrType.SEARCH_REGEX_MATCHES,
                 title: localize(
-                    "positron.addEditRowFilter.conditionSearchRegexMatches",
-                    "regex matches",
+                    'positron.addEditRowFilter.conditionSearchRegexMatches',
+                    'regex matches',
                 ),
             });
 
             entries.push({
                 identifier: RowFilterDescrType.IS_EMPTY,
-                title: localize(
-                    "positron.addEditRowFilter.conditionIsEmpty",
-                    "is empty",
-                ),
+                title: localize('positron.addEditRowFilter.conditionIsEmpty', 'is empty'),
             });
 
             entries.push({
                 identifier: RowFilterDescrType.IS_NOT_EMPTY,
-                title: localize(
-                    "positron.addEditRowFilter.conditionIsNotEmpty",
-                    "is not empty",
-                ),
+                title: localize('positron.addEditRowFilter.conditionIsNotEmpty', 'is not empty'),
             });
 
             entries.push({
                 identifier: RowFilterDescrType.IS_EMPTY,
-                title: "",
+                title: '',
                 isSeparator: true,
             });
         }
@@ -344,33 +305,30 @@
         if (isNumericType(selectedColumnSchema) || isDateLikeType(selectedColumnSchema)) {
             entries.push({
                 identifier: RowFilterDescrType.IS_LESS_THAN,
-                title: localize(
-                    "positron.addEditRowFilter.conditionIsLessThan",
-                    "is less than",
-                ),
+                title: localize('positron.addEditRowFilter.conditionIsLessThan', 'is less than'),
             });
 
             entries.push({
                 identifier: RowFilterDescrType.IS_LESS_OR_EQUAL,
                 title: localize(
-                    "positron.addEditRowFilter.conditionIsLessThanOrEqual",
-                    "is less than or equal to",
+                    'positron.addEditRowFilter.conditionIsLessThanOrEqual',
+                    'is less than or equal to',
                 ),
             });
 
             entries.push({
                 identifier: RowFilterDescrType.IS_GREATER_THAN,
                 title: localize(
-                    "positron.addEditRowFilter.conditionIsGreaterThan",
-                    "is greater than",
+                    'positron.addEditRowFilter.conditionIsGreaterThan',
+                    'is greater than',
                 ),
             });
 
             entries.push({
                 identifier: RowFilterDescrType.IS_GREATER_OR_EQUAL,
                 title: localize(
-                    "positron.addEditRowFilter.conditionIsGreaterThanOrEqual",
-                    "is greater than or equal to",
+                    'positron.addEditRowFilter.conditionIsGreaterThanOrEqual',
+                    'is greater than or equal to',
                 ),
             });
         }
@@ -383,17 +341,14 @@
         ) {
             entries.push({
                 identifier: RowFilterDescrType.IS_EQUAL_TO,
-                title: localize(
-                    "positron.addEditRowFilter.conditionIsEqualTo",
-                    "is equal to",
-                ),
+                title: localize('positron.addEditRowFilter.conditionIsEqualTo', 'is equal to'),
             });
 
             entries.push({
                 identifier: RowFilterDescrType.IS_NOT_EQUAL_TO,
                 title: localize(
-                    "positron.addEditRowFilter.conditionIsNotEqualTo",
-                    "is not equal to",
+                    'positron.addEditRowFilter.conditionIsNotEqualTo',
+                    'is not equal to',
                 ),
             });
         }
@@ -401,41 +356,32 @@
         if (isBooleanType(selectedColumnSchema)) {
             entries.push({
                 identifier: RowFilterDescrType.IS_TRUE,
-                title: localize(
-                    "positron.addEditRowFilter.conditionIsTrue",
-                    "is true",
-                ),
+                title: localize('positron.addEditRowFilter.conditionIsTrue', 'is true'),
             });
 
             entries.push({
                 identifier: RowFilterDescrType.IS_FALSE,
-                title: localize(
-                    "positron.addEditRowFilter.conditionIsFalse",
-                    "is false",
-                ),
+                title: localize('positron.addEditRowFilter.conditionIsFalse', 'is false'),
             });
         }
 
         if (isNumericType(selectedColumnSchema) || isDateLikeType(selectedColumnSchema)) {
             entries.push({
                 identifier: RowFilterDescrType.IS_BETWEEN,
-                title: "",
+                title: '',
                 isSeparator: true,
             });
 
             entries.push({
                 identifier: RowFilterDescrType.IS_BETWEEN,
-                title: localize(
-                    "positron.addEditRowFilter.conditionIsBetween",
-                    "is between",
-                ),
+                title: localize('positron.addEditRowFilter.conditionIsBetween', 'is between'),
             });
 
             entries.push({
                 identifier: RowFilterDescrType.IS_NOT_BETWEEN,
                 title: localize(
-                    "positron.addEditRowFilter.conditionIsNotBetween",
-                    "is not between",
+                    'positron.addEditRowFilter.conditionIsNotBetween',
+                    'is not between',
                 ),
             });
         }
@@ -447,16 +393,13 @@
 
     const firstPlaceholder = $derived(
         numParams === 2
-            ? localize(
-                  "positron.addEditRowFilter.lowerLimitPlaceholder",
-                  "lower limit",
-              )
-            : localize("positron.addEditRowFilter.valuePlaceholder", "value"),
+            ? localize('positron.addEditRowFilter.lowerLimitPlaceholder', 'lower limit')
+            : localize('positron.addEditRowFilter.valuePlaceholder', 'value'),
     );
 
     const secondPlaceholder = localize(
-        "positron.addEditRowFilter.upperLimitPlaceholder",
-        "upper limit",
+        'positron.addEditRowFilter.upperLimitPlaceholder',
+        'upper limit',
     );
 
     function validateRowFilterValue(columnSchema: SchemaColumn, value: string): boolean {
@@ -478,16 +421,16 @@
     function applyRowFilter() {
         if (!selectedColumnSchema) {
             errorText = localize(
-                "positron.addEditRowFilter.pleaseSelectColumn",
-                "Please select the column.",
+                'positron.addEditRowFilter.pleaseSelectColumn',
+                'Please select the column.',
             );
             return;
         }
 
         if (!selectedFilterType) {
             errorText = localize(
-                "positron.addEditRowFilter.pleaseSelectCondition",
-                "Please select the condition.",
+                'positron.addEditRowFilter.pleaseSelectCondition',
+                'Please select the condition.',
             );
             return;
         }
@@ -503,14 +446,14 @@
                     case RowFilterDescrType.IS_BETWEEN:
                     case RowFilterDescrType.IS_NOT_BETWEEN:
                         errorText = localize(
-                            "positron.addEditRowFilter.pleaseSupplyLowerLimit",
-                            "Please supply the lower limit.",
+                            'positron.addEditRowFilter.pleaseSupplyLowerLimit',
+                            'Please supply the lower limit.',
                         );
                         break;
                     default:
                         errorText = localize(
-                            "positron.addEditRowFilter.pleaseSupplyValue",
-                            "Please supply the value.",
+                            'positron.addEditRowFilter.pleaseSupplyValue',
+                            'Please supply the value.',
                         );
                         break;
                 }
@@ -524,14 +467,14 @@
                     case RowFilterDescrType.IS_BETWEEN:
                     case RowFilterDescrType.IS_NOT_BETWEEN:
                         errorText = localize(
-                            "positron.addEditRowFilter.pleaseSupplyValidLowerLimit",
-                            "Please supply a valid lower limit.",
+                            'positron.addEditRowFilter.pleaseSupplyValidLowerLimit',
+                            'Please supply a valid lower limit.',
                         );
                         break;
                     default:
                         errorText = localize(
-                            "positron.addEditRowFilter.pleaseSupplyValidValue",
-                            "Please supply a valid value.",
+                            'positron.addEditRowFilter.pleaseSupplyValidValue',
+                            'Please supply a valid value.',
                         );
                         break;
                 }
@@ -548,8 +491,8 @@
 
             if (value.length === 0) {
                 errorText = localize(
-                    "positron.addEditRowFilter.pleaseSupplyUpperLimit",
-                    "Please supply the upper limit.",
+                    'positron.addEditRowFilter.pleaseSupplyUpperLimit',
+                    'Please supply the upper limit.',
                 );
                 focusSecondParameter();
                 return false;
@@ -557,8 +500,8 @@
 
             if (!validateRowFilterValue(columnSchema, value)) {
                 errorText = localize(
-                    "positron.addEditRowFilter.pleaseSupplyValidUpperLimit",
-                    "Please supply a valid upper limit.",
+                    'positron.addEditRowFilter.pleaseSupplyValidUpperLimit',
+                    'Please supply a valid upper limit.',
                 );
                 focusSecondParameter();
                 return false;
@@ -611,13 +554,7 @@
                     return;
                 }
 
-                applyDescriptor(
-                    new RowFilterDescriptorSearch(
-                        commonProps,
-                        firstValue,
-                        filterType,
-                    ),
-                );
+                applyDescriptor(new RowFilterDescriptorSearch(commonProps, firstValue, filterType));
                 break;
 
             case RowFilterDescrType.IS_LESS_THAN:
@@ -631,11 +568,7 @@
                 }
 
                 applyDescriptor(
-                    new RowFilterDescriptorComparison(
-                        commonProps,
-                        firstValue,
-                        filterType,
-                    ),
+                    new RowFilterDescriptorComparison(commonProps, firstValue, filterType),
                 );
                 break;
 
@@ -649,11 +582,7 @@
                 }
 
                 applyDescriptor(
-                    new RowFilterDescriptorIsBetween(
-                        commonProps,
-                        firstValue,
-                        secondValue,
-                    ),
+                    new RowFilterDescriptorIsBetween(commonProps, firstValue, secondValue),
                 );
                 break;
 
@@ -667,11 +596,7 @@
                 }
 
                 applyDescriptor(
-                    new RowFilterDescriptorIsNotBetween(
-                        commonProps,
-                        firstValue,
-                        secondValue,
-                    ),
+                    new RowFilterDescriptorIsNotBetween(commonProps, firstValue, secondValue),
                 );
                 break;
         }
@@ -694,7 +619,7 @@
                 (isSingleParam(previousType) && isTwoParams(nextType)) ||
                 (isTwoParams(previousType) && isSingleParam(nextType))
             ) {
-                secondValue = "";
+                secondValue = '';
                 errorText = undefined;
             } else {
                 clearFilterValuesAndErrorText();
@@ -703,7 +628,7 @@
     }
 
     function handleParameterKeyDown(event: KeyboardEvent) {
-        if (event.key !== "Enter") {
+        if (event.key !== 'Enter') {
             return;
         }
 
@@ -727,10 +652,7 @@
             {columns}
             {totalColumns}
             {selectedColumnSchema}
-            title={localize(
-                "positron.addEditRowFilter.selectColumn",
-                "Select Column",
-            )}
+            title={localize('positron.addEditRowFilter.selectColumn', 'Select Column')}
             onSelectedColumnSchemaChanged={handleColumnSchemaChanged}
         />
 
@@ -739,10 +661,7 @@
             disabled={selectedColumnSchema === undefined}
             entries={conditionEntries}
             selectedIdentifier={selectedFilterType}
-            title={localize(
-                "positron.addEditRowFilter.selectCondition",
-                "Select Condition",
-            )}
+            title={localize('positron.addEditRowFilter.selectCondition', 'Select Condition')}
             onSelectionChanged={handleConditionChanged}
         />
 
@@ -776,12 +695,8 @@
             <div class="error">{errorText}</div>
         {/if}
 
-        <button
-            class="button-apply-row-filter"
-            onclick={applyRowFilter}
-            type="button"
-        >
-            {localize("positron.addEditRowFilter.applyFilter", "Apply Filter")}
+        <button class="button-apply-row-filter" onclick={applyRowFilter} type="button">
+            {localize('positron.addEditRowFilter.applyFilter', 'Apply Filter')}
         </button>
     </div>
 </ModalPopup>
@@ -832,8 +747,7 @@
         );
     }
 
-    .add-edit-row-filter-modal-popup-body
-        .button-apply-row-filter:focus-visible {
+    .add-edit-row-filter-modal-popup-body .button-apply-row-filter:focus-visible {
         outline: 1px solid var(--vscode-focusBorder);
     }
 </style>

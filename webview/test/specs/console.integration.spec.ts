@@ -1,7 +1,12 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import type * as Monaco from 'monaco-editor/editor';
 import type { ConsoleInputDraft } from '../../../src/shared/consoleInputState';
-import { ConsoleMethods, SessionMethods, createSession, registerConsoleDefaults } from '../harness/domains';
+import {
+    ConsoleMethods,
+    SessionMethods,
+    createSession,
+    registerConsoleDefaults,
+} from '../harness/domains';
 import { openWebviewPage } from '../harness/page';
 
 function consoleEditorInput(page: Page): Locator {
@@ -83,11 +88,11 @@ function createConsoleStateWithItems(
 }
 
 async function readConsoleInputPrompts(page: Page): Promise<string[]> {
-    return page.locator('.console-input .monaco-editor .line-numbers').evaluateAll((nodes) =>
-        nodes
-            .map((node) => node.textContent?.trim() ?? '')
-            .filter((text) => text.length > 0),
-    );
+    return page
+        .locator('.console-input .monaco-editor .line-numbers')
+        .evaluateAll((nodes) =>
+            nodes.map((node) => node.textContent?.trim() ?? '').filter((text) => text.length > 0),
+        );
 }
 
 async function readConsoleScrollMetrics(
@@ -105,8 +110,7 @@ async function readConsoleScrollMetrics(
             scrollTop: element.scrollTop,
             scrollHeight: element.scrollHeight,
             clientHeight: element.clientHeight,
-            distanceFromBottom:
-                element.scrollHeight - element.clientHeight - element.scrollTop,
+            distanceFromBottom: element.scrollHeight - element.clientHeight - element.scrollTop,
         };
     });
 }
@@ -132,20 +136,12 @@ async function scrollConsoleToBottom(page: Page, sessionId = 'session-1'): Promi
     );
 }
 
-async function scrollConsoleUp(
-    page: Page,
-    offset: number,
-    sessionId = 'session-1',
-): Promise<void> {
+async function scrollConsoleUp(page: Page, offset: number, sessionId = 'session-1'): Promise<void> {
     const metrics = await readConsoleScrollMetrics(page, sessionId);
     await setConsoleScrollTop(page, Math.max(0, metrics.scrollTop - offset), sessionId);
 }
 
-function createExecutionRuntimeChange(
-    executionId: string,
-    code: string,
-    outputText: string,
-) {
+function createExecutionRuntimeChange(executionId: string, code: string, outputText: string) {
     const now = Date.now();
     return {
         kind: 'appendRuntimeItem' as const,
@@ -180,7 +176,12 @@ function createExecutionRuntimeChange(
 test('console restores state and switches sessions through the sidebar', async ({ page }) => {
     const sessions = [
         createSession({ id: 'session-1', name: 'Primary' }),
-        createSession({ id: 'session-2', name: 'Analytics', runtimeName: 'Python', languageId: 'python' }),
+        createSession({
+            id: 'session-2',
+            name: 'Analytics',
+            runtimeName: 'Python',
+            languageId: 'python',
+        }),
     ];
     const backend = await openWebviewPage(page, 'console', {
         configure: (mockBackend) => {
@@ -225,7 +226,9 @@ test('console restores state and switches sessions through the sidebar', async (
     await expect(page.getByText('session-two output')).toBeVisible();
 });
 
-test('console follows a newly foregrounded session after a previous tab selection', async ({ page }) => {
+test('console follows a newly foregrounded session after a previous tab selection', async ({
+    page,
+}) => {
     const sessions = [
         createSession({ id: 'session-1', name: 'Primary' }),
         createSession({ id: 'session-2', name: 'Analytics' }),
@@ -242,7 +245,10 @@ test('console follows a newly foregrounded session after a previous tab selectio
     await backend.notify(SessionMethods.info, { sessions, activeSessionId: 'session-1' });
 
     await page.getByText('Analytics').click();
-    await expect(page.getByRole('tab', { name: 'Analytics' })).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByRole('tab', { name: 'Analytics' })).toHaveAttribute(
+        'aria-selected',
+        'true',
+    );
 
     const newSession = createSession({ id: 'session-3', name: 'New session' });
     const sessionsWithNew = [...sessions, newSession];
@@ -257,7 +263,9 @@ test('console follows a newly foregrounded session after a previous tab selectio
     );
 });
 
-test('console loads shared Monaco styles and colorizes activity input through the public API', async ({ page }) => {
+test('console loads shared Monaco styles and colorizes activity input through the public API', async ({
+    page,
+}) => {
     const sessions = [createSession()];
     const backend = await openWebviewPage(page, 'console', {
         configure: (mockBackend) => {
@@ -298,31 +306,38 @@ test('console keeps the reduced Monaco language setup functional', async ({ page
     });
     await expect.poll(() => backend.notificationCount(ConsoleMethods.ready)).toBeGreaterThan(0);
 
-    const readRuntime = () => page.evaluate(() => {
-        const monaco = (globalThis as typeof globalThis & {
-            monaco?: {
-                editor?: {
-                    getEditors?: () => Array<{
-                        getContribution?: (id: string) => unknown;
-                    }>;
-                };
-                languages?: { getLanguages?: () => Array<{ id: string }> };
+    const readRuntime = () =>
+        page.evaluate(() => {
+            const monaco = (
+                globalThis as typeof globalThis & {
+                    monaco?: {
+                        editor?: {
+                            getEditors?: () => Array<{
+                                getContribution?: (id: string) => unknown;
+                            }>;
+                        };
+                        languages?: { getLanguages?: () => Array<{ id: string }> };
+                    };
+                }
+            ).monaco;
+            const editor = monaco?.editor?.getEditors?.()[0];
+            return {
+                editorApiReady: typeof monaco?.editor?.getEditors === 'function',
+                workerReady:
+                    typeof (
+                        globalThis as typeof globalThis & {
+                            MonacoEnvironment?: { getWorker?: unknown };
+                        }
+                    ).MonacoEnvironment?.getWorker === 'function',
+                languageIds:
+                    monaco?.languages?.getLanguages?.().map((language) => language.id) ?? [],
+                requiredContributions: [
+                    'editor.contrib.contentHover',
+                    'editor.contrib.suggestController',
+                    'snippetController2',
+                ].map((id) => Boolean(editor?.getContribution?.(id))),
             };
-        }).monaco;
-        const editor = monaco?.editor?.getEditors?.()[0];
-        return {
-            editorApiReady: typeof monaco?.editor?.getEditors === 'function',
-            workerReady: typeof (globalThis as typeof globalThis & {
-                MonacoEnvironment?: { getWorker?: unknown };
-            }).MonacoEnvironment?.getWorker === 'function',
-            languageIds: monaco?.languages?.getLanguages?.().map((language) => language.id) ?? [],
-            requiredContributions: [
-                'editor.contrib.contentHover',
-                'editor.contrib.suggestController',
-                'snippetController2',
-            ].map((id) => Boolean(editor?.getContribution?.(id))),
-        };
-    });
+        });
     await expect.poll(readRuntime).toMatchObject({
         editorApiReady: true,
         workerReady: true,
@@ -334,7 +349,9 @@ test('console keeps the reduced Monaco language setup functional', async ({ page
     expect(runtime.languageIds).not.toContain('javascript');
 });
 
-test('console copies output and copies or cuts Monaco selections before treating Ctrl+C as interrupt', async ({ page }) => {
+test('console copies output and copies or cuts Monaco selections before treating Ctrl+C as interrupt', async ({
+    page,
+}) => {
     const backend = await openWebviewPage(page, 'console', {
         configure: (mockBackend) => {
             registerConsoleDefaults(mockBackend, {
@@ -347,9 +364,11 @@ test('console copies output and copies or cuts Monaco selections before treating
 
     await page.evaluate(() => {
         const nativeCopies: string[] = [];
-        (globalThis as typeof globalThis & {
-            __consoleNativeCopies?: string[];
-        }).__consoleNativeCopies = nativeCopies;
+        (
+            globalThis as typeof globalThis & {
+                __consoleNativeCopies?: string[];
+            }
+        ).__consoleNativeCopies = nativeCopies;
         // Bubble phase observes the clipboard payload after Monaco has filled
         // it. Native copy does not call the Host clipboard RPC.
         document.addEventListener('copy', (event) => {
@@ -359,12 +378,17 @@ test('console copies output and copies or cuts Monaco selections before treating
         });
     });
     const copiedTexts = async () => [
-        ...backend.requests(ConsoleMethods.writeClipboardText).map(
-            request => (request.params as { text: string }).text,
-        ),
-        ...await page.evaluate(() => (globalThis as typeof globalThis & {
-            __consoleNativeCopies?: string[];
-        }).__consoleNativeCopies ?? []),
+        ...backend
+            .requests(ConsoleMethods.writeClipboardText)
+            .map((request) => (request.params as { text: string }).text),
+        ...(await page.evaluate(
+            () =>
+                (
+                    globalThis as typeof globalThis & {
+                        __consoleNativeCopies?: string[];
+                    }
+                ).__consoleNativeCopies ?? [],
+        )),
     ];
 
     await backend.notify(ConsoleMethods.restoreState, {
@@ -375,9 +399,9 @@ test('console copies output and copies or cuts Monaco selections before treating
     await expect(page.getByText('copy this output')).toBeVisible();
 
     await page.getByTestId('console-session-1').evaluate((consoleNode) => {
-        const outputNode = Array.from(
-            consoleNode.querySelectorAll<HTMLElement>('*'),
-        ).find((node) => node.textContent === 'copy this output');
+        const outputNode = Array.from(consoleNode.querySelectorAll<HTMLElement>('*')).find(
+            (node) => node.textContent === 'copy this output',
+        );
         if (!outputNode) {
             throw new Error('Expected output node');
         }
@@ -391,21 +415,17 @@ test('console copies output and copies or cuts Monaco selections before treating
     });
 
     await page.keyboard.press('Control+c');
-    await expect
-        .poll(() => backend.requestCount(ConsoleMethods.writeClipboardText))
-        .toBe(1);
-    expect(
-        backend.requests(ConsoleMethods.writeClipboardText).at(-1)?.params,
-    ).toEqual({ text: 'copy this output' });
+    await expect.poll(() => backend.requestCount(ConsoleMethods.writeClipboardText)).toBe(1);
+    expect(backend.requests(ConsoleMethods.writeClipboardText).at(-1)?.params).toEqual({
+        text: 'copy this output',
+    });
     expect(backend.requestCount(ConsoleMethods.interrupt)).toBe(0);
 
     await backend.notify(ConsoleMethods.setPendingCode, {
         sessionId: 'session-1',
         code: 'alpha + beta',
     });
-    await expect(page.locator('.console-input .view-lines')).toContainText(
-        'alpha + beta',
-    );
+    await expect(page.locator('.console-input .view-lines')).toContainText('alpha + beta');
     await page.locator('.console-input .view-lines').click();
     await page.keyboard.press('Control+a');
 
@@ -414,16 +434,10 @@ test('console copies output and copies or cuts Monaco selections before treating
     expect(backend.requestCount(ConsoleMethods.interrupt)).toBe(0);
 
     await page.keyboard.press('Control+x');
-    await expect.poll(copiedTexts).toEqual([
-        'copy this output', 'alpha + beta', 'alpha + beta',
-    ]);
-    await expect(page.locator('.console-input .view-lines')).not.toContainText(
-        'alpha + beta',
-    );
+    await expect.poll(copiedTexts).toEqual(['copy this output', 'alpha + beta', 'alpha + beta']);
+    await expect(page.locator('.console-input .view-lines')).not.toContainText('alpha + beta');
 
-    const interruptRequest = backend.waitForNextRequest(
-        ConsoleMethods.interrupt,
-    );
+    const interruptRequest = backend.waitForNextRequest(ConsoleMethods.interrupt);
     await page.keyboard.press('Control+c');
     expect((await interruptRequest).params).toEqual({
         sessionId: 'session-1',
@@ -442,7 +456,8 @@ test('console copies output and copies or cuts Monaco selections before treating
         const queryCommandSupported = document.queryCommandSupported.bind(document);
         Object.defineProperty(document, 'queryCommandSupported', {
             configurable: true,
-            value: (command: string) => command === 'copy' ? false : queryCommandSupported(command),
+            value: (command: string) =>
+                command === 'copy' ? false : queryCommandSupported(command),
         });
     });
     const fallbackCopy = backend.waitForNextRequest(ConsoleMethods.writeClipboardText);
@@ -452,7 +467,9 @@ test('console copies output and copies or cuts Monaco selections before treating
     expect(backend.requestCount(ConsoleMethods.interrupt)).toBe(1);
 });
 
-test('console execution and runtime indicators keep semantic non-black colors', async ({ page }) => {
+test('console execution and runtime indicators keep semantic non-black colors', async ({
+    page,
+}) => {
     const sessions = [
         createSession({ id: 'session-1', name: 'Primary', state: 'busy' }),
         createSession({
@@ -503,23 +520,25 @@ test('console execution and runtime indicators keep semantic non-black colors', 
         '[data-execution-id="activity-executing"] .activity-input.executing .progress-bar',
     );
     await expect(executionIndicator).toBeVisible();
-    await expect.poll(() => executionIndicator.evaluate(
-        element => getComputedStyle(element).backgroundColor,
-    )).toBe('rgb(46, 183, 124)');
+    await expect
+        .poll(() =>
+            executionIndicator.evaluate((element) => getComputedStyle(element).backgroundColor),
+        )
+        .toBe('rgb(46, 183, 124)');
 
     const runtimeStatusIcon = page
         .getByTestId('console-tab-session-1')
         .locator('.runtime-status-icon');
     await expect(runtimeStatusIcon).toBeVisible();
-    await expect.poll(() => runtimeStatusIcon.evaluate(
-        element => getComputedStyle(element).color,
-    )).toBe('rgb(58, 121, 178)');
+    await expect
+        .poll(() => runtimeStatusIcon.evaluate((element) => getComputedStyle(element).color))
+        .toBe('rgb(58, 121, 178)');
 });
 
-test('console follows the backend foreground session when a new session is added', async ({ page }) => {
-    const initialSessions = [
-        createSession({ id: 'session-1', name: 'Primary' }),
-    ];
+test('console follows the backend foreground session when a new session is added', async ({
+    page,
+}) => {
+    const initialSessions = [createSession({ id: 'session-1', name: 'Primary' })];
     const backend = await openWebviewPage(page, 'console', {
         configure: (mockBackend) => {
             registerConsoleDefaults(mockBackend, {
@@ -569,11 +588,15 @@ test('console follows the backend foreground session when a new session is added
 
 for (const streamType of ['output', 'error'] as const) {
     for (const initiallyEmpty of [false, true]) {
-        test(`console renders incremental ${streamType} streams from ${initiallyEmpty ? 'empty' : 'visible'} output`, async ({ page }) => {
+        test(`console renders incremental ${streamType} streams from ${initiallyEmpty ? 'empty' : 'visible'} output`, async ({
+            page,
+        }) => {
             const backend = await openWebviewPage(page, 'console', {
                 configure: registerConsoleDefaults,
             });
-            await expect.poll(() => backend.notificationCount(ConsoleMethods.ready)).toBeGreaterThan(0);
+            await expect
+                .poll(() => backend.notificationCount(ConsoleMethods.ready))
+                .toBeGreaterThan(0);
 
             const createStream = (id: string, text: string) => ({
                 type: 'stream' as const,
@@ -598,7 +621,9 @@ for (const streamType of ['output', 'error'] as const) {
 
             const activity = page.locator('[data-execution-id="activity-1"]');
             await expect(activity).toBeAttached();
-            await expect(activity.locator('.console-output-lines')).toHaveCount(initiallyEmpty ? 0 : 1);
+            await expect(activity.locator('.console-output-lines')).toHaveCount(
+                initiallyEmpty ? 0 : 1,
+            );
             if (!initiallyEmpty) {
                 await expect(activity).toContainText('Attaching core tidyverse packages');
             }
@@ -616,7 +641,9 @@ for (const streamType of ['output', 'error'] as const) {
                         },
                     ],
                 });
-                await expect(activity).toContainText(index === 0 ? 'Attaching Seurat' : 'Attaching SeuratObject');
+                await expect(activity).toContainText(
+                    index === 0 ? 'Attaching Seurat' : 'Attaching SeuratObject',
+                );
             }
 
             await expect(activity).toContainText('Conflicts');
@@ -628,7 +655,9 @@ for (const streamType of ['output', 'error'] as const) {
     }
 }
 
-test('console requests a full-state refresh when runtime change sync gaps appear', async ({ page }) => {
+test('console requests a full-state refresh when runtime change sync gaps appear', async ({
+    page,
+}) => {
     const backend = await openWebviewPage(page, 'console', {
         configure: (mockBackend) => {
             registerConsoleDefaults(mockBackend, {
@@ -677,21 +706,27 @@ test('console requests a full-state refresh when runtime change sync gaps appear
     await expect(page.getByText('recovered output')).toBeVisible();
 });
 
-test('console renders an actionable error follow-up and sends its stable identifiers', async ({ page }) => {
+test('console renders an actionable error follow-up and sends its stable identifiers', async ({
+    page,
+}) => {
     const backend = await openWebviewPage(page, 'console', {
         configure: registerConsoleDefaults,
     });
     await expect.poll(() => backend.notificationCount(ConsoleMethods.ready)).toBeGreaterThan(0);
     const state = createConsoleState('before error');
     const activity = state.items[1];
-    if (activity.type !== 'activity') { throw new Error('Expected activity state'); }
+    if (activity.type !== 'activity') {
+        throw new Error('Expected activity state');
+    }
     activity.items.push({
         type: 'errorSuggestion',
         id: 'suggestion-item-1',
         parentId: 'activity-1',
         when: Date.now(),
         available: true,
-        suggestions: [{ id: 'install-package:pandas', iconId: 'lightbulb', label: 'Install pandas' }],
+        suggestions: [
+            { id: 'install-package:pandas', iconId: 'lightbulb', label: 'Install pandas' },
+        ],
     });
     await backend.notify(ConsoleMethods.restoreState, {
         sessionId: 'session-1',
@@ -743,7 +778,9 @@ test('console toolbar actions stay aligned with extension-side requests', async 
 
     const restartRequest = backend.waitForNextRequest(SessionMethods.restart);
     await page.getByLabel('Restart R').click();
-    await expect.poll(async () => (await restartRequest).params).toEqual({ sessionId: 'session-1' });
+    await expect
+        .poll(async () => (await restartRequest).params)
+        .toEqual({ sessionId: 'session-1' });
 
     const traceRequest = backend.waitForNextRequest(ConsoleMethods.toggleTrace);
     await page.getByLabel('Toggle Trace').click();
@@ -755,9 +792,9 @@ test('console toolbar actions stay aligned with extension-side requests', async 
 
     const openInEditorRequest = backend.waitForNextRequest('console/openInEditor');
     await page.getByLabel('Open in Editor').click();
-    await expect.poll(async () => (await openInEditorRequest).params).toEqual(
-        expect.objectContaining({ sessionId: 'session-1' }),
-    );
+    await expect
+        .poll(async () => (await openInEditorRequest).params)
+        .toEqual(expect.objectContaining({ sessionId: 'session-1' }));
 
     const stopRequest = backend.waitForNextRequest(SessionMethods.stop);
     await page.getByLabel('Delete Session').click();
@@ -774,7 +811,9 @@ for (const outcome of ['cancelled', 'failed'] as const) {
             createSession({ id: 'session-3', name: 'Modeling' }),
         ];
         let finishRequest!: () => void;
-        const pendingRequest = new Promise<void>((resolve) => { finishRequest = resolve; });
+        const pendingRequest = new Promise<void>((resolve) => {
+            finishRequest = resolve;
+        });
         const backend = await openWebviewPage(page, 'console', {
             configure: (mockBackend) => {
                 registerConsoleDefaults(mockBackend, {
@@ -799,7 +838,9 @@ for (const outcome of ['cancelled', 'failed'] as const) {
             await expect(button).toBeVisible();
             await button.click();
             await expect.poll(() => backend.requestCount(SessionMethods.stop)).toBe(1);
-            expect(backend.requests(SessionMethods.stop)[0].params).toEqual({ sessionId: 'session-1' });
+            expect(backend.requests(SessionMethods.stop)[0].params).toEqual({
+                sessionId: 'session-1',
+            });
             await expect(button).toBeDisabled();
             finishRequest();
             await expect(button).toBeEnabled();
@@ -815,7 +856,9 @@ for (const outcome of ['cancelled', 'failed'] as const) {
             await expect(button).toBeVisible();
             await button.click();
             await expect.poll(() => backend.requestCount(SessionMethods.stop)).toBe(2);
-            expect(backend.requests(SessionMethods.stop)[1].params).toEqual({ sessionId: 'session-1' });
+            expect(backend.requests(SessionMethods.stop)[1].params).toEqual({
+                sessionId: 'session-1',
+            });
             await expect(targetTab).toHaveCount(0);
             await expect(page.getByRole('tab', { name: 'Analytics', exact: true })).toBeVisible();
             await expect(page.getByRole('tab', { name: 'Modeling', exact: true })).toBeVisible();
@@ -825,7 +868,9 @@ for (const outcome of ['cancelled', 'failed'] as const) {
     });
 }
 
-test('console restart repro keeps the prompt visible and defers execute until the session is ready', async ({ page }) => {
+test('console restart repro keeps the prompt visible and defers execute until the session is ready', async ({
+    page,
+}) => {
     const readySession = createSession({
         id: 'session-1',
         name: 'Primary',
@@ -859,9 +904,11 @@ test('console restart repro keeps the prompt visible and defers execute until th
 
     const restartRequest = backend.waitForNextRequest(SessionMethods.restart);
     await page.getByLabel('Restart R').click();
-    await expect.poll(async () => (await restartRequest).params).toEqual({
-        sessionId: readySession.id,
-    });
+    await expect
+        .poll(async () => (await restartRequest).params)
+        .toEqual({
+            sessionId: readySession.id,
+        });
 
     const restartingSession = {
         ...readySession,
@@ -908,9 +955,7 @@ test('console restart repro keeps the prompt visible and defers execute until th
     const executeCountBeforeReady = backend.requestCount(ConsoleMethods.submitCode);
     await monacoInput.press('Enter');
     await page.waitForTimeout(200);
-    expect.soft(backend.requestCount(ConsoleMethods.submitCode)).toBe(
-        executeCountBeforeReady,
-    );
+    expect.soft(backend.requestCount(ConsoleMethods.submitCode)).toBe(executeCountBeforeReady);
 
     await backend.notify(SessionMethods.info, {
         sessions: [readySession],
@@ -918,17 +963,13 @@ test('console restart repro keeps the prompt visible and defers execute until th
     });
     await page.waitForTimeout(300);
 
-    expect.soft(backend.requestCount(ConsoleMethods.submitCode)).toBe(
-        executeCountBeforeReady + 1,
+    expect.soft(backend.requestCount(ConsoleMethods.submitCode)).toBe(executeCountBeforeReady + 1);
+    expect.soft(backend.requests(ConsoleMethods.submitCode).at(-1)?.params).toEqual(
+        expect.objectContaining({
+            sessionId: readySession.id,
+            code: 'value <- 1',
+        }),
     );
-    expect
-        .soft(backend.requests(ConsoleMethods.submitCode).at(-1)?.params)
-        .toEqual(
-            expect.objectContaining({
-                sessionId: readySession.id,
-                code: 'value <- 1',
-            }),
-        );
 });
 
 test('console restart repro recovers after a detached runtime frame', async ({ page }) => {
@@ -965,9 +1006,11 @@ test('console restart repro recovers after a detached runtime frame', async ({ p
 
     const restartRequest = backend.waitForNextRequest(SessionMethods.restart);
     await page.getByLabel('Restart R').click();
-    await expect.poll(async () => (await restartRequest).params).toEqual({
-        sessionId: readySession.id,
-    });
+    await expect
+        .poll(async () => (await restartRequest).params)
+        .toEqual({
+            sessionId: readySession.id,
+        });
 
     const detachedSession = {
         ...readySession,
@@ -1024,9 +1067,7 @@ test('console restart repro recovers after a detached runtime frame', async ({ p
     const executeCountBeforeReady = backend.requestCount(ConsoleMethods.submitCode);
     await monacoInput.press('Enter');
     await page.waitForTimeout(200);
-    expect.soft(backend.requestCount(ConsoleMethods.submitCode)).toBe(
-        executeCountBeforeReady,
-    );
+    expect.soft(backend.requestCount(ConsoleMethods.submitCode)).toBe(executeCountBeforeReady);
 
     await backend.notify(SessionMethods.info, {
         sessions: [readySession],
@@ -1034,20 +1075,18 @@ test('console restart repro recovers after a detached runtime frame', async ({ p
     });
     await page.waitForTimeout(300);
 
-    expect.soft(backend.requestCount(ConsoleMethods.submitCode)).toBe(
-        executeCountBeforeReady + 1,
+    expect.soft(backend.requestCount(ConsoleMethods.submitCode)).toBe(executeCountBeforeReady + 1);
+    expect.soft(backend.requests(ConsoleMethods.submitCode).at(-1)?.params).toEqual(
+        expect.objectContaining({
+            sessionId: readySession.id,
+            code: 'value <- 2',
+        }),
     );
-    expect
-        .soft(backend.requests(ConsoleMethods.submitCode).at(-1)?.params)
-        .toEqual(
-            expect.objectContaining({
-                sessionId: readySession.id,
-                code: 'value <- 2',
-            }),
-        );
 });
 
-test('console session switch repro keeps the selected tab when another session finishes restarting', async ({ page }) => {
+test('console session switch repro keeps the selected tab when another session finishes restarting', async ({
+    page,
+}) => {
     const primaryReady = createSession({
         id: 'session-1',
         name: 'Primary',
@@ -1096,9 +1135,11 @@ test('console session switch repro keeps the selected tab when another session f
 
     const switchRequest = backend.waitForNextRequest(SessionMethods.switch);
     await page.getByRole('tab', { name: 'Primary' }).click();
-    await expect.poll(async () => (await switchRequest).params).toEqual({
-        sessionId: primaryReady.id,
-    });
+    await expect
+        .poll(async () => (await switchRequest).params)
+        .toEqual({
+            sessionId: primaryReady.id,
+        });
 
     await expect(page.getByRole('tab', { name: 'Primary' })).toHaveAttribute(
         'aria-selected',
@@ -1143,7 +1184,9 @@ test('console session switch repro keeps the selected tab when another session f
     await expect(page.getByText('restarting session output')).toBeVisible();
 });
 
-test('console ready-session repro keeps the standard input visible when no prompt item is active', async ({ page }) => {
+test('console ready-session repro keeps the standard input visible when no prompt item is active', async ({
+    page,
+}) => {
     const readySession = createSession({
         id: 'session-1',
         name: 'Primary',
@@ -1191,7 +1234,9 @@ test('console ready-session repro keeps the standard input visible when no promp
     await expect.poll(() => readConsoleInputPrompts(page)).toContain('>');
 });
 
-test('console keeps the current position when a tall input grows after the user scrolls up', async ({ page }) => {
+test('console keeps the current position when a tall input grows after the user scrolls up', async ({
+    page,
+}) => {
     await page.setViewportSize({ width: 960, height: 720 });
 
     const readySession = createSession({
@@ -1246,7 +1291,9 @@ test('console keeps the current position when a tall input grows after the user 
     expect(afterGrowth.distanceFromBottom).toBeGreaterThan(120);
 });
 
-test('console stays unlocked after Enter before the first execution output arrives', async ({ page }) => {
+test('console stays unlocked after Enter before the first execution output arrives', async ({
+    page,
+}) => {
     await page.setViewportSize({ width: 960, height: 720 });
 
     const readySession = createSession({
@@ -1279,7 +1326,9 @@ test('console stays unlocked after Enter before the first execution output arriv
     await expect(page.locator('.console-input')).toBeVisible();
     await scrollConsoleToBottom(page, readySession.id);
     await expect
-        .poll(async () => (await readConsoleScrollMetrics(page, readySession.id)).distanceFromBottom)
+        .poll(
+            async () => (await readConsoleScrollMetrics(page, readySession.id)).distanceFromBottom,
+        )
         .toBeLessThanOrEqual(12);
 
     const monacoInput = consoleEditorInput(page);
@@ -1292,20 +1341,27 @@ test('console stays unlocked after Enter before the first execution output arriv
     const executeRequest = backend.waitForNextRequest(ConsoleMethods.submitCode);
     await monacoInput.focus();
     await monacoInput.press('Enter');
-    await expect.poll(async () => (await executeRequest).params).toEqual(
-        expect.objectContaining({
-            sessionId: readySession.id,
-            code: 'value <- 1',
-        }),
-    );
+    await expect
+        .poll(async () => (await executeRequest).params)
+        .toEqual(
+            expect.objectContaining({
+                sessionId: readySession.id,
+                code: 'value <- 1',
+            }),
+        );
 
     await expect
-        .poll(async () => (await backend.getState<{ scrollLocked?: Record<string, boolean> }>())
-            ?.scrollLocked?.[readySession.id] ?? false)
+        .poll(
+            async () =>
+                (await backend.getState<{ scrollLocked?: Record<string, boolean> }>())
+                    ?.scrollLocked?.[readySession.id] ?? false,
+        )
         .toBe(false);
 });
 
-test('console follows the first execution output while the user stays at the bottom', async ({ page }) => {
+test('console follows the first execution output while the user stays at the bottom', async ({
+    page,
+}) => {
     await page.setViewportSize({ width: 960, height: 720 });
 
     const readySession = createSession({
@@ -1338,7 +1394,9 @@ test('console follows the first execution output while the user stays at the bot
     await expect(page.locator('.console-input')).toBeVisible();
     await scrollConsoleToBottom(page, readySession.id);
     await expect
-        .poll(async () => (await readConsoleScrollMetrics(page, readySession.id)).distanceFromBottom)
+        .poll(
+            async () => (await readConsoleScrollMetrics(page, readySession.id)).distanceFromBottom,
+        )
         .toBeLessThanOrEqual(12);
 
     const monacoInput = consoleEditorInput(page);
@@ -1351,12 +1409,14 @@ test('console follows the first execution output while the user stays at the bot
     const executeRequest = backend.waitForNextRequest(ConsoleMethods.submitCode);
     await monacoInput.focus();
     await monacoInput.press('Enter');
-    await expect.poll(async () => (await executeRequest).params).toEqual(
-        expect.objectContaining({
-            sessionId: readySession.id,
-            code: 'value <- 1',
-        }),
-    );
+    await expect
+        .poll(async () => (await executeRequest).params)
+        .toEqual(
+            expect.objectContaining({
+                sessionId: readySession.id,
+                code: 'value <- 1',
+            }),
+        );
 
     await backend.notify(ConsoleMethods.runtimeChanges, {
         sessionId: readySession.id,
@@ -1371,11 +1431,15 @@ test('console follows the first execution output while the user stays at the bot
     });
 
     await expect
-        .poll(async () => (await readConsoleScrollMetrics(page, readySession.id)).distanceFromBottom)
+        .poll(
+            async () => (await readConsoleScrollMetrics(page, readySession.id)).distanceFromBottom,
+        )
         .toBeLessThanOrEqual(12);
 });
 
-test('console does not force execution output back into view after the user scrolls up', async ({ page }) => {
+test('console does not force execution output back into view after the user scrolls up', async ({
+    page,
+}) => {
     await page.setViewportSize({ width: 960, height: 720 });
 
     const readySession = createSession({
@@ -1418,19 +1482,24 @@ test('console does not force execution output back into view after the user scro
     const executeRequest = backend.waitForNextRequest(ConsoleMethods.submitCode);
     await monacoInput.focus();
     await monacoInput.press('Enter');
-    await expect.poll(async () => (await executeRequest).params).toEqual(
-        expect.objectContaining({
-            sessionId: readySession.id,
-            code: 'value <- 2',
-        }),
-    );
+    await expect
+        .poll(async () => (await executeRequest).params)
+        .toEqual(
+            expect.objectContaining({
+                sessionId: readySession.id,
+                code: 'value <- 2',
+            }),
+        );
 
     await scrollConsoleUp(page, 320, readySession.id);
     const lockedMetrics = await readConsoleScrollMetrics(page, readySession.id);
 
     await expect
-        .poll(async () => (await backend.getState<{ scrollLocked?: Record<string, boolean> }>())
-            ?.scrollLocked?.[readySession.id])
+        .poll(
+            async () =>
+                (await backend.getState<{ scrollLocked?: Record<string, boolean> }>())
+                    ?.scrollLocked?.[readySession.id],
+        )
         .toBe(true);
 
     await backend.notify(ConsoleMethods.runtimeChanges, {
@@ -1451,7 +1520,9 @@ test('console does not force execution output back into view after the user scro
     expect(afterOutput.distanceFromBottom).toBeGreaterThan(120);
 });
 
-test('console shows startup progress and can create a new session from the empty state', async ({ page }) => {
+test('console shows startup progress and can create a new session from the empty state', async ({
+    page,
+}) => {
     const backend = await openWebviewPage(page, 'console', {
         configure: (mockBackend) => {
             registerConsoleDefaults(mockBackend, {
@@ -1504,7 +1575,9 @@ test('console shows startup progress and can create a new session from the empty
     await expect(page.getByText('Start Session')).toHaveCount(0);
 });
 
-test('console applies metadata updates and keeps rename and interrupt requests aligned with session tabs', async ({ page }) => {
+test('console applies metadata updates and keeps rename and interrupt requests aligned with session tabs', async ({
+    page,
+}) => {
     const sessions = [
         createSession({ id: 'session-1', name: 'Primary', state: 'busy' }),
         createSession({ id: 'session-2', name: 'Analytics' }),
@@ -1557,17 +1630,18 @@ test('console applies metadata updates and keeps rename and interrupt requests a
             configurable: true,
             value: {
                 writeText: async (text: string) => {
-                    (globalThis as typeof globalThis & { __copiedCwd?: string })
-                        .__copiedCwd = text;
+                    (globalThis as typeof globalThis & { __copiedCwd?: string }).__copiedCwd = text;
                 },
             },
         });
     });
     await workingDirectory.press('Enter');
     await expect
-        .poll(() => page.evaluate(() =>
-            (globalThis as typeof globalThis & { __copiedCwd?: string }).__copiedCwd,
-        ))
+        .poll(() =>
+            page.evaluate(
+                () => (globalThis as typeof globalThis & { __copiedCwd?: string }).__copiedCwd,
+            ),
+        )
         .toBe('C:\\Users\\me\\project');
 
     const interruptRequest = backend.waitForNextRequest(ConsoleMethods.interrupt);
@@ -1585,7 +1659,9 @@ test('console applies metadata updates and keeps rename and interrupt requests a
     });
 });
 
-test('console executes pending, pasted, and history-driven input and supports select-all and clear shortcuts', async ({ page }) => {
+test('console executes pending, pasted, and history-driven input and supports select-all and clear shortcuts', async ({
+    page,
+}) => {
     const backend = await openWebviewPage(page, 'console', {
         configure: (mockBackend) => {
             registerConsoleDefaults(mockBackend, {
@@ -1611,9 +1687,11 @@ test('console executes pending, pasted, and history-driven input and supports se
     await backend.notify(ConsoleMethods.selectAll, {
         sessionId: 'session-1',
     });
-    await expect.poll(async () => {
-        return page.evaluate(() => window.getSelection()?.toString() ?? '');
-    }).toContain('existing output');
+    await expect
+        .poll(async () => {
+            return page.evaluate(() => window.getSelection()?.toString() ?? '');
+        })
+        .toContain('existing output');
 
     await backend.notify(ConsoleMethods.clear, {
         sessionId: 'session-1',
@@ -1631,12 +1709,14 @@ test('console executes pending, pasted, and history-driven input and supports se
 
     const executePendingCode = backend.waitForNextRequest(ConsoleMethods.submitCode);
     await monacoInput.press('Enter');
-    await expect.poll(async () => (await executePendingCode).params).toEqual(
-        expect.objectContaining({
-            sessionId: 'session-1',
-            code: '1 + 1',
-        }),
-    );
+    await expect
+        .poll(async () => (await executePendingCode).params)
+        .toEqual(
+            expect.objectContaining({
+                sessionId: 'session-1',
+                code: '1 + 1',
+            }),
+        );
 
     await backend.notify(ConsoleMethods.pasteText, {
         sessionId: 'session-1',
@@ -1645,12 +1725,14 @@ test('console executes pending, pasted, and history-driven input and supports se
     await page.waitForTimeout(200);
     const executePastedCode = backend.waitForNextRequest(ConsoleMethods.submitCode);
     await monacoInput.press('Enter');
-    await expect.poll(async () => (await executePastedCode).params).toEqual(
-        expect.objectContaining({
-            sessionId: 'session-1',
-            code: '2 + 2',
-        }),
-    );
+    await expect
+        .poll(async () => (await executePastedCode).params)
+        .toEqual(
+            expect.objectContaining({
+                sessionId: 'session-1',
+                code: '2 + 2',
+            }),
+        );
 
     await backend.notify(ConsoleMethods.historyAdd, {
         sessionId: 'session-1',
@@ -1679,19 +1761,23 @@ test('console executes pending, pasted, and history-driven input and supports se
 
     const executeHistoryCode = backend.waitForNextRequest(ConsoleMethods.submitCode);
     await monacoInput.press('Enter');
-    await expect.poll(async () => (await executeHistoryCode).params).toEqual(
-        expect.objectContaining({
-            sessionId: 'session-1',
-            code: 'y <- 2',
-        }),
-    );
+    await expect
+        .poll(async () => (await executeHistoryCode).params)
+        .toEqual(
+            expect.objectContaining({
+                sessionId: 'session-1',
+                code: 'y <- 2',
+            }),
+        );
 
     const clearRequest = backend.waitForNextRequest(ConsoleMethods.clearConsole);
     await monacoInput.press(process.platform === 'darwin' ? 'Meta+l' : 'Control+l');
     expect((await clearRequest).params).toEqual({ sessionId: 'session-1' });
 });
 
-test('console bridges prompt replies, execution reveal, output links, width updates, and output channels', async ({ page }) => {
+test('console bridges prompt replies, execution reveal, output links, width updates, and output channels', async ({
+    page,
+}) => {
     const sessions = [
         createSession({
             promptActive: false,
@@ -1748,7 +1834,8 @@ test('console bridges prompt replies, execution reveal, output links, width upda
                         parentId: 'activity-1',
                         when: now + 2,
                         data: {
-                            'text/plain': 'See https://example.com/docs and RPE/SI/plot_drug.R:26:1 for details',
+                            'text/plain':
+                                'See https://example.com/docs and RPE/SI/plot_drug.R:26:1 for details',
                         },
                     },
                 ],
@@ -1801,7 +1888,9 @@ test('console bridges prompt replies, execution reveal, output links, width upda
         ]),
     });
 
-    await expect.poll(() => backend.notificationCount(ConsoleMethods.setWidthInChars)).toBeGreaterThan(0);
+    await expect
+        .poll(() => backend.notificationCount(ConsoleMethods.setWidthInChars))
+        .toBeGreaterThan(0);
     await expect(page.locator('.output-hyperlink')).toHaveText('https://example.com/docs');
 
     const openExternal = backend.waitForNextNotification(ConsoleMethods.openExternal);
@@ -1812,7 +1901,9 @@ test('console bridges prompt replies, execution reveal, output links, width upda
     expect(backend.notificationCount(ConsoleMethods.openFile)).toBe(0);
 
     const openFile = backend.waitForNextNotification(ConsoleMethods.openFile);
-    await page.locator('.console-file-link').click({ modifiers: [process.platform === 'darwin' ? 'Meta' : 'Control'] });
+    await page
+        .locator('.console-file-link')
+        .click({ modifiers: [process.platform === 'darwin' ? 'Meta' : 'Control'] });
     expect((await openFile).params).toEqual({
         sessionId: 'session-1',
         path: 'RPE/SI/plot_drug.R',
@@ -1824,11 +1915,15 @@ test('console bridges prompt replies, execution reveal, output links, width upda
         sessionId: 'session-1',
         executionId: 'activity-1',
     });
-    await expect(page.locator('[data-execution-id="activity-1"] .activity-input')).toHaveClass(/revealed/);
+    await expect(page.locator('[data-execution-id="activity-1"] .activity-input')).toHaveClass(
+        /revealed/,
+    );
 
     const promptInputs = page.locator('.activity-prompt textarea.inputarea');
     await expect(promptInputs).toHaveCount(2);
-    const interruptInput = page.locator('[data-execution-id="activity-2"] .activity-prompt textarea.inputarea');
+    const interruptInput = page.locator(
+        '[data-execution-id="activity-2"] .activity-prompt textarea.inputarea',
+    );
     const replyContainer = page.locator('[data-execution-id="activity-3"] .activity-prompt');
     const replyInput = replyContainer.locator('textarea.inputarea');
     const modifier = await page.evaluate(() =>
@@ -1861,9 +1956,7 @@ test('console bridges prompt replies, execution reveal, output links, width upda
             }),
         );
     });
-    await expect(
-        replyContainer.locator('.view-lines'),
-    ).toContainText('baseline-1 line-2');
+    await expect(replyContainer.locator('.view-lines')).toContainText('baseline-1 line-2');
     await replyInput.press(`${modifier}+z`);
     await replyInput.press('Enter');
     expect((await replyPrompt).params).toEqual({
@@ -1895,7 +1988,9 @@ test('console bridges prompt replies, execution reveal, output links, width upda
     });
 });
 
-test('console respects host-owned submission results for incomplete, executed, and failing fragments', async ({ page }) => {
+test('console respects host-owned submission results for incomplete, executed, and failing fragments', async ({
+    page,
+}) => {
     const backend = await openWebviewPage(page, 'console', {
         configure: (mockBackend) => {
             registerConsoleDefaults(mockBackend, {
@@ -1925,16 +2020,23 @@ test('console respects host-owned submission results for incomplete, executed, a
     await expect(monacoInput).toHaveCount(1);
     await monacoInput.focus();
 
-    const getEditorValue = () => page.evaluate(() => {
-        const monaco = (globalThis as typeof globalThis & { monaco: typeof Monaco }).monaco;
-        return monaco.editor.getEditors().find(editor =>
-            editor.getDomNode()?.closest('.console-input'),
-        )?.getValue();
-    });
-    const getInputDraft = () => backend.notifications(ConsoleMethods.inputDraftChanged)
-        .map(notification => notification.params as { sessionId: string; draft: ConsoleInputDraft })
-        .filter(params => params.sessionId === 'session-1')
-        .at(-1)?.draft;
+    const getEditorValue = () =>
+        page.evaluate(() => {
+            const monaco = (globalThis as typeof globalThis & { monaco: typeof Monaco }).monaco;
+            return monaco.editor
+                .getEditors()
+                .find((editor) => editor.getDomNode()?.closest('.console-input'))
+                ?.getValue();
+        });
+    const getInputDraft = () =>
+        backend
+            .notifications(ConsoleMethods.inputDraftChanged)
+            .map(
+                (notification) =>
+                    notification.params as { sessionId: string; draft: ConsoleInputDraft },
+            )
+            .filter((params) => params.sessionId === 'session-1')
+            .at(-1)?.draft;
     await expect.poll(getEditorValue).toBe('');
     let executeCount = backend.requestCount(ConsoleMethods.submitCode);
 
@@ -1952,14 +2054,18 @@ test('console respects host-owned submission results for incomplete, executed, a
         const expectedDraft = getInputDraft();
         expect(expectedDraft).toBeDefined();
         await backend.notify(ConsoleMethods.setPendingCode, {
-            sessionId: 'session-1', code, expectedDraft,
+            sessionId: 'session-1',
+            code,
+            expectedDraft,
         });
         await expect.poll(getEditorValue).toBe(code);
 
         const execute = backend.waitForNextRequest(ConsoleMethods.submitCode);
         await monacoInput.press('Enter');
         expect((await execute).params).toEqual({
-            sessionId: 'session-1', code, checkCompleteness: true,
+            sessionId: 'session-1',
+            code,
+            checkCompleteness: true,
         });
         await expect.poll(getEditorValue).toBe(expectedInput);
         executeCount += 1;
@@ -1967,7 +2073,9 @@ test('console respects host-owned submission results for incomplete, executed, a
     }
 });
 
-test('console preserves type-ahead and shows delayed submission feedback with a transcript placeholder', async ({ page }) => {
+test('console preserves type-ahead and shows delayed submission feedback with a transcript placeholder', async ({
+    page,
+}) => {
     let resolveSubmission!: (result: { status: 'executed' }) => void;
     const backend = await openWebviewPage(page, 'console', {
         configure: (mockBackend) => {
@@ -1976,9 +2084,10 @@ test('console preserves type-ahead and shows delayed submission feedback with a 
             });
             mockBackend.onRequest(
                 ConsoleMethods.submitCode,
-                () => new Promise<{ status: 'executed' }>((resolve) => {
-                    resolveSubmission = resolve;
-                }),
+                () =>
+                    new Promise<{ status: 'executed' }>((resolve) => {
+                        resolveSubmission = resolve;
+                    }),
             );
         },
     });
@@ -2000,27 +2109,26 @@ test('console preserves type-ahead and shows delayed submission feedback with a 
     await backend.notify(ConsoleMethods.runtimeChanges, {
         sessionId: 'session-1',
         syncSeq: 2,
-        changes: [{
-            kind: 'appendRuntimeItem',
-            runtimeItem: {
-                type: 'pendingInput',
-                id: 'submitting-1',
-                when: Date.now(),
-                inputPrompt: '> ',
-                code: 'slow_call()',
-                submitting: true,
+        changes: [
+            {
+                kind: 'appendRuntimeItem',
+                runtimeItem: {
+                    type: 'pendingInput',
+                    id: 'submitting-1',
+                    when: Date.now(),
+                    inputPrompt: '> ',
+                    code: 'slow_call()',
+                    submitting: true,
+                },
             },
-        }],
+        ],
     });
 
     await expect(page.getByLabel('Submitting code')).toBeVisible();
     const submittingIndicator = page.locator('.pending-input-submitting-bar');
     await expect(submittingIndicator).toBeVisible();
     await expect(submittingIndicator).toHaveCSS('width', '4px');
-    await expect(page.locator('.pending-input.submitting')).toHaveCSS(
-        'background-image',
-        'none',
-    );
+    await expect(page.locator('.pending-input.submitting')).toHaveCSS('background-image', 'none');
     await expect(page.getByTestId('console-submitting-overlay')).toHaveCount(0);
     await backend.notify(ConsoleMethods.setPendingCode, {
         sessionId: 'session-1',
@@ -2029,12 +2137,18 @@ test('console preserves type-ahead and shows delayed submission feedback with a 
     await expect(page.getByTestId('console-submitting-overlay')).toBeVisible({ timeout: 2_500 });
     resolveSubmission({ status: 'executed' });
     await expect(page.getByTestId('console-submitting-overlay')).toHaveCount(0);
-    await expect.poll(() => page.evaluate(() =>
-        (globalThis as any).monaco?.editor?.getEditors?.()[0]?.getValue() ?? null,
-    )).toBe('type_ahead <- 1');
+    await expect
+        .poll(() =>
+            page.evaluate(
+                () => (globalThis as any).monaco?.editor?.getEditors?.()[0]?.getValue() ?? null,
+            ),
+        )
+        .toBe('type_ahead <- 1');
 });
 
-test('console cancels a slow host submission and restores submitted code before type-ahead', async ({ page }) => {
+test('console cancels a slow host submission and restores submitted code before type-ahead', async ({
+    page,
+}) => {
     let resolveSubmission!: (result: { status: 'cancelled' }) => void;
     const backend = await openWebviewPage(page, 'console', {
         configure: (mockBackend) => {
@@ -2043,9 +2157,10 @@ test('console cancels a slow host submission and restores submitted code before 
             });
             mockBackend.onRequest(
                 ConsoleMethods.submitCode,
-                () => new Promise<{ status: 'cancelled' }>((resolve) => {
-                    resolveSubmission = resolve;
-                }),
+                () =>
+                    new Promise<{ status: 'cancelled' }>((resolve) => {
+                        resolveSubmission = resolve;
+                    }),
             );
             mockBackend.onRequest(ConsoleMethods.cancelSubmission, () => {
                 resolveSubmission({ status: 'cancelled' });
@@ -2074,12 +2189,18 @@ test('console cancels a slow host submission and restores submitted code before 
     await page.getByRole('button', { name: 'Cancel' }).click();
     await cancelRequest;
     await expect(page.getByTestId('console-submitting-overlay')).toHaveCount(0);
-    await expect.poll(() => page.evaluate(() =>
-        (globalThis as any).monaco?.editor?.getEditors?.()[0]?.getValue() ?? null,
-    )).toBe('slow_call()\ntype_ahead <- 1');
+    await expect
+        .poll(() =>
+            page.evaluate(
+                () => (globalThis as any).monaco?.editor?.getEditors?.()[0]?.getValue() ?? null,
+            ),
+        )
+        .toBe('slow_call()\ntype_ahead <- 1');
 });
 
-test('console updates pending input, resource usage, and language assets from extension notifications', async ({ page }) => {
+test('console updates pending input, resource usage, and language assets from extension notifications', async ({
+    page,
+}) => {
     const sessions = [
         createSession({ id: 'session-1', name: 'Primary', promptActive: false }),
         createSession({ id: 'session-2', name: 'Analytics' }),
@@ -2134,9 +2255,7 @@ test('console updates pending input, resource usage, and language assets from ex
     await expect(page.getByTestId('console-tab-session-1')).toContainText('25%');
     await expect(page.getByTestId('console-tab-session-1')).toContainText('MEM');
 
-    const runtimeIcon = page
-        .getByTestId('console-tab-session-1')
-        .locator('.language-icon');
+    const runtimeIcon = page.getByTestId('console-tab-session-1').locator('.language-icon');
     await backend.notify(ConsoleMethods.themeChanged, {
         theme: {
             base: 'vs-dark',
@@ -2166,19 +2285,28 @@ test('console updates pending input, resource usage, and language assets from ex
         },
     });
     await expect
-        .poll(() => page.evaluate(() => {
-            return {
-                modules: (globalThis as typeof globalThis & {
-                    __arkLanguageMonacoSupportModules?: Record<string, string>;
-                }).__arkLanguageMonacoSupportModules,
-                grammars: (globalThis as typeof globalThis & {
-                    __arkLanguageTextMateGrammars?: Record<string, {
-                        scopeName: string;
-                        grammarUrl: string;
-                    }>;
-                }).__arkLanguageTextMateGrammars,
-            };
-        }))
+        .poll(() =>
+            page.evaluate(() => {
+                return {
+                    modules: (
+                        globalThis as typeof globalThis & {
+                            __arkLanguageMonacoSupportModules?: Record<string, string>;
+                        }
+                    ).__arkLanguageMonacoSupportModules,
+                    grammars: (
+                        globalThis as typeof globalThis & {
+                            __arkLanguageTextMateGrammars?: Record<
+                                string,
+                                {
+                                    scopeName: string;
+                                    grammarUrl: string;
+                                }
+                            >;
+                        }
+                    ).__arkLanguageTextMateGrammars,
+                };
+            }),
+        )
         .toEqual({
             modules: {
                 python: '/fixtures/python-support.js',
@@ -2195,7 +2323,7 @@ test('console updates pending input, resource usage, and language assets from ex
 test('console applies acknowledged resource usage snapshots atomically', async ({ page }) => {
     const session = createSession({ id: 'session-1', name: 'Primary' });
     const backend = await openWebviewPage(page, 'console', {
-        configure: mockBackend => {
+        configure: (mockBackend) => {
             registerConsoleDefaults(mockBackend, {
                 sessions: [session],
                 activeSessionId: session.id,
@@ -2208,19 +2336,19 @@ test('console applies acknowledged resource usage snapshots atomically', async (
         activeSessionId: session.id,
     });
 
-    const firstAck = backend.waitForNextNotification(
-        ConsoleMethods.resourceUsageSnapshotAck,
-    );
+    const firstAck = backend.waitForNextNotification(ConsoleMethods.resourceUsageSnapshotAck);
     await backend.notify(ConsoleMethods.resourceUsageSnapshot, {
         generation: 7,
-        sessions: [{
-            sessionId: session.id,
-            replace: true,
-            samples: [
-                { cpu_percent: 10, memory_bytes: 1_048_576 },
-                { cpu_percent: 20, memory_bytes: 2_097_152 },
-            ],
-        }],
+        sessions: [
+            {
+                sessionId: session.id,
+                replace: true,
+                samples: [
+                    { cpu_percent: 10, memory_bytes: 1_048_576 },
+                    { cpu_percent: 20, memory_bytes: 2_097_152 },
+                ],
+            },
+        ],
     });
     expect((await firstAck).params).toEqual({ generation: 7 });
     const monitor = page.locator('.console-resource-monitor');
@@ -2229,16 +2357,16 @@ test('console applies acknowledged resource usage snapshots atomically', async (
     );
     await expect(monitor).toContainText('2.00MB');
 
-    const secondAck = backend.waitForNextNotification(
-        ConsoleMethods.resourceUsageSnapshotAck,
-    );
+    const secondAck = backend.waitForNextNotification(ConsoleMethods.resourceUsageSnapshotAck);
     await backend.notify(ConsoleMethods.resourceUsageSnapshot, {
         generation: 8,
-        sessions: [{
-            sessionId: session.id,
-            replace: false,
-            samples: [{ cpu_percent: 35, memory_bytes: 3_145_728 }],
-        }],
+        sessions: [
+            {
+                sessionId: session.id,
+                replace: false,
+                samples: [{ cpu_percent: 35, memory_bytes: 3_145_728 }],
+            },
+        ],
     });
     expect((await secondAck).params).toEqual({ generation: 8 });
     await expect(monitor).toHaveAccessibleName(
@@ -2247,14 +2375,16 @@ test('console applies acknowledged resource usage snapshots atomically', async (
     await expect(monitor).toContainText('3.00MB');
 });
 
-test('console aligns single-session resource usage with the red interrupt action and persists its context toggle', async ({ page }) => {
+test('console aligns single-session resource usage with the red interrupt action and persists its context toggle', async ({
+    page,
+}) => {
     const session = createSession({
         id: 'session-1',
         name: 'Primary',
         state: 'busy',
     });
     const backend = await openWebviewPage(page, 'console', {
-        configure: mockBackend => {
+        configure: (mockBackend) => {
             registerConsoleDefaults(mockBackend, {
                 sessions: [session],
                 activeSessionId: session.id,
@@ -2293,17 +2423,10 @@ test('console aligns single-session resource usage with the red interrupt action
     await expect(monitor).toContainText('2.00MB');
     await expect(interrupt).toBeVisible();
 
-
     const actionPositions = await page.evaluate(() => {
-        const interruptElement = document.querySelector(
-            '[aria-label="Interrupt Execution"]',
-        );
-        const monitorElement = document.querySelector(
-            '.console-resource-monitor',
-        );
-        const restartElement = document.querySelector(
-            '[aria-label="Restart R"]',
-        );
+        const interruptElement = document.querySelector('[aria-label="Interrupt Execution"]');
+        const monitorElement = document.querySelector('.console-resource-monitor');
+        const restartElement = document.querySelector('[aria-label="Restart R"]');
         if (!interruptElement || !monitorElement || !restartElement) {
             throw new Error('Expected console action bar controls');
         }
@@ -2317,19 +2440,14 @@ test('console aligns single-session resource usage with the red interrupt action
             restartLeft: restartRect.left,
         };
     });
-    expect(actionPositions.monitorLeft).toBeGreaterThanOrEqual(
-        actionPositions.interruptRight,
-    );
-    expect(actionPositions.restartLeft).toBeGreaterThanOrEqual(
-        actionPositions.monitorRight,
-    );
+    expect(actionPositions.monitorLeft).toBeGreaterThanOrEqual(actionPositions.interruptRight);
+    expect(actionPositions.restartLeft).toBeGreaterThanOrEqual(actionPositions.monitorRight);
 
     const interruptColors = await interrupt
         .locator('.action-bar-button-icon')
-        .evaluate(element => {
+        .evaluate((element) => {
             const expectedColorProbe = document.createElement('span');
-            expectedColorProbe.style.color =
-                'var(--vscode-errorForeground, #f44747)';
+            expectedColorProbe.style.color = 'var(--vscode-errorForeground, #f44747)';
             document.body.append(expectedColorProbe);
             const colors = {
                 actual: getComputedStyle(element, '::before').color,
@@ -2355,7 +2473,9 @@ test('console aligns single-session resource usage with the red interrupt action
     await expect(monitor).toHaveCount(0);
 });
 
-test('console find caps matches, handles regex edges, navigates in Positron direction, and resizes', async ({ page }) => {
+test('console find caps matches, handles regex edges, navigates in Positron direction, and resizes', async ({
+    page,
+}) => {
     const backend = await openWebviewPage(page, 'console', {
         configure: (mockBackend) => registerConsoleDefaults(mockBackend),
     });
@@ -2388,9 +2508,13 @@ test('console find caps matches, handles regex edges, navigates in Positron dire
     // Ctrl/Cmd+V in the find box must not be redirected to the console input
     // by ConsoleInstance's global clipboard shortcut handler.
     const consoleValuesBeforePaste = await page.evaluate(() =>
-        ((globalThis as typeof globalThis & {
-            monaco?: { editor?: { getEditors?: () => Array<{ getValue: () => string }> } };
-        }).monaco?.editor?.getEditors?.() ?? []).map((editor) => editor.getValue()),
+        (
+            (
+                globalThis as typeof globalThis & {
+                    monaco?: { editor?: { getEditors?: () => Array<{ getValue: () => string }> } };
+                }
+            ).monaco?.editor?.getEditors?.() ?? []
+        ).map((editor) => editor.getValue()),
     );
     await page.evaluate(() => {
         Object.defineProperty(navigator, 'clipboard', {
@@ -2402,11 +2526,21 @@ test('console find caps matches, handles regex edges, navigates in Positron dire
     // Clipboard handling is browser-owned; verify only that the paste was not
     // redirected into any Console editor.
     await expect(findInput).toBeFocused();
-    await expect.poll(() => page.evaluate(() =>
-        ((globalThis as typeof globalThis & {
-            monaco?: { editor?: { getEditors?: () => Array<{ getValue: () => string }> } };
-        }).monaco?.editor?.getEditors?.() ?? []).map((editor) => editor.getValue()),
-    )).toEqual(consoleValuesBeforePaste);
+    await expect
+        .poll(() =>
+            page.evaluate(() =>
+                (
+                    (
+                        globalThis as typeof globalThis & {
+                            monaco?: {
+                                editor?: { getEditors?: () => Array<{ getValue: () => string }> };
+                            };
+                        }
+                    ).monaco?.editor?.getEditors?.() ?? []
+                ).map((editor) => editor.getValue()),
+            ),
+        )
+        .toEqual(consoleValuesBeforePaste);
 
     await findInput.press('Shift+Enter');
     await expect(page.getByText('2 of 1000+')).toBeVisible();
@@ -2428,7 +2562,9 @@ test('console find caps matches, handles regex edges, navigates in Positron dire
     await page.mouse.down();
     await page.mouse.move(box.x - 80, box.y + 8);
     await page.mouse.up();
-    await expect.poll(async () => (await shell.boundingBox())?.width ?? 0).toBeGreaterThan(before.width + 50);
+    await expect
+        .poll(async () => (await shell.boundingBox())?.width ?? 0)
+        .toBeGreaterThan(before.width + 50);
     await findInput.press('Escape');
     await expect(findInput).toHaveCount(0);
 
@@ -2444,17 +2580,20 @@ test('console find caps matches, handles regex edges, navigates in Positron dire
     await expect(findInput).toHaveCount(0);
 });
 
-test('console splitter enforces the 60px minimum and one-fifth maximum with keyboard resizing', async ({ page }) => {
+test('console splitter enforces the 60px minimum and one-fifth maximum with keyboard resizing', async ({
+    page,
+}) => {
     await page.setViewportSize({ width: 1000, height: 700 });
     const sessions = [
         createSession({ id: 'session-1', createdTimestamp: 1 }),
         createSession({ id: 'session-2', name: 'Second', createdTimestamp: 2 }),
     ];
     const backend = await openWebviewPage(page, 'console', {
-        configure: (mockBackend) => registerConsoleDefaults(mockBackend, {
-            sessions,
-            activeSessionId: 'session-1',
-        }),
+        configure: (mockBackend) =>
+            registerConsoleDefaults(mockBackend, {
+                sessions,
+                activeSessionId: 'session-1',
+            }),
     });
     await expect.poll(() => backend.notificationCount(ConsoleMethods.ready)).toBeGreaterThan(0);
     await backend.notify(SessionMethods.info, { sessions, activeSessionId: 'session-1' });
@@ -2463,13 +2602,19 @@ test('console splitter enforces the 60px minimum and one-fifth maximum with keyb
     const tabs = page.getByRole('tablist');
     await splitter.press('Home');
     await expect.poll(async () => (await tabs.boundingBox())?.width ?? 0).toBeLessThanOrEqual(200);
-    await expect.poll(async () => (await tabs.boundingBox())?.width ?? 0).toBeGreaterThanOrEqual(190);
+    await expect
+        .poll(async () => (await tabs.boundingBox())?.width ?? 0)
+        .toBeGreaterThanOrEqual(190);
     await splitter.press('End');
-    await expect.poll(async () => (await tabs.boundingBox())?.width ?? 0).toBeGreaterThanOrEqual(59);
+    await expect
+        .poll(async () => (await tabs.boundingBox())?.width ?? 0)
+        .toBeGreaterThanOrEqual(59);
     await expect.poll(async () => (await tabs.boundingBox())?.width ?? 0).toBeLessThanOrEqual(70);
 });
 
-test('console navigates input history with ArrowUp and ArrowDown keyboard events', async ({ page }) => {
+test('console navigates input history with ArrowUp and ArrowDown keyboard events', async ({
+    page,
+}) => {
     const backend = await openWebviewPage(page, 'console', {
         configure: (mockBackend) => {
             registerConsoleDefaults(mockBackend, {
@@ -2559,7 +2704,9 @@ test('console navigates input history with ArrowUp and ArrowDown keyboard events
     await expect.poll(getEditorValue).toBe('');
 });
 
-test('console navigates restored inputHistory entries with ArrowUp keyboard events', async ({ page }) => {
+test('console navigates restored inputHistory entries with ArrowUp keyboard events', async ({
+    page,
+}) => {
     const backend = await openWebviewPage(page, 'console', {
         configure: (mockBackend) => {
             registerConsoleDefaults(mockBackend, {
@@ -2659,12 +2806,14 @@ test('console recalls executed code with ArrowUp after Enter execution', async (
 
     const executeRequest = backend.waitForNextRequest(ConsoleMethods.submitCode);
     await monacoInput.press('Enter');
-    await expect.poll(async () => (await executeRequest).params).toEqual(
-        expect.objectContaining({
-            sessionId: 'session-1',
-            code: 'print("hello")',
-        }),
-    );
+    await expect
+        .poll(async () => (await executeRequest).params)
+        .toEqual(
+            expect.objectContaining({
+                sessionId: 'session-1',
+                code: 'print("hello")',
+            }),
+        );
 
     // The extension host is the history authority and notifies the webview only
     // after it accepts the execution.
@@ -2682,10 +2831,22 @@ test('console recalls executed code with ArrowUp after Enter execution', async (
     await expect.poll(getEditorValue).toBe('');
 });
 
-test('console handles complete session lifecycle: create → switch → destroy → fallback', async ({ page }) => {
+test('console handles complete session lifecycle: create → switch → destroy → fallback', async ({
+    page,
+}) => {
     const session1 = createSession({ id: 'session-1', name: 'Primary' });
-    const session2 = createSession({ id: 'session-2', name: 'Analytics', runtimeName: 'Python', languageId: 'python' });
-    const session3 = createSession({ id: 'session-3', name: 'Modeling', runtimeName: 'Python', languageId: 'python' });
+    const session2 = createSession({
+        id: 'session-2',
+        name: 'Analytics',
+        runtimeName: 'Python',
+        languageId: 'python',
+    });
+    const session3 = createSession({
+        id: 'session-3',
+        name: 'Modeling',
+        runtimeName: 'Python',
+        languageId: 'python',
+    });
 
     // Start with all three sessions so switch handler knows about all of them
     const backend = await openWebviewPage(page, 'console', {
@@ -2790,26 +2951,32 @@ test('console input history is isolated between sessions', async ({ page }) => {
     await backend.notify(ConsoleMethods.restoreState, {
         sessionId: 'session-1',
         syncSeq: 1,
-        state: createConsoleStateWithItems([
-            {
-                type: 'started' as const,
-                id: 'runtime-started-1',
-                when: Date.now(),
-                sessionName: 'Primary',
-            },
-        ], { inputHistory: ['session1_cmd_a', 'session1_cmd_b'] }),
+        state: createConsoleStateWithItems(
+            [
+                {
+                    type: 'started' as const,
+                    id: 'runtime-started-1',
+                    when: Date.now(),
+                    sessionName: 'Primary',
+                },
+            ],
+            { inputHistory: ['session1_cmd_a', 'session1_cmd_b'] },
+        ),
     });
     await backend.notify(ConsoleMethods.restoreState, {
         sessionId: 'session-2',
         syncSeq: 1,
-        state: createConsoleStateWithItems([
-            {
-                type: 'started' as const,
-                id: 'runtime-started-2',
-                when: Date.now(),
-                sessionName: 'Analytics',
-            },
-        ], { inputHistory: ['session2_cmd_x', 'session2_cmd_y'] }),
+        state: createConsoleStateWithItems(
+            [
+                {
+                    type: 'started' as const,
+                    id: 'runtime-started-2',
+                    when: Date.now(),
+                    sessionName: 'Analytics',
+                },
+            ],
+            { inputHistory: ['session2_cmd_x', 'session2_cmd_y'] },
+        ),
     });
 
     await expect(page.locator('.console-input')).toBeVisible();
@@ -2859,7 +3026,9 @@ test('console input history is isolated between sessions', async ({ page }) => {
     await expect.poll(getEditorValue).toBe('session2_cmd_x');
 });
 
-test('console correctly renders active session when both sessions restore concurrently', async ({ page }) => {
+test('console correctly renders active session when both sessions restore concurrently', async ({
+    page,
+}) => {
     const sessions = [
         createSession({ id: 'session-1', name: 'Primary' }),
         createSession({ id: 'session-2', name: 'Analytics' }),
@@ -2906,7 +3075,9 @@ test('console correctly renders active session when both sessions restore concur
     );
 });
 
-test('console safely handles switching to a restarting session and defers execute', async ({ page }) => {
+test('console safely handles switching to a restarting session and defers execute', async ({
+    page,
+}) => {
     const session1 = createSession({
         id: 'session-1',
         name: 'Primary',
@@ -2966,18 +3137,20 @@ test('console safely handles switching to a restarting session and defers execut
 
     // The console input should still be visible even during restart
     await expect(page.locator('.console-input')).toBeVisible();
-    const readInput = () => page.evaluate(() => {
-        const monaco = (globalThis as typeof globalThis & { monaco: typeof Monaco }).monaco;
-        const editor = monaco.editor.getEditors().find(editor =>
-            editor.getDomNode()?.closest('.console-input'),
-        );
-        return {
-            uri: editor?.getModel()?.uri.toString(),
-            code: editor?.getValue(),
-            focused: editor?.hasTextFocus() ?? false,
-        };
-    });
-    await expect.poll(async () => (await readInput()).uri)
+    const readInput = () =>
+        page.evaluate(() => {
+            const monaco = (globalThis as typeof globalThis & { monaco: typeof Monaco }).monaco;
+            const editor = monaco.editor
+                .getEditors()
+                .find((editor) => editor.getDomNode()?.closest('.console-input'));
+            return {
+                uri: editor?.getModel()?.uri.toString(),
+                code: editor?.getValue(),
+                focused: editor?.hasTextFocus() ?? false,
+            };
+        });
+    await expect
+        .poll(async () => (await readInput()).uri)
         .toBe('inmemory://console/session-session-2.r');
 
     // Try to execute code — it should be deferred because session is restarting
@@ -2988,9 +3161,10 @@ test('console safely handles switching to a restarting session and defers execut
     await expect.poll(async () => (await readInput()).code).toBe('deferred_code <- 1');
     await page.evaluate(() => {
         const monaco = (globalThis as typeof globalThis & { monaco: typeof Monaco }).monaco;
-        monaco.editor.getEditors().find(editor =>
-            editor.getDomNode()?.closest('.console-input'),
-        )!.focus();
+        monaco.editor
+            .getEditors()
+            .find((editor) => editor.getDomNode()?.closest('.console-input'))!
+            .focus();
     });
     await expect.poll(async () => (await readInput()).focused).toBe(true);
 
@@ -3011,15 +3185,15 @@ test('console safely handles switching to a restarting session and defers execut
     });
 
     // The deferred execute should now fire
-    await expect.poll(() => backend.requestCount(ConsoleMethods.submitCode)).toBe(executeCountBefore + 1);
-    expect
-        .soft(backend.requests(ConsoleMethods.submitCode).at(-1)?.params)
-        .toEqual(
-            expect.objectContaining({
-                sessionId: 'session-2',
-                code: 'deferred_code <- 1',
-            }),
-        );
+    await expect
+        .poll(() => backend.requestCount(ConsoleMethods.submitCode))
+        .toBe(executeCountBefore + 1);
+    expect.soft(backend.requests(ConsoleMethods.submitCode).at(-1)?.params).toEqual(
+        expect.objectContaining({
+            sessionId: 'session-2',
+            code: 'deferred_code <- 1',
+        }),
+    );
 });
 
 test('console tracks syncSeq independently per session', async ({ page }) => {

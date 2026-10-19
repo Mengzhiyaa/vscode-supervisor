@@ -13,31 +13,35 @@ import { type IColumnSortKey, type IDataColumn, DataColumnAlignment } from '../i
 /**
  * ColumnHeaderOptions type.
  */
-type ColumnHeaderOptions = | {
-    readonly columnHeaders: false;
-    readonly columnHeadersHeight?: never;
-} | {
-    readonly columnHeaders: true;
-    readonly columnHeadersHeight: number;
-};
+type ColumnHeaderOptions =
+    | {
+          readonly columnHeaders: false;
+          readonly columnHeadersHeight?: never;
+      }
+    | {
+          readonly columnHeaders: true;
+          readonly columnHeadersHeight: number;
+      };
 
 /**
  * RowHeaderOptions type.
  */
-type RowHeaderOptions = | {
-    readonly rowHeaders: false;
-    readonly rowHeadersWidth?: never;
-    readonly rowHeadersResize?: never;
-} | {
-    readonly rowHeaders: true;
-    readonly rowHeadersWidth: number;
-    readonly rowHeadersResize: boolean;
-};
+type RowHeaderOptions =
+    | {
+          readonly rowHeaders: false;
+          readonly rowHeadersWidth?: never;
+          readonly rowHeadersResize?: never;
+      }
+    | {
+          readonly rowHeaders: true;
+          readonly rowHeadersWidth: number;
+          readonly rowHeadersResize: boolean;
+      };
 
 /**
  * DefaultSizeOptions type.
  */
-type DefaultSizeOptions = | {
+type DefaultSizeOptions = {
     readonly defaultColumnWidth: number;
     readonly defaultRowHeight: number;
 };
@@ -45,80 +49,92 @@ type DefaultSizeOptions = | {
 /**
  * ColumnResizeOptions type.
  */
-type ColumnResizeOptions = | {
-    readonly columnResize: false;
-    readonly minimumColumnWidth?: never;
-    readonly maximumColumnWidth?: never;
-} | {
-    readonly columnResize: true;
-    readonly minimumColumnWidth: number;
-    readonly maximumColumnWidth: number;
-};
+type ColumnResizeOptions =
+    | {
+          readonly columnResize: false;
+          readonly minimumColumnWidth?: never;
+          readonly maximumColumnWidth?: never;
+      }
+    | {
+          readonly columnResize: true;
+          readonly minimumColumnWidth: number;
+          readonly maximumColumnWidth: number;
+      };
 
 /**
  * RowResizeOptions type.
  */
-type RowResizeOptions = | {
-    readonly rowResize: false;
-    readonly minimumRowHeight?: never;
-    readonly maximumRowHeight?: never;
-} | {
-    readonly rowResize: true;
-    readonly minimumRowHeight: number;
-    readonly maximumRowHeight: number;
-};
+type RowResizeOptions =
+    | {
+          readonly rowResize: false;
+          readonly minimumRowHeight?: never;
+          readonly maximumRowHeight?: never;
+      }
+    | {
+          readonly rowResize: true;
+          readonly minimumRowHeight: number;
+          readonly maximumRowHeight: number;
+      };
 
 /**
  * ColumnPinningOptions type.
  */
-type ColumnPinningOptions = | {
-    readonly columnPinning: false;
-    readonly maximumPinnedColumns?: never;
-} | {
-    readonly columnPinning: true;
-    readonly maximumPinnedColumns: number;
-};
+type ColumnPinningOptions =
+    | {
+          readonly columnPinning: false;
+          readonly maximumPinnedColumns?: never;
+      }
+    | {
+          readonly columnPinning: true;
+          readonly maximumPinnedColumns: number;
+      };
 
 /**
  * RowPinningOptions type.
  */
-type RowPinningOptions = | {
-    readonly rowPinning: false;
-    readonly maximumPinnedRows?: never;
-} | {
-    readonly rowPinning: true;
-    readonly maximumPinnedRows: number;
-};
+type RowPinningOptions =
+    | {
+          readonly rowPinning: false;
+          readonly maximumPinnedRows?: never;
+      }
+    | {
+          readonly rowPinning: true;
+          readonly maximumPinnedRows: number;
+      };
 
 /**
  * ScrollbarOptions type.
  */
-type ScrollbarOptions = | {
-    readonly horizontalScrollbar: false;
-    readonly verticalScrollbar: false;
-    readonly scrollbarThickness?: never;
-    readonly scrollbarOverscroll?: never;
-} | {
-    readonly horizontalScrollbar: true;
-    readonly verticalScrollbar: false;
-    readonly scrollbarThickness: number;
-    readonly scrollbarOverscroll: number;
-} | {
-    readonly horizontalScrollbar: false;
-    readonly verticalScrollbar: true;
-    readonly scrollbarThickness: number;
-    readonly scrollbarOverscroll: number;
-} | {
-    readonly horizontalScrollbar: true;
-    readonly verticalScrollbar: true;
-    readonly scrollbarThickness: number;
-    readonly scrollbarOverscroll: number;
-};
+type ScrollbarOptions =
+    | {
+          readonly horizontalScrollbar: false;
+          readonly verticalScrollbar: false;
+          readonly scrollbarThickness?: never;
+          readonly scrollbarOverscroll?: never;
+      }
+    | {
+          readonly horizontalScrollbar: true;
+          readonly verticalScrollbar: false;
+          readonly scrollbarThickness: number;
+          readonly scrollbarOverscroll: number;
+      }
+    | {
+          readonly horizontalScrollbar: false;
+          readonly verticalScrollbar: true;
+          readonly scrollbarThickness: number;
+          readonly scrollbarOverscroll: number;
+      }
+    | {
+          readonly horizontalScrollbar: true;
+          readonly verticalScrollbar: true;
+          readonly scrollbarThickness: number;
+          readonly scrollbarOverscroll: number;
+      };
 
 /**
  * DisplayOptions type.
  */
-type DisplayOptions = | {
+type DisplayOptions = {
     useEditorFont: boolean;
     automaticLayout: boolean;
     rowsMargin?: number;
@@ -129,33 +145,34 @@ type DisplayOptions = | {
 /**
  * CursorOptions type.
  */
-type CursorOptions = | {
+type CursorOptions = {
     cursorInitiallyHidden?: boolean;
 };
 
 /**
  * DefaultCursorOptions type.
  */
-type DefaultCursorOptions = | {
-    internalCursor: false;
-    cursorOffset?: never;
-} | {
-    internalCursor: true;
-    cursorOffset: number;
-};
+type DefaultCursorOptions =
+    | {
+          internalCursor: false;
+          cursorOffset?: never;
+      }
+    | {
+          internalCursor: true;
+          cursorOffset: number;
+      };
 
 /**
  * SelectionOptions type.
  */
-type SelectionOptions = | {
+type SelectionOptions = {
     selection?: boolean;
 };
 
 /**
  * DataGridOptions type.
  */
-export type DataGridOptions =
-    ColumnHeaderOptions &
+export type DataGridOptions = ColumnHeaderOptions &
     RowHeaderOptions &
     DefaultSizeOptions &
     ColumnResizeOptions &
@@ -234,7 +251,7 @@ export type DataGridCellContent = string | DataGridCellComponent;
 export enum ExtendColumnSelectionBy {
     Column = 'column',
     Page = 'page',
-    Screen = 'screen'
+    Screen = 'screen',
 }
 
 /**
@@ -243,7 +260,7 @@ export enum ExtendColumnSelectionBy {
 export enum ExtendRowSelectionBy {
     Row = 'row',
     Page = 'page',
-    Screen = 'screen'
+    Screen = 'screen',
 }
 
 /**
@@ -255,7 +272,7 @@ export enum CellSelectionState {
     SelectedLeft = 2,
     SelectedRight = 4,
     SelectedTop = 8,
-    SelectedBottom = 16
+    SelectedBottom = 16,
 }
 
 /**
@@ -284,7 +301,7 @@ export enum RowSelectionState {
 export enum MouseSelectionType {
     Single = 'single',
     Range = 'range',
-    Multi = 'multi'
+    Multi = 'multi',
 }
 
 //#endregion Selection Enumerations
@@ -314,7 +331,10 @@ class CellSelectionIndexes {
         return this.rowIndexes[this.rowIndexes.length - 1];
     }
 
-    constructor(public readonly columnIndexes: number[], public readonly rowIndexes: number[]) {
+    constructor(
+        public readonly columnIndexes: number[],
+        public readonly rowIndexes: number[],
+    ) {
         this._columnIndexesSet = new Set(columnIndexes);
         this._rowIndexesSet = new Set(rowIndexes);
     }
@@ -355,38 +375,41 @@ class SelectionIndexes {
  * ClipboardCell class.
  */
 export class ClipboardCell {
-    constructor(readonly columnIndex: number, readonly rowIndex: number) { }
+    constructor(
+        readonly columnIndex: number,
+        readonly rowIndex: number,
+    ) {}
 }
 
 /**
  * ClipboardCellIndexes class.
  */
 export class ClipboardCellIndexes {
-    constructor(readonly columnIndexes: number[], readonly rowIndexes: number[]) { }
+    constructor(
+        readonly columnIndexes: number[],
+        readonly rowIndexes: number[],
+    ) {}
 }
 
 /**
  * ClipboardColumnIndexes class.
  */
 export class ClipboardColumnIndexes {
-    constructor(readonly indexes: number[]) { }
+    constructor(readonly indexes: number[]) {}
 }
 
 /**
  * ClipboardRowIndexes class.
  */
 export class ClipboardRowIndexes {
-    constructor(readonly indexes: number[]) { }
+    constructor(readonly indexes: number[]) {}
 }
 
 /**
  * ClipboardData type.
  */
 export type ClipboardData =
-    ClipboardCell |
-    ClipboardCellIndexes |
-    ClipboardColumnIndexes |
-    ClipboardRowIndexes;
+    ClipboardCell | ClipboardCellIndexes | ClipboardColumnIndexes | ClipboardRowIndexes;
 
 //#endregion Clipboard Classes
 
@@ -488,14 +511,14 @@ class SimpleEventEmitter<T> {
     private _listeners: Set<(value: T) => void> = new Set();
 
     fire(value: T): void {
-        this._listeners.forEach(listener => listener(value));
+        this._listeners.forEach((listener) => listener(value));
     }
 
     get event(): (listener: (value: T) => void) => { dispose: () => void } {
         return (listener: (value: T) => void) => {
             this._listeners.add(listener);
             return {
-                dispose: () => this._listeners.delete(listener)
+                dispose: () => this._listeners.delete(listener),
             };
         };
     }
@@ -624,7 +647,7 @@ export abstract class DataGridInstance {
             width: this._width,
             height: this._height,
             scrollTop,
-            scrollLeft
+            scrollLeft,
         });
         this.fireOnDidUpdateEvent();
     }
@@ -641,12 +664,12 @@ export abstract class DataGridInstance {
     constructor(options: DataGridOptions) {
         // ColumnHeaderOptions.
         this._columnHeaders = options.columnHeaders || false;
-        this._columnHeadersHeight = this._columnHeaders ? options.columnHeadersHeight ?? 0 : 0;
+        this._columnHeadersHeight = this._columnHeaders ? (options.columnHeadersHeight ?? 0) : 0;
 
         // RowHeaderOptions.
         this._rowHeaders = options.rowHeaders || false;
-        this._rowHeadersWidth = this._rowHeaders ? options.rowHeadersWidth ?? 0 : 0;
-        this._rowHeadersResize = this._rowHeaders ? options.rowHeadersResize ?? false : false;
+        this._rowHeadersWidth = this._rowHeaders ? (options.rowHeadersWidth ?? 0) : 0;
+        this._rowHeadersResize = this._rowHeaders ? (options.rowHeadersResize ?? false) : false;
 
         // DefaultSizeOptions.
         this._defaultColumnWidth = options.defaultColumnWidth;
@@ -664,11 +687,11 @@ export abstract class DataGridInstance {
 
         // ColumnPinningOptions.
         this._columnPinning = options.columnPinning || false;
-        this._maximumPinnedColumns = this._columnPinning ? options.maximumPinnedColumns ?? 0 : 0;
+        this._maximumPinnedColumns = this._columnPinning ? (options.maximumPinnedColumns ?? 0) : 0;
 
         // RowPinningOptions.
         this._rowPinning = options.rowPinning || false;
-        this._maximumPinnedRows = this._rowPinning ? options.maximumPinnedRows ?? 0 : 0;
+        this._maximumPinnedRows = this._rowPinning ? (options.maximumPinnedRows ?? 0) : 0;
 
         // ScrollbarOptions.
         this._horizontalScrollbar = options.horizontalScrollbar || false;
@@ -692,7 +715,7 @@ export abstract class DataGridInstance {
 
         // DefaultCursorOptions.
         this._internalCursor = options.internalCursor ?? true;
-        this._cursorOffset = this._internalCursor ? options.cursorOffset ?? 0 : 0;
+        this._cursorOffset = this._internalCursor ? (options.cursorOffset ?? 0) : 0;
 
         // SelectionOptions.
         this._selection = options.selection ?? true;
@@ -706,19 +729,32 @@ export abstract class DataGridInstance {
 
     //#region Public Properties - Settings
 
-    get columnHeaders() { return this._columnHeaders; }
-    get columnHeadersHeight() { return this._columnHeadersHeight; }
-    get rowHeaders() { return this._rowHeaders; }
-    get rowHeadersWidth() { return this._rowHeadersWidth; }
-    get rowHeadersResize() { return this._rowHeadersResize; }
-    get minimumRowHeadersWidth() { return 20; }
+    get columnHeaders() {
+        return this._columnHeaders;
+    }
+    get columnHeadersHeight() {
+        return this._columnHeadersHeight;
+    }
+    get rowHeaders() {
+        return this._rowHeaders;
+    }
+    get rowHeadersWidth() {
+        return this._rowHeadersWidth;
+    }
+    get rowHeadersResize() {
+        return this._rowHeadersResize;
+    }
+    get minimumRowHeadersWidth() {
+        return 20;
+    }
     get maximumRowHeadersWidth() {
         if (this._width <= 0) {
             return Math.max(this.minimumRowHeadersWidth, this._maximumColumnWidth);
         }
 
         // Keep room for an unpinned column when the container is large enough.
-        const reservedWidth = this._minimumColumnWidth +
+        const reservedWidth =
+            this._minimumColumnWidth +
             (this._columnPinning ? this._columnLayoutManager.pinnedLayoutEntriesSize : 0) +
             (this._verticalScrollbar ? this._scrollbarThickness : 0);
         return Math.max(
@@ -726,30 +762,78 @@ export abstract class DataGridInstance {
             Math.min(this._maximumColumnWidth, this._width - reservedWidth),
         );
     }
-    get columnResize() { return this._columnResize; }
-    get minimumColumnWidth() { return this._minimumColumnWidth; }
-    get maximumColumnWidth() { return this._maximumColumnWidth; }
-    get defaultColumnWidth() { return this._defaultColumnWidth; }
-    get rowResize() { return this._rowResize; }
-    get minimumRowHeight() { return this._minimumRowHeight; }
-    get maximumRowHeight() { return this._maximumRowHeight; }
-    get defaultRowHeight() { return this._defaultRowHeight; }
-    get columnPinning() { return this._columnPinning; }
-    get maximumPinnedColumns() { return this._maximumPinnedColumns; }
-    get rowPinning() { return this._rowPinning; }
-    get maximumPinnedRows() { return this._maximumPinnedRows; }
-    get horizontalScrollbar() { return this._horizontalScrollbar; }
-    get verticalScrollbar() { return this._verticalScrollbar; }
-    get scrollbarThickness() { return this._scrollbarThickness; }
-    get scrollbarOverscroll() { return this._scrollbarOverscroll; }
-    get useEditorFont() { return this._useEditorFont; }
-    get automaticLayout() { return this._automaticLayout; }
-    get rowsMargin() { return this._rowsMargin; }
-    get cellBorders() { return this._cellBorders; }
-    get horizontalCellPadding() { return this._horizontalCellPadding; }
-    get internalCursor() { return this._internalCursor; }
-    get cursorOffset() { return this._cursorOffset; }
-    get selection() { return this._selection; }
+    get columnResize() {
+        return this._columnResize;
+    }
+    get minimumColumnWidth() {
+        return this._minimumColumnWidth;
+    }
+    get maximumColumnWidth() {
+        return this._maximumColumnWidth;
+    }
+    get defaultColumnWidth() {
+        return this._defaultColumnWidth;
+    }
+    get rowResize() {
+        return this._rowResize;
+    }
+    get minimumRowHeight() {
+        return this._minimumRowHeight;
+    }
+    get maximumRowHeight() {
+        return this._maximumRowHeight;
+    }
+    get defaultRowHeight() {
+        return this._defaultRowHeight;
+    }
+    get columnPinning() {
+        return this._columnPinning;
+    }
+    get maximumPinnedColumns() {
+        return this._maximumPinnedColumns;
+    }
+    get rowPinning() {
+        return this._rowPinning;
+    }
+    get maximumPinnedRows() {
+        return this._maximumPinnedRows;
+    }
+    get horizontalScrollbar() {
+        return this._horizontalScrollbar;
+    }
+    get verticalScrollbar() {
+        return this._verticalScrollbar;
+    }
+    get scrollbarThickness() {
+        return this._scrollbarThickness;
+    }
+    get scrollbarOverscroll() {
+        return this._scrollbarOverscroll;
+    }
+    get useEditorFont() {
+        return this._useEditorFont;
+    }
+    get automaticLayout() {
+        return this._automaticLayout;
+    }
+    get rowsMargin() {
+        return this._rowsMargin;
+    }
+    get cellBorders() {
+        return this._cellBorders;
+    }
+    get horizontalCellPadding() {
+        return this._horizontalCellPadding;
+    }
+    get internalCursor() {
+        return this._internalCursor;
+    }
+    get cursorOffset() {
+        return this._cursorOffset;
+    }
+    get selection() {
+        return this._selection;
+    }
 
     /**
      * Optional hover manager. Concrete instances can override.
@@ -762,7 +846,9 @@ export abstract class DataGridInstance {
 
     //#region Public Properties
 
-    get focused() { return this._focused; }
+    get focused() {
+        return this._focused;
+    }
     abstract get columns(): number;
     abstract get rows(): number;
 
@@ -771,11 +857,19 @@ export abstract class DataGridInstance {
     }
 
     get scrollHeight() {
-        return (this._rowsMargin * 2) + this._rowLayoutManager.unpinnedLayoutEntriesSize + this._scrollbarOverscroll;
+        return (
+            this._rowsMargin * 2 +
+            this._rowLayoutManager.unpinnedLayoutEntriesSize +
+            this._scrollbarOverscroll
+        );
     }
 
-    get pageWidth() { return this.layoutWidth; }
-    get pageHeight() { return this.layoutHeight; }
+    get pageWidth() {
+        return this.layoutWidth;
+    }
+    get pageHeight() {
+        return this.layoutHeight;
+    }
 
     get layoutWidth() {
         let layoutWidth = this._width;
@@ -830,7 +924,9 @@ export abstract class DataGridInstance {
     }
 
     get firstColumn(): ColumnDescriptor | undefined {
-        const layoutEntry = this._columnLayoutManager.findFirstUnpinnedLayoutEntry(this.horizontalScrollOffset);
+        const layoutEntry = this._columnLayoutManager.findFirstUnpinnedLayoutEntry(
+            this.horizontalScrollOffset,
+        );
         if (!layoutEntry) {
             return undefined;
         }
@@ -842,7 +938,9 @@ export abstract class DataGridInstance {
     }
 
     get firstRow(): RowDescriptor | undefined {
-        const layoutEntry = this._rowLayoutManager.findFirstUnpinnedLayoutEntry(this.verticalScrollOffset);
+        const layoutEntry = this._rowLayoutManager.findFirstUnpinnedLayoutEntry(
+            this.verticalScrollOffset,
+        );
         if (!layoutEntry) {
             return undefined;
         }
@@ -853,17 +951,37 @@ export abstract class DataGridInstance {
         };
     }
 
-    get horizontalScrollOffset() { return this._horizontalScrollOffset; }
-    get verticalScrollOffset() { return this._verticalScrollOffset; }
-    get cursorColumnIndex() { return this._cursorColumnIndex; }
-    get cursorRowIndex() { return this._cursorRowIndex; }
-    get isColumnSorting() { return this._columnSortKeys.size > 0; }
+    get horizontalScrollOffset() {
+        return this._horizontalScrollOffset;
+    }
+    get verticalScrollOffset() {
+        return this._verticalScrollOffset;
+    }
+    get cursorColumnIndex() {
+        return this._cursorColumnIndex;
+    }
+    get cursorRowIndex() {
+        return this._cursorRowIndex;
+    }
+    get isColumnSorting() {
+        return this._columnSortKeys.size > 0;
+    }
 
-    get firstColumnIndex() { return this._columnLayoutManager.firstIndex; }
-    get lastColumnIndex() { return this._columnLayoutManager.lastIndex; }
-    get lastColummIndex() { return this.lastColumnIndex; }
-    get firstRowIndex() { return this._rowLayoutManager.firstIndex; }
-    get lastRowIndex() { return this._rowLayoutManager.lastIndex; }
+    get firstColumnIndex() {
+        return this._columnLayoutManager.firstIndex;
+    }
+    get lastColumnIndex() {
+        return this._columnLayoutManager.lastIndex;
+    }
+    get lastColummIndex() {
+        return this.lastColumnIndex;
+    }
+    get firstRowIndex() {
+        return this._rowLayoutManager.firstIndex;
+    }
+    get lastRowIndex() {
+        return this._rowLayoutManager.lastIndex;
+    }
 
     rowHeader(rowIndex: number): string {
         return `${rowIndex + 1}`;
@@ -909,9 +1027,11 @@ export abstract class DataGridInstance {
     }
 
     showCursor() {
-        if (this._cursorInitiallyHidden &&
+        if (
+            this._cursorInitiallyHidden &&
             this._cursorColumnIndex === -1 &&
-            this._cursorRowIndex === -1) {
+            this._cursorRowIndex === -1
+        ) {
             this.setCursorPosition(0, 0);
             return true;
         }
@@ -920,27 +1040,35 @@ export abstract class DataGridInstance {
 
     getColumnDescriptors(horizontalOffset: number, width: number): ColumnDescriptors {
         const pinnedLayoutEntries = this._columnLayoutManager.pinnedLayoutEntries(width);
-        const pinnedColumnDescriptors = pinnedLayoutEntries.map((pinnedLayoutEntry): ColumnDescriptor => ({
-            columnIndex: pinnedLayoutEntry.index,
-            left: pinnedLayoutEntry.start,
-            width: pinnedLayoutEntry.size,
-        }));
+        const pinnedColumnDescriptors = pinnedLayoutEntries.map(
+            (pinnedLayoutEntry): ColumnDescriptor => ({
+                columnIndex: pinnedLayoutEntry.index,
+                left: pinnedLayoutEntry.start,
+                width: pinnedLayoutEntry.size,
+            }),
+        );
 
         const pinnedColumnDescriptorsWidth = (() => {
             if (!pinnedColumnDescriptors.length) {
                 return 0;
             } else {
-                const lastPinnedColumnDescriptor = pinnedColumnDescriptors[pinnedColumnDescriptors.length - 1];
+                const lastPinnedColumnDescriptor =
+                    pinnedColumnDescriptors[pinnedColumnDescriptors.length - 1];
                 return lastPinnedColumnDescriptor.left + lastPinnedColumnDescriptor.width;
             }
         })();
 
-        const unpinnedLayoutEntries = this._columnLayoutManager.unpinnedLayoutEntries(horizontalOffset, width - pinnedColumnDescriptorsWidth);
-        const unpinnedColumnDescriptors = unpinnedLayoutEntries.map((pinnedLayoutEntry): ColumnDescriptor => ({
-            columnIndex: pinnedLayoutEntry.index,
-            left: pinnedColumnDescriptorsWidth + pinnedLayoutEntry.start,
-            width: pinnedLayoutEntry.size,
-        }));
+        const unpinnedLayoutEntries = this._columnLayoutManager.unpinnedLayoutEntries(
+            horizontalOffset,
+            width - pinnedColumnDescriptorsWidth,
+        );
+        const unpinnedColumnDescriptors = unpinnedLayoutEntries.map(
+            (pinnedLayoutEntry): ColumnDescriptor => ({
+                columnIndex: pinnedLayoutEntry.index,
+                left: pinnedColumnDescriptorsWidth + pinnedLayoutEntry.start,
+                width: pinnedLayoutEntry.size,
+            }),
+        );
 
         return {
             pinnedColumnDescriptors,
@@ -950,27 +1078,35 @@ export abstract class DataGridInstance {
 
     getRowDescriptors(verticalOffset: number, layoutHeight: number): RowDescriptors {
         const pinnedLayoutEntries = this._rowLayoutManager.pinnedLayoutEntries(layoutHeight);
-        const pinnedRowDescriptors = pinnedLayoutEntries.map((pinnedLayoutEntry): RowDescriptor => ({
-            rowIndex: pinnedLayoutEntry.index,
-            top: pinnedLayoutEntry.start,
-            height: pinnedLayoutEntry.size,
-        }));
+        const pinnedRowDescriptors = pinnedLayoutEntries.map(
+            (pinnedLayoutEntry): RowDescriptor => ({
+                rowIndex: pinnedLayoutEntry.index,
+                top: pinnedLayoutEntry.start,
+                height: pinnedLayoutEntry.size,
+            }),
+        );
 
         const pinnedRowDescriptorsHeight = (() => {
             if (!pinnedRowDescriptors.length) {
                 return 0;
             } else {
-                const lastPinnedRowDescriptor = pinnedRowDescriptors[pinnedRowDescriptors.length - 1];
+                const lastPinnedRowDescriptor =
+                    pinnedRowDescriptors[pinnedRowDescriptors.length - 1];
                 return lastPinnedRowDescriptor.top + lastPinnedRowDescriptor.height;
             }
         })();
 
-        const unpinnedLayoutEntries = this._rowLayoutManager.unpinnedLayoutEntries(verticalOffset, layoutHeight - pinnedRowDescriptorsHeight);
-        const unpinnedRowDescriptors = unpinnedLayoutEntries.map((pinnedLayoutEntry): RowDescriptor => ({
-            rowIndex: pinnedLayoutEntry.index,
-            top: pinnedRowDescriptorsHeight + pinnedLayoutEntry.start,
-            height: pinnedLayoutEntry.size,
-        }));
+        const unpinnedLayoutEntries = this._rowLayoutManager.unpinnedLayoutEntries(
+            verticalOffset,
+            layoutHeight - pinnedRowDescriptorsHeight,
+        );
+        const unpinnedRowDescriptors = unpinnedLayoutEntries.map(
+            (pinnedLayoutEntry): RowDescriptor => ({
+                rowIndex: pinnedLayoutEntry.index,
+                top: pinnedRowDescriptorsHeight + pinnedLayoutEntry.start,
+                height: pinnedLayoutEntry.size,
+            }),
+        );
 
         return {
             pinnedRowDescriptors,
@@ -1006,12 +1142,16 @@ export abstract class DataGridInstance {
     }
 
     async scrollPageUp(): Promise<void> {
-        const firstUnpinnedLayoutEntry = this._rowLayoutManager.findFirstUnpinnedLayoutEntry(this.verticalScrollOffset);
+        const firstUnpinnedLayoutEntry = this._rowLayoutManager.findFirstUnpinnedLayoutEntry(
+            this.verticalScrollOffset,
+        );
         if (firstUnpinnedLayoutEntry === undefined) {
             return;
         }
 
-        const firstUnpinnedLayoutEntryPosition = this._rowLayoutManager.mapIndexToPosition(firstUnpinnedLayoutEntry.index);
+        const firstUnpinnedLayoutEntryPosition = this._rowLayoutManager.mapIndexToPosition(
+            firstUnpinnedLayoutEntry.index,
+        );
         if (firstUnpinnedLayoutEntryPosition === undefined) {
             return;
         }
@@ -1031,7 +1171,9 @@ export abstract class DataGridInstance {
             if (layoutEntry.start >= this.verticalScrollOffset - this.layoutHeight) {
                 lastFullyVisibleLayoutEntry = layoutEntry;
             } else {
-                this.setVerticalScrollOffset(lastFullyVisibleLayoutEntry?.start ?? layoutEntry.start);
+                this.setVerticalScrollOffset(
+                    lastFullyVisibleLayoutEntry?.start ?? layoutEntry.start,
+                );
                 await this.fetchData();
                 this.fireOnDidUpdateEvent();
                 return;
@@ -1044,17 +1186,25 @@ export abstract class DataGridInstance {
     }
 
     async scrollPageDown(): Promise<void> {
-        const firstUnpinnedLayoutEntry = this._rowLayoutManager.findFirstUnpinnedLayoutEntry(this.verticalScrollOffset);
+        const firstUnpinnedLayoutEntry = this._rowLayoutManager.findFirstUnpinnedLayoutEntry(
+            this.verticalScrollOffset,
+        );
         if (firstUnpinnedLayoutEntry === undefined) {
             return;
         }
 
-        const firstUnpinnedLayoutEntryPosition = this._rowLayoutManager.mapIndexToPosition(firstUnpinnedLayoutEntry.index);
+        const firstUnpinnedLayoutEntryPosition = this._rowLayoutManager.mapIndexToPosition(
+            firstUnpinnedLayoutEntry.index,
+        );
         if (firstUnpinnedLayoutEntryPosition === undefined) {
             return;
         }
 
-        for (let position = firstUnpinnedLayoutEntryPosition + 1; position < this._rowLayoutManager.entryCount; position++) {
+        for (
+            let position = firstUnpinnedLayoutEntryPosition + 1;
+            position < this._rowLayoutManager.entryCount;
+            position++
+        ) {
             const index = this._rowLayoutManager.mapPositionToIndex(position);
             if (index === undefined) {
                 return;
@@ -1066,7 +1216,9 @@ export abstract class DataGridInstance {
             }
 
             if (layoutEntry.end >= this.verticalScrollOffset + this.layoutHeight) {
-                this.setVerticalScrollOffset(Math.min(layoutEntry.start, this.maximumVerticalScrollOffset));
+                this.setVerticalScrollOffset(
+                    Math.min(layoutEntry.start, this.maximumVerticalScrollOffset),
+                );
                 await this.fetchData();
                 this.fireOnDidUpdateEvent();
                 return;
@@ -1086,7 +1238,7 @@ export abstract class DataGridInstance {
         if (!columnSortKey) {
             this._columnSortKeys.set(
                 columnIndex,
-                new ColumnSortKeyDescriptor(this._columnSortKeys.size, columnIndex, ascending)
+                new ColumnSortKeyDescriptor(this._columnSortKeys.size, columnIndex, ascending),
             );
         } else if (ascending !== columnSortKey.ascending) {
             columnSortKey.ascending = ascending;
@@ -1107,7 +1259,7 @@ export abstract class DataGridInstance {
             this.clearPinnedRows();
             this._columnSortKeys.delete(columnIndex);
 
-            this._columnSortKeys.forEach(columnSortToUpdate => {
+            this._columnSortKeys.forEach((columnSortToUpdate) => {
                 if (columnSortToUpdate.sortIndex > columnSortKey.sortIndex) {
                     columnSortToUpdate.sortIndex -= 1;
                 }
@@ -1185,7 +1337,10 @@ export abstract class DataGridInstance {
         }
     }
 
-    async setScrollOffsets(horizontalScrollOffset: number, verticalScrollOffset: number): Promise<void> {
+    async setScrollOffsets(
+        horizontalScrollOffset: number,
+        verticalScrollOffset: number,
+    ): Promise<void> {
         const nextHorizontalScrollOffset = Math.max(
             0,
             Math.min(horizontalScrollOffset, this.maximumHorizontalScrollOffset),
@@ -1194,8 +1349,10 @@ export abstract class DataGridInstance {
             0,
             Math.min(verticalScrollOffset, this.maximumVerticalScrollOffset),
         );
-        if (nextHorizontalScrollOffset !== this._horizontalScrollOffset ||
-            nextVerticalScrollOffset !== this._verticalScrollOffset) {
+        if (
+            nextHorizontalScrollOffset !== this._horizontalScrollOffset ||
+            nextVerticalScrollOffset !== this._verticalScrollOffset
+        ) {
             this._horizontalScrollOffset = nextHorizontalScrollOffset;
             this._verticalScrollOffset = nextVerticalScrollOffset;
             await this.fetchData();
@@ -1232,9 +1389,10 @@ export abstract class DataGridInstance {
             this._horizontalScrollOffset = columnLayoutEntry.start;
             scrollOffsetUpdated = true;
         } else if (columnLayoutEntry.end > this._horizontalScrollOffset + this.layoutWidth) {
-            this._horizontalScrollOffset = columnIndex === this.columns - 1
-                ? this.maximumHorizontalScrollOffset
-                : columnLayoutEntry.end - this.layoutWidth;
+            this._horizontalScrollOffset =
+                columnIndex === this.columns - 1
+                    ? this.maximumHorizontalScrollOffset
+                    : columnLayoutEntry.end - this.layoutWidth;
             scrollOffsetUpdated = true;
         }
 
@@ -1242,9 +1400,10 @@ export abstract class DataGridInstance {
             this._verticalScrollOffset = rowLayoutEntry.start;
             scrollOffsetUpdated = true;
         } else if (rowLayoutEntry.end > this._verticalScrollOffset + this.layoutHeight) {
-            this._verticalScrollOffset = rowIndex === this._rowLayoutManager.lastIndex
-                ? this.maximumVerticalScrollOffset
-                : rowLayoutEntry.end - this.layoutHeight;
+            this._verticalScrollOffset =
+                rowIndex === this._rowLayoutManager.lastIndex
+                    ? this.maximumVerticalScrollOffset
+                    : rowLayoutEntry.end - this.layoutHeight;
             scrollOffsetUpdated = true;
         }
 
@@ -1308,7 +1467,10 @@ export abstract class DataGridInstance {
     }
 
     setCursorPosition(cursorColumnIndex: number, cursorRowIndex: number): void {
-        if (cursorColumnIndex !== this._cursorColumnIndex || cursorRowIndex !== this._cursorRowIndex) {
+        if (
+            cursorColumnIndex !== this._cursorColumnIndex ||
+            cursorRowIndex !== this._cursorRowIndex
+        ) {
             this._cursorColumnIndex = cursorColumnIndex;
             this._cursorRowIndex = cursorRowIndex;
             this.fireOnDidUpdateEvent();
@@ -1348,7 +1510,7 @@ export abstract class DataGridInstance {
         firstColumnIndex: number,
         firstRowIndex: number,
         lastColumnIndex: number,
-        lastRowIndex: number
+        lastRowIndex: number,
     ): void {
         if (!this._selection) {
             return;
@@ -1445,7 +1607,9 @@ export abstract class DataGridInstance {
             }
 
             case MouseSelectionType.Range: {
-                const cursorColumnPosition = this._columnLayoutManager.mapIndexToPosition(this._cursorColumnIndex);
+                const cursorColumnPosition = this._columnLayoutManager.mapIndexToPosition(
+                    this._cursorColumnIndex,
+                );
                 if (cursorColumnPosition === undefined) {
                     return;
                 }
@@ -1455,7 +1619,9 @@ export abstract class DataGridInstance {
                     return;
                 }
 
-                const cursorRowPosition = this._rowLayoutManager.mapIndexToPosition(this._cursorRowIndex);
+                const cursorRowPosition = this._rowLayoutManager.mapIndexToPosition(
+                    this._cursorRowIndex,
+                );
                 if (cursorRowPosition === undefined) {
                     return;
                 }
@@ -1470,12 +1636,18 @@ export abstract class DataGridInstance {
                 const firstRowPosition = Math.min(cursorRowPosition, rowPosition);
                 const lastRowPosition = Math.max(cursorRowPosition, rowPosition);
 
-                const columnIndexes = this._columnLayoutManager.mapPositionsToIndexes(firstColumnPosition, lastColumnPosition);
+                const columnIndexes = this._columnLayoutManager.mapPositionsToIndexes(
+                    firstColumnPosition,
+                    lastColumnPosition,
+                );
                 if (columnIndexes === undefined) {
                     return;
                 }
 
-                const rowIndexes = this._rowLayoutManager.mapPositionsToIndexes(firstRowPosition, lastRowPosition);
+                const rowIndexes = this._rowLayoutManager.mapPositionsToIndexes(
+                    firstRowPosition,
+                    lastRowPosition,
+                );
                 if (rowIndexes === undefined) {
                     return;
                 }
@@ -1491,7 +1663,10 @@ export abstract class DataGridInstance {
         }
     }
 
-    async mouseSelectColumn(columnIndex: number, mouseSelectionType: MouseSelectionType): Promise<void> {
+    async mouseSelectColumn(
+        columnIndex: number,
+        mouseSelectionType: MouseSelectionType,
+    ): Promise<void> {
         this._cellSelectionIndexes = undefined;
         this._rowSelectionIndexes = undefined;
 
@@ -1512,7 +1687,9 @@ export abstract class DataGridInstance {
             }
 
             case MouseSelectionType.Range: {
-                const cursorColumnPosition = this._columnLayoutManager.mapIndexToPosition(this._cursorColumnIndex);
+                const cursorColumnPosition = this._columnLayoutManager.mapIndexToPosition(
+                    this._cursorColumnIndex,
+                );
                 if (cursorColumnPosition === undefined) {
                     return;
                 }
@@ -1525,7 +1702,10 @@ export abstract class DataGridInstance {
                 const firstColumnPosition = Math.min(cursorColumnPosition, columnPosition);
                 const lastColumnPosition = Math.max(cursorColumnPosition, columnPosition);
 
-                const columnIndexes = this._columnLayoutManager.mapPositionsToIndexes(firstColumnPosition, lastColumnPosition);
+                const columnIndexes = this._columnLayoutManager.mapPositionsToIndexes(
+                    firstColumnPosition,
+                    lastColumnPosition,
+                );
                 if (columnIndexes === undefined) {
                     return;
                 }
@@ -1544,14 +1724,15 @@ export abstract class DataGridInstance {
                 if (this._columnSelectionIndexes === undefined) {
                     indexes.push(columnIndex);
                 } else if (this._columnSelectionIndexes.contains(columnIndex)) {
-                    indexes = this._columnSelectionIndexes.indexes.filter(index => index !== columnIndex);
+                    indexes = this._columnSelectionIndexes.indexes.filter(
+                        (index) => index !== columnIndex,
+                    );
                 } else {
                     indexes = [...this._columnSelectionIndexes.indexes, columnIndex];
                 }
 
-                this._columnSelectionIndexes = indexes.length === 0
-                    ? undefined
-                    : new SelectionIndexes(indexes);
+                this._columnSelectionIndexes =
+                    indexes.length === 0 ? undefined : new SelectionIndexes(indexes);
 
                 await adjustCursor(columnIndex);
                 await this.scrollToColumn(columnIndex);
@@ -1583,7 +1764,9 @@ export abstract class DataGridInstance {
             }
 
             case MouseSelectionType.Range: {
-                const cursorRowPosition = this._rowLayoutManager.mapIndexToPosition(this._cursorRowIndex);
+                const cursorRowPosition = this._rowLayoutManager.mapIndexToPosition(
+                    this._cursorRowIndex,
+                );
                 if (cursorRowPosition === undefined) {
                     return;
                 }
@@ -1596,7 +1779,10 @@ export abstract class DataGridInstance {
                 const firstRowPosition = Math.min(cursorRowPosition, rowPosition);
                 const lastRowPosition = Math.max(cursorRowPosition, rowPosition);
 
-                const rowIndexes = this._rowLayoutManager.mapPositionsToIndexes(firstRowPosition, lastRowPosition);
+                const rowIndexes = this._rowLayoutManager.mapPositionsToIndexes(
+                    firstRowPosition,
+                    lastRowPosition,
+                );
                 if (rowIndexes === undefined) {
                     return;
                 }
@@ -1615,14 +1801,15 @@ export abstract class DataGridInstance {
                 if (this._rowSelectionIndexes === undefined) {
                     indexes.push(rowIndex);
                 } else if (this._rowSelectionIndexes.contains(rowIndex)) {
-                    indexes = this._rowSelectionIndexes.indexes.filter(index => index !== rowIndex);
+                    indexes = this._rowSelectionIndexes.indexes.filter(
+                        (index) => index !== rowIndex,
+                    );
                 } else {
                     indexes = [...this._rowSelectionIndexes.indexes, rowIndex];
                 }
 
-                this._rowSelectionIndexes = indexes.length === 0
-                    ? undefined
-                    : new SelectionIndexes(indexes);
+                this._rowSelectionIndexes =
+                    indexes.length === 0 ? undefined : new SelectionIndexes(indexes);
 
                 await adjustCursor(rowIndex);
                 await this.scrollToRow(rowIndex);
@@ -1692,10 +1879,7 @@ export abstract class DataGridInstance {
         anchorElement: HTMLElement,
         anchorPoint?: DataGridContextMenuAnchorPoint,
     ): Promise<void> {
-        const items = await this.buildCellContextMenuItems(
-            columnIndex,
-            rowIndex,
-        );
+        const items = await this.buildCellContextMenuItems(columnIndex, rowIndex);
         if (!items?.length) {
             return;
         }
@@ -1716,7 +1900,11 @@ export abstract class DataGridInstance {
     }
 
     pinColumn(columnIndex: number): void {
-        if (this._columnPinning && this._columnLayoutManager.pinnedIndexesCount < this._maximumPinnedColumns && this._columnLayoutManager.pinIndex(columnIndex)) {
+        if (
+            this._columnPinning &&
+            this._columnLayoutManager.pinnedIndexesCount < this._maximumPinnedColumns &&
+            this._columnLayoutManager.pinIndex(columnIndex)
+        ) {
             this.clearSelection();
             this.notifyPinnedColumnsChanged();
             this.fireOnDidUpdateEvent();
@@ -1736,7 +1924,11 @@ export abstract class DataGridInstance {
     }
 
     pinRow(rowIndex: number): void {
-        if (this._rowPinning && this._rowLayoutManager.pinnedIndexesCount < this._maximumPinnedRows && this._rowLayoutManager.pinIndex(rowIndex)) {
+        if (
+            this._rowPinning &&
+            this._rowLayoutManager.pinnedIndexesCount < this._maximumPinnedRows &&
+            this._rowLayoutManager.pinIndex(rowIndex)
+        ) {
             this.clearSelection();
             this.fireOnDidUpdateEvent();
         }
@@ -1778,7 +1970,9 @@ export abstract class DataGridInstance {
     }
 
     moveCursorLeft(): void {
-        const previousColumnIndex = this._columnLayoutManager.previousIndex(this._cursorColumnIndex);
+        const previousColumnIndex = this._columnLayoutManager.previousIndex(
+            this._cursorColumnIndex,
+        );
         if (previousColumnIndex === undefined) {
             return;
         }
@@ -1804,12 +1998,16 @@ export abstract class DataGridInstance {
 
         if (this._columnSelectionIndexes) {
             if (this._columnSelectionIndexes.contains(this._cursorColumnIndex)) {
-                const cursorColumnPosition = this._columnLayoutManager.mapIndexToPosition(this._cursorColumnIndex);
+                const cursorColumnPosition = this._columnLayoutManager.mapIndexToPosition(
+                    this._cursorColumnIndex,
+                );
                 if (cursorColumnPosition === undefined || cursorColumnPosition === 0) {
                     return;
                 }
 
-                const previousColumnIndex = this._columnLayoutManager.mapPositionToIndex(cursorColumnPosition - 1);
+                const previousColumnIndex = this._columnLayoutManager.mapPositionToIndex(
+                    cursorColumnPosition - 1,
+                );
                 if (previousColumnIndex === undefined) {
                     return;
                 }
@@ -1832,7 +2030,9 @@ export abstract class DataGridInstance {
 
         if (this._cellSelectionIndexes) {
             if (this._cursorColumnIndex === this._cellSelectionIndexes.lastColumnIndex) {
-                const firstColumnPosition = this._columnLayoutManager.mapIndexToPosition(this._cellSelectionIndexes.firstColumnIndex);
+                const firstColumnPosition = this._columnLayoutManager.mapIndexToPosition(
+                    this._cellSelectionIndexes.firstColumnIndex,
+                );
                 if (firstColumnPosition === undefined) {
                     return;
                 }
@@ -1841,12 +2041,17 @@ export abstract class DataGridInstance {
                     return;
                 }
 
-                const lastColumnPosition = this._columnLayoutManager.mapIndexToPosition(this._cellSelectionIndexes.lastColumnIndex);
+                const lastColumnPosition = this._columnLayoutManager.mapIndexToPosition(
+                    this._cellSelectionIndexes.lastColumnIndex,
+                );
                 if (lastColumnPosition === undefined) {
                     return;
                 }
 
-                const columnIndexes = this._columnLayoutManager.mapPositionsToIndexes(firstColumnPosition - 1, lastColumnPosition);
+                const columnIndexes = this._columnLayoutManager.mapPositionsToIndexes(
+                    firstColumnPosition - 1,
+                    lastColumnPosition,
+                );
                 if (columnIndexes === undefined) {
                     return;
                 }
@@ -1862,17 +2067,24 @@ export abstract class DataGridInstance {
             }
 
             if (this._cursorColumnIndex === this._cellSelectionIndexes.firstColumnIndex) {
-                const firstColumnPosition = this._columnLayoutManager.mapIndexToPosition(this._cellSelectionIndexes.firstColumnIndex);
+                const firstColumnPosition = this._columnLayoutManager.mapIndexToPosition(
+                    this._cellSelectionIndexes.firstColumnIndex,
+                );
                 if (firstColumnPosition === undefined) {
                     return;
                 }
 
-                const lastColumnPosition = this._columnLayoutManager.mapIndexToPosition(this._cellSelectionIndexes.lastColumnIndex);
+                const lastColumnPosition = this._columnLayoutManager.mapIndexToPosition(
+                    this._cellSelectionIndexes.lastColumnIndex,
+                );
                 if (lastColumnPosition === undefined) {
                     return;
                 }
 
-                const columnIndexes = this._columnLayoutManager.mapPositionsToIndexes(firstColumnPosition, lastColumnPosition - 1);
+                const columnIndexes = this._columnLayoutManager.mapPositionsToIndexes(
+                    firstColumnPosition,
+                    lastColumnPosition - 1,
+                );
                 if (columnIndexes === undefined) {
                     return;
                 }
@@ -1889,7 +2101,9 @@ export abstract class DataGridInstance {
             return;
         }
 
-        const cursorColumnPosition = this._columnLayoutManager.mapIndexToPosition(this._cursorColumnIndex);
+        const cursorColumnPosition = this._columnLayoutManager.mapIndexToPosition(
+            this._cursorColumnIndex,
+        );
         if (cursorColumnPosition === undefined) {
             return;
         }
@@ -1903,12 +2117,18 @@ export abstract class DataGridInstance {
             return;
         }
 
-        const columnIndexes = this._columnLayoutManager.mapPositionsToIndexes(cursorColumnPosition - 1, cursorColumnPosition);
+        const columnIndexes = this._columnLayoutManager.mapPositionsToIndexes(
+            cursorColumnPosition - 1,
+            cursorColumnPosition,
+        );
         if (columnIndexes === undefined) {
             return;
         }
 
-        const rowIndexes = this._rowLayoutManager.mapPositionsToIndexes(cursorRowPosition, cursorRowPosition);
+        const rowIndexes = this._rowLayoutManager.mapPositionsToIndexes(
+            cursorRowPosition,
+            cursorRowPosition,
+        );
         if (rowIndexes === undefined) {
             return;
         }
@@ -1926,12 +2146,19 @@ export abstract class DataGridInstance {
 
         if (this._columnSelectionIndexes) {
             if (this._columnSelectionIndexes.contains(this._cursorColumnIndex)) {
-                const cursorColumnPosition = this._columnLayoutManager.mapIndexToPosition(this._cursorColumnIndex);
-                if (cursorColumnPosition === undefined || cursorColumnPosition === this._columnLayoutManager.entryCount - 1) {
+                const cursorColumnPosition = this._columnLayoutManager.mapIndexToPosition(
+                    this._cursorColumnIndex,
+                );
+                if (
+                    cursorColumnPosition === undefined ||
+                    cursorColumnPosition === this._columnLayoutManager.entryCount - 1
+                ) {
                     return;
                 }
 
-                const nextColumnIndex = this._columnLayoutManager.mapPositionToIndex(cursorColumnPosition + 1);
+                const nextColumnIndex = this._columnLayoutManager.mapPositionToIndex(
+                    cursorColumnPosition + 1,
+                );
                 if (nextColumnIndex === undefined) {
                     return;
                 }
@@ -1954,7 +2181,9 @@ export abstract class DataGridInstance {
 
         if (this._cellSelectionIndexes) {
             if (this._cursorColumnIndex === this._cellSelectionIndexes.firstColumnIndex) {
-                const lastColumnPosition = this._columnLayoutManager.mapIndexToPosition(this._cellSelectionIndexes.lastColumnIndex);
+                const lastColumnPosition = this._columnLayoutManager.mapIndexToPosition(
+                    this._cellSelectionIndexes.lastColumnIndex,
+                );
                 if (lastColumnPosition === undefined) {
                     return;
                 }
@@ -1963,12 +2192,17 @@ export abstract class DataGridInstance {
                     return;
                 }
 
-                const firstColumnPosition = this._columnLayoutManager.mapIndexToPosition(this._cellSelectionIndexes.firstColumnIndex);
+                const firstColumnPosition = this._columnLayoutManager.mapIndexToPosition(
+                    this._cellSelectionIndexes.firstColumnIndex,
+                );
                 if (firstColumnPosition === undefined) {
                     return;
                 }
 
-                const columnIndexes = this._columnLayoutManager.mapPositionsToIndexes(firstColumnPosition, lastColumnPosition + 1);
+                const columnIndexes = this._columnLayoutManager.mapPositionsToIndexes(
+                    firstColumnPosition,
+                    lastColumnPosition + 1,
+                );
                 if (columnIndexes === undefined) {
                     return;
                 }
@@ -1984,17 +2218,24 @@ export abstract class DataGridInstance {
             }
 
             if (this._cursorColumnIndex === this._cellSelectionIndexes.lastColumnIndex) {
-                const firstColumnPosition = this._columnLayoutManager.mapIndexToPosition(this._cellSelectionIndexes.firstColumnIndex);
+                const firstColumnPosition = this._columnLayoutManager.mapIndexToPosition(
+                    this._cellSelectionIndexes.firstColumnIndex,
+                );
                 if (firstColumnPosition === undefined) {
                     return;
                 }
 
-                const lastColumnPosition = this._columnLayoutManager.mapIndexToPosition(this._cellSelectionIndexes.lastColumnIndex);
+                const lastColumnPosition = this._columnLayoutManager.mapIndexToPosition(
+                    this._cellSelectionIndexes.lastColumnIndex,
+                );
                 if (lastColumnPosition === undefined) {
                     return;
                 }
 
-                const columnIndexes = this._columnLayoutManager.mapPositionsToIndexes(firstColumnPosition + 1, lastColumnPosition);
+                const columnIndexes = this._columnLayoutManager.mapPositionsToIndexes(
+                    firstColumnPosition + 1,
+                    lastColumnPosition,
+                );
                 if (columnIndexes === undefined) {
                     return;
                 }
@@ -2011,7 +2252,9 @@ export abstract class DataGridInstance {
             return;
         }
 
-        const cursorColumnPosition = this._columnLayoutManager.mapIndexToPosition(this._cursorColumnIndex);
+        const cursorColumnPosition = this._columnLayoutManager.mapIndexToPosition(
+            this._cursorColumnIndex,
+        );
         if (cursorColumnPosition === undefined) {
             return;
         }
@@ -2025,12 +2268,18 @@ export abstract class DataGridInstance {
             return;
         }
 
-        const columnIndexes = this._columnLayoutManager.mapPositionsToIndexes(cursorColumnPosition, cursorColumnPosition + 1);
+        const columnIndexes = this._columnLayoutManager.mapPositionsToIndexes(
+            cursorColumnPosition,
+            cursorColumnPosition + 1,
+        );
         if (columnIndexes === undefined) {
             return;
         }
 
-        const rowIndexes = this._rowLayoutManager.mapPositionsToIndexes(cursorRowPosition, cursorRowPosition);
+        const rowIndexes = this._rowLayoutManager.mapPositionsToIndexes(
+            cursorRowPosition,
+            cursorRowPosition,
+        );
         if (rowIndexes === undefined) {
             return;
         }
@@ -2048,12 +2297,16 @@ export abstract class DataGridInstance {
 
         if (this._rowSelectionIndexes) {
             if (this._rowSelectionIndexes.contains(this._cursorRowIndex)) {
-                const cursorRowPosition = this._rowLayoutManager.mapIndexToPosition(this._cursorRowIndex);
+                const cursorRowPosition = this._rowLayoutManager.mapIndexToPosition(
+                    this._cursorRowIndex,
+                );
                 if (cursorRowPosition === undefined || cursorRowPosition === 0) {
                     return;
                 }
 
-                const previousRowIndex = this._rowLayoutManager.mapPositionToIndex(cursorRowPosition - 1);
+                const previousRowIndex = this._rowLayoutManager.mapPositionToIndex(
+                    cursorRowPosition - 1,
+                );
                 if (previousRowIndex === undefined) {
                     return;
                 }
@@ -2076,7 +2329,9 @@ export abstract class DataGridInstance {
 
         if (this._cellSelectionIndexes) {
             if (this._cursorRowIndex === this._cellSelectionIndexes.lastRowIndex) {
-                const firstRowPosition = this._rowLayoutManager.mapIndexToPosition(this._cellSelectionIndexes.firstRowIndex);
+                const firstRowPosition = this._rowLayoutManager.mapIndexToPosition(
+                    this._cellSelectionIndexes.firstRowIndex,
+                );
                 if (firstRowPosition === undefined) {
                     return;
                 }
@@ -2085,12 +2340,17 @@ export abstract class DataGridInstance {
                     return;
                 }
 
-                const lastRowPosition = this._rowLayoutManager.mapIndexToPosition(this._cellSelectionIndexes.lastRowIndex);
+                const lastRowPosition = this._rowLayoutManager.mapIndexToPosition(
+                    this._cellSelectionIndexes.lastRowIndex,
+                );
                 if (lastRowPosition === undefined) {
                     return;
                 }
 
-                const rowIndexes = this._rowLayoutManager.mapPositionsToIndexes(firstRowPosition - 1, lastRowPosition);
+                const rowIndexes = this._rowLayoutManager.mapPositionsToIndexes(
+                    firstRowPosition - 1,
+                    lastRowPosition,
+                );
                 if (rowIndexes === undefined) {
                     return;
                 }
@@ -2106,17 +2366,24 @@ export abstract class DataGridInstance {
             }
 
             if (this._cursorRowIndex === this._cellSelectionIndexes.firstRowIndex) {
-                const firstRowPosition = this._rowLayoutManager.mapIndexToPosition(this._cellSelectionIndexes.firstRowIndex);
+                const firstRowPosition = this._rowLayoutManager.mapIndexToPosition(
+                    this._cellSelectionIndexes.firstRowIndex,
+                );
                 if (firstRowPosition === undefined) {
                     return;
                 }
 
-                const lastRowPosition = this._rowLayoutManager.mapIndexToPosition(this._cellSelectionIndexes.lastRowIndex);
+                const lastRowPosition = this._rowLayoutManager.mapIndexToPosition(
+                    this._cellSelectionIndexes.lastRowIndex,
+                );
                 if (lastRowPosition === undefined) {
                     return;
                 }
 
-                const rowIndexes = this._rowLayoutManager.mapPositionsToIndexes(firstRowPosition, lastRowPosition - 1);
+                const rowIndexes = this._rowLayoutManager.mapPositionsToIndexes(
+                    firstRowPosition,
+                    lastRowPosition - 1,
+                );
                 if (rowIndexes === undefined) {
                     return;
                 }
@@ -2142,17 +2409,25 @@ export abstract class DataGridInstance {
             return;
         }
 
-        const cursorColumnPosition = this._columnLayoutManager.mapIndexToPosition(this._cursorColumnIndex);
+        const cursorColumnPosition = this._columnLayoutManager.mapIndexToPosition(
+            this._cursorColumnIndex,
+        );
         if (cursorColumnPosition === undefined) {
             return;
         }
 
-        const columnIndexes = this._columnLayoutManager.mapPositionsToIndexes(cursorColumnPosition, cursorColumnPosition);
+        const columnIndexes = this._columnLayoutManager.mapPositionsToIndexes(
+            cursorColumnPosition,
+            cursorColumnPosition,
+        );
         if (columnIndexes === undefined) {
             return;
         }
 
-        const rowIndexes = this._rowLayoutManager.mapPositionsToIndexes(cursorRowPosition - 1, cursorRowPosition);
+        const rowIndexes = this._rowLayoutManager.mapPositionsToIndexes(
+            cursorRowPosition - 1,
+            cursorRowPosition,
+        );
         if (rowIndexes === undefined) {
             return;
         }
@@ -2170,12 +2445,19 @@ export abstract class DataGridInstance {
 
         if (this._rowSelectionIndexes) {
             if (this._rowSelectionIndexes.contains(this._cursorRowIndex)) {
-                const cursorRowPosition = this._rowLayoutManager.mapIndexToPosition(this._cursorRowIndex);
-                if (cursorRowPosition === undefined || cursorRowPosition === this._rowLayoutManager.entryCount - 1) {
+                const cursorRowPosition = this._rowLayoutManager.mapIndexToPosition(
+                    this._cursorRowIndex,
+                );
+                if (
+                    cursorRowPosition === undefined ||
+                    cursorRowPosition === this._rowLayoutManager.entryCount - 1
+                ) {
                     return;
                 }
 
-                const nextRowIndex = this._rowLayoutManager.mapPositionToIndex(cursorRowPosition + 1);
+                const nextRowIndex = this._rowLayoutManager.mapPositionToIndex(
+                    cursorRowPosition + 1,
+                );
                 if (nextRowIndex === undefined) {
                     return;
                 }
@@ -2198,7 +2480,9 @@ export abstract class DataGridInstance {
 
         if (this._cellSelectionIndexes) {
             if (this._cursorRowIndex === this._cellSelectionIndexes.firstRowIndex) {
-                const lastRowPosition = this._rowLayoutManager.mapIndexToPosition(this._cellSelectionIndexes.lastRowIndex);
+                const lastRowPosition = this._rowLayoutManager.mapIndexToPosition(
+                    this._cellSelectionIndexes.lastRowIndex,
+                );
                 if (lastRowPosition === undefined) {
                     return;
                 }
@@ -2207,12 +2491,17 @@ export abstract class DataGridInstance {
                     return;
                 }
 
-                const firstRowPosition = this._rowLayoutManager.mapIndexToPosition(this._cellSelectionIndexes.firstRowIndex);
+                const firstRowPosition = this._rowLayoutManager.mapIndexToPosition(
+                    this._cellSelectionIndexes.firstRowIndex,
+                );
                 if (firstRowPosition === undefined) {
                     return;
                 }
 
-                const rowIndexes = this._rowLayoutManager.mapPositionsToIndexes(firstRowPosition, lastRowPosition + 1);
+                const rowIndexes = this._rowLayoutManager.mapPositionsToIndexes(
+                    firstRowPosition,
+                    lastRowPosition + 1,
+                );
                 if (rowIndexes === undefined) {
                     return;
                 }
@@ -2228,17 +2517,24 @@ export abstract class DataGridInstance {
             }
 
             if (this._cursorRowIndex === this._cellSelectionIndexes.lastRowIndex) {
-                const firstRowPosition = this._rowLayoutManager.mapIndexToPosition(this._cellSelectionIndexes.firstRowIndex);
+                const firstRowPosition = this._rowLayoutManager.mapIndexToPosition(
+                    this._cellSelectionIndexes.firstRowIndex,
+                );
                 if (firstRowPosition === undefined) {
                     return;
                 }
 
-                const lastRowPosition = this._rowLayoutManager.mapIndexToPosition(this._cellSelectionIndexes.lastRowIndex);
+                const lastRowPosition = this._rowLayoutManager.mapIndexToPosition(
+                    this._cellSelectionIndexes.lastRowIndex,
+                );
                 if (lastRowPosition === undefined) {
                     return;
                 }
 
-                const rowIndexes = this._rowLayoutManager.mapPositionsToIndexes(firstRowPosition + 1, lastRowPosition);
+                const rowIndexes = this._rowLayoutManager.mapPositionsToIndexes(
+                    firstRowPosition + 1,
+                    lastRowPosition,
+                );
                 if (rowIndexes === undefined) {
                     return;
                 }
@@ -2264,17 +2560,25 @@ export abstract class DataGridInstance {
             return;
         }
 
-        const cursorColumnPosition = this._columnLayoutManager.mapIndexToPosition(this._cursorColumnIndex);
+        const cursorColumnPosition = this._columnLayoutManager.mapIndexToPosition(
+            this._cursorColumnIndex,
+        );
         if (cursorColumnPosition === undefined) {
             return;
         }
 
-        const columnIndexes = this._columnLayoutManager.mapPositionsToIndexes(cursorColumnPosition, cursorColumnPosition);
+        const columnIndexes = this._columnLayoutManager.mapPositionsToIndexes(
+            cursorColumnPosition,
+            cursorColumnPosition,
+        );
         if (columnIndexes === undefined) {
             return;
         }
 
-        const rowIndexes = this._rowLayoutManager.mapPositionsToIndexes(cursorRowPosition, cursorRowPosition + 1);
+        const rowIndexes = this._rowLayoutManager.mapPositionsToIndexes(
+            cursorRowPosition,
+            cursorRowPosition + 1,
+        );
         if (rowIndexes === undefined) {
             return;
         }
@@ -2328,7 +2632,7 @@ export abstract class DataGridInstance {
         if (this._cellSelectionIndexes) {
             return new ClipboardCellIndexes(
                 this._cellSelectionIndexes.columnIndexes,
-                this._cellSelectionIndexes.rowIndexes
+                this._cellSelectionIndexes.rowIndexes,
             );
         }
 
@@ -2360,7 +2664,10 @@ export abstract class DataGridInstance {
     }
 
     cellSelectionState(columnIndex: number, rowIndex: number): CellSelectionState {
-        if (this._cellSelectionIndexes && this._cellSelectionIndexes.contains(columnIndex, rowIndex)) {
+        if (
+            this._cellSelectionIndexes &&
+            this._cellSelectionIndexes.contains(columnIndex, rowIndex)
+        ) {
             let cellSelectionState = CellSelectionState.Selected;
 
             if (columnIndex === this._cellSelectionIndexes.firstColumnIndex) {
@@ -2442,7 +2749,9 @@ export abstract class DataGridInstance {
 
     protected scrollToCursor(): void {
         // Get the cursor column layout entry.
-        const cursorColumnLayoutEntry = this._columnLayoutManager.getLayoutEntry(this._cursorColumnIndex);
+        const cursorColumnLayoutEntry = this._columnLayoutManager.getLayoutEntry(
+            this._cursorColumnIndex,
+        );
         if (cursorColumnLayoutEntry) {
             // If the cursor is to the left of the layout, scroll left.
             if (cursorColumnLayoutEntry.start < this._horizontalScrollOffset) {
@@ -2487,7 +2796,7 @@ export abstract class DataGridInstance {
                 this._pendingOnDidUpdateEvent = false;
                 this._onDidUpdateEmitter.fire();
                 // Also update the Svelte store trigger
-                this.updateTrigger.update(n => n + 1);
+                this.updateTrigger.update((n) => n + 1);
             });
         }
     }

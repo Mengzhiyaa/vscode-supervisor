@@ -17,7 +17,9 @@ import {
 
 class MemoryMemento implements vscode.Memento {
     readonly values = new Map<string, unknown>();
-    keys(): readonly string[] { return [...this.values.keys()]; }
+    keys(): readonly string[] {
+        return [...this.values.keys()];
+    }
     get<T>(key: string): T | undefined;
     get<T>(key: string, defaultValue: T): T;
     get<T>(key: string, defaultValue?: T): T | undefined {
@@ -74,9 +76,13 @@ suite('[Unit] Runtime discovery cache', () => {
         const frameworkLog = logChannel();
         const languageLog = logChannel();
         const seen: vscode.LogOutputChannel[] = [];
-        const manager = new RuntimeManager(context, {
-            registerDiscoveredRuntime: () => undefined,
-        } as any, frameworkLog);
+        const manager = new RuntimeManager(
+            context,
+            {
+                registerDiscoveredRuntime: () => undefined,
+            } as any,
+            frameworkLog,
+        );
         const provider = {
             languageId: 'r',
             languageName: 'R',
@@ -84,7 +90,11 @@ suite('[Unit] Runtime discovery cache', () => {
                 seen.push(log);
                 yield { path: '/usr/bin/R' };
             },
-            createRuntimeMetadata: (_context: unknown, installation: unknown, log: vscode.LogOutputChannel) => {
+            createRuntimeMetadata: (
+                _context: unknown,
+                installation: unknown,
+                log: vscode.LogOutputChannel,
+            ) => {
                 seen.push(log);
                 return {
                     runtimeId: 'r-test',
@@ -121,10 +131,14 @@ suite('[Unit] Runtime discovery cache', () => {
     test('ignores dynamic runtime removal events from an old provider generation', () => {
         const context = { globalState: new MemoryMemento() } as unknown as vscode.ExtensionContext;
         const removed: string[] = [];
-        const manager = new RuntimeManager(context, {
-            registerDiscoveredRuntime: () => undefined,
-            unregisterDiscoveredRuntime: (runtimeId: string) => removed.push(runtimeId),
-        } as any, logChannel());
+        const manager = new RuntimeManager(
+            context,
+            {
+                registerDiscoveredRuntime: () => undefined,
+                unregisterDiscoveredRuntime: (runtimeId: string) => removed.push(runtimeId),
+            } as any,
+            logChannel(),
+        );
         const oldDiscover = new vscode.EventEmitter<{ path: string }>();
         const oldRemove = new vscode.EventEmitter<{ runtimeId: string }>();
         const newDiscover = new vscode.EventEmitter<{ path: string }>();
@@ -132,20 +146,25 @@ suite('[Unit] Runtime discovery cache', () => {
         const makeProvider = (
             discover: vscode.Event<{ path: string }>,
             remove: vscode.Event<{ runtimeId: string }>,
-        ) => ({
-            languageId: 'r',
-            onDidDiscoverInstallation: discover,
-            onDidRemoveRuntime: remove,
-            getRuntimePath: (installation: { path: string }) => installation.path,
-            createRuntimeMetadata: (_context: unknown, installation: { path: string }) => ({
-                runtimeId: installation.path,
-                runtimePath: installation.path,
+        ) =>
+            ({
                 languageId: 'r',
-            }),
-        } as any);
+                onDidDiscoverInstallation: discover,
+                onDidRemoveRuntime: remove,
+                getRuntimePath: (installation: { path: string }) => installation.path,
+                createRuntimeMetadata: (_context: unknown, installation: { path: string }) => ({
+                    runtimeId: installation.path,
+                    runtimePath: installation.path,
+                    languageId: 'r',
+                }),
+            }) as any;
 
-        const oldLease = manager.registerRuntimeProvider(makeProvider(oldDiscover.event, oldRemove.event));
-        const newLease = manager.registerRuntimeProvider(makeProvider(newDiscover.event, newRemove.event));
+        const oldLease = manager.registerRuntimeProvider(
+            makeProvider(oldDiscover.event, oldRemove.event),
+        );
+        const newLease = manager.registerRuntimeProvider(
+            makeProvider(newDiscover.event, newRemove.event),
+        );
         newDiscover.fire({ path: 'runtime-1' });
         oldRemove.fire({ runtimeId: 'runtime-1' });
         assert.ok(manager.getRuntime('runtime-1'));
@@ -189,23 +208,27 @@ suite('[Unit] Runtime discovery cache', () => {
         const runtimePath = path.join(directory, 'runtime');
         await fs.writeFile(runtimePath, 'runtime');
         const cache = new RuntimeDiscoveryCache(new MemoryMemento(), logChannel());
-        await cache.replaceBucket('test.extension', 'python', [{
-            runtimeId: 'project-runtime',
-            runtimeName: 'Project Runtime',
-            runtimePath,
-            runtimeVersion: '1',
-            runtimeShortName: '1',
-            runtimeSource: 'workspace',
-            languageId: 'python',
-            languageName: 'Python',
-            languageVersion: '3',
-            startupBehavior: LanguageRuntimeStartupBehavior.Explicit,
-        }], { entries: [] });
-
-        assert.deepStrictEqual(
-            cache.getBucket('test.extension', 'python')?.entries,
-            [],
+        await cache.replaceBucket(
+            'test.extension',
+            'python',
+            [
+                {
+                    runtimeId: 'project-runtime',
+                    runtimeName: 'Project Runtime',
+                    runtimePath,
+                    runtimeVersion: '1',
+                    runtimeShortName: '1',
+                    runtimeSource: 'workspace',
+                    languageId: 'python',
+                    languageName: 'Python',
+                    languageVersion: '3',
+                    startupBehavior: LanguageRuntimeStartupBehavior.Explicit,
+                },
+            ],
+            { entries: [] },
         );
+
+        assert.deepStrictEqual(cache.getBucket('test.extension', 'python')?.entries, []);
         await fs.rm(directory, { recursive: true, force: true });
     });
 
@@ -250,7 +273,7 @@ suite('[Unit] Runtime discovery cache', () => {
             resolveInitialInstallation: async () => undefined,
             promptForInstallation: async () => undefined,
             formatRuntimeName: () => 'Cached Runtime',
-            getRuntimePath: installation => installation.path,
+            getRuntimePath: (installation) => installation.path,
             getRuntimeSource: () => 'test',
             createRuntimeMetadata: () => metadata,
             createKernelSpec: async () => ({
@@ -260,7 +283,7 @@ suite('[Unit] Runtime discovery cache', () => {
                 language: 'cache-language',
                 kernel_protocol_version: '5.3',
             }),
-            restoreInstallationFromMetadata: value => ({ path: value.runtimePath }),
+            restoreInstallationFromMetadata: (value) => ({ path: value.runtimePath }),
         };
 
         const first = new RuntimeManager(context, sessionManager, logChannel());
@@ -295,21 +318,31 @@ suite('[Unit] Runtime discovery cache', () => {
     test('prefers a freshly resolved workspace installation over a cached global installation', async () => {
         const context = { globalState: new MemoryMemento() } as unknown as vscode.ExtensionContext;
         const registered: LanguageRuntimeMetadata[] = [];
-        const manager = new RuntimeManager(context, {
-            registerDiscoveredRuntime: (_languageId: string, _installation: unknown, metadata: LanguageRuntimeMetadata) => {
-                registered.push(metadata);
-            },
-        } as any, logChannel());
+        const manager = new RuntimeManager(
+            context,
+            {
+                registerDiscoveredRuntime: (
+                    _languageId: string,
+                    _installation: unknown,
+                    metadata: LanguageRuntimeMetadata,
+                ) => {
+                    registered.push(metadata);
+                },
+            } as any,
+            logChannel(),
+        );
         const globalInstallation = { path: '/usr/bin/python' };
         const workspaceInstallation = { path: '/workspace/.venv/bin/python' };
         const provider: ILanguageRuntimeProvider<{ path: string }> = {
             languageId: 'python',
             languageName: 'Python',
-            discoverInstallations: async function* () { return; },
+            discoverInstallations: async function* () {
+                return;
+            },
             resolveInitialInstallation: async () => workspaceInstallation,
             promptForInstallation: async () => undefined,
-            formatRuntimeName: installation => installation.path,
-            getRuntimePath: installation => installation.path,
+            formatRuntimeName: (installation) => installation.path,
+            getRuntimePath: (installation) => installation.path,
             getRuntimeSource: () => 'test',
             createRuntimeMetadata: (_extensionContext, installation) => ({
                 runtimeId: installation.path,
@@ -332,11 +365,11 @@ suite('[Unit] Runtime discovery cache', () => {
             shouldRecommendForWorkspace: async () => true,
         };
         manager.registerRuntimeProvider(provider);
-        manager.registerDiscoveredRuntime('python', globalInstallation, provider.createRuntimeMetadata(
-            context,
+        manager.registerDiscoveredRuntime(
+            'python',
             globalInstallation,
-            logChannel(),
-        ));
+            provider.createRuntimeMetadata(context, globalInstallation, logChannel()),
+        );
 
         const recommendations = await manager.recommendWorkspaceRuntimes([]);
 

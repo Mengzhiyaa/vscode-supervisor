@@ -4,24 +4,24 @@
      * Displays plots with per-session state tracking.
      * Follows Positron's pattern of maintaining separate state per session.
      */
-    import { onMount, tick } from "svelte";
-    import { copyImageToClipboard } from "$lib/imageClipboard";
-    import { localize } from "$lib/localization";
+    import { onMount, tick } from 'svelte';
+    import { copyImageToClipboard } from '$lib/imageClipboard';
+    import { localize } from '$lib/localization';
 
-    import { getRpcConnection } from "$lib/rpc/client";
-    import ActionBar from "./ActionBar.svelte";
-    import PlotsContainer from "./PlotsContainer.svelte";
-    import type { MessageConnection } from "vscode-jsonrpc/browser";
+    import { getRpcConnection } from '$lib/rpc/client';
+    import ActionBar from './ActionBar.svelte';
+    import PlotsContainer from './PlotsContainer.svelte';
+    import type { MessageConnection } from 'vscode-jsonrpc/browser';
     import {
         ZoomLevel,
         DarkFilter,
         HistoryPolicy,
         HistoryPosition,
         type EditorTarget,
-    } from "./types";
-    import CustomSizeDialog from "./CustomSizeDialog.svelte";
+    } from './types';
+    import CustomSizeDialog from './CustomSizeDialog.svelte';
 
-    let copyError = $state("");
+    let copyError = $state('');
 
     interface Plot {
         id: string;
@@ -29,7 +29,7 @@
         thumbnail?: string;
         cachedThumbnail?: string;
         renderVersion?: number;
-        state?: import("@shared/plots").PlotClientState;
+        state?: import('@shared/plots').PlotClientState;
         renderEstimateMs?: number;
         /** Initial image data to display without a render request */
         initialData?: string;
@@ -38,7 +38,7 @@
             height: number;
             pixelRatio: number;
         };
-        kind?: "static" | "dynamic" | "html";
+        kind?: 'static' | 'dynamic' | 'html';
         htmlUri?: string;
         htmlActive?: boolean;
         originUri?: string;
@@ -63,16 +63,16 @@
         name: string;
         runtimeName: string;
         state:
-            | "uninitialized"
-            | "starting"
-            | "ready"
-            | "busy"
-            | "offline"
-            | "interrupting"
-            | "restarting"
-            | "exiting"
-            | "exited"
-            | "disconnected";
+            | 'uninitialized'
+            | 'starting'
+            | 'ready'
+            | 'busy'
+            | 'offline'
+            | 'interrupting'
+            | 'restarting'
+            | 'exiting'
+            | 'exited'
+            | 'disconnected';
     }
 
     interface PlotsListResult {
@@ -85,7 +85,7 @@
         unchanged?: boolean;
     }
 
-    type PlotPatch = Partial<Omit<Plot, "id">>;
+    type PlotPatch = Partial<Omit<Plot, 'id'>>;
 
     interface PlotAddedParams {
         plotId: string;
@@ -98,7 +98,7 @@
         };
         renderVersion?: number;
         sessionId?: string;
-        kind?: "static" | "dynamic" | "html";
+        kind?: 'static' | 'dynamic' | 'html';
         htmlUri?: string;
         htmlActive?: boolean;
         originUri?: string;
@@ -129,7 +129,7 @@
         renderVersion: number;
     }
 
-    type PlotDisplayMode = "all" | "active";
+    type PlotDisplayMode = 'all' | 'active';
     const HISTORY_LOAD_THRESHOLD_PX = 80;
     const HISTORY_PAGE_FALLBACK_SIZE = 16;
     const HISTORY_PAGE_MIN_SIZE = 8;
@@ -146,12 +146,12 @@
     let allPlots = $state<Plot[]>([]);
     let selectedPlotId = $state<string | null>(null);
     let lastSelectedPlotId: string | null = null;
-    let plotDisplayMode = $state<PlotDisplayMode>("all");
+    let plotDisplayMode = $state<PlotDisplayMode>('all');
     let connection = $state<MessageConnection | undefined>();
     let darkFilterMode = $state<DarkFilter>(DarkFilter.Auto);
     let historyPolicy = $state<HistoryPolicy>(HistoryPolicy.Automatic);
     let historyPosition = $state<HistoryPosition>(HistoryPosition.Auto);
-    let openInEditorDefaultTarget = $state<EditorTarget>("activeGroup");
+    let openInEditorDefaultTarget = $state<EditorTarget>('activeGroup');
     let plotsListCursor = $state(0);
     let totalPlotsCount = $state<number | undefined>(undefined);
     let hasMorePlotsHistory = $state(false);
@@ -160,12 +160,12 @@
 
     // Sizing policy state (Positron integration)
     let sizingPolicies = $state<SizingPolicyInfo[]>([
-        { id: "auto", name: "Auto" },
-        { id: "square", name: "Square" },
-        { id: "landscape", name: "Landscape" },
-        { id: "portrait", name: "Portrait" },
-        { id: "fill", name: "Fill" },
-        { id: "intrinsic", name: "Intrinsic" },
+        { id: 'auto', name: 'Auto' },
+        { id: 'square', name: 'Square' },
+        { id: 'landscape', name: 'Landscape' },
+        { id: 'portrait', name: 'Portrait' },
+        { id: 'fill', name: 'Fill' },
+        { id: 'intrinsic', name: 'Intrinsic' },
     ]);
     let showCustomSizeDialog = $state(false);
 
@@ -177,7 +177,7 @@
 
     // Derived: filter plots by active session (show all if no session filter)
     const plots = $derived(
-        plotDisplayMode === "active" && activeSessionId
+        plotDisplayMode === 'active' && activeSessionId
             ? allPlots.filter((p) => p.sessionId === activeSessionId)
             : allPlots,
     );
@@ -199,15 +199,14 @@
     );
     const selectedPlot = $derived(
         selectedPlotId
-            ? (plots.find((p) => p.id === selectedPlotId) ??
-                  plots[plots.length - 1])
+            ? (plots.find((p) => p.id === selectedPlotId) ?? plots[plots.length - 1])
             : plots[plots.length - 1],
     );
 
     const selectedPlotSessionName = $derived(
         selectedPlot?.sessionId
-            ? (sessions.find((session) => session.id === selectedPlot.sessionId)
-                  ?.name ?? selectedPlot.sessionId)
+            ? (sessions.find((session) => session.id === selectedPlot.sessionId)?.name ??
+                  selectedPlot.sessionId)
             : undefined,
     );
 
@@ -220,36 +219,26 @@
 
         try {
             const pathname = new URL(selectedOriginUri).pathname;
-            const segments = decodeURIComponent(pathname)
-                .split("/")
-                .filter(Boolean);
+            const segments = decodeURIComponent(pathname).split('/').filter(Boolean);
             return segments[segments.length - 1];
         } catch {
             return undefined;
         }
     });
 
-    const selectedPlotZoomLevel = $derived(
-        selectedPlot?.zoomLevel ?? ZoomLevel.Fit,
-    );
+    const selectedPlotZoomLevel = $derived(selectedPlot?.zoomLevel ?? ZoomLevel.Fit);
 
-    const selectedPlotSizingPolicyId = $derived(
-        selectedPlot?.sizingPolicyId ?? "auto",
-    );
+    const selectedPlotSizingPolicyId = $derived(selectedPlot?.sizingPolicyId ?? 'auto');
 
     const selectedPlotCustomSize = $derived(selectedPlot?.customSize);
 
-    const selectedPlotHasIntrinsicSize = $derived(
-        selectedPlot?.hasIntrinsicSize ?? false,
-    );
+    const selectedPlotHasIntrinsicSize = $derived(selectedPlot?.hasIntrinsicSize ?? false);
 
     // Show history based on history policy:
     // - AlwaysVisible: always show when plots exist
     // - NeverVisible: never show
     // - Automatic: show when there are 2+ plots and enough space
-    const hasHistoryViewportSpace = $derived(
-        containerWidth >= 300 && containerHeight >= 300,
-    );
+    const hasHistoryViewportSpace = $derived(containerWidth >= 300 && containerHeight >= 300);
     const showHistory = $derived(
         historyPolicy === HistoryPolicy.NeverVisible
             ? false
@@ -263,7 +252,7 @@
     let plotViewportWidth = $state(1);
     let plotViewportHeight = $state(1);
     let viewportUpdateTimeout: ReturnType<typeof setTimeout> | null = null;
-    let lastViewportKey = "";
+    let lastViewportKey = '';
     const isGalleryEditor = Boolean(
         (window as Window & { __ARK_PLOTS_GALLERY_EDITOR__?: boolean })
             .__ARK_PLOTS_GALLERY_EDITOR__,
@@ -278,7 +267,7 @@
             (event.metaKey || event.ctrlKey) &&
             !event.shiftKey &&
             !event.altKey &&
-            event.key.toLowerCase() === "w";
+            event.key.toLowerCase() === 'w';
         if (!isCloseShortcut) {
             return;
         }
@@ -292,15 +281,13 @@
         }
 
         try {
-            await connection.sendRequest("plots/closeAuxPanel");
+            await connection.sendRequest('plots/closeAuxPanel');
         } catch (e) {
-            console.error("Failed to close gallery auxiliary panel:", e);
+            console.error('Failed to close gallery auxiliary panel:', e);
         }
     }
 
-    function clonePlotSize(
-        size: Plot["customSize"],
-    ): Plot["customSize"] | undefined {
+    function clonePlotSize(size: Plot['customSize']): Plot['customSize'] | undefined {
         if (!size) {
             return undefined;
         }
@@ -323,20 +310,14 @@
         selectedPlotId = nextPlotId;
     }
 
-    function patchPlot(
-        plotId: string,
-        patch: PlotPatch | ((plot: Plot) => Plot),
-    ): void {
+    function patchPlot(plotId: string, patch: PlotPatch | ((plot: Plot) => Plot)): void {
         let changed = false;
         const nextPlots = allPlots.map((plot) => {
             if (plot.id !== plotId) {
                 return plot;
             }
 
-            const nextPlot =
-                typeof patch === "function"
-                    ? patch(plot)
-                    : { ...plot, ...patch };
+            const nextPlot = typeof patch === 'function' ? patch(plot) : { ...plot, ...patch };
 
             changed ||= nextPlot !== plot;
             return nextPlot;
@@ -348,13 +329,13 @@
     }
 
     function upsertPlotFromAdded(params: PlotAddedParams): void {
-        if (typeof params.revision === "number" && params.revision < lastAppliedRevision) {
+        if (typeof params.revision === 'number' && params.revision < lastAppliedRevision) {
             return;
         }
         const existing = allPlots.find((plot) => plot.id === params.plotId);
         const isNewPlot = !existing;
         const isStaleRender =
-            typeof params.renderVersion === "number" &&
+            typeof params.renderVersion === 'number' &&
             existing &&
             params.renderVersion < (existing.renderVersion ?? 0);
 
@@ -366,16 +347,12 @@
                 : (params.thumbnail ?? existing?.thumbnail),
             cachedThumbnail: isStaleRender
                 ? existing.cachedThumbnail
-                : (params.thumbnail ??
-                  existing?.cachedThumbnail ??
-                  existing?.thumbnail),
+                : (params.thumbnail ?? existing?.cachedThumbnail ?? existing?.thumbnail),
             renderVersion: isStaleRender
-                ? existing.renderVersion ?? 0
-                : params.renderVersion ?? existing?.renderVersion,
+                ? (existing.renderVersion ?? 0)
+                : (params.renderVersion ?? existing?.renderVersion),
             initialData: params.initialData ?? existing?.initialData,
-            initialRenderSettings:
-                params.initialRenderSettings ??
-                existing?.initialRenderSettings,
+            initialRenderSettings: params.initialRenderSettings ?? existing?.initialRenderSettings,
             kind: params.kind ?? existing?.kind,
             htmlUri: params.htmlUri ?? existing?.htmlUri,
             // Legacy producers did not send this field and should remain
@@ -386,16 +363,10 @@
             code: params.code ?? existing?.code,
             parentId: params.parentId ?? existing?.parentId,
             languageId: params.languageId ?? existing?.languageId,
-            zoomLevel:
-                (params.zoomLevel as ZoomLevel | undefined) ??
-                existing?.zoomLevel,
-            sizingPolicyId:
-                params.sizingPolicyId ?? existing?.sizingPolicyId,
-            customSize:
-                clonePlotSize(params.customSize) ??
-                clonePlotSize(existing?.customSize),
-            hasIntrinsicSize:
-                params.hasIntrinsicSize ?? existing?.hasIntrinsicSize,
+            zoomLevel: (params.zoomLevel as ZoomLevel | undefined) ?? existing?.zoomLevel,
+            sizingPolicyId: params.sizingPolicyId ?? existing?.sizingPolicyId,
+            customSize: clonePlotSize(params.customSize) ?? clonePlotSize(existing?.customSize),
+            hasIntrinsicSize: params.hasIntrinsicSize ?? existing?.hasIntrinsicSize,
             created: params.created ?? existing?.created,
         });
         const existingIndex = allPlots.findIndex((plot) => plot.id === params.plotId);
@@ -406,7 +377,7 @@
         } else {
             allPlots = [...allPlots, nextPlot];
         }
-        if (typeof params.revision === "number") {
+        if (typeof params.revision === 'number') {
             lastAppliedRevision = Math.max(lastAppliedRevision, params.revision);
         }
 
@@ -415,7 +386,7 @@
         }
 
         plotsListCursor += 1;
-        if (typeof totalPlotsCount === "number") {
+        if (typeof totalPlotsCount === 'number') {
             totalPlotsCount += 1;
             hasMorePlotsHistory = plotsListCursor < totalPlotsCount;
         }
@@ -437,15 +408,13 @@
         if (removedLoadedCount > 0) {
             plotsListCursor = Math.max(0, plotsListCursor - removedLoadedCount);
         }
-        if (typeof totalPlotsCount === "number") {
+        if (typeof totalPlotsCount === 'number') {
             totalPlotsCount = Math.max(0, totalPlotsCount - plotIds.length);
             hasMorePlotsHistory = plotsListCursor < totalPlotsCount;
         }
 
         if (selectedPlotId && removedIds.has(selectedPlotId)) {
-            setSelectedPlotId(
-                allPlots.length > 0 ? allPlots[allPlots.length - 1].id : null,
-            );
+            setSelectedPlotId(allPlots.length > 0 ? allPlots[allPlots.length - 1].id : null);
         }
     }
 
@@ -462,7 +431,7 @@
         const existing = allPlots.find((plot) => plot.id === params.plotId);
         if (
             existing &&
-            typeof existing.renderVersion === "number" &&
+            typeof existing.renderVersion === 'number' &&
             params.renderVersion < (existing.renderVersion ?? 0)
         ) {
             return;
@@ -488,29 +457,21 @@
 
         patchPlot(params.plotId, (plot) => ({
             ...plot,
-            renderVersion: Math.max(
-                plot.renderVersion ?? 0,
-                params.renderVersion,
-            ),
+            renderVersion: Math.max(plot.renderVersion ?? 0, params.renderVersion),
         }));
     }
 
     function applyPlotsPage(result: PlotsListResult): void {
-        if (typeof result.revision === "number" && result.revision < lastAppliedRevision) {
+        if (typeof result.revision === 'number' && result.revision < lastAppliedRevision) {
             return;
         }
-        const normalized = (result.plots ?? []).map((plot) =>
-            normalizePlot(plot),
-        );
+        const normalized = (result.plots ?? []).map((plot) => normalizePlot(plot));
 
         allPlots = normalized;
-        if (typeof result.revision === "number") {
+        if (typeof result.revision === 'number') {
             lastAppliedRevision = result.revision;
         }
-        plotsListCursor =
-            result.nextCursor !== undefined
-                ? result.nextCursor
-                : normalized.length;
+        plotsListCursor = result.nextCursor !== undefined ? result.nextCursor : normalized.length;
         totalPlotsCount = result.totalCount;
         hasMorePlotsHistory = Boolean(result.hasMore);
 
@@ -522,9 +483,7 @@
         );
     }
 
-    function updateSelectionFromNotification(
-        params: SelectedPlotChangedParams,
-    ): void {
+    function updateSelectionFromNotification(params: SelectedPlotChangedParams): void {
         const nextPlotId = params.plotId ?? null;
         if (nextPlotId !== selectedPlotId) {
             setSelectedPlotId(nextPlotId, { preventServerEcho: true });
@@ -545,10 +504,10 @@
         if (params.customSize !== undefined) {
             nextPatch.customSize = clonePlotSize(params.customSize);
         }
-        if (typeof params.hasIntrinsicSize === "boolean") {
+        if (typeof params.hasIntrinsicSize === 'boolean') {
             nextPatch.hasIntrinsicSize = params.hasIntrinsicSize;
         }
-        if (typeof params.zoomLevel === "number") {
+        if (typeof params.zoomLevel === 'number') {
             nextPatch.zoomLevel = params.zoomLevel as ZoomLevel;
         }
 
@@ -560,12 +519,9 @@
     function normalizePlot(plot: Plot): Plot {
         return {
             ...plot,
-            renderVersion:
-                typeof plot.renderVersion === "number" ? plot.renderVersion : 0,
+            renderVersion: typeof plot.renderVersion === 'number' ? plot.renderVersion : 0,
             zoomLevel:
-                typeof plot.zoomLevel === "number"
-                    ? (plot.zoomLevel as ZoomLevel)
-                    : ZoomLevel.Fit,
+                typeof plot.zoomLevel === 'number' ? (plot.zoomLevel as ZoomLevel) : ZoomLevel.Fit,
             sizingPolicyId: plot.sizingPolicyId,
             customSize: clonePlotSize(plot.customSize),
             hasIntrinsicSize: plot.hasIntrinsicSize,
@@ -623,9 +579,7 @@
                 viewportExtent = measuredViewportExtent;
             }
 
-            const firstThumbnail = scroller.querySelector(
-                ".plot-thumbnail",
-            ) as HTMLElement | null;
+            const firstThumbnail = scroller.querySelector('.plot-thumbnail') as HTMLElement | null;
             if (firstThumbnail) {
                 const rect = firstThumbnail.getBoundingClientRect();
                 const style = getComputedStyle(firstThumbnail);
@@ -636,28 +590,19 @@
                     ? parseCssPx(style.marginRight)
                     : parseCssPx(style.marginBottom);
                 const measuredItemExtent =
-                    (historyBottom ? rect.width : rect.height) +
-                    marginStart +
-                    marginEnd;
+                    (historyBottom ? rect.width : rect.height) + marginStart + marginEnd;
                 if (measuredItemExtent > 0) {
                     itemExtent = measuredItemExtent;
                 }
             }
         }
 
-        const visibleCount = Math.max(
-            1,
-            Math.ceil(viewportExtent / itemExtent),
-        );
+        const visibleCount = Math.max(1, Math.ceil(viewportExtent / itemExtent));
         const estimatedPageSize = Math.max(
             HISTORY_PAGE_FALLBACK_SIZE,
             visibleCount * HISTORY_PAGE_OVERSCAN,
         );
-        return clamp(
-            Math.ceil(estimatedPageSize),
-            HISTORY_PAGE_MIN_SIZE,
-            HISTORY_PAGE_MAX_SIZE,
-        );
+        return clamp(Math.ceil(estimatedPageSize), HISTORY_PAGE_MIN_SIZE, HISTORY_PAGE_MAX_SIZE);
     }
 
     async function requestPlotsPage(
@@ -669,13 +614,13 @@
         }
 
         try {
-            return (await connection.sendRequest("plots/list", {
+            return (await connection.sendRequest('plots/list', {
                 cursor,
                 limit,
                 knownRevision: cursor === 0 ? lastAppliedRevision : undefined,
             })) as PlotsListResult;
         } catch (e) {
-            console.error("Failed to list plots page:", e);
+            console.error('Failed to list plots page:', e);
             return undefined;
         }
     }
@@ -704,37 +649,29 @@
             : 0;
 
         try {
-            const page = await requestPlotsPage(
-                plotsListCursor,
-                getHistoryPageSize(),
-            );
+            const page = await requestPlotsPage(plotsListCursor, getHistoryPageSize());
             if (!page) {
                 return;
             }
-            if (typeof page.revision === "number" && page.revision < lastAppliedRevision) {
+            if (typeof page.revision === 'number' && page.revision < lastAppliedRevision) {
                 return;
             }
-            if (typeof page.revision === "number") {
+            if (typeof page.revision === 'number') {
                 lastAppliedRevision = page.revision;
             }
 
-            const normalized = (page.plots ?? []).map((plot) =>
-                normalizePlot(plot),
-            );
+            const normalized = (page.plots ?? []).map((plot) => normalizePlot(plot));
             mergeOlderPlots(normalized);
 
-            plotsListCursor =
-                page.nextCursor ?? plotsListCursor + normalized.length;
+            plotsListCursor = page.nextCursor ?? plotsListCursor + normalized.length;
             hasMorePlotsHistory = Boolean(page.hasMore);
-            if (typeof page.totalCount === "number") {
+            if (typeof page.totalCount === 'number') {
                 totalPlotsCount = page.totalCount;
             }
 
             if (normalized.length > 0 && scroller) {
                 await tick();
-                const afterExtent = historyBottom
-                    ? scroller.scrollWidth
-                    : scroller.scrollHeight;
+                const afterExtent = historyBottom ? scroller.scrollWidth : scroller.scrollHeight;
                 const delta = Math.max(0, afterExtent - beforeExtent);
                 if (historyBottom) {
                     scroller.scrollLeft = beforeOffset + delta;
@@ -752,24 +689,21 @@
         scheduleViewportUpdate();
 
         // Listen for new plots with sessionId
-        connection.onNotification(
-            "plots/added",
-            (params: PlotAddedParams) => {
-                if (!params.sessionId) {
-                    console.warn("[Plots] Dropping plot without sessionId");
-                    return;
-                }
-                upsertPlotFromAdded(params);
-            },
-        );
-
-        // Listen for plots cleared
-        connection.onNotification("plots/cleared", (params?: { revision?: number }) => {
-            const revision = params?.revision;
-            if (typeof revision === "number" && revision < lastAppliedRevision) {
+        connection.onNotification('plots/added', (params: PlotAddedParams) => {
+            if (!params.sessionId) {
+                console.warn('[Plots] Dropping plot without sessionId');
                 return;
             }
-            if (typeof revision === "number") {
+            upsertPlotFromAdded(params);
+        });
+
+        // Listen for plots cleared
+        connection.onNotification('plots/cleared', (params?: { revision?: number }) => {
+            const revision = params?.revision;
+            if (typeof revision === 'number' && revision < lastAppliedRevision) {
+                return;
+            }
+            if (typeof revision === 'number') {
                 lastAppliedRevision = Math.max(lastAppliedRevision, revision);
             }
             clearPlotsState();
@@ -777,12 +711,12 @@
 
         // Listen for plots removed (session-specific cleanup)
         connection.onNotification(
-            "plots/removed",
+            'plots/removed',
             (params: { plotIds: string[]; sessionId: string; revision?: number }) => {
-                if (typeof params.revision === "number" && params.revision < lastAppliedRevision) {
+                if (typeof params.revision === 'number' && params.revision < lastAppliedRevision) {
                     return;
                 }
-                if (typeof params.revision === "number") {
+                if (typeof params.revision === 'number') {
                     lastAppliedRevision = Math.max(lastAppliedRevision, params.revision);
                 }
                 removePlots(params.plotIds);
@@ -791,7 +725,7 @@
 
         // Listen for session info updates
         connection.onNotification(
-            "session/info",
+            'session/info',
             (params: { sessions: SessionInfo[]; activeSessionId?: string }) => {
                 sessions = params.sessions;
                 activeSessionId = resolveActiveSessionId(
@@ -805,9 +739,7 @@
         // Fetch initial plots/history state (session state is push-based via session/info).
         (async () => {
             try {
-                const historyState = (await connection!.sendRequest(
-                    "plots/getHistoryState",
-                )) as {
+                const historyState = (await connection!.sendRequest('plots/getHistoryState')) as {
                     policy?: HistoryPolicy;
                     position?: HistoryPosition;
                 };
@@ -818,29 +750,29 @@
                     historyPosition = historyState.position;
                 }
             } catch (e) {
-                console.error("Failed to get history state:", e);
+                console.error('Failed to get history state:', e);
             }
 
             try {
                 const darkFilterState = (await connection!.sendRequest(
-                    "plots/getDarkFilterMode",
+                    'plots/getDarkFilterMode',
                 )) as { mode?: DarkFilter };
                 if (darkFilterState.mode) {
                     darkFilterMode = darkFilterState.mode;
                 }
             } catch (e) {
-                console.error("Failed to get dark filter mode:", e);
+                console.error('Failed to get dark filter mode:', e);
             }
 
             try {
                 const editorTargetState = (await connection!.sendRequest(
-                    "plots/getPreferredEditorTarget",
+                    'plots/getPreferredEditorTarget',
                 )) as { target?: EditorTarget };
                 if (editorTargetState.target) {
                     openInEditorDefaultTarget = editorTargetState.target;
                 }
             } catch (e) {
-                console.error("Failed to get preferred editor target:", e);
+                console.error('Failed to get preferred editor target:', e);
             }
 
             // Load plots.
@@ -850,20 +782,20 @@
                     applyPlotsPage(result);
                 }
             } catch (e) {
-                console.error("Failed to list plots:", e);
+                console.error('Failed to list plots:', e);
             }
 
             try {
                 await tick();
-                scrollSelectedThumbnailIntoView({ behavior: "auto" });
+                scrollSelectedThumbnailIntoView({ behavior: 'auto' });
             } catch (e) {
-                console.error("Failed to position history scroller:", e);
+                console.error('Failed to position history scroller:', e);
             }
         })();
 
         // Listen for sizing policy changes
         connection.onNotification(
-            "plots/sizingPolicyChanged",
+            'plots/sizingPolicyChanged',
             (params: {
                 plotId?: string;
                 policyId: string;
@@ -874,8 +806,7 @@
                     sizingPolicies = params.policies;
                 }
 
-                const targetPlotId =
-                    params.plotId ?? selectedPlotId ?? undefined;
+                const targetPlotId = params.plotId ?? selectedPlotId ?? undefined;
                 if (targetPlotId) {
                     patchPlot(targetPlotId, {
                         sizingPolicyId: params.policyId,
@@ -885,17 +816,14 @@
             },
         );
 
-        connection.onNotification(
-            "plots/selectedChanged",
-            (params: SelectedPlotChangedParams) => {
-                updateSelectionFromNotification(params);
-            },
-        );
+        connection.onNotification('plots/selectedChanged', (params: SelectedPlotChangedParams) => {
+            updateSelectionFromNotification(params);
+        });
 
         connection.onNotification(
-            "plots/zoomChanged",
+            'plots/zoomChanged',
             (params: { plotId: string; zoomLevel: number }) => {
-                if (typeof params.zoomLevel !== "number") {
+                if (typeof params.zoomLevel !== 'number') {
                     return;
                 }
 
@@ -905,32 +833,29 @@
             },
         );
 
-        connection.sendNotification("plots/ready");
+        connection.sendNotification('plots/ready');
 
         // Listen for history policy changes
         connection.onNotification(
-            "plots/historyPolicyChanged",
+            'plots/historyPolicyChanged',
             (params: { policy: HistoryPolicy }) => {
                 historyPolicy = params.policy;
             },
         );
 
         connection.onNotification(
-            "plots/historyPositionChanged",
+            'plots/historyPositionChanged',
             (params: { position: HistoryPosition }) => {
                 historyPosition = params.position;
             },
         );
 
-        connection.onNotification(
-            "plots/darkFilterModeChanged",
-            (params: { mode: DarkFilter }) => {
-                darkFilterMode = params.mode;
-            },
-        );
+        connection.onNotification('plots/darkFilterModeChanged', (params: { mode: DarkFilter }) => {
+            darkFilterMode = params.mode;
+        });
 
         connection.onNotification(
-            "plots/updated",
+            'plots/updated',
             (params: {
                 plotId: string;
                 name?: string;
@@ -951,7 +876,7 @@
         );
 
         connection.onNotification(
-            "plots/htmlPlotStateChanged",
+            'plots/htmlPlotStateChanged',
             (params: { plotId: string; active: boolean }) => {
                 patchPlot(params.plotId, { htmlActive: params.active });
             },
@@ -959,22 +884,30 @@
 
         // Listen for plot state changes
         connection.onNotification(
-            "plots/plotStateChanged",
+            'plots/plotStateChanged',
             (params: { plotId: string; state: string }) => {
                 // Could update plot state tracking here
                 console.log(`Plot ${params.plotId} state: ${params.state}`);
             },
         );
 
-        connection.onNotification("plots/plotStateChanged", (params: {
-            plotId: string; state: import("@shared/plots").PlotClientState; renderEstimateMs: number;
-        }) => {
-            patchPlot(params.plotId, { state: params.state, renderEstimateMs: params.renderEstimateMs });
-        });
+        connection.onNotification(
+            'plots/plotStateChanged',
+            (params: {
+                plotId: string;
+                state: import('@shared/plots').PlotClientState;
+                renderEstimateMs: number;
+            }) => {
+                patchPlot(params.plotId, {
+                    state: params.state,
+                    renderEstimateMs: params.renderEstimateMs,
+                });
+            },
+        );
 
         // Listen for render completion and keep thumbnail list in sync.
         connection.onNotification(
-            "plots/renderCompleted",
+            'plots/renderCompleted',
             (params: {
                 plotId: string;
                 uri?: string;
@@ -1037,16 +970,16 @@
     // Plot actions
     async function handleSave() {
         if (!connection || !selectedPlotId) return;
-        if (selectedPlot?.kind === "html") {
-            console.warn("Save not supported for HTML plots");
+        if (selectedPlot?.kind === 'html') {
+            console.warn('Save not supported for HTML plots');
             return;
         }
         try {
-            await connection.sendRequest("plots/save", {
+            await connection.sendRequest('plots/save', {
                 plotId: selectedPlotId,
             });
         } catch (e) {
-            console.error("Failed to save plot:", e);
+            console.error('Failed to save plot:', e);
         }
     }
 
@@ -1054,14 +987,15 @@
         plotId: string,
         copyConnection: MessageConnection | undefined,
     ): Promise<string | null> {
-        if (selectedPlotId === plotId && selectedPlot?.kind === "html") {
+        if (selectedPlotId === plotId && selectedPlot?.kind === 'html') {
             return null;
         }
-        const imageElement = selectedPlotId === plotId
-            ? plotViewportElement?.querySelector("img.plot") as HTMLImageElement | null
-            : null;
-        const src = imageElement?.getAttribute("src");
-        if (src && src.startsWith("data:")) {
+        const imageElement =
+            selectedPlotId === plotId
+                ? (plotViewportElement?.querySelector('img.plot') as HTMLImageElement | null)
+                : null;
+        const src = imageElement?.getAttribute('src');
+        if (src && src.startsWith('data:')) {
             return src;
         }
 
@@ -1073,11 +1007,11 @@
             const width = plotViewportElement?.clientWidth || 400;
             const height = plotViewportElement?.clientHeight || 400;
             const pixelRatio = window.devicePixelRatio || 1;
-            const result = (await copyConnection.sendRequest("plots/render", {
+            const result = (await copyConnection.sendRequest('plots/render', {
                 plotId,
                 width,
                 height,
-                format: "png",
+                format: 'png',
                 pixelRatio,
             })) as {
                 data: string;
@@ -1089,49 +1023,52 @@
                 return null;
             }
 
-            return result.data.startsWith("data:")
+            return result.data.startsWith('data:')
                 ? result.data
                 : `data:${result.mimeType};base64,${result.data}`;
         } catch (e) {
-            console.error("Failed to render plot for clipboard:", e);
+            console.error('Failed to render plot for clipboard:', e);
             return null;
         }
     }
 
     async function handleCopy() {
         if (!selectedPlotId) return;
-        if (selectedPlot?.kind === "html") {
-            console.warn("Copy not supported for HTML plots");
+        if (selectedPlot?.kind === 'html') {
+            console.warn('Copy not supported for HTML plots');
             return;
         }
         const plotId = selectedPlotId;
         const copyConnection = connection;
-        copyError = "";
+        copyError = '';
         const dataUri = await resolvePlotDataUri(plotId, copyConnection);
         try {
-            if (!dataUri) throw new Error("No image available");
+            if (!dataUri) throw new Error('No image available');
             await copyImageToClipboard(dataUri);
             return;
         } catch {
             if (selectedPlotId === plotId) {
-                copyError = localize("plots.copyUnavailable", "Image could not be copied. Use Save Plot to export it.");
+                copyError = localize(
+                    'plots.copyUnavailable',
+                    'Image could not be copied. Use Save Plot to export it.',
+                );
             }
         }
 
         try {
             if (copyConnection) {
-                const result = await copyConnection.sendRequest("plots/copy", {
+                const result = (await copyConnection.sendRequest('plots/copy', {
                     plotId,
-                }) as { success: boolean; error?: string };
+                })) as { success: boolean; error?: string };
                 if (!result.success) {
-                    throw new Error(result.error ?? "Image clipboard is unavailable");
+                    throw new Error(result.error ?? 'Image clipboard is unavailable');
                 }
                 return;
             }
 
-            throw new Error("Image clipboard is unavailable");
+            throw new Error('Image clipboard is unavailable');
         } catch (e) {
-            console.error("Failed to copy plot:", e);
+            console.error('Failed to copy plot:', e);
         }
     }
 
@@ -1143,7 +1080,7 @@
         patchPlot(selectedPlotId, { zoomLevel });
 
         if (connection) {
-            void connection.sendRequest("plots/selectZoom", {
+            void connection.sendRequest('plots/selectZoom', {
                 plotId: selectedPlotId,
                 zoomLevel,
             });
@@ -1158,11 +1095,11 @@
         }
 
         try {
-            await connection.sendRequest("plots/selectDarkFilterMode", {
+            await connection.sendRequest('plots/selectDarkFilterMode', {
                 mode,
             });
         } catch (e) {
-            console.error("Failed to update dark filter mode:", e);
+            console.error('Failed to update dark filter mode:', e);
         }
     }
 
@@ -1170,11 +1107,11 @@
     async function handleSelectSizingPolicy(policyId: string) {
         if (!connection) return;
         try {
-            await connection.sendRequest("plots/selectSizingPolicy", {
+            await connection.sendRequest('plots/selectSizingPolicy', {
                 policyId,
             });
         } catch (e) {
-            console.error("Failed to select sizing policy:", e);
+            console.error('Failed to select sizing policy:', e);
         }
     }
 
@@ -1182,69 +1119,63 @@
         showCustomSizeDialog = true;
     }
 
-    async function handleCustomSizeSubmit(size: {
-        width: number;
-        height: number;
-    }) {
+    async function handleCustomSizeSubmit(size: { width: number; height: number }) {
         if (!connection) return;
         const plotId = selectedPlotId;
         const { width, height } = size;
         try {
-            await connection.sendRequest("plots/setCustomSize", {
+            await connection.sendRequest('plots/setCustomSize', {
                 width,
                 height,
             });
 
             if (plotId) {
                 patchPlot(plotId, {
-                    sizingPolicyId: "custom",
+                    sizingPolicyId: 'custom',
                     customSize: { width, height },
                 });
             }
         } catch (e) {
-            console.error("Failed to set custom size:", e);
+            console.error('Failed to set custom size:', e);
         }
     }
 
-    async function handleOpenInEditor(
-        target: "editorTab" | "editorTabSide" | "newWindow",
-    ) {
+    async function handleOpenInEditor(target: 'editorTab' | 'editorTabSide' | 'newWindow') {
         if (!connection || !selectedPlotId) return;
         const previousTarget = openInEditorDefaultTarget;
         const nextTarget: EditorTarget =
-            target === "newWindow"
-                ? "newWindow"
-                : target === "editorTabSide"
-                  ? "sideGroup"
-                  : "activeGroup";
+            target === 'newWindow'
+                ? 'newWindow'
+                : target === 'editorTabSide'
+                  ? 'sideGroup'
+                  : 'activeGroup';
 
         try {
             openInEditorDefaultTarget = nextTarget;
-            if (target === "newWindow") {
-                await connection.sendRequest("plots/openInNewWindow", {
+            if (target === 'newWindow') {
+                await connection.sendRequest('plots/openInNewWindow', {
                     plotId: selectedPlotId,
                 });
                 return;
             }
 
-            const viewColumn =
-                target === "editorTabSide" ? "beside" : "active";
-            await connection.sendRequest("plots/openInEditor", {
+            const viewColumn = target === 'editorTabSide' ? 'beside' : 'active';
+            await connection.sendRequest('plots/openInEditor', {
                 plotId: selectedPlotId,
                 viewColumn,
             });
         } catch (e) {
             openInEditorDefaultTarget = previousTarget;
-            console.error("Failed to open plot in editor:", e);
+            console.error('Failed to open plot in editor:', e);
         }
     }
 
     async function handleOpenGalleryInNewWindow() {
         if (!connection) return;
         try {
-            await connection.sendRequest("plots/openGalleryInNewWindow");
+            await connection.sendRequest('plots/openGalleryInNewWindow');
         } catch (e) {
-            console.error("Failed to open gallery in new window:", e);
+            console.error('Failed to open gallery in new window:', e);
         }
     }
 
@@ -1254,23 +1185,20 @@
         }
 
         try {
-            await connection.sendRequest("plots/openInNewWindow", {
+            await connection.sendRequest('plots/openInNewWindow', {
                 plotId: selectedPlotId,
             });
         } catch (e) {
-            console.error("Failed to pop out plot:", e);
+            console.error('Failed to pop out plot:', e);
         }
     }
 
-    async function handleRevealPlotCodeInConsole(data: {
-        sessionId: string;
-        executionId: string;
-    }) {
+    async function handleRevealPlotCodeInConsole(data: { sessionId: string; executionId: string }) {
         if (!connection) return;
         try {
-            await connection.sendRequest("plots/revealInConsole", data);
+            await connection.sendRequest('plots/revealInConsole', data);
         } catch (e) {
-            console.error("Failed to reveal plot code in console:", e);
+            console.error('Failed to reveal plot code in console:', e);
         }
     }
 
@@ -1281,32 +1209,31 @@
     }) {
         if (!connection) return;
         try {
-            const plot = plots.find(plot => plot.code === data.code && plot.sessionId === data.sessionId);
-            await connection.sendRequest("plots/runCodeAgain", { ...data, plotId: plot?.id });
+            const plot = plots.find(
+                (plot) => plot.code === data.code && plot.sessionId === data.sessionId,
+            );
+            await connection.sendRequest('plots/runCodeAgain', { ...data, plotId: plot?.id });
         } catch (e) {
-            console.error("Failed to run plot code again:", e);
+            console.error('Failed to run plot code again:', e);
         }
     }
 
-    async function handleNavigateToPlotSource(data: {
-        sessionId: string;
-        executionId?: string;
-    }) {
+    async function handleNavigateToPlotSource(data: { sessionId: string; executionId?: string }) {
         if (!connection) {
             return;
         }
 
         try {
             if (data.executionId) {
-                await connection.sendRequest("plots/revealInConsole", data);
+                await connection.sendRequest('plots/revealInConsole', data);
                 return;
             }
 
-            await connection.sendRequest("plots/activateConsoleSession", {
+            await connection.sendRequest('plots/activateConsoleSession', {
                 sessionId: data.sessionId,
             });
         } catch (e) {
-            console.error("Failed to navigate to plot source:", e);
+            console.error('Failed to navigate to plot source:', e);
         }
     }
 
@@ -1316,11 +1243,11 @@
         }
 
         try {
-            await connection.sendRequest("plots/openOriginFile", {
+            await connection.sendRequest('plots/openOriginFile', {
                 plotId: selectedPlotId,
             });
         } catch (e) {
-            console.error("Failed to open plot origin file:", e);
+            console.error('Failed to open plot origin file:', e);
         }
     }
 
@@ -1330,9 +1257,9 @@
         }
 
         try {
-            await connection.sendRequest("plots/openDarkFilterSettings");
+            await connection.sendRequest('plots/openDarkFilterSettings');
         } catch (e) {
-            console.error("Failed to open dark filter settings:", e);
+            console.error('Failed to open dark filter settings:', e);
         }
     }
 
@@ -1342,9 +1269,9 @@
         }
 
         try {
-            await connection.sendRequest("plots/claimHtmlPlot", payload);
+            await connection.sendRequest('plots/claimHtmlPlot', payload);
         } catch (e) {
-            console.error("Failed to claim HTML plot lifecycle:", e);
+            console.error('Failed to claim HTML plot lifecycle:', e);
         }
     }
 
@@ -1354,31 +1281,27 @@
         }
 
         try {
-            await connection.sendRequest("plots/releaseHtmlPlot", payload);
+            await connection.sendRequest('plots/releaseHtmlPlot', payload);
         } catch (e) {
-            console.error("Failed to release HTML plot lifecycle:", e);
+            console.error('Failed to release HTML plot lifecycle:', e);
         }
     }
 
-    function handleLayoutHtmlPlot(payload: {
-        plotId: string;
-        width: number;
-        height: number;
-    }) {
+    function handleLayoutHtmlPlot(payload: { plotId: string; width: number; height: number }) {
         if (!connection) {
             return;
         }
 
-        connection.sendNotification("plots/layoutHtmlPlot", payload);
+        connection.sendNotification('plots/layoutHtmlPlot', payload);
     }
 
     async function handleClearAll() {
         if (!connection) return;
         try {
-            await connection.sendRequest("plots/clear");
+            await connection.sendRequest('plots/clear');
             clearPlotsState();
         } catch (e) {
-            console.error("Failed to clear plots:", e);
+            console.error('Failed to clear plots:', e);
         }
     }
 
@@ -1390,18 +1313,14 @@
     async function handleDeletePlot(id: string) {
         if (!connection) return;
         try {
-            await connection.sendRequest("plots/delete", { plotId: id });
+            await connection.sendRequest('plots/delete', { plotId: id });
             removePlots([id]);
         } catch (e) {
-            console.error("Failed to delete plot:", e);
+            console.error('Failed to delete plot:', e);
         }
     }
 
-    function handlePlotRendered(payload: {
-        plotId: string;
-        uri: string;
-        renderVersion: number;
-    }) {
+    function handlePlotRendered(payload: { plotId: string; uri: string; renderVersion: number }) {
         applyRenderCompleted(payload);
     }
 
@@ -1439,10 +1358,10 @@
     function handleContainerKeydown(event: KeyboardEvent) {
         if (event.target !== containerElement) return;
 
-        if (event.key === "ArrowUp" || event.key === "ArrowLeft") {
+        if (event.key === 'ArrowUp' || event.key === 'ArrowLeft') {
             event.preventDefault();
             handlePrevious();
-        } else if (event.key === "ArrowDown" || event.key === "ArrowRight") {
+        } else if (event.key === 'ArrowDown' || event.key === 'ArrowRight') {
             event.preventDefault();
             handleNext();
         }
@@ -1459,23 +1378,21 @@
         void loadOlderPlotsPageIfNeeded();
     }
 
-    function scrollSelectedThumbnailIntoView(
-        options?: { behavior?: ScrollBehavior },
-    ) {
+    function scrollSelectedThumbnailIntoView(options?: { behavior?: ScrollBehavior }) {
         const scroller = historyScrollerElement;
         if (!scroller || !showHistory) {
             return;
         }
 
         const selectedThumbnail = scroller.querySelector(
-            ".plot-thumbnail.selected",
+            '.plot-thumbnail.selected',
         ) as HTMLElement | null;
 
         if (selectedThumbnail) {
             selectedThumbnail.scrollIntoView({
-                behavior: options?.behavior ?? "smooth",
-                block: "nearest",
-                inline: "nearest",
+                behavior: options?.behavior ?? 'smooth',
+                block: 'nearest',
+                inline: 'nearest',
             });
             return;
         }
@@ -1507,11 +1424,11 @@
             return;
         }
         lastViewportKey = key;
-        connection.sendNotification("plots/viewportChanged", {
+        connection.sendNotification('plots/viewportChanged', {
             width,
             height,
             pixelRatio,
-            format: "png",
+            format: 'png',
         });
     }
 
@@ -1530,15 +1447,15 @@
         lastSelectedPlotId = selectedPlotId;
 
         const plotId = selectedPlotId;
-        void connection.sendRequest("plots/select", { plotId }).catch((e) => {
-            console.error("Failed to select plot:", e);
+        void connection.sendRequest('plots/select', { plotId }).catch((e) => {
+            console.error('Failed to select plot:', e);
         });
     });
 
     $effect(() => {
         void selectedPlotSizingPolicyId;
         if (!connection || !plotViewportElement) return;
-        lastViewportKey = "";
+        lastViewportKey = '';
         scheduleViewportUpdate();
     });
 
@@ -1569,26 +1486,26 @@
             void loadOlderPlotsPageIfNeeded();
         };
 
-        scroller.addEventListener("scroll", onScroll, { passive: true });
+        scroller.addEventListener('scroll', onScroll, { passive: true });
         return () => {
-            scroller.removeEventListener("scroll", onScroll);
+            scroller.removeEventListener('scroll', onScroll);
         };
     });
 
-    let lastThumbnailScrollKey = $state("");
+    let lastThumbnailScrollKey = $state('');
 
     $effect(() => {
         const scroller = historyScrollerElement;
         const historyVisible = showHistory;
-        const orientation = historyBottom ? "bottom" : "right";
+        const orientation = historyBottom ? 'bottom' : 'right';
         const plotId = selectedPlotId;
 
         if (!scroller || !historyVisible) {
-            lastThumbnailScrollKey = "";
+            lastThumbnailScrollKey = '';
             return;
         }
 
-        const scrollKey = `${plotId ?? "latest"}:${orientation}`;
+        const scrollKey = `${plotId ?? 'latest'}:${orientation}`;
         if (scrollKey === lastThumbnailScrollKey) {
             return;
         }
@@ -1622,15 +1539,11 @@
             getName: () => p.name,
             getPlotSize: () => undefined,
         }))}
-        selectedSizingPolicy={sizingPolicies.find(
-            (p) => p.id === selectedPlotSizingPolicyId,
-        )
+        selectedSizingPolicy={sizingPolicies.find((p) => p.id === selectedPlotSizingPolicyId)
             ? {
                   id: selectedPlotSizingPolicyId,
                   getName: () =>
-                      sizingPolicies.find(
-                          (p) => p.id === selectedPlotSizingPolicyId,
-                      )?.name || "",
+                      sizingPolicies.find((p) => p.id === selectedPlotSizingPolicyId)?.name || '',
                   getPlotSize: () => undefined,
               }
             : undefined}
@@ -1674,7 +1587,7 @@
         sizingPolicyId={selectedPlotSizingPolicyId}
         customSize={selectedPlotCustomSize}
         selectedSessionName={selectedPlotSessionName}
-        selectedOriginFile={selectedOriginFile}
+        {selectedOriginFile}
         {selectedPlotName}
         {showHistory}
         {historyBottom}

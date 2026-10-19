@@ -1,13 +1,13 @@
 <script lang="ts">
-    import { onMount } from "svelte";
-    import { localize } from "../nls";
-    import PositronModalDialog from "./positronModalDialog/positronModalDialog.svelte";
-    import ContentArea from "./positronModalDialog/components/contentArea.svelte";
-    import PlatformNativeDialogActionBar from "./positronModalDialog/components/platformNativeDialogActionBar.svelte";
-    import SimpleCodeEditor from "./simpleCodeEditor/simpleCodeEditor.svelte";
+    import { onMount } from 'svelte';
+    import { localize } from '../nls';
+    import PositronModalDialog from './positronModalDialog/positronModalDialog.svelte';
+    import ContentArea from './positronModalDialog/components/contentArea.svelte';
+    import PlatformNativeDialogActionBar from './positronModalDialog/components/platformNativeDialogActionBar.svelte';
+    import SimpleCodeEditor from './simpleCodeEditor/simpleCodeEditor.svelte';
     import DropDownListBox, {
         type DropDownListBoxEntry,
-    } from "../../shared/DropDownListBox.svelte";
+    } from '../../shared/DropDownListBox.svelte';
 
     interface FocusableComponent {
         focus: () => void;
@@ -27,7 +27,7 @@
     let {
         syntaxes,
         selectedSyntax,
-        previewCode = "",
+        previewCode = '',
         previewError,
         previewLoading = false,
         onApply,
@@ -36,8 +36,8 @@
     }: Props = $props();
 
     let syntaxDropDownRef = $state<FocusableComponent | null>(null);
-    let chosenSyntax = $state("");
-    let lastRequestedSyntax = $state("");
+    let chosenSyntax = $state('');
+    let lastRequestedSyntax = $state('');
 
     const syntaxEntries = $derived.by((): DropDownListBoxEntry[] =>
         syntaxes.map((syntax) => ({
@@ -54,7 +54,7 @@
         const preferredSyntax =
             selectedSyntax && syntaxes.includes(selectedSyntax)
                 ? selectedSyntax
-                : syntaxes[0] ?? "";
+                : (syntaxes[0] ?? '');
 
         if (!chosenSyntax || !syntaxes.includes(chosenSyntax)) {
             chosenSyntax = preferredSyntax;
@@ -78,21 +78,15 @@
 </script>
 
 <PositronModalDialog
-    title={localize(
-        "positronConvertToCodeModalDialogTitle",
-        "Convert to Code",
-    )}
+    title={localize('positronConvertToCodeModalDialogTitle', 'Convert to Code')}
     width={400}
     height={400}
-    onCancel={onCancel}
+    {onCancel}
 >
     <ContentArea>
         <div class="convert-to-code-dialog">
             <h3 class="code-syntax-heading">
-                {localize(
-                    "positron.dataExplorer.codeSyntaxHeading",
-                    "Select code syntax",
-                )}
+                {localize('positron.dataExplorer.codeSyntaxHeading', 'Select code syntax')}
             </h3>
 
             <div class="convert-to-code-syntax-dropdown">
@@ -100,40 +94,30 @@
                     bind:this={syntaxDropDownRef}
                     entries={syntaxEntries}
                     selectedIdentifier={chosenSyntax}
-                    title={localize(
-                        "positron.dataExplorer.selectCodeSyntax",
-                        "Select Code Syntax",
-                    )}
+                    title={localize('positron.dataExplorer.selectCodeSyntax', 'Select Code Syntax')}
                     onSelectionChanged={(entry) => {
                         chosenSyntax = entry.identifier;
                     }}
                 />
             </div>
 
-            <div
-                class="convert-to-code-editor"
-                aria-live="polite"
-                aria-busy={previewLoading}
-            >
+            <div class="convert-to-code-editor" aria-live="polite" aria-busy={previewLoading}>
                 {#if previewLoading}
                     <div class="editor-message editor-placeholder">
                         {localize(
-                            "positron.dataExplorer.convertToCode.loading",
-                            "Generating preview...",
+                            'positron.dataExplorer.convertToCode.loading',
+                            'Generating preview...',
                         )}
                     </div>
                 {:else if previewError}
                     <div class="editor-message editor-error">{previewError}</div>
                 {:else if previewCode.trim()}
-                    <SimpleCodeEditor
-                        code={previewCode}
-                        language={chosenSyntax}
-                    />
+                    <SimpleCodeEditor code={previewCode} language={chosenSyntax} />
                 {:else}
                     <div class="editor-message editor-placeholder">
                         {localize(
-                            "positron.dataExplorer.convertToCode.empty",
-                            "No preview is available for the current selection.",
+                            'positron.dataExplorer.convertToCode.empty',
+                            'No preview is available for the current selection.',
                         )}
                     </div>
                 {/if}
@@ -145,7 +129,7 @@
         <PlatformNativeDialogActionBar>
             {#snippet secondaryButton()}
                 <button class="action-bar-button" type="button" onclick={onCancel}>
-                    {localize("positronCancel", "Cancel")}
+                    {localize('positronCancel', 'Cancel')}
                 </button>
             {/snippet}
             {#snippet primaryButton()}
@@ -159,7 +143,7 @@
                         }
                     }}
                 >
-                    {localize("positron.dataExplorer.positronCopyCode", "Copy Code")}
+                    {localize('positron.dataExplorer.positronCopyCode', 'Copy Code')}
                 </button>
             {/snippet}
         </PlatformNativeDialogActionBar>
@@ -195,10 +179,7 @@
         overflow: hidden;
         border-radius: 3px;
         border: 1px solid var(--vscode-positronModalDialog-border);
-        background: var(
-            --vscode-editor-background,
-            var(--vscode-positronModalDialog-background)
-        );
+        background: var(--vscode-editor-background, var(--vscode-positronModalDialog-background));
     }
 
     .editor-message {

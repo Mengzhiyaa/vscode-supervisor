@@ -3,11 +3,11 @@
   Port from Positron's dataGridColumnHeader.tsx
 -->
 <script lang="ts">
-    import { onDestroy } from "svelte";
-    import { getPositronDataGridContext } from "../positronDataGridContext";
-    import { ColumnSelectionState } from "../classes/dataGridInstance";
-    import { selectionType } from "../utilities/mouseUtilities";
-    import { renderLeadingTrailingWhitespace } from "../../dataExplorer/components/tableDataCell";
+    import { onDestroy } from 'svelte';
+    import { getPositronDataGridContext } from '../positronDataGridContext';
+    import { ColumnSelectionState } from '../classes/dataGridInstance';
+    import { selectionType } from '../utilities/mouseUtilities';
+    import { renderLeadingTrailingWhitespace } from '../../dataExplorer/components/tableDataCell';
 
     interface Props {
         columnIndex: number;
@@ -16,12 +16,7 @@
         pinned?: boolean;
     }
 
-    let {
-        columnIndex,
-        left,
-        width,
-        pinned = false,
-    }: Props = $props();
+    let { columnIndex, left, width, pinned = false }: Props = $props();
 
     const { instance } = getPositronDataGridContext();
     const updateTrigger = instance.updateTrigger;
@@ -36,15 +31,15 @@
     });
 
     const columnName = $derived(columnData?.name ?? `Column ${columnIndex + 1}`);
-    const columnDescription = $derived(columnData?.description ?? "");
+    const columnDescription = $derived(columnData?.description ?? '');
 
     const columnLabel = $derived.by(() => {
         return (
-            (instance as {
-                getSchemaColumn?: (
-                    index: number,
-                ) => { description?: string } | undefined;
-            }).getSchemaColumn?.(columnIndex)?.description ?? ""
+            (
+                instance as {
+                    getSchemaColumn?: (index: number) => { description?: string } | undefined;
+                }
+            ).getSchemaColumn?.(columnIndex)?.description ?? ''
         );
     });
 
@@ -61,18 +56,14 @@ ${columnLabel}`;
         return columnLabel || undefined;
     });
 
-    const renderedColumnName = $derived.by(() =>
-        renderLeadingTrailingWhitespace(columnName),
-    );
+    const renderedColumnName = $derived.by(() => renderLeadingTrailingWhitespace(columnName));
 
     const columnSortKey = $derived.by(() => {
         $updateTrigger;
         const sortKey = instance.getSortKey(columnIndex);
         // Sort descriptors are mutable class instances. Project their values
         // so a direction or priority change reaches the column header.
-        return sortKey
-            ? { ascending: sortKey.ascending, sortIndex: sortKey.sortIndex }
-            : undefined;
+        return sortKey ? { ascending: sortKey.ascending, sortIndex: sortKey.sortIndex } : undefined;
     });
 
     const focused = $derived.by(() => {
@@ -85,19 +76,13 @@ ${columnLabel}`;
         return instance.columnSelectionState(columnIndex);
     });
 
-    const selected = $derived(
-        (columnSelectionState & ColumnSelectionState.Selected) !== 0,
-    );
+    const selected = $derived((columnSelectionState & ColumnSelectionState.Selected) !== 0);
 
     async function mouseDownHandler(event: MouseEvent) {
         event.stopPropagation();
 
         if (event.button === 0) {
-            if (
-                (event.target as HTMLElement).closest(
-                    ".sort-button, .resize-handle",
-                )
-            ) {
+            if ((event.target as HTMLElement).closest('.sort-button, .resize-handle')) {
                 return;
             }
         }
@@ -115,17 +100,10 @@ ${columnLabel}`;
         if (event.button === 2) {
             const endingRect = headerRef?.getBoundingClientRect();
             if (startingRect && endingRect) {
-                await instance.showColumnContextMenu(
-                    columnIndex,
-                    headerRef!,
-                    {
-                        clientX:
-                            event.clientX +
-                            endingRect.left -
-                            startingRect.left,
-                        clientY: event.clientY,
-                    },
-                );
+                await instance.showColumnContextMenu(columnIndex, headerRef!, {
+                    clientX: event.clientX + endingRect.left - startingRect.left,
+                    clientY: event.clientY,
+                });
             }
         }
     }
@@ -156,10 +134,11 @@ ${columnLabel}`;
         instance.hoverManager?.hideHover();
     }
 
-    function renderNamePart(
-        part: string | { kind: "whitespace"; text: string },
-    ): { text: string; whitespace: boolean } {
-        if (typeof part === "string") {
+    function renderNamePart(part: string | { kind: 'whitespace'; text: string }): {
+        text: string;
+        whitespace: boolean;
+    } {
+        if (typeof part === 'string') {
             return { text: part, whitespace: false };
         }
 
@@ -183,9 +162,9 @@ ${columnLabel}`;
         resizeStartX = event.clientX;
         resizeStartWidth = width;
 
-        window.addEventListener("mousemove", handleResizeMove);
-        window.addEventListener("mouseup", handleResizeEnd);
-        window.addEventListener("blur", handleResizeEnd);
+        window.addEventListener('mousemove', handleResizeMove);
+        window.addEventListener('mouseup', handleResizeEnd);
+        window.addEventListener('blur', handleResizeEnd);
     }
 
     function handleResizeMove(event: MouseEvent) {
@@ -208,9 +187,9 @@ ${columnLabel}`;
 
     function handleResizeEnd() {
         isResizing = false;
-        window.removeEventListener("mousemove", handleResizeMove);
-        window.removeEventListener("mouseup", handleResizeEnd);
-        window.removeEventListener("blur", handleResizeEnd);
+        window.removeEventListener('mousemove', handleResizeMove);
+        window.removeEventListener('mouseup', handleResizeEnd);
+        window.removeEventListener('blur', handleResizeEnd);
     }
     onDestroy(handleResizeEnd);
 </script>
@@ -236,14 +215,11 @@ ${columnLabel}`;
             <div
                 class="selection-overlay"
                 class:focused
-                class:selected-left={
-                    (columnSelectionState & ColumnSelectionState.SelectedLeft) !==
-                    0
-                }
-                class:selected-right={
-                    (columnSelectionState & ColumnSelectionState.SelectedRight) !==
-                    0
-                }
+                class:selected-left={(columnSelectionState & ColumnSelectionState.SelectedLeft) !==
+                    0}
+                class:selected-right={(columnSelectionState &
+                    ColumnSelectionState.SelectedRight) !==
+                    0}
             ></div>
         {/if}
     {/if}
@@ -264,9 +240,7 @@ ${columnLabel}`;
             >
                 {#each renderedColumnName as part, index (index)}
                     {@const renderedPart = renderNamePart(part)}
-                    <span class:whitespace={renderedPart.whitespace}
-                        >{renderedPart.text}</span
-                    >
+                    <span class:whitespace={renderedPart.whitespace}>{renderedPart.text}</span>
                 {/each}
             </div>
 
@@ -295,10 +269,7 @@ ${columnLabel}`;
             onclick={dropdownPressed}
             aria-label="Sort options"
         >
-            <div
-                class="codicon codicon-positron-vertical-ellipsis"
-                style:font-size="18px"
-            ></div>
+            <div class="codicon codicon-positron-vertical-ellipsis" style:font-size="18px"></div>
         </button>
     </div>
 
@@ -340,10 +311,7 @@ ${columnLabel}`;
         left: 0;
         width: 100%;
         height: 2px;
-        background-color: var(
-            --vscode-positronDataGrid-selectionBorder,
-            var(--vscode-focusBorder)
-        );
+        background-color: var(--vscode-positronDataGrid-selectionBorder, var(--vscode-focusBorder));
     }
 
     .data-grid-column-header .border-overlay {
@@ -354,15 +322,9 @@ ${columnLabel}`;
         position: absolute;
         box-sizing: border-box;
         border-right: 1px solid
-            var(
-                --vscode-positronDataGrid-border,
-                var(--vscode-editorGroup-border)
-            );
+            var(--vscode-positronDataGrid-border, var(--vscode-editorGroup-border));
         border-bottom: 1px solid
-            var(
-                --vscode-positronDataGrid-border,
-                var(--vscode-editorGroup-border)
-            );
+            var(--vscode-positronDataGrid-border, var(--vscode-editorGroup-border));
     }
 
     .data-grid-column-header .selection-overlay {
@@ -377,15 +339,9 @@ ${columnLabel}`;
             var(--vscode-list-activeSelectionBackground)
         );
         border-top: 1px solid
-            var(
-                --vscode-positronDataGrid-selectionBorder,
-                var(--vscode-focusBorder)
-            );
+            var(--vscode-positronDataGrid-selectionBorder, var(--vscode-focusBorder));
         border-bottom: 1px solid
-            var(
-                --vscode-positronDataGrid-selectionInnerBorder,
-                var(--vscode-focusBorder)
-            );
+            var(--vscode-positronDataGrid-selectionInnerBorder, var(--vscode-focusBorder));
     }
 
     .data-grid-column-header .selection-overlay:not(.focused) {
@@ -394,26 +350,17 @@ ${columnLabel}`;
 
     .data-grid-column-header .selection-overlay.selected-left {
         border-left: 1px solid
-            var(
-                --vscode-positronDataGrid-selectionBorder,
-                var(--vscode-focusBorder)
-            );
+            var(--vscode-positronDataGrid-selectionBorder, var(--vscode-focusBorder));
     }
 
     .data-grid-column-header .selection-overlay.selected-right {
         border-right: 1px solid
-            var(
-                --vscode-positronDataGrid-selectionBorder,
-                var(--vscode-focusBorder)
-            );
+            var(--vscode-positronDataGrid-selectionBorder, var(--vscode-focusBorder));
     }
 
     .data-grid-column-header .selection-overlay:not(.selected-right) {
         border-right: 1px solid
-            var(
-                --vscode-positronDataGrid-selectionInnerBorder,
-                var(--vscode-focusBorder)
-            );
+            var(--vscode-positronDataGrid-selectionInnerBorder, var(--vscode-focusBorder));
     }
 
     .data-grid-column-header .content {
@@ -439,14 +386,8 @@ ${columnLabel}`;
         white-space: nowrap;
         line-height: normal;
         text-overflow: ellipsis;
-        font-size: var(
-            --positron-data-grid-column-header-title-font-size,
-            12px
-        );
-        font-weight: var(
-            --positron-data-grid-column-header-title-font-weight,
-            600
-        );
+        font-size: var(--positron-data-grid-column-header-title-font-size, 12px);
+        font-weight: var(--positron-data-grid-column-header-title-font-weight, 600);
     }
 
     .data-grid-column-header .content .title-description .title .whitespace {
@@ -459,10 +400,7 @@ ${columnLabel}`;
         white-space: nowrap;
         line-height: normal;
         text-overflow: ellipsis;
-        font-size: var(
-            --positron-data-grid-column-header-description-font-size,
-            11px
-        );
+        font-size: var(--positron-data-grid-column-header-description-font-size, 11px);
     }
 
     .data-grid-column-header .content .sort-indicator {
@@ -481,14 +419,8 @@ ${columnLabel}`;
             --vscode-positronDataGrid-sortIndexForeground,
             var(--vscode-descriptionForeground)
         );
-        font-size: var(
-            --positron-data-grid-column-header-sort-index-font-size,
-            10px
-        );
-        font-weight: var(
-            --positron-data-grid-column-header-sort-index-font-weight,
-            600
-        );
+        font-size: var(--positron-data-grid-column-header-sort-index-font-size, 10px);
+        font-weight: var(--positron-data-grid-column-header-sort-index-font-weight, 600);
         font-variant-numeric: var(
             --positron-data-grid-column-header-sort-index-font-variant-numeric,
             tabular-nums
@@ -522,19 +454,11 @@ ${columnLabel}`;
     }
 
     .data-grid-column-header .content .sort-button:hover {
-        border: 1px solid
-            var(
-                --vscode-positronDataGrid-selectionBorder,
-                var(--vscode-focusBorder)
-            );
+        border: 1px solid var(--vscode-positronDataGrid-selectionBorder, var(--vscode-focusBorder));
     }
 
     .data-grid-column-header .content .sort-button:active {
-        border: 1px solid
-            var(
-                --vscode-positronDataGrid-selectionBorder,
-                var(--vscode-focusBorder)
-            );
+        border: 1px solid var(--vscode-positronDataGrid-selectionBorder, var(--vscode-focusBorder));
         background-color: var(
             --vscode-positronDataGrid-selectionBackground,
             var(--vscode-list-activeSelectionBackground)
@@ -555,9 +479,6 @@ ${columnLabel}`;
     }
 
     .data-grid-column-header .resize-handle:hover {
-        background-color: var(
-            --vscode-sash-hoverBorder,
-            var(--vscode-focusBorder)
-        );
+        background-color: var(--vscode-sash-hoverBorder, var(--vscode-focusBorder));
     }
 </style>

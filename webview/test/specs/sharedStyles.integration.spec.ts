@@ -2,15 +2,46 @@ import { expect, test } from '@playwright/test';
 import { openWebviewPage } from '../harness/page';
 
 const domains = [
-    'console', 'variables', 'plots', 'plotEditor',
-    'packages', 'viewer', 'help', 'dataExplorer',
+    'console',
+    'variables',
+    'plots',
+    'plotEditor',
+    'packages',
+    'viewer',
+    'help',
+    'dataExplorer',
 ] as const;
+
+function assertStylesheetOrder(actual: Array<string | null>, expected: string[]): void {
+    for (const href of expected) {
+        expect(actual, `Missing stylesheet ${href}`).toContain(href);
+        expect(actual.filter((candidate) => candidate === href)).toHaveLength(1);
+    }
+    for (let index = 1; index < expected.length; index++) {
+        expect(actual.indexOf(expected[index - 1])).toBeLessThan(actual.indexOf(expected[index]));
+    }
+}
+
+test('stylesheet order assertions reject missing, duplicate and reversed links', () => {
+    const stylesheets = ['setup.css', 'common.css', 'page.css'];
+    for (const missing of stylesheets) {
+        expect(() =>
+            assertStylesheetOrder(
+                stylesheets.filter((href) => href !== missing),
+                stylesheets,
+            ),
+        ).toThrow();
+    }
+    expect(() => assertStylesheetOrder([...stylesheets, 'setup.css'], stylesheets)).toThrow();
+    expect(() => assertStylesheetOrder([...stylesheets].reverse(), stylesheets)).toThrow();
+    assertStylesheetOrder(stylesheets, stylesheets);
+});
 
 for (const domain of domains) {
     test(`${domain} loads shared icon styles and external fonts`, async ({ page }) => {
         const failedResources: string[] = [];
         const fontUrls = new Set<string>();
-        page.on('response', response => {
+        page.on('response', (response) => {
             const url = response.url();
             if (url.includes('/dist/') && response.status() >= 400) {
                 failedResources.push(url);
@@ -19,7 +50,7 @@ for (const domain of domains) {
                 fontUrls.add(url);
             }
         });
-        page.on('requestfailed', request => {
+        page.on('requestfailed', (request) => {
             if (request.url().includes('/dist/')) {
                 failedResources.push(request.url());
             }
@@ -30,7 +61,8 @@ for (const domain of domains) {
 
         const icons = await page.evaluate(async () => {
             const container = document.createElement('div');
-            container.innerHTML = '<span class="codicon codicon-add"></span>' +
+            container.innerHTML =
+                '<span class="codicon codicon-add"></span>' +
                 '<span class="codicon codicon-positron-save"></span>';
             document.body.append(container);
 
@@ -38,17 +70,23 @@ for (const domain of domains) {
             const positron = await document.fonts.load('16px codicon-positron', '\uf232');
             await document.fonts.ready;
 
-            const glyphs = [...container.children].map(element => ({
+            const glyphs = [...container.children].map((element) => ({
                 fontFamily: getComputedStyle(element).fontFamily,
                 content: getComputedStyle(element, '::before').content,
             }));
             container.remove();
             return {
                 glyphs,
-                standardLoaded: standard.some(font => font.status === 'loaded'),
-                positronLoaded: positron.some(font => font.status === 'loaded'),
-                stylesheets: [...document.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]')]
-                    .map(link => link.getAttribute('href')),
+                standardLoaded: standard.some((font) => font.status === 'loaded'),
+                positronLoaded: positron.some((font) => font.status === 'loaded'),
+                stylesheets: [
+                    ...document.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]'),
+                ].map((link) => link.getAttribute('href')),
+                loadedStylesheets: [
+                    ...document.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]'),
+                ]
+                    .filter((link) => link.sheet !== null)
+                    .map((link) => link.getAttribute('href')),
             };
         });
 
@@ -58,16 +96,20 @@ for (const domain of domains) {
         expect(icons.glyphs[0].content).toBe('"\uea60"');
         expect(icons.glyphs[1].fontFamily).toBe('codicon-positron');
         expect(icons.glyphs[1].content).toBe('"\uf232"');
-        expect(icons.stylesheets.indexOf('../dist/common/index.css')).toBeLessThan(
-            icons.stylesheets.indexOf(`../dist/${domain}/index.css`),
-        );
-        if (domain === 'console' || domain === 'dataExplorer') {
-            expect(icons.stylesheets.indexOf('../dist/setup/index.css')).toBeLessThan(
-                icons.stylesheets.indexOf('../dist/common/index.css'),
-            );
+        const expectedStylesheets = [
+            ...(domain === 'console' || domain === 'dataExplorer'
+                ? ['../dist/setup/index.css']
+                : []),
+            '../dist/common/index.css',
+            `../dist/${domain}/index.css`,
+        ];
+        assertStylesheetOrder(icons.stylesheets, expectedStylesheets);
+        for (const href of expectedStylesheets) {
+            expect(icons.loadedStylesheets, `Stylesheet did not load: ${href}`).toContain(href);
         }
-        expect([...fontUrls].filter(url => /\/dist\/assets\/.*\.ttf(?:\?|$)/.test(url)).length)
-            .toBeGreaterThanOrEqual(2);
+        expect(
+            [...fontUrls].filter((url) => /\/dist\/assets\/.*\.ttf(?:\?|$)/.test(url)).length,
+        ).toBeGreaterThanOrEqual(2);
         expect(failedResources).toEqual([]);
 
         const entryCss = await page.request.get(`/dist/${domain}/index.css`);

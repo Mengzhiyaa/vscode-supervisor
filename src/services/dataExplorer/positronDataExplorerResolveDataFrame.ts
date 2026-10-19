@@ -43,7 +43,10 @@ export function getDataExplorerLanguageIdAtPosition(
     return embeddedLanguageId;
 }
 
-export function isDocumentLanguageCompatible(documentLanguageId: string, runtimeLanguageId: string): boolean {
+export function isDocumentLanguageCompatible(
+    documentLanguageId: string,
+    runtimeLanguageId: string,
+): boolean {
     if (documentLanguageId === 'quarto') {
         return runtimeLanguageId === 'python' || runtimeLanguageId === 'r';
     }
@@ -56,25 +59,30 @@ function resolveVariablesInstance(
     runtimeSessionService?: RuntimeSessionService,
     requestedSessionId?: string,
 ): IPositronVariablesInstance | undefined {
-    const sessionId = requestedSessionId ??
+    const sessionId =
+        requestedSessionId ??
         runtimeSessionService?.getConsoleSessionForLanguage(languageId)?.sessionId ??
-        runtimeSessionService?.activeSessions.find(session =>
-            session.runtimeMetadata.languageId.toLowerCase() === languageId &&
-            session.sessionMetadata.sessionMode === LanguageRuntimeSessionMode.Console,
+        runtimeSessionService?.activeSessions.find(
+            (session) =>
+                session.runtimeMetadata.languageId.toLowerCase() === languageId &&
+                session.sessionMetadata.sessionMode === LanguageRuntimeSessionMode.Console,
         )?.sessionId;
     if (sessionId) {
-        return variablesService.getVariablesInstance?.(sessionId) ??
+        return (
+            variablesService.getVariablesInstance?.(sessionId) ??
             variablesService.positronVariablesInstances.find(
-                instance => instance.session.sessionId === sessionId,
-            );
+                (instance) => instance.session.sessionId === sessionId,
+            )
+        );
     }
     const activeInstance = variablesService.activePositronVariablesInstance;
     if (activeInstance?.session.runtimeMetadata.languageId.toLowerCase() === languageId) {
         return activeInstance;
     }
-    const compatibleInstances = variablesService.positronVariablesInstances?.filter(
-        instance => instance.session.runtimeMetadata.languageId.toLowerCase() === languageId,
-    ) ?? [];
+    const compatibleInstances =
+        variablesService.positronVariablesInstances?.filter(
+            (instance) => instance.session.runtimeMetadata.languageId.toLowerCase() === languageId,
+        ) ?? [];
     return compatibleInstances.length === 1 ? compatibleInstances[0] : undefined;
 }
 
@@ -104,15 +112,18 @@ export function resolveDataFrameAtPosition(
     if (!instance) {
         return undefined;
     }
-    const variable = instance.variableItems.find(item =>
-        item.hasViewer && (item.displayName === name || item.path.at(-1) === name));
-    return variable ? {
-        instance,
-        variable,
-        range,
-        sessionId: instance.session.sessionId,
-        languageId,
-    } : undefined;
+    const variable = instance.variableItems.find(
+        (item) => item.hasViewer && (item.displayName === name || item.path.at(-1) === name),
+    );
+    return variable
+        ? {
+              instance,
+              variable,
+              range,
+              sessionId: instance.session.sessionId,
+              languageId,
+          }
+        : undefined;
 }
 
 /**
@@ -171,8 +182,10 @@ export function findDataExplorerIdentifierRanges(document: vscode.TextDocument):
                 code += ' '.repeat(line.length - character);
                 break;
             }
-            if (languageId === 'python' &&
-                (line.startsWith("'''", character) || line.startsWith('"""', character))) {
+            if (
+                languageId === 'python' &&
+                (line.startsWith("'''", character) || line.startsWith('"""', character))
+            ) {
                 multilineQuote = line.slice(character, character + 3) as "'''" | '"""';
                 code += '   ';
                 character += 2;

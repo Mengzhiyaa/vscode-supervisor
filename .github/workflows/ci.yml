@@ -49,6 +49,12 @@ jobs:
       - name: Test binary installer
         run: npm run test:binaries
 
+      - name: Test Data Explorer localization verifier
+        run: npm run test:data-explorer-localization
+
+      - name: Test Monaco import contracts
+        run: npm run test:monaco-contracts
+
       - name: Verify generated contracts
         run: npm run verify:api-dts && npm run verify:webview-rpc-contracts && npm run verify:data-explorer-localization
 

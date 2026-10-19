@@ -12,22 +12,27 @@
  */
 
 interface AWSv4Configuration {
-  options?: {
-    region?: string
-    service?: string
-  }
-  credentials?: {
-    accessKeyId?: string
-    secretAccessKey?: string,
-    sessionToken?: string
-  }
+    options?: {
+        region?: string;
+        service?: string;
+    };
+    credentials?: {
+        accessKeyId?: string;
+        secretAccessKey?: string;
+        sessionToken?: string;
+    };
 }
 
 export interface ConfigurationParameters {
-    apiKey?: string | Promise<string> | ((name: string) => string) | ((name: string) => Promise<string>);
+    apiKey?:
+        string | Promise<string> | ((name: string) => string) | ((name: string) => Promise<string>);
     username?: string;
     password?: string;
-    accessToken?: string | Promise<string> | ((name?: string, scopes?: string[]) => string) | ((name?: string, scopes?: string[]) => Promise<string>);
+    accessToken?:
+        | string
+        | Promise<string>
+        | ((name?: string, scopes?: string[]) => string)
+        | ((name?: string, scopes?: string[]) => Promise<string>);
     awsv4?: AWSv4Configuration;
     basePath?: string;
     serverIndex?: number;
@@ -40,7 +45,8 @@ export class Configuration {
      * parameter for apiKey security
      * @param name security name
      */
-    apiKey?: string | Promise<string> | ((name: string) => string) | ((name: string) => Promise<string>);
+    apiKey?:
+        string | Promise<string> | ((name: string) => string) | ((name: string) => Promise<string>);
     /**
      * parameter for basic security
      */
@@ -54,7 +60,11 @@ export class Configuration {
      * @param name security name
      * @param scopes oauth2 scope
      */
-    accessToken?: string | Promise<string> | ((name?: string, scopes?: string[]) => string) | ((name?: string, scopes?: string[]) => Promise<string>);
+    accessToken?:
+        | string
+        | Promise<string>
+        | ((name?: string, scopes?: string[]) => string)
+        | ((name?: string, scopes?: string[]) => Promise<string>);
     /**
      * parameter for aws4 signature security
      * @param {Object} AWS4Signature - AWS4 Signature security
@@ -115,7 +125,13 @@ export class Configuration {
      * @return True if the given MIME is JSON, false otherwise.
      */
     public isJsonMime(mime: string): boolean {
-        const jsonMime: RegExp = new RegExp('^(application\/json|[^;/ \t]+\/[^;/ \t]+[+]json)[ \t]*(;.*)?$', 'i');
-        return mime !== null && (jsonMime.test(mime) || mime.toLowerCase() === 'application/json-patch+json');
+        const jsonMime: RegExp = new RegExp(
+            '^(application\/json|[^;/ \t]+\/[^;/ \t]+[+]json)[ \t]*(;.*)?$',
+            'i',
+        );
+        return (
+            mime !== null &&
+            (jsonMime.test(mime) || mime.toLowerCase() === 'application/json-patch+json')
+        );
     }
 }

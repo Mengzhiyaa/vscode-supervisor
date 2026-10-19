@@ -12,7 +12,12 @@ import {
 } from '../internal/runtimeTypes';
 import { RuntimeClientInstance, RuntimeClientMessageSender } from './RuntimeClientInstance';
 import type { IPlotSize, IPositronPlotSizingPolicy } from './sizingPolicy';
-import type { IntrinsicSize, PlotOrigin, PlotRenderSettings, PlotResult } from './comms/positronPlotComm';
+import type {
+    IntrinsicSize,
+    PlotOrigin,
+    PlotRenderSettings,
+    PlotResult,
+} from './comms/positronPlotComm';
 import { PlotRenderFormat, PlotUnit } from './comms/positronPlotComm';
 import { DeferredRender, IRenderedPlot } from './positronPlotRenderQueue';
 import { PlotSizingPolicyAuto } from './sizingPolicyAuto';
@@ -93,14 +98,14 @@ export interface PlotMetadata {
 
 /**
  * A client instance for handling plot comms from the runtime.
- * 
+ *
  * This is a full version of Positron's PlotClientInstance that:
  * - Extends RuntimeClientInstance for comm management
  * - Handles plot render requests and updates
  * - Emits events when plots are rendered
  * - Supports sizing policies and intrinsic size
  * - Manages render state with throttling
- * 
+ *
  * Matches Positron's PlotClientInstance in services/languageRuntime.
  */
 export class PlotClientInstance extends RuntimeClientInstance {
@@ -190,7 +195,7 @@ export class PlotClientInstance extends RuntimeClientInstance {
         closer: () => void,
         sessionId: string,
         sizingPolicy: IPositronPlotSizingPolicy | undefined,
-        commProxy: PositronPlotCommProxy
+        commProxy: PositronPlotCommProxy,
     ) {
         super(message, sender, closer);
 
@@ -213,51 +218,28 @@ export class PlotClientInstance extends RuntimeClientInstance {
             session_id: sessionId,
             pre_render: data.pre_render,
             sizing_policy: {
-                id: this._sizingPolicy.id
-            }
+                id: this._sizingPolicy.id,
+            },
         };
 
         this._lastRender = this._preRenderToRenderedPlot(data.pre_render);
-        if (this._lastRender) { this._plotState = PlotClientState.Rendered; }
+        if (this._lastRender) {
+            this._plotState = PlotClientState.Rendered;
+        }
 
         this._plotSubscriptions.push(commProxy.onDidClose(() => this.dispose()));
 
-        this._plotSubscriptions.push(commProxy.onDidRenderUpdate(async (evt) => {
-            const rendered = this._preRenderToRenderedPlot(evt.pre_render);
-            // Preserve the viewport request before installing the new kernel image.
-            const desired = this._currentRender?.renderRequest ?? this._lastRender;
-            let needsSelect = true;
-            if (rendered) {
-                if (this._currentRender && this._settingsEqual(rendered, this._currentRender.renderRequest)) {
-                    this._currentRender.complete(rendered);
-                } else {
-                    this._currentRender?.cancel();
-                }
-                this._currentRender = undefined;
-                this._lastRender = rendered;
-                this._stateEmitter.fire(PlotClientState.Rendered);
-                this._completeRenderEmitter.fire(rendered);
-                this._renderUpdateEmitter.fire(rendered);
-                if (!desired || this._settingsEqual(rendered, desired)) { return; }
-                needsSelect = false;
-            }
-            try {
-                const rendered = await this._queuePlotUpdateRequest(desired);
-                if (needsSelect && !this._disposedPlot) { this._renderUpdateEmitter.fire(rendered); }
-            } catch (error) {
-                if (this._disposedPlot || (error instanceof Error && error.message === 'Canceled')) { return; }
-                logFrameworkDiagnostic('PlotClientInstance', `Failed to queue plot update request: ${getErrorMessage(error)}`);
-                this._onDidUpdatePlot.fire();
-            }
-        }));
-
-        // Listen for show plot events from the comm proxy
-        this._plotSubscriptions.push(commProxy.onDidShowPlot((evt) => {
-            const rendered = this._preRenderToRenderedPlot(evt.pre_render);
-            if (rendered) {
-                if (rendered.uri !== this._lastRender?.uri) {
-                    // A late RPC response must not replace the newly shown kernel image.
-                    if (this._currentRender && this._settingsEqual(rendered, this._currentRender.renderRequest)) {
+        this._plotSubscriptions.push(
+            commProxy.onDidRenderUpdate(async (evt) => {
+                const rendered = this._preRenderToRenderedPlot(evt.pre_render);
+                // Preserve the viewport request before installing the new kernel image.
+                const desired = this._currentRender?.renderRequest ?? this._lastRender;
+                let needsSelect = true;
+                if (rendered) {
+                    if (
+                        this._currentRender &&
+                        this._settingsEqual(rendered, this._currentRender.renderRequest)
+                    ) {
                         this._currentRender.complete(rendered);
                     } else {
                         this._currentRender?.cancel();
@@ -266,24 +248,79 @@ export class PlotClientInstance extends RuntimeClientInstance {
                     this._lastRender = rendered;
                     this._stateEmitter.fire(PlotClientState.Rendered);
                     this._completeRenderEmitter.fire(rendered);
+                    this._renderUpdateEmitter.fire(rendered);
+                    if (!desired || this._settingsEqual(rendered, desired)) {
+                        return;
+                    }
+                    needsSelect = false;
                 }
-            }
-            this._showPlotEmitter.fire();
-        }));
+                try {
+                    const rendered = await this._queuePlotUpdateRequest(desired);
+                    if (needsSelect && !this._disposedPlot) {
+                        this._renderUpdateEmitter.fire(rendered);
+                    }
+                } catch (error) {
+                    if (
+                        this._disposedPlot ||
+                        (error instanceof Error && error.message === 'Canceled')
+                    ) {
+                        return;
+                    }
+                    logFrameworkDiagnostic(
+                        'PlotClientInstance',
+                        `Failed to queue plot update request: ${getErrorMessage(error)}`,
+                    );
+                    this._onDidUpdatePlot.fire();
+                }
+            }),
+        );
+
+        // Listen for show plot events from the comm proxy
+        this._plotSubscriptions.push(
+            commProxy.onDidShowPlot((evt) => {
+                const rendered = this._preRenderToRenderedPlot(evt.pre_render);
+                if (rendered) {
+                    if (rendered.uri !== this._lastRender?.uri) {
+                        // A late RPC response must not replace the newly shown kernel image.
+                        if (
+                            this._currentRender &&
+                            this._settingsEqual(rendered, this._currentRender.renderRequest)
+                        ) {
+                            this._currentRender.complete(rendered);
+                        } else {
+                            this._currentRender?.cancel();
+                        }
+                        this._currentRender = undefined;
+                        this._lastRender = rendered;
+                        this._stateEmitter.fire(PlotClientState.Rendered);
+                        this._completeRenderEmitter.fire(rendered);
+                    }
+                }
+                this._showPlotEmitter.fire();
+            }),
+        );
 
         // Listen for intrinsic size changes from the comm proxy
-        this._plotSubscriptions.push(commProxy.onDidSetIntrinsicSize((size) => {
-            this._intrinsicSizeEmitter.fire(size);
-        }));
+        this._plotSubscriptions.push(
+            commProxy.onDidSetIntrinsicSize((size) => {
+                this._intrinsicSizeEmitter.fire(size);
+            }),
+        );
 
         // Listen for state changes
-        this._plotSubscriptions.push(this.onDidChangeState((state) => {
-            this._plotState = state;
-        }));
+        this._plotSubscriptions.push(
+            this.onDidChangeState((state) => {
+                this._plotState = state;
+            }),
+        );
     }
 
-    private _preRenderToRenderedPlot(preRender: UpdateEvent['pre_render']): IRenderedPlot | undefined {
-        if (!preRender?.data || !preRender.mime_type || !preRender.settings) { return undefined; }
+    private _preRenderToRenderedPlot(
+        preRender: UpdateEvent['pre_render'],
+    ): IRenderedPlot | undefined {
+        if (!preRender?.data || !preRender.mime_type || !preRender.settings) {
+            return undefined;
+        }
         return {
             uri: `data:${preRender.mime_type};base64,${this._padBase64(preRender.data)}`,
             size: preRender.settings.size,
@@ -296,11 +333,16 @@ export class PlotClientInstance extends RuntimeClientInstance {
     /** Infer the format for older kernels that omit it from pre-render settings. */
     private _preRenderFormat(mime: string): PlotRenderFormat {
         switch (mime.toLowerCase()) {
-            case 'image/svg+xml': return PlotRenderFormat.Svg;
-            case 'image/jpeg': return PlotRenderFormat.Jpeg;
-            case 'application/pdf': return PlotRenderFormat.Pdf;
-            case 'image/tiff': return PlotRenderFormat.Tiff;
-            default: return PlotRenderFormat.Png;
+            case 'image/svg+xml':
+                return PlotRenderFormat.Svg;
+            case 'image/jpeg':
+                return PlotRenderFormat.Jpeg;
+            case 'application/pdf':
+                return PlotRenderFormat.Pdf;
+            case 'image/tiff':
+                return PlotRenderFormat.Tiff;
+            default:
+                return PlotRenderFormat.Png;
         }
     }
 
@@ -311,8 +353,6 @@ export class PlotClientInstance extends RuntimeClientInstance {
         }
         return data;
     }
-
-
 
     /**
      * Get the intrinsic size of the plot, if known.
@@ -365,7 +405,10 @@ export class PlotClientInstance extends RuntimeClientInstance {
         this._sizingPolicy = newSizingPolicy;
         this.metadata.sizing_policy = {
             id: newSizingPolicy.id,
-            size: newSizingPolicy instanceof PlotSizingPolicyCustom ? newSizingPolicy.size : undefined
+            size:
+                newSizingPolicy instanceof PlotSizingPolicyCustom
+                    ? newSizingPolicy.size
+                    : undefined,
         };
         this._sizingPolicyEmitter.fire(newSizingPolicy);
     }
@@ -377,31 +420,58 @@ export class PlotClientInstance extends RuntimeClientInstance {
      *   Use this when the caller already delivers the rendered URI (e.g. via an
      *   RPC response) and emitting the event would duplicate the transmission.
      */
-    async renderWithSizingPolicy(size: IPlotSize | undefined, pixel_ratio: number, format = PlotRenderFormat.Png, suppressCompleteEvent = false): Promise<IRenderedPlot> {
+    async renderWithSizingPolicy(
+        size: IPlotSize | undefined,
+        pixel_ratio: number,
+        format = PlotRenderFormat.Png,
+        suppressCompleteEvent = false,
+    ): Promise<IRenderedPlot> {
         const previous = this._sizingPolicy;
         const resolved = await this.resolveSizingPolicy(previous);
-        if (this._disposedPlot) { throw new vscode.CancellationError(); }
+        if (this._disposedPlot) {
+            throw new vscode.CancellationError();
+        }
         const policy = this._sizingPolicy === previous ? resolved : this._sizingPolicy;
-        if (this._sizingPolicy !== policy) { this.sizingPolicy = policy; }
-        return this.renderPlot(size ? policy.getPlotSize(size) : size, pixel_ratio, format, suppressCompleteEvent);
+        if (this._sizingPolicy !== policy) {
+            this.sizingPolicy = policy;
+        }
+        return this.renderPlot(
+            size ? policy.getPlotSize(size) : size,
+            pixel_ratio,
+            format,
+            suppressCompleteEvent,
+        );
     }
 
     /** Discover intrinsic support once per shared comm, preserving policy changes made while waiting. */
-    async resolveSizingPolicy(policy: IPositronPlotSizingPolicy): Promise<IPositronPlotSizingPolicy> {
+    async resolveSizingPolicy(
+        policy: IPositronPlotSizingPolicy,
+    ): Promise<IPositronPlotSizingPolicy> {
         const followsClient = policy === this._sizingPolicy;
         const intrinsic = await this.getIntrinsicSize();
         const current = followsClient ? this._sizingPolicy : policy;
-        return current instanceof PlotSizingPolicyIntrinsic && !intrinsic ? new PlotSizingPolicyAuto() : current;
+        return current instanceof PlotSizingPolicyIntrinsic && !intrinsic
+            ? new PlotSizingPolicyAuto()
+            : current;
     }
 
     /** Export at explicit dimensions without changing the surface's image, policy or pending render. */
-    renderForExport(size: IPlotSize | undefined, pixel_ratio: number, format: PlotRenderFormat): Promise<IRenderedPlot> {
-        if (this._disposedPlot) { return Promise.reject(new vscode.CancellationError()); }
-        const request = new DeferredRender({
-            size: size && { width: Math.floor(size.width), height: Math.floor(size.height) },
-            pixel_ratio,
-            format,
-        }, { preview: true });
+    renderForExport(
+        size: IPlotSize | undefined,
+        pixel_ratio: number,
+        format: PlotRenderFormat,
+    ): Promise<IRenderedPlot> {
+        if (this._disposedPlot) {
+            return Promise.reject(new vscode.CancellationError());
+        }
+        const request = new DeferredRender(
+            {
+                size: size && { width: Math.floor(size.width), height: Math.floor(size.height) },
+                pixel_ratio,
+                format,
+            },
+            { preview: true },
+        );
         this._commProxy.render(request);
         return request.promise;
     }
@@ -411,24 +481,44 @@ export class PlotClientInstance extends RuntimeClientInstance {
      */
     private _settingsEqual(
         left: { size?: IPlotSize; pixel_ratio: number; format?: PlotRenderFormat },
-        right: { size?: IPlotSize; pixel_ratio: number; format?: PlotRenderFormat }
+        right: { size?: IPlotSize; pixel_ratio: number; format?: PlotRenderFormat },
     ): boolean {
-        if (left.size?.height !== right.size?.height) {return false;}
-        if (left.size?.width !== right.size?.width) {return false;}
-        if (left.pixel_ratio !== right.pixel_ratio) {return false;}
+        if (left.size?.height !== right.size?.height) {
+            return false;
+        }
+        if (left.size?.width !== right.size?.width) {
+            return false;
+        }
+        if (left.pixel_ratio !== right.pixel_ratio) {
+            return false;
+        }
         return (left.format ?? PlotRenderFormat.Png) === (right.format ?? PlotRenderFormat.Png);
     }
 
     /** Returns the latest image and whether it satisfies the requested render settings. */
-    getCachedRender(size: IPlotSize | undefined, pixel_ratio: number, format = PlotRenderFormat.Png): { rendered: IRenderedPlot; matchesTarget: boolean } | undefined {
-        if (this._disposedPlot || !this._lastRender) { return undefined; }
+    getCachedRender(
+        size: IPlotSize | undefined,
+        pixel_ratio: number,
+        format = PlotRenderFormat.Png,
+    ): { rendered: IRenderedPlot; matchesTarget: boolean } | undefined {
+        if (this._disposedPlot || !this._lastRender) {
+            return undefined;
+        }
         return {
             rendered: this._lastRender,
-            matchesTarget: !this._currentRender && this._settingsEqual({
-                size: size && { height: Math.floor(size.height), width: Math.floor(size.width) },
-                pixel_ratio,
-                format,
-            }, this._lastRender),
+            matchesTarget:
+                !this._currentRender &&
+                this._settingsEqual(
+                    {
+                        size: size && {
+                            height: Math.floor(size.height),
+                            width: Math.floor(size.width),
+                        },
+                        pixel_ratio,
+                        format,
+                    },
+                    this._lastRender,
+                ),
         };
     }
 
@@ -440,8 +530,15 @@ export class PlotClientInstance extends RuntimeClientInstance {
      * @param format The format of the plot
      * @returns A promise that resolves to a rendered image
      */
-    renderPlot(size: IPlotSize | undefined, pixel_ratio: number, format = PlotRenderFormat.Png, suppressCompleteEvent = false): Promise<IRenderedPlot> {
-        if (this._disposedPlot) { return Promise.reject(new vscode.CancellationError()); }
+    renderPlot(
+        size: IPlotSize | undefined,
+        pixel_ratio: number,
+        format = PlotRenderFormat.Png,
+        suppressCompleteEvent = false,
+    ): Promise<IRenderedPlot> {
+        if (this._disposedPlot) {
+            return Promise.reject(new vscode.CancellationError());
+        }
         const settings = {
             size: size && { height: Math.floor(size.height), width: Math.floor(size.width) },
             pixel_ratio,
@@ -454,43 +551,63 @@ export class PlotClientInstance extends RuntimeClientInstance {
         return this._performRender(settings, suppressCompleteEvent);
     }
 
-    private _performRender(settings: { size?: IPlotSize; pixel_ratio: number; format: PlotRenderFormat }, suppressCompleteEvent = false): Promise<IRenderedPlot> {
-        if (this._disposedPlot) { return Promise.reject(new vscode.CancellationError()); }
+    private _performRender(
+        settings: { size?: IPlotSize; pixel_ratio: number; format: PlotRenderFormat },
+        suppressCompleteEvent = false,
+    ): Promise<IRenderedPlot> {
+        if (this._disposedPlot) {
+            return Promise.reject(new vscode.CancellationError());
+        }
         this._currentRender?.cancel();
-        const request = new DeferredRender(settings, { onStart: () => {
-            if (!this._disposedPlot && this._currentRender === request) {
-                this._stateEmitter.fire(PlotClientState.Rendering);
-            }
-        } });
+        const request = new DeferredRender(settings, {
+            onStart: () => {
+                if (!this._disposedPlot && this._currentRender === request) {
+                    this._stateEmitter.fire(PlotClientState.Rendering);
+                }
+            },
+        });
         this._currentRender = request;
         this._stateEmitter.fire(PlotClientState.RenderPending);
         // Install promise handlers before the proxy can synchronously complete/cancel it.
-        const result = request.promise.then(rendered => {
-            const result = { ...rendered, format: settings.format };
-            if (this._disposedPlot || this._currentRender !== request) { return result; }
-            const frozen = vscode.workspace.getConfiguration().get<boolean>(PlotsConfiguration.freezeSlowPlots, true);
-            if (shouldFreezeSlowPlot(!this._lastRender, result, frozen)) {
-                this.sizingPolicy = new PlotSizingPolicyCustom(result.size, true);
-            }
-            this._lastRender = result;
-            this._lastRenderTimeMs = result.renderTimeMs;
-            this._currentRender = undefined;
-            if (!suppressCompleteEvent) { this._completeRenderEmitter.fire(result); }
-            this._stateEmitter.fire(PlotClientState.Rendered);
-            return result;
-        }, error => {
-            if (!this._disposedPlot && this._currentRender === request) {
+        const result = request.promise.then(
+            (rendered) => {
+                const result = { ...rendered, format: settings.format };
+                if (this._disposedPlot || this._currentRender !== request) {
+                    return result;
+                }
+                const frozen = vscode.workspace
+                    .getConfiguration()
+                    .get<boolean>(PlotsConfiguration.freezeSlowPlots, true);
+                if (shouldFreezeSlowPlot(!this._lastRender, result, frozen)) {
+                    this.sizingPolicy = new PlotSizingPolicyCustom(result.size, true);
+                }
+                this._lastRender = result;
+                this._lastRenderTimeMs = result.renderTimeMs;
                 this._currentRender = undefined;
+                if (!suppressCompleteEvent) {
+                    this._completeRenderEmitter.fire(result);
+                }
                 this._stateEmitter.fire(PlotClientState.Rendered);
-            }
-            throw error;
-        });
+                return result;
+            },
+            (error) => {
+                if (!this._disposedPlot && this._currentRender === request) {
+                    this._currentRender = undefined;
+                    this._stateEmitter.fire(PlotClientState.Rendered);
+                }
+                throw error;
+            },
+        );
         this._commProxy.render(request);
         return result;
     }
 
-    private _queuePlotUpdateRequest(settings = this._currentRender?.renderRequest ?? this._lastRender): Promise<IRenderedPlot> {
-        if (!settings) { return Promise.reject(new Error('Cannot update plot before it has been rendered')); }
+    private _queuePlotUpdateRequest(
+        settings = this._currentRender?.renderRequest ?? this._lastRender,
+    ): Promise<IRenderedPlot> {
+        if (!settings) {
+            return Promise.reject(new Error('Cannot update plot before it has been rendered'));
+        }
         // Kernel updates invalidate the cached pixels even when dimensions match.
         return this._performRender({
             size: settings.size,
@@ -542,13 +659,15 @@ export class PlotClientInstance extends RuntimeClientInstance {
      * Disposes the plot client.
      */
     override dispose(): void {
-        if (this._disposedPlot) { return; }
+        if (this._disposedPlot) {
+            return;
+        }
         this._disposedPlot = true;
         this._currentRender?.cancel();
         this._currentRender = undefined;
         this._stateEmitter.fire(PlotClientState.Closed);
         this._onDidClose.fire();
-        this._plotSubscriptions.forEach(subscription => subscription.dispose());
+        this._plotSubscriptions.forEach((subscription) => subscription.dispose());
         this._plotSubscriptions.length = 0;
 
         // Dispose emitters
@@ -571,7 +690,7 @@ export class PlotClientInstance extends RuntimeClientInstance {
      * Updates the metadata for this plot client.
      * Called after fetching metadata from the backend via get_metadata RPC.
      * Matches Positron's metadata update pattern.
-     * 
+     *
      * @param metadata Partial metadata to merge with existing metadata
      */
     updateMetadata(metadata: Partial<PlotMetadata>): void {
@@ -598,7 +717,7 @@ export function createPlotClient(
     closer: () => void,
     sessionId: string,
     sizingPolicy: IPositronPlotSizingPolicy | undefined,
-    commProxy: PositronPlotCommProxy
+    commProxy: PositronPlotCommProxy,
 ): PlotClientInstance {
     return new PlotClientInstance(message, sender, closer, sessionId, sizingPolicy, commProxy);
 }

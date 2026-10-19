@@ -3,7 +3,10 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
-import type { ColumnProfileRequest, ColumnProfileResult } from '../../../runtime/comms/positronDataExplorerComm';
+import type {
+    ColumnProfileRequest,
+    ColumnProfileResult,
+} from '../../../runtime/comms/positronDataExplorerComm';
 import type { DataExplorerClientInstance } from '../languageRuntimeDataExplorerClient';
 
 const PROFILE_REQUEST_CHUNK_SIZE = 8;
@@ -52,11 +55,11 @@ export class TableSummaryCache {
         if (generation !== this._generation || token?.isCancellationRequested) {
             return [];
         }
-        const keys = requests.map(request => JSON.stringify(request));
-        keys.forEach(key => this._retainedKeys.add(key));
+        const keys = requests.map((request) => JSON.stringify(request));
+        keys.forEach((key) => this._retainedKeys.add(key));
 
         const pending = new Set<Promise<void>>();
-        keys.forEach(key => {
+        keys.forEach((key) => {
             const request = this._pending.get(key);
             if (request) {
                 pending.add(request);
@@ -79,14 +82,14 @@ export class TableSummaryCache {
         }
 
         this._scheduleTrim();
-        return keys.map(key => this._profiles.get(key) ?? {});
+        return keys.map((key) => this._profiles.get(key) ?? {});
     }
 
     private async _requestChunk(
         requests: ColumnProfileRequest[],
         generation: number,
     ): Promise<void> {
-        const keys = requests.map(request => JSON.stringify(request));
+        const keys = requests.map((request) => JSON.stringify(request));
         const uncachedRequests: ColumnProfileRequest[] = [];
         const uncachedKeys: string[] = [];
         const pending = new Set<Promise<void>>();
@@ -114,7 +117,7 @@ export class TableSummaryCache {
         this._requestTokenSources.add(tokenSource);
         const request = this._clientInstance
             .requestColumnProfiles(uncachedRequests, tokenSource.token)
-            .then(results => {
+            .then((results) => {
                 if (generation !== this._generation || tokenSource.token.isCancellationRequested) {
                     return;
                 }
@@ -122,11 +125,11 @@ export class TableSummaryCache {
                     this._profiles.set(key, results[index] ?? {});
                 });
             });
-        uncachedKeys.forEach(key => this._pending.set(key, request));
+        uncachedKeys.forEach((key) => this._pending.set(key, request));
         try {
             await request;
         } finally {
-            uncachedKeys.forEach(key => {
+            uncachedKeys.forEach((key) => {
                 if (this._pending.get(key) === request) {
                     this._pending.delete(key);
                 }

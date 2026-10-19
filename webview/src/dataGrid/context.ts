@@ -6,7 +6,4 @@ export {
     setDataGridContext,
     setPositronDataGridContext,
 } from './positronDataGridContext';
-export type {
-    DataGridContext,
-    PositronDataGridContext,
-} from './positronDataGridContext';
+export type { DataGridContext, PositronDataGridContext } from './positronDataGridContext';

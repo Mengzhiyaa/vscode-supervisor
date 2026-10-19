@@ -10,10 +10,7 @@ import type { ColumnValue } from '../types';
  * WidthCalculators interface.
  */
 export interface WidthCalculators {
-    columnHeaderWidthCalculator: (
-        columnName: string,
-        typeName: string,
-    ) => number;
+    columnHeaderWidthCalculator: (columnName: string, typeName: string) => number;
     columnValueWidthCalculator: (length: number) => number;
 }
 
@@ -91,10 +88,8 @@ function defaultEditorFont(): string {
 
     const rootStyle = getComputedStyle(document.documentElement);
     const fontFamily =
-        rootStyle.getPropertyValue('--vscode-editor-font-family').trim() ||
-        'monospace';
-    const fontSize =
-        rootStyle.getPropertyValue('--vscode-editor-font-size').trim() || '13px';
+        rootStyle.getPropertyValue('--vscode-editor-font-family').trim() || 'monospace';
+    const fontSize = rootStyle.getPropertyValue('--vscode-editor-font-size').trim() || '13px';
 
     return `400 ${fontSize} ${fontFamily}`;
 }
@@ -158,9 +153,7 @@ export class TableDataCache {
 
     setDimensions(columns: number, rows: number, hasRowLabels = false): boolean {
         const dimensionsChanged =
-            this._columns !== columns ||
-            this._rows !== rows ||
-            this._hasRowLabels !== hasRowLabels;
+            this._columns !== columns || this._rows !== rows || this._hasRowLabels !== hasRowLabels;
         if (!dimensionsChanged) {
             return false;
         }
@@ -275,8 +268,7 @@ export class TableDataCache {
 
         if (columns.length > 0) {
             const targetColumns =
-                columnIndices ??
-                Array.from({ length: columns.length }, (_, index) => index);
+                columnIndices ?? Array.from({ length: columns.length }, (_, index) => index);
 
             for (let columnOffset = 0; columnOffset < targetColumns.length; columnOffset++) {
                 const columnIndex = targetColumns[columnOffset];
@@ -292,10 +284,7 @@ export class TableDataCache {
                     const dataCell = decodeColumnValue(values[rowOffset] ?? '');
                     const rowIndex = rowIndices?.[rowOffset] ?? startRow + rowOffset;
                     columnCache.set(rowIndex, dataCell);
-                    maxValueLength = Math.max(
-                        maxValueLength,
-                        dataCell.formatted.length,
-                    );
+                    maxValueLength = Math.max(maxValueLength, dataCell.formatted.length);
                 }
 
                 this._columnValueLengths.set(columnIndex, maxValueLength);
@@ -334,9 +323,7 @@ export class TableDataCache {
         );
         const valueLength = this._columnValueLengths.get(columnIndex) ?? 0;
         const valueWidth =
-            valueLength > 0
-                ? this._widthCalculators.columnValueWidthCalculator(valueLength)
-                : 0;
+            valueLength > 0 ? this._widthCalculators.columnValueWidthCalculator(valueLength) : 0;
 
         return Math.max(
             minimumColumnWidth,
@@ -344,10 +331,7 @@ export class TableDataCache {
         );
     }
 
-    trimData(
-        columnIndices: Iterable<number>,
-        rowIndices: Iterable<number>,
-    ): void {
+    trimData(columnIndices: Iterable<number>, rowIndices: Iterable<number>): void {
         const keepColumns = new Set(columnIndices);
         const keepRows = new Set(rowIndices);
 

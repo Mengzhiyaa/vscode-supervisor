@@ -5,7 +5,7 @@
     Mirrors: positron/.../components/outputRunWithLinks.tsx
 -->
 <script lang="ts">
-    import { getRpcConnection } from "../lib/rpc/client";
+    import { getRpcConnection } from '../lib/rpc/client';
 
     interface Props {
         text: string;
@@ -25,31 +25,29 @@
     /**
      * Splits text into parts with links identified.
      */
-    function parseTextWithLinks(
-        text: string,
-    ): Array<{ type: "text" | "link"; content: string }> {
+    function parseTextWithLinks(text: string): Array<{ type: 'text' | 'link'; content: string }> {
         const links = detectHyperlinks(text);
         if (links.length === 0) {
-            return [{ type: "text", content: text }];
+            return [{ type: 'text', content: text }];
         }
 
-        const parts: Array<{ type: "text" | "link"; content: string }> = [];
+        const parts: Array<{ type: 'text' | 'link'; content: string }> = [];
         let remaining = text;
 
         for (const link of links) {
             const index = remaining.indexOf(link);
             if (index > 0) {
                 parts.push({
-                    type: "text",
+                    type: 'text',
                     content: remaining.substring(0, index),
                 });
             }
-            parts.push({ type: "link", content: link });
+            parts.push({ type: 'link', content: link });
             remaining = remaining.substring(index + link.length);
         }
 
         if (remaining.length > 0) {
-            parts.push({ type: "text", content: remaining });
+            parts.push({ type: 'text', content: remaining });
         }
 
         return parts;
@@ -60,14 +58,14 @@
      */
     function handleLinkClick(event: MouseEvent, url: string) {
         event.preventDefault();
-        getRpcConnection().sendNotification("console/openExternal", { url });
+        getRpcConnection().sendNotification('console/openExternal', { url });
     }
 
     const parts = $derived(parseTextWithLinks(text));
 </script>
 
 {#each parts as part}
-    {#if part.type === "link"}
+    {#if part.type === 'link'}
         <a
             href={part.content}
             class="output-hyperlink"

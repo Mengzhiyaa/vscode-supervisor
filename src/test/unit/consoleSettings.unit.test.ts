@@ -29,13 +29,19 @@ suite('[Unit] console appearance settings', () => {
     });
 
     test('clamps the Positron console font-size range to 6 through 100', () => {
-        assert.strictEqual(resolveConsoleAppearance({
-            configuredFontSize: 2,
-            configuredFontSizeInspection: { workspaceValue: 2 },
-        }).fontSize, 6);
-        assert.strictEqual(resolveConsoleAppearance({
-            configuredFontSize: 200,
-            configuredFontSizeInspection: { workspaceValue: 200 },
-        }).fontSize, 100);
+        assert.strictEqual(
+            resolveConsoleAppearance({
+                configuredFontSize: 2,
+                configuredFontSizeInspection: { workspaceValue: 2 },
+            }).fontSize,
+            6,
+        );
+        assert.strictEqual(
+            resolveConsoleAppearance({
+                configuredFontSize: 200,
+                configuredFontSizeInspection: { workspaceValue: 200 },
+            }).fontSize,
+            100,
+        );
     });
 });

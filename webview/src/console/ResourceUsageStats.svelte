@@ -3,7 +3,7 @@
     Based on Positron's ResourceUsageStats.tsx
 -->
 <script lang="ts">
-    import { localize } from "$lib/localization";
+    import { localize } from '$lib/localization';
     // Props
     let {
         cpuPercent = 0,
@@ -49,20 +49,20 @@
 
 <dl class="resource-usage-stats" aria-live="polite" aria-atomic="true">
     {#if showCpu}<div class="resource-usage-cpu">
-        <dt class="resource-usage-label">{localize("console.resource.cpu", "CPU")}</dt>
-        <dd class="resource-usage-value">{cpuPercent.toFixed(0)}%</dd>
-    </div>{/if}
+            <dt class="resource-usage-label">{localize('console.resource.cpu', 'CPU')}</dt>
+            <dd class="resource-usage-value">{cpuPercent.toFixed(0)}%</dd>
+        </div>{/if}
     {#if showMemory}<div
-        class="resource-usage-memory"
-        title={localize(
-            "console.resource.memoryTooltip",
-            "Memory {0}",
-            formatBytes(memoryBytes),
-        )}
-    >
-        <dt class="resource-usage-label">{localize("console.resource.memoryShort", "MEM")}</dt>
-        <dd class="resource-usage-value">{formatBytes(memoryBytes)}</dd>
-    </div>{/if}
+            class="resource-usage-memory"
+            title={localize(
+                'console.resource.memoryTooltip',
+                'Memory {0}',
+                formatBytes(memoryBytes),
+            )}
+        >
+            <dt class="resource-usage-label">{localize('console.resource.memoryShort', 'MEM')}</dt>
+            <dd class="resource-usage-value">{formatBytes(memoryBytes)}</dd>
+        </div>{/if}
 </dl>
 
 <style>

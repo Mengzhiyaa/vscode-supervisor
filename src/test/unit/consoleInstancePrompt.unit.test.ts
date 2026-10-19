@@ -99,14 +99,16 @@ suite('[Unit] console instance prompt normalization', () => {
         const instance = createConsoleInstance();
         instance.restoreState({
             version: 2,
-            items: [{
-                type: 'pendingInput',
-                id: 'pending-before-reload',
-                when: Date.now(),
-                inputPrompt: '>',
-                code: 'dangerous_side_effect()',
-                submitting: true,
-            }],
+            items: [
+                {
+                    type: 'pendingInput',
+                    id: 'pending-before-reload',
+                    when: Date.now(),
+                    inputPrompt: '>',
+                    code: 'dangerous_side_effect()',
+                    submitting: true,
+                },
+            ],
             inputHistory: [],
             trace: false,
             wordWrap: true,
@@ -125,20 +127,24 @@ suite('[Unit] console instance prompt normalization', () => {
         const instance = createConsoleInstance();
         instance.restoreState({
             version: 2,
-            items: [{
-                type: 'activity',
-                parentId: 'password-prompt',
-                items: [{
-                    type: 'prompt',
-                    id: 'prompt-1',
+            items: [
+                {
+                    type: 'activity',
                     parentId: 'password-prompt',
-                    when: Date.now(),
-                    prompt: 'Password:',
-                    password: true,
-                    state: 'Answered' as any,
-                    answer: 'must-not-survive',
-                }],
-            }],
+                    items: [
+                        {
+                            type: 'prompt',
+                            id: 'prompt-1',
+                            parentId: 'password-prompt',
+                            when: Date.now(),
+                            prompt: 'Password:',
+                            password: true,
+                            state: 'Answered' as any,
+                            answer: 'must-not-survive',
+                        },
+                    ],
+                },
+            ],
             inputHistory: [],
             trace: false,
             wordWrap: true,
@@ -222,22 +228,32 @@ suite('[Unit] console instance prompt normalization', () => {
             session.state = RuntimeState.Ready;
             changed.fire(RuntimeState.Ready);
             instance.completeStartup();
-            const items = instance.serializeState().items.filter(item => item.type === 'started' || item.type === 'restarted');
+            const items = instance
+                .serializeState()
+                .items.filter((item) => item.type === 'started' || item.type === 'restarted');
             assert.strictEqual(items.length, 1);
             assert.strictEqual(items[0].type, 'restarted');
             assert.strictEqual((items[0] as { sessionName: string }).sessionName, 'Session 1');
-            assert.deepStrictEqual(instance.runtimeItems[0].getClipboardRepresentation(''), ['Session 1 restarted.']);
-        } finally { instance.dispose(); changed.dispose(); }
+            assert.deepStrictEqual(instance.runtimeItems[0].getClipboardRepresentation(''), [
+                'Session 1 restarted.',
+            ]);
+        } finally {
+            instance.dispose();
+            changed.dispose();
+        }
     });
 
     test('startup completion serializes a session name rather than a formatted sentence', () => {
         const instance = createConsoleInstance();
         try {
             instance.attachRuntimeSession(createRuntimeSession(), SessionAttachMode.Starting);
-            const item = instance.serializeState().items.find(item => item.type === 'started');
+            const item = instance.serializeState().items.find((item) => item.type === 'started');
             assert.strictEqual((item as { sessionName: string }).sessionName, 'Session 1');
-            assert.deepStrictEqual(instance.runtimeItems[0].getClipboardRepresentation(''), ['Session 1 started.']);
-        } finally { instance.dispose(); }
+            assert.deepStrictEqual(instance.runtimeItems[0].getClipboardRepresentation(''), [
+                'Session 1 started.',
+            ]);
+        } finally {
+            instance.dispose();
+        }
     });
-
 });

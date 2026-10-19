@@ -3,9 +3,9 @@
   Port from Positron's summaryRowSortDropdown.tsx
 -->
 <script lang="ts">
-    import ActionBarMenuButton from "../../../../../shared/ActionBarMenuButton.svelte";
-    import { localize } from "../../../../nls";
-    import type { SearchSchemaSortOrder } from "../../../../types";
+    import ActionBarMenuButton from '../../../../../shared/ActionBarMenuButton.svelte';
+    import { localize } from '../../../../nls';
+    import type { SearchSchemaSortOrder } from '../../../../types';
 
     interface Props {
         currentSort: SearchSchemaSortOrder;
@@ -16,28 +16,28 @@
     let { currentSort, disabled = false, onSortChanged }: Props = $props();
 
     const positronDataExplorerSummarySort = localize(
-        "positron.dataExplorer.sort",
-        "Sort summary row data",
+        'positron.dataExplorer.sort',
+        'Sort summary row data',
     );
     const positronSortByOriginal = localize(
-        "positron.dataExplorer.sortByOriginal",
-        "Sort by Original",
+        'positron.dataExplorer.sortByOriginal',
+        'Sort by Original',
     );
     const positronSortByNameAsc = localize(
-        "positron.dataExplorer.sortByNameAsc",
-        "Sort by Name, Ascending",
+        'positron.dataExplorer.sortByNameAsc',
+        'Sort by Name, Ascending',
     );
     const positronSortByNameDesc = localize(
-        "positron.dataExplorer.sortByNameDesc",
-        "Sort by Name, Descending",
+        'positron.dataExplorer.sortByNameDesc',
+        'Sort by Name, Descending',
     );
     const positronSortByTypeAsc = localize(
-        "positron.dataExplorer.sortByTypeAsc",
-        "Sort by Type, Ascending",
+        'positron.dataExplorer.sortByTypeAsc',
+        'Sort by Type, Ascending',
     );
     const positronSortByTypeDesc = localize(
-        "positron.dataExplorer.sortByTypeDesc",
-        "Sort by Type, Descending",
+        'positron.dataExplorer.sortByTypeDesc',
+        'Sort by Type, Descending',
     );
 
     const sortOptions: Array<{
@@ -46,39 +46,35 @@
         option: SearchSchemaSortOrder;
     }> = [
         {
-            id: "original",
+            id: 'original',
             label: positronSortByOriginal,
-            option: "original",
+            option: 'original',
         },
         {
-            id: "ascending_name",
+            id: 'ascending_name',
             label: positronSortByNameAsc,
-            option: "ascending_name",
+            option: 'ascending_name',
         },
         {
-            id: "descending_name",
+            id: 'descending_name',
             label: positronSortByNameDesc,
-            option: "descending_name",
+            option: 'descending_name',
         },
         {
-            id: "ascending_type",
+            id: 'ascending_type',
             label: positronSortByTypeAsc,
-            option: "ascending_type",
+            option: 'ascending_type',
         },
         {
-            id: "descending_type",
+            id: 'descending_type',
             label: positronSortByTypeDesc,
-            option: "descending_type",
+            option: 'descending_type',
         },
     ];
 
-    const sortLabelMap = new Map(
-        sortOptions.map((option) => [option.id, option.label]),
-    );
+    const sortLabelMap = new Map(sortOptions.map((option) => [option.id, option.label]));
 
-    const currentSortLabel = $derived(
-        sortLabelMap.get(currentSort) ?? positronSortByOriginal,
-    );
+    const currentSortLabel = $derived(sortLabelMap.get(currentSort) ?? positronSortByOriginal);
 </script>
 
 <ActionBarMenuButton

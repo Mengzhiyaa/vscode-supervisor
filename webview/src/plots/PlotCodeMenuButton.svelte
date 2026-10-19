@@ -3,7 +3,7 @@
   1:1 Positron replication - Menu button for plot code actions
 -->
 <script lang="ts">
-    import ActionBarMenuButton from "../shared/ActionBarMenuButton.svelte";
+    import ActionBarMenuButton from '../shared/ActionBarMenuButton.svelte';
 
     interface Props {
         plotCode?: string;
@@ -12,15 +12,8 @@
         languageId?: string;
         hasOriginFile?: boolean;
         oncopyCode?: (code: string) => void;
-        onrevealInConsole?: (data: {
-            sessionId: string;
-            executionId: string;
-        }) => void;
-        onrunCodeAgain?: (data: {
-            code: string;
-            sessionId: string;
-            languageId: string;
-        }) => void;
+        onrevealInConsole?: (data: { sessionId: string; executionId: string }) => void;
+        onrunCodeAgain?: (data: { code: string; sessionId: string; languageId: string }) => void;
         onopenSourceFile?: () => void;
     }
 
@@ -36,12 +29,12 @@
         onopenSourceFile,
     }: Props = $props();
 
-    const tooltip = "Plot code actions";
+    const tooltip = 'Plot code actions';
     const labels = {
-        copyCode: "Copy Code",
-        revealInConsole: "Reveal Code in Console",
-        runCodeAgain: "Run Code Again",
-        openSourceFile: "Open Source File",
+        copyCode: 'Copy Code',
+        revealInConsole: 'Reveal Code in Console',
+        runCodeAgain: 'Run Code Again',
+        openSourceFile: 'Open Source File',
     };
 
     const hasCopyCode = $derived(!!plotCode);
@@ -55,9 +48,9 @@
     ariaLabel={tooltip}
     actions={() => [
         {
-            id: "copy-code",
+            id: 'copy-code',
             label: labels.copyCode,
-            icon: "copy",
+            icon: 'copy',
             disabled: !hasCopyCode,
             onSelected: () => {
                 if (plotCode) {
@@ -66,9 +59,9 @@
             },
         },
         {
-            id: "reveal-in-console",
+            id: 'reveal-in-console',
             label: labels.revealInConsole,
-            icon: "go-to-file",
+            icon: 'go-to-file',
             disabled: !hasRevealInConsole,
             onSelected: () => {
                 if (executionId && sessionId) {
@@ -77,9 +70,9 @@
             },
         },
         {
-            id: "run-code-again",
+            id: 'run-code-again',
             label: labels.runCodeAgain,
-            icon: "run",
+            icon: 'run',
             disabled: !hasRunCodeAgain,
             onSelected: () => {
                 if (plotCode && sessionId && languageId) {
@@ -88,9 +81,9 @@
             },
         },
         {
-            id: "open-source-file",
+            id: 'open-source-file',
             label: labels.openSourceFile,
-            icon: "go-to-file",
+            icon: 'go-to-file',
             disabled: !hasOriginFile,
             onSelected: () => {
                 onopenSourceFile?.();

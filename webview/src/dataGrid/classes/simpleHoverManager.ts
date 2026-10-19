@@ -47,7 +47,7 @@ export class SimpleHoverManager implements DataGridHoverManager {
 
     constructor(hoverDelay = 500) {
         this._hoverDelay = hoverDelay;
-        document.addEventListener("keydown", this._onKeyDown, true);
+        document.addEventListener('keydown', this._onKeyDown, true);
     }
 
     private readonly _onKeyDown = () => {
@@ -125,7 +125,7 @@ export class SimpleHoverManager implements DataGridHoverManager {
     dispose(): void {
         this.hideHover();
         this.clearPendingShow();
-        document.removeEventListener("keydown", this._onKeyDown, true);
+        document.removeEventListener('keydown', this._onKeyDown, true);
         this._disposed = true;
     }
 }

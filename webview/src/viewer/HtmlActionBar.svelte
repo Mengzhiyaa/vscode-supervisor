@@ -27,7 +27,6 @@
         onopen,
         onfind,
     }: Props = $props();
-
 </script>
 
 <div class="preview-action-bar">

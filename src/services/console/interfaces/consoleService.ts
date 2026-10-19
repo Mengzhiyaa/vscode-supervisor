@@ -7,10 +7,7 @@ import * as vscode from 'vscode';
 import type { ConsoleInputDraft, ConsoleInputEdit } from '../../../shared/consoleInputState';
 import { RuntimeItem } from '../classes/runtimeItem';
 import { RuntimeSession } from '../../../runtime/session';
-import {
-    RuntimeCodeExecutionMode,
-    RuntimeErrorBehavior,
-} from '../../../shared/runtime';
+import { RuntimeCodeExecutionMode, RuntimeErrorBehavior } from '../../../shared/runtime';
 import type {
     LanguageRuntimeOutputWithKind,
     LanguageRuntimeResultWithKind,
@@ -34,10 +31,7 @@ import type {
     PromptStateEvent,
     WorkingDirectoryEvent,
 } from '../../../runtime/comms/positronUiComm';
-export {
-    RuntimeCodeExecutionMode,
-    RuntimeErrorBehavior,
-} from '../../../shared/runtime';
+export { RuntimeCodeExecutionMode, RuntimeErrorBehavior } from '../../../shared/runtime';
 
 /**
  * PositronConsoleState enumeration (1:1 Positron).
@@ -51,7 +45,7 @@ export const enum PositronConsoleState {
     Interrupting = 'Interrupting',
     Exiting = 'Exiting',
     Exited = 'Exited',
-    Disconnected = 'Disconnected'
+    Disconnected = 'Disconnected',
 }
 
 /**
@@ -132,9 +126,18 @@ export type ConsoleRuntimeItemsChangeEvent =
     | { kind: 'appendRuntimeItem'; item: SerializedConsoleRuntimeItemPayload }
     | { kind: 'replaceRuntimeItem'; targetId: string; item: SerializedConsoleRuntimeItemPayload }
     | { kind: 'appendActivityItem'; parentId: string; item: SerializedConsoleActivityItemPayload }
-    | { kind: 'replaceActivityOutput'; parentId: string; outputId: string; item: SerializedConsoleActivityItemPayload }
+    | {
+          kind: 'replaceActivityOutput';
+          parentId: string;
+          outputId: string;
+          item: SerializedConsoleActivityItemPayload;
+      }
     | { kind: 'clearActivityOutput'; parentId: string }
-    | { kind: 'updateActivityInputState'; parentId: string; state: 'provisional' | 'executing' | 'completed' | 'cancelled' | 'unknown-after-reload' };
+    | {
+          kind: 'updateActivityInputState';
+          parentId: string;
+          state: 'provisional' | 'executing' | 'completed' | 'cancelled' | 'unknown-after-reload';
+      };
 
 /**
  * Input history navigation event args (1:1 Positron pattern).
@@ -157,7 +160,9 @@ export interface IPositronConsoleService extends vscode.Disposable {
     readonly activePositronConsoleInstance: IPositronConsoleInstance | undefined;
     readonly onDidStartPositronConsoleInstance: vscode.Event<IPositronConsoleInstance>;
     readonly onDidDeletePositronConsoleInstance: vscode.Event<IPositronConsoleInstance>;
-    readonly onDidChangeActivePositronConsoleInstance: vscode.Event<IPositronConsoleInstance | undefined>;
+    readonly onDidChangeActivePositronConsoleInstance: vscode.Event<
+        IPositronConsoleInstance | undefined
+    >;
     readonly onDidChangeConsoleWidth: vscode.Event<number>;
     readonly onDidExecuteCode: vscode.Event<ILanguageRuntimeCodeExecutedEvent>;
     readonly onDidChangeInputState: vscode.Event<ILanguageRuntimeInputStateChangedEvent>;
@@ -253,7 +258,9 @@ export interface IPositronConsoleInstance extends vscode.Disposable {
     readonly onDidRequestInputEdit: vscode.Event<ConsoleInputEdit>;
     readonly onDidChangeCodeSubmissionInProgress: vscode.Event<boolean>;
     updateInputDraft(draft: ConsoleInputDraft): void;
-    setInputDraftReader(reader: (token: vscode.CancellationToken) => Promise<ConsoleInputDraft | undefined>): vscode.Disposable;
+    setInputDraftReader(
+        reader: (token: vscode.CancellationToken) => Promise<ConsoleInputDraft | undefined>,
+    ): vscode.Disposable;
 
     // Reveal execution event (1:1 Positron)
     readonly onDidRevealExecution: vscode.Event<string>;

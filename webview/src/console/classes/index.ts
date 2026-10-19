@@ -12,7 +12,7 @@ export {
     RuntimeItemStarting,
     RuntimeItemRestartButton,
     RuntimeItemTrace,
-    RuntimeItemRestarting
+    RuntimeItemRestarting,
 } from './runtimeItem';
 export { ActivityItem } from './activityItem';
 
@@ -34,7 +34,10 @@ export { ActivityItemPrompt, ActivityItemPromptState } from './activityItemPromp
 
 // Activity item classes - Output (Positron-style)
 export { ActivityItemOutputHtml } from './activityItemOutputHtml';
-export { ActivityItemOutputMessage, type ILanguageRuntimeMessageOutputData } from './activityItemOutputMessage';
+export {
+    ActivityItemOutputMessage,
+    type ILanguageRuntimeMessageOutputData,
+} from './activityItemOutputMessage';
 export { ActivityItemOutputPlot } from './activityItemOutputPlot';
 
 // Activity output type alias (Positron pattern)

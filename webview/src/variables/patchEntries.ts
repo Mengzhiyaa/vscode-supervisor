@@ -17,13 +17,9 @@ import type {
     IVariableGroup,
     IVariableItem,
     IVariableOverflow,
-} from "../types/variables";
+} from '../types/variables';
 
-import {
-    isVariableGroup,
-    isVariableItem,
-    isVariableOverflow,
-} from "../types/variables";
+import { isVariableGroup, isVariableItem, isVariableOverflow } from '../types/variables';
 
 export interface PatchResult {
     /** The patched array – unchanged entries reuse the old reference. */
@@ -39,10 +35,7 @@ export interface PatchResult {
  * Uses a `Map<id, entry>` lookup so insertions, deletions and
  * reordering are all handled correctly.
  */
-export function patchEntries(
-    existing: VariableEntry[],
-    incoming: VariableEntry[],
-): PatchResult {
+export function patchEntries(existing: VariableEntry[], incoming: VariableEntry[]): PatchResult {
     if (existing.length === 0) {
         return { entries: incoming, changed: incoming.length > 0 };
     }
@@ -78,10 +71,7 @@ export function patchEntries(
  * Shallow-compare two entries of the same type.
  * Only fields that affect rendering are compared.
  */
-export function entriesEqual(
-    a: VariableEntry,
-    b: VariableEntry,
-): boolean {
+export function entriesEqual(a: VariableEntry, b: VariableEntry): boolean {
     if (a.type !== b.type) {
         return false;
     }
@@ -122,8 +112,5 @@ function itemsEqual(a: IVariableItem, b: IVariableItem): boolean {
 }
 
 function overflowsEqual(a: IVariableOverflow, b: IVariableOverflow): boolean {
-    return (
-        a.overflowValues === b.overflowValues &&
-        a.indentLevel === b.indentLevel
-    );
+    return a.overflowValues === b.overflowValues && a.indentLevel === b.indentLevel;
 }

@@ -1,17 +1,17 @@
 <script lang="ts">
-    import type { Snippet } from "svelte";
-    import { onMount } from "svelte";
-    import DraggableTitleBar from "./components/draggableTitleBar.svelte";
+    import type { Snippet } from 'svelte';
+    import { onMount } from 'svelte';
+    import DraggableTitleBar from './components/draggableTitleBar.svelte';
 
     const FOCUSABLE_ELEMENT_SELECTORS =
-        "a[href]:not([disabled])," +
-        "button:not([disabled])," +
-        "textarea:not([disabled])," +
+        'a[href]:not([disabled]),' +
+        'button:not([disabled]),' +
+        'textarea:not([disabled]),' +
         "input[type='text']:not([disabled])," +
         "input[type='number']:not([disabled])," +
         "input[type='radio']:not([disabled])," +
         "input[type='checkbox']:not([disabled])," +
-        "select:not([disabled])";
+        'select:not([disabled])';
     const GUTTER = 40;
 
     interface Props {
@@ -23,18 +23,9 @@
         children: Snippet;
     }
 
-    let {
-        title,
-        width,
-        height,
-        onCancel,
-        closeOnClickOutside = true,
-        children,
-    }: Props = $props();
+    let { title, width, height, onCancel, closeOnClickOutside = true, children }: Props = $props();
 
-    const titleId = `positron-modal-dialog-${Math.random()
-        .toString(36)
-        .slice(2)}`;
+    const titleId = `positron-modal-dialog-${Math.random().toString(36).slice(2)}`;
 
     let dialogContainerRef = $state<HTMLDivElement | null>(null);
     let dialogBoxRef = $state<HTMLDivElement | null>(null);
@@ -87,8 +78,7 @@
 
     function getFocusableElements() {
         return Array.from(
-            dialogBoxRef?.querySelectorAll<HTMLElement>(FOCUSABLE_ELEMENT_SELECTORS) ??
-                [],
+            dialogBoxRef?.querySelectorAll<HTMLElement>(FOCUSABLE_ELEMENT_SELECTORS) ?? [],
         );
     }
 
@@ -98,19 +88,21 @@
         }
 
         switch (event.key) {
-            case "Enter": {
+            case 'Enter': {
                 const activeElement = document.activeElement;
-                if (activeElement instanceof HTMLElement && (
-                    activeElement.isContentEditable ||
-                    activeElement.closest("button, a[href], select, textarea, [role='button'], [role='combobox']")
-                )) {
+                if (
+                    activeElement instanceof HTMLElement &&
+                    (activeElement.isContentEditable ||
+                        activeElement.closest(
+                            "button, a[href], select, textarea, [role='button'], [role='combobox']",
+                        ))
+                ) {
                     return;
                 }
 
-                const defaultButton =
-                    dialogBoxRef.querySelector<HTMLButtonElement>(
-                        "button.default:not([disabled])",
-                    );
+                const defaultButton = dialogBoxRef.querySelector<HTMLButtonElement>(
+                    'button.default:not([disabled])',
+                );
                 if (!defaultButton) {
                     return;
                 }
@@ -120,13 +112,13 @@
                 defaultButton.click();
                 return;
             }
-            case "Escape": {
+            case 'Escape': {
                 event.preventDefault();
                 event.stopPropagation();
                 onCancel?.();
                 return;
             }
-            case "Tab": {
+            case 'Tab': {
                 const focusableElements = getFocusableElements();
                 if (focusableElements.length === 0) {
                     event.preventDefault();
@@ -135,26 +127,19 @@
                 }
 
                 const firstFocusableElement = focusableElements[0];
-                const lastFocusableElement =
-                    focusableElements[focusableElements.length - 1];
+                const lastFocusableElement = focusableElements[focusableElements.length - 1];
                 const activeElement = document.activeElement;
                 const activeElementIndex = focusableElements.findIndex(
                     (element) => element === activeElement,
                 );
 
                 if (!event.shiftKey) {
-                    if (
-                        activeElementIndex === -1 ||
-                        activeElement === lastFocusableElement
-                    ) {
+                    if (activeElementIndex === -1 || activeElement === lastFocusableElement) {
                         event.preventDefault();
                         event.stopPropagation();
                         firstFocusableElement.focus();
                     }
-                } else if (
-                    activeElementIndex === -1 ||
-                    activeElement === firstFocusableElement
-                ) {
+                } else if (activeElementIndex === -1 || activeElement === firstFocusableElement) {
                     event.preventDefault();
                     event.stopPropagation();
                     lastFocusableElement.focus();
@@ -324,8 +309,7 @@
         background: var(--vscode-positronModalDialog-buttonBackground);
     }
 
-    .positron-modal-dialog-box
-        :global(.action-bar-button:hover:not(:disabled)) {
+    .positron-modal-dialog-box :global(.action-bar-button:hover:not(:disabled)) {
         background: var(--vscode-positronModalDialog-buttonHoverBackground);
     }
 
@@ -334,11 +318,8 @@
         background: var(--vscode-positronModalDialog-defaultButtonBackground);
     }
 
-    .positron-modal-dialog-box
-        :global(.action-bar-button.default:hover:not(:disabled)) {
-        background: var(
-            --vscode-positronModalDialog-defaultButtonHoverBackground
-        );
+    .positron-modal-dialog-box :global(.action-bar-button.default:hover:not(:disabled)) {
+        background: var(--vscode-positronModalDialog-defaultButtonHoverBackground);
     }
 
     .positron-modal-dialog-box :global(.action-bar-button:disabled) {

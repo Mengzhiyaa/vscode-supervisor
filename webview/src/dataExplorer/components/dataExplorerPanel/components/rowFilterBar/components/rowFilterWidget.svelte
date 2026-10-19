@@ -3,8 +3,8 @@
   Port from Positron's row filter widget
 -->
 <script lang="ts">
-    import { getDataExplorerContext } from "../../../../../positronDataExplorerContext";
-    import type { RowFilterDescriptor } from "../../addEditRowFilterModalPopup/rowFilterDescriptor";
+    import { getDataExplorerContext } from '../../../../../positronDataExplorerContext';
+    import type { RowFilterDescriptor } from '../../addEditRowFilterModalPopup/rowFilterDescriptor';
     import {
         RowFilterDescriptorComparison,
         RowFilterDescriptorIsBetween,
@@ -16,8 +16,8 @@
         RowFilterDescriptorIsNull,
         RowFilterDescriptorIsTrue,
         RowFilterDescriptorSearch,
-    } from "../../addEditRowFilterModalPopup/rowFilterDescriptor";
-    import { localize } from "../../../../../nls";
+    } from '../../addEditRowFilterModalPopup/rowFilterDescriptor';
+    import { localize } from '../../../../../nls';
 
     interface Props {
         filterId: string;
@@ -35,8 +35,8 @@
 
     const isValid = $derived(rowFilter.props.isValid !== false);
     const columnName = $derived(rowFilter.schema.column_name);
-    const widgetTooltip = localize("positron.editFilter", "Edit Filter");
-    const clearTooltip = localize("positron.clearFilter", "Clear Filter");
+    const widgetTooltip = localize('positron.editFilter', 'Edit Filter');
+    const clearTooltip = localize('positron.clearFilter', 'Clear Filter');
 
     function showHover(anchorElement: HTMLElement, content: string) {
         if (!tableDataDataGridInstance?.hoverManager) {
@@ -78,7 +78,7 @@
             return;
         }
 
-        if (event.key !== "Enter" && event.key !== " ") {
+        if (event.key !== 'Enter' && event.key !== ' ') {
             return;
         }
 
@@ -99,8 +99,7 @@
     onclick={handleClick}
     onkeydown={handleKeydown}
     onmousedown={handleMouseDown}
-    onmouseenter={(event) =>
-        showHover(event.currentTarget as HTMLElement, widgetTooltip)}
+    onmouseenter={(event) => showHover(event.currentTarget as HTMLElement, widgetTooltip)}
     onmouseleave={hideHover}
     onfocus={(event) => showHover(event.currentTarget as HTMLElement, widgetTooltip)}
     onblur={hideHover}
@@ -112,34 +111,22 @@
     <div class="title">
         {#if rowFilter instanceof RowFilterDescriptorIsEmpty}
             <span class="column-name">{columnName}</span>
-            <span class="space-before"
-                >{localize("positron.isEmpty", "is empty")}</span
-            >
+            <span class="space-before">{localize('positron.isEmpty', 'is empty')}</span>
         {:else if rowFilter instanceof RowFilterDescriptorIsNotEmpty}
             <span class="column-name">{columnName}</span>
-            <span class="space-before"
-                >{localize("positron.isNotEmpty", "is not empty")}</span
-            >
+            <span class="space-before">{localize('positron.isNotEmpty', 'is not empty')}</span>
         {:else if rowFilter instanceof RowFilterDescriptorIsNull}
             <span class="column-name">{columnName}</span>
-            <span class="space-before"
-                >{localize("positron.isMissing", "is missing")}</span
-            >
+            <span class="space-before">{localize('positron.isMissing', 'is missing')}</span>
         {:else if rowFilter instanceof RowFilterDescriptorIsNotNull}
             <span class="column-name">{columnName}</span>
-            <span class="space-before"
-                >{localize("positron.isNotMissing", "is not missing")}</span
-            >
+            <span class="space-before">{localize('positron.isNotMissing', 'is not missing')}</span>
         {:else if rowFilter instanceof RowFilterDescriptorIsTrue}
             <span class="column-name">{columnName}</span>
-            <span class="space-before"
-                >{localize("positron.isTrue", "is true")}</span
-            >
+            <span class="space-before">{localize('positron.isTrue', 'is true')}</span>
         {:else if rowFilter instanceof RowFilterDescriptorIsFalse}
             <span class="column-name">{columnName}</span>
-            <span class="space-before"
-                >{localize("positron.isFalse", "is false")}</span
-            >
+            <span class="space-before">{localize('positron.isFalse', 'is false')}</span>
         {:else if rowFilter instanceof RowFilterDescriptorComparison}
             <span class="column-name">{columnName}</span>
             <span class="space-before space-after">
@@ -156,9 +143,7 @@
             <span class="column-name">{columnName}</span>
             <span class="space-before space-after">&gt;=</span>
             <span class="column-value">{rowFilter.lowerLimit}</span>
-            <span class="space-before space-after"
-                >{localize("positron.and", "and")}</span
-            >
+            <span class="space-before space-after">{localize('positron.and', 'and')}</span>
             <span class="column-name">{columnName}</span>
             <span class="space-before space-after">&lt;=</span>
             <span class="column-value">{rowFilter.upperLimit}</span>
@@ -166,9 +151,7 @@
             <span class="column-name">{columnName}</span>
             <span class="space-before space-after">&lt;</span>
             <span class="column-value">{rowFilter.lowerLimit}</span>
-            <span class="space-before space-after"
-                >{localize("positron.and", "and")}</span
-            >
+            <span class="space-before space-after">{localize('positron.and', 'and')}</span>
             <span class="column-name">{columnName}</span>
             <span class="space-before space-after">&gt;</span>
             <span class="column-value">{rowFilter.upperLimit}</span>
@@ -180,8 +163,7 @@
         bind:this={clearButtonRef}
         onclick={handleClear}
         onmousedown={handleClearMouseDown}
-        onmouseenter={(event) =>
-            showHover(event.currentTarget as HTMLElement, clearTooltip)}
+        onmouseenter={(event) => showHover(event.currentTarget as HTMLElement, clearTooltip)}
         onmouseleave={hideHover}
         onfocus={(event) => showHover(event.currentTarget as HTMLElement, clearTooltip)}
         onblur={hideHover}
@@ -210,9 +192,7 @@
 
     .invalid-row-filter-widget {
         color: var(--vscode-positronDataExplorer-background) !important;
-        background-color: var(
-            --vscode-positronDataExplorer-invalidFilterBackground
-        ) !important;
+        background-color: var(--vscode-positronDataExplorer-invalidFilterBackground) !important;
     }
 
     .row-filter-widget:hover {
@@ -244,12 +224,12 @@
     }
 
     .row-filter-widget .title .space-before::before {
-        content: " ";
+        content: ' ';
         white-space: pre;
     }
 
     .row-filter-widget .title .space-after::after {
-        content: " ";
+        content: ' ';
         white-space: pre;
     }
 

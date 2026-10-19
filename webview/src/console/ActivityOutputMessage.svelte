@@ -5,8 +5,8 @@
     Mirrors: positron/.../components/activityOutputMessage.tsx
 -->
 <script lang="ts">
-    import type { ActivityItemOutputMessage } from "./classes";
-    import ConsoleOutputLines from "./ConsoleOutputLines.svelte";
+    import type { ActivityItemOutputMessage } from './classes';
+    import ConsoleOutputLines from './ConsoleOutputLines.svelte';
 
     interface Props {
         activityItemOutputMessage: ActivityItemOutputMessage;

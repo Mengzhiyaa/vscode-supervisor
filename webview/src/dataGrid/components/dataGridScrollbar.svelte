@@ -4,36 +4,25 @@
 -->
 <script lang="ts">
     interface Props {
-        orientation: "horizontal" | "vertical";
+        orientation: 'horizontal' | 'vertical';
         totalSize: number;
         viewportSize: number;
         scrollPosition: number;
         onDidChangeScrollOffset?: (scrollOffset: number) => void;
     }
 
-    let {
-        orientation,
-        totalSize,
-        viewportSize,
-        scrollPosition,
-        onDidChangeScrollOffset,
-    }: Props = $props();
+    let { orientation, totalSize, viewportSize, scrollPosition, onDidChangeScrollOffset }: Props =
+        $props();
 
-    const maximumScrollPosition = $derived(
-        Math.max(0, totalSize - viewportSize),
-    );
+    const maximumScrollPosition = $derived(Math.max(0, totalSize - viewportSize));
     const thumbSize = $derived(
         maximumScrollPosition > 0
-            ? Math.min(
-                  viewportSize,
-                  Math.max(30, (viewportSize / totalSize) * viewportSize),
-              )
+            ? Math.min(viewportSize, Math.max(30, (viewportSize / totalSize) * viewportSize))
             : 0,
     );
     const thumbPosition = $derived(
         maximumScrollPosition > 0
-            ? (pinToRange(scrollPosition, 0, maximumScrollPosition) /
-                  maximumScrollPosition) *
+            ? (pinToRange(scrollPosition, 0, maximumScrollPosition) / maximumScrollPosition) *
                   (viewportSize - thumbSize)
             : 0,
     );
@@ -49,9 +38,7 @@
         if (event.target === trackRef) {
             const rect = trackRef.getBoundingClientRect();
             const clickPos =
-                orientation === "horizontal"
-                    ? event.clientX - rect.left
-                    : event.clientY - rect.top;
+                orientation === 'horizontal' ? event.clientX - rect.left : event.clientY - rect.top;
 
             if (clickPos < thumbPosition) {
                 emitScroll(scrollPosition - viewportSize);
@@ -63,17 +50,17 @@
 
     function handleTrackKeyDown(event: KeyboardEvent) {
         const step = 50;
-        if (event.key === "ArrowUp" || event.key === "ArrowLeft") {
+        if (event.key === 'ArrowUp' || event.key === 'ArrowLeft') {
             event.preventDefault();
             emitScroll(Math.max(0, scrollPosition - step));
-        } else if (event.key === "ArrowDown" || event.key === "ArrowRight") {
+        } else if (event.key === 'ArrowDown' || event.key === 'ArrowRight') {
             event.preventDefault();
             emitScroll(scrollPosition + step);
         }
     }
 
     function handleThumbPointerDown(event: PointerEvent) {
-        if (event.pointerType === "mouse" && event.buttons !== 1) {
+        if (event.pointerType === 'mouse' && event.buttons !== 1) {
             return;
         }
 
@@ -81,8 +68,7 @@
         event.stopPropagation();
         isDragging = true;
         dragPointerId = event.pointerId;
-        dragStartPos =
-            orientation === "horizontal" ? event.clientX : event.clientY;
+        dragStartPos = orientation === 'horizontal' ? event.clientX : event.clientY;
         dragStartScroll = scrollPosition;
         const target = event.currentTarget as HTMLButtonElement;
         target.setPointerCapture(event.pointerId);
@@ -93,18 +79,14 @@
             return;
         }
 
-        const currentPos =
-            orientation === "horizontal" ? event.clientX : event.clientY;
+        const currentPos = orientation === 'horizontal' ? event.clientX : event.clientY;
         const delta = currentPos - dragStartPos;
         const draggableSize = viewportSize - thumbSize;
         if (draggableSize <= 0) {
             return;
         }
 
-        emitScroll(
-            dragStartScroll +
-                (delta / draggableSize) * maximumScrollPosition,
-        );
+        emitScroll(dragStartScroll + (delta / draggableSize) * maximumScrollPosition);
     }
 
     function handleThumbPointerUp(event: PointerEvent) {
@@ -133,23 +115,20 @@
     }
 
     function emitScroll(newPosition: number) {
-        onDidChangeScrollOffset?.(
-            pinToRange(newPosition, 0, maximumScrollPosition),
-        );
+        onDidChangeScrollOffset?.(pinToRange(newPosition, 0, maximumScrollPosition));
     }
 
     function handleWheel(event: WheelEvent) {
         event.preventDefault();
-        const delta =
-            orientation === "horizontal" ? event.deltaX : event.deltaY;
+        const delta = orientation === 'horizontal' ? event.deltaX : event.deltaY;
         emitScroll(scrollPosition + delta);
     }
 </script>
 
 <div
     class="scrollbar"
-    class:horizontal={orientation === "horizontal"}
-    class:vertical={orientation === "vertical"}
+    class:horizontal={orientation === 'horizontal'}
+    class:vertical={orientation === 'vertical'}
     class:hidden={!showScrollbar}
     bind:this={trackRef}
     onclick={handleTrackClick}
@@ -166,9 +145,8 @@
     <button
         type="button"
         class="thumb"
-        style="{orientation === 'horizontal'
-            ? 'left'
-            : 'top'}: {thumbPosition}px; {orientation === 'horizontal'
+        style="{orientation === 'horizontal' ? 'left' : 'top'}: {thumbPosition}px; {orientation ===
+        'horizontal'
             ? 'width'
             : 'height'}: {thumbSize}px;"
         tabindex="-1"

@@ -12,15 +12,15 @@
     }
 
     let {
-        placeholder = "",
-        value = "",
+        placeholder = '',
+        value = '',
         autoFocus = false,
         onTextChanged,
         onKeyDown,
     }: Props = $props();
 
     let inputRef = $state<HTMLInputElement | null>(null);
-    let text = $state("");
+    let text = $state('');
     let focused = $state(false);
 
     $effect(() => {
@@ -100,8 +100,6 @@
 
     .row-filter-parameter-input .text-input::selection {
         color: var(--vscode-positronModalDialog-textInputSelectionForeground);
-        background: var(
-            --vscode-positronModalDialog-textInputSelectionBackground
-        );
+        background: var(--vscode-positronModalDialog-textInputSelectionBackground);
     }
 </style>

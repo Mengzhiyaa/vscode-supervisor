@@ -13,7 +13,7 @@ async function nextTurn(): Promise<void> {
 suite('[Unit] console resource usage coordinator', () => {
     test('bounds hidden history and restores it with one snapshot', async () => {
         const publications: ConsoleResourceUsagePublication[] = [];
-        const coordinator = new ConsoleResourceUsageCoordinator(publication => {
+        const coordinator = new ConsoleResourceUsageCoordinator((publication) => {
             publications.push(publication);
         });
 
@@ -48,7 +48,7 @@ suite('[Unit] console resource usage coordinator', () => {
 
     test('keeps one batch in flight and coalesces follow-up samples', async () => {
         const publications: ConsoleResourceUsagePublication[] = [];
-        const coordinator = new ConsoleResourceUsageCoordinator(publication => {
+        const coordinator = new ConsoleResourceUsageCoordinator((publication) => {
             publications.push(publication);
         });
 
@@ -68,10 +68,10 @@ suite('[Unit] console resource usage coordinator', () => {
 
         assert.strictEqual(publications.length, 2);
         assert.deepStrictEqual(
-            publications[1].sessions.map(session => ({
+            publications[1].sessions.map((session) => ({
                 sessionId: session.sessionId,
                 replace: session.replace,
-                cpu: session.samples.map(sample => sample.cpu_percent),
+                cpu: session.samples.map((sample) => sample.cpu_percent),
             })),
             [
                 { sessionId: 'session-1', replace: false, cpu: [2, 3] },
@@ -82,7 +82,7 @@ suite('[Unit] console resource usage coordinator', () => {
 
     test('ignores stale acknowledgements after a hidden-to-visible transition', async () => {
         const publications: ConsoleResourceUsagePublication[] = [];
-        const coordinator = new ConsoleResourceUsageCoordinator(publication => {
+        const coordinator = new ConsoleResourceUsageCoordinator((publication) => {
             publications.push(publication);
         });
 
@@ -107,7 +107,7 @@ suite('[Unit] console resource usage coordinator', () => {
         await nextTurn();
         assert.strictEqual(publications.length, 3);
         assert.deepStrictEqual(
-            publications[2].sessions[0].samples.map(sample => sample.cpu_percent),
+            publications[2].sessions[0].samples.map((sample) => sample.cpu_percent),
             [3],
         );
     });

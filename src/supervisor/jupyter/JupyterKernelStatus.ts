@@ -9,5 +9,5 @@
  * @link https://jupyter-client.readthedocs.io/en/stable/messaging.html#kernel-status
  */
 export interface JupyterKernelStatus {
-	execution_state: 'busy' | 'idle' | 'starting';
+    execution_state: 'busy' | 'idle' | 'starting';
 }

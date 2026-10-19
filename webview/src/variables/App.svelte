@@ -1,23 +1,20 @@
 <script lang="ts">
-    import { onMount, tick } from "svelte";
-    import { SvelteMap, SvelteSet } from "svelte/reactivity";
-    import type { MessageConnection } from "vscode-jsonrpc/browser";
-    import { getRpcConnection } from "$lib/rpc/client";
-    import { localize } from "$lib/localization";
-    import ActionBars from "./ActionBars.svelte";
-    import ConfirmDialog from "./ConfirmDialog.svelte";
-    import ContextMenu from "./ContextMenu.svelte";
-    import VariableGroup from "./VariableGroup.svelte";
-    import VariableItem from "./VariableItem.svelte";
-    import VariableOverflow from "./VariableOverflow.svelte";
-    import VariablesEmpty from "./VariablesEmpty.svelte";
-    import {
-        calculateVariablesColumnLayout,
-        getNameColumnBounds,
-    } from "./columnLayout";
-    import { patchEntries } from "./patchEntries";
-    import { calculateVirtualRange } from "./virtualList";
-    import type { MemoryUsageSnapshot } from "../types/memory";
+    import { onMount, tick } from 'svelte';
+    import { SvelteMap, SvelteSet } from 'svelte/reactivity';
+    import type { MessageConnection } from 'vscode-jsonrpc/browser';
+    import { getRpcConnection } from '$lib/rpc/client';
+    import { localize } from '$lib/localization';
+    import ActionBars from './ActionBars.svelte';
+    import ConfirmDialog from './ConfirmDialog.svelte';
+    import ContextMenu from './ContextMenu.svelte';
+    import VariableGroup from './VariableGroup.svelte';
+    import VariableItem from './VariableItem.svelte';
+    import VariableOverflow from './VariableOverflow.svelte';
+    import VariablesEmpty from './VariablesEmpty.svelte';
+    import { calculateVariablesColumnLayout, getNameColumnBounds } from './columnLayout';
+    import { patchEntries } from './patchEntries';
+    import { calculateVirtualRange } from './virtualList';
+    import type { MemoryUsageSnapshot } from '../types/memory';
     import type {
         IVariableGroup,
         IVariableItem,
@@ -26,12 +23,8 @@
         VariablesInstanceInfo,
         VariablesGrouping,
         VariablesSorting,
-    } from "../types/variables";
-    import {
-        isVariableGroup,
-        isVariableItem,
-        isVariableOverflow,
-    } from "../types/variables";
+    } from '../types/variables';
+    import { isVariableGroup, isVariableItem, isVariableOverflow } from '../types/variables';
 
     type GroupingMode = VariablesGrouping;
     type SortingMode = VariablesSorting;
@@ -41,16 +34,16 @@
         name: string;
         runtimeName: string;
         state:
-            | "uninitialized"
-            | "starting"
-            | "ready"
-            | "busy"
-            | "offline"
-            | "interrupting"
-            | "restarting"
-            | "exiting"
-            | "exited"
-            | "disconnected";
+            | 'uninitialized'
+            | 'starting'
+            | 'ready'
+            | 'busy'
+            | 'offline'
+            | 'interrupting'
+            | 'restarting'
+            | 'exiting'
+            | 'exited'
+            | 'disconnected';
     }
 
     interface SessionVariablesData {
@@ -66,11 +59,10 @@
     const DEFAULT_NAME_COLUMN_WIDTH = 100;
     const MINIMUM_NAME_COLUMN_WIDTH = 80;
     const RIGHT_COLUMN_VISIBILITY_THRESHOLD = 250;
-    const DEFAULT_GROUPING: GroupingMode = "kind";
-    const DEFAULT_SORTING: SortingMode = "name";
-    const DEFAULT_FILTER_TEXT = "";
-    const DEFAULT_HIGHLIGHT_RECENT =
-        !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const DEFAULT_GROUPING: GroupingMode = 'kind';
+    const DEFAULT_SORTING: SortingMode = 'name';
+    const DEFAULT_FILTER_TEXT = '';
+    const DEFAULT_HIGHLIGHT_RECENT = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const VARIABLE_ROW_HEIGHT = 26;
     const VIRTUAL_LIST_OVERSCAN = 10;
     const FILTER_DEBOUNCE_MS = 800;
@@ -79,8 +71,7 @@
     let activeSessionId = $state<string | undefined>();
     let activeVariablesInstanceId = $state<string | undefined>();
     const sessionDataMap = new SvelteMap<string, SessionVariablesData>();
-    const variablesInstanceMap =
-        new SvelteMap<string, VariablesInstanceInfo>();
+    const variablesInstanceMap = new SvelteMap<string, VariablesInstanceInfo>();
 
     let loading = $state(true);
     let connection = $state<MessageConnection | undefined>();
@@ -149,13 +140,9 @@
         return data;
     }
 
-    const currentEntries = $derived(
-        activeSessionId ? getSessionData(activeSessionId).entries : [],
-    );
+    const currentEntries = $derived(activeSessionId ? getSessionData(activeSessionId).entries : []);
     const currentRecentEntryIds = $derived(
-        activeSessionId
-            ? getSessionData(activeSessionId).recentEntryIds
-            : new Set<string>(),
+        activeSessionId ? getSessionData(activeSessionId).recentEntryIds : new Set<string>(),
     );
     const activeVariablesInstance = $derived(
         activeVariablesInstanceId
@@ -165,8 +152,7 @@
               : undefined,
     );
     const activeInstanceDisabled = $derived(
-        activeVariablesInstance?.state === "closed" ||
-            activeVariablesInstance?.state === "closing",
+        activeVariablesInstance?.state === 'closed' || activeVariablesInstance?.state === 'closing',
     );
     const visibleRange = $derived(
         calculateVirtualRange(
@@ -179,15 +165,12 @@
     );
     const visibleStartIndex = $derived(visibleRange.start);
     const visibleEndIndex = $derived(visibleRange.end);
-    const visibleEntries = $derived(
-        currentEntries.slice(visibleStartIndex, visibleEndIndex),
-    );
+    const visibleEntries = $derived(currentEntries.slice(visibleStartIndex, visibleEndIndex));
     const variablesInstances = $derived<VariablesInstance[]>(
         sessions
             .filter(
                 (session) =>
-                    variablesInstanceMap.size === 0 ||
-                    variablesInstanceMap.has(session.id),
+                    variablesInstanceMap.size === 0 || variablesInstanceMap.has(session.id),
             )
             .map((session) => ({
                 id: session.id,
@@ -200,16 +183,14 @@
 
     function syncActiveInstanceControls() {
         const instance =
-            (activeVariablesInstanceId &&
-                variablesInstanceMap.get(activeVariablesInstanceId)) ||
+            (activeVariablesInstanceId && variablesInstanceMap.get(activeVariablesInstanceId)) ||
             (activeSessionId && variablesInstanceMap.get(activeSessionId)) ||
             undefined;
 
         groupingMode = instance?.grouping ?? DEFAULT_GROUPING;
         sortingMode = instance?.sorting ?? DEFAULT_SORTING;
         filterText = instance?.filterText ?? DEFAULT_FILTER_TEXT;
-        highlightRecent =
-            instance?.highlightRecent ?? DEFAULT_HIGHLIGHT_RECENT;
+        highlightRecent = instance?.highlightRecent ?? DEFAULT_HIGHLIGHT_RECENT;
     }
 
     $effect(() => {
@@ -226,22 +207,25 @@
     });
 
     $effect(() => {
-        const busy = !loading && activeVariablesInstance?.status === "busy";
+        const busy = !loading && activeVariablesInstance?.status === 'busy';
         if (busyProgressTimer) {
             clearTimeout(busyProgressTimer);
             busyProgressTimer = undefined;
         }
         if (!busy) {
             showBusyProgress = false;
-            if (activeVariablesInstance && activeVariablesInstance.status !== "busy") {
+            if (activeVariablesInstance && activeVariablesInstance.status !== 'busy') {
                 observedSettledInstance = true;
             }
             return;
         }
-        busyProgressTimer = setTimeout(() => {
-            showBusyProgress = true;
-            busyProgressTimer = undefined;
-        }, observedSettledInstance ? 500 : 100);
+        busyProgressTimer = setTimeout(
+            () => {
+                showBusyProgress = true;
+                busyProgressTimer = undefined;
+            },
+            observedSettledInstance ? 500 : 100,
+        );
         return () => {
             if (busyProgressTimer) {
                 clearTimeout(busyProgressTimer);
@@ -270,10 +254,7 @@
     });
 
     $effect(() => {
-        if (
-            selectedEntryId &&
-            !currentEntries.some((entry) => entry.id === selectedEntryId)
-        ) {
+        if (selectedEntryId && !currentEntries.some((entry) => entry.id === selectedEntryId)) {
             selectedEntryId = null;
         }
     });
@@ -286,7 +267,7 @@
     });
 
     $effect(() => {
-        connection?.sendNotification("variables/contextKeysChanged", {
+        connection?.sendNotification('variables/contextKeysChanged', {
             variablesFocused: focused,
             hasSelection: !!selectedEntryId && !activeInstanceDisabled,
         });
@@ -297,7 +278,7 @@
         connection = rpc;
 
         rpc.onNotification(
-            "variables/entriesChanged",
+            'variables/entriesChanged',
             (params: { sessionId: string; entries: VariableEntry[]; revision: number }) => {
                 entryRequests.delete(params.sessionId);
                 const data = ensureSessionData(params.sessionId);
@@ -306,10 +287,7 @@
                 }
                 data.loaded = true;
                 data.revision = params.revision;
-                const { entries, changed } = patchEntries(
-                    data.entries,
-                    params.entries,
-                );
+                const { entries, changed } = patchEntries(data.entries, params.entries);
                 if (changed) {
                     data.entries = entries;
                     sessionDataMap.set(params.sessionId, { ...data });
@@ -326,7 +304,7 @@
         );
 
         rpc.onNotification(
-            "session/info",
+            'session/info',
             (params: { sessions: SessionInfo[]; activeSessionId?: string }) => {
                 const previousActiveSessionId = activeSessionId;
                 selectionVersion++;
@@ -335,12 +313,8 @@
                 }
                 sessions = params.sessions;
 
-                const knownSessionIds = new Set(
-                    params.sessions.map((session) => session.id),
-                );
-                for (const sessionId of Array.from(
-                    sessionDataMap.keys(),
-                )) {
+                const knownSessionIds = new Set(params.sessions.map((session) => session.id));
+                for (const sessionId of Array.from(sessionDataMap.keys())) {
                     if (!knownSessionIds.has(sessionId)) {
                         entryRequests.delete(sessionId);
                         variablesInstanceMap.delete(sessionId);
@@ -348,14 +322,9 @@
                         clearRecentTimersForSession(sessionId);
                     }
                 }
-                if (
-                    activeVariablesInstanceId &&
-                    !knownSessionIds.has(activeVariablesInstanceId)
-                ) {
+                if (activeVariablesInstanceId && !knownSessionIds.has(activeVariablesInstanceId)) {
                     activeVariablesInstanceId = resolveActiveSessionId(
-                        params.sessions.filter((session) =>
-                            variablesInstanceMap.has(session.id),
-                        ),
+                        params.sessions.filter((session) => variablesInstanceMap.has(session.id)),
                     );
                 }
 
@@ -386,69 +355,57 @@
         );
 
         rpc.onNotification(
-            "variables/instanceStarted",
+            'variables/instanceStarted',
             (params: { instance: VariablesInstanceInfo }) => {
-                variablesInstanceMap.set(
-                    params.instance.sessionId,
-                    params.instance,
+                variablesInstanceMap.set(params.instance.sessionId, params.instance);
+            },
+        );
+
+        rpc.onNotification('variables/instanceStopped', (params: { sessionId: string }) => {
+            entryRequests.delete(params.sessionId);
+            variablesInstanceMap.delete(params.sessionId);
+            sessionDataMap.delete(params.sessionId);
+            clearRecentTimersForSession(params.sessionId);
+
+            if (activeVariablesInstanceId === params.sessionId) {
+                const availableInstanceSessions = sessions.filter((session) =>
+                    variablesInstanceMap.has(session.id),
                 );
-            },
-        );
-
-        rpc.onNotification(
-            "variables/instanceStopped",
-            (params: { sessionId: string }) => {
-                entryRequests.delete(params.sessionId);
-                variablesInstanceMap.delete(params.sessionId);
-                sessionDataMap.delete(params.sessionId);
-                clearRecentTimersForSession(params.sessionId);
-
-                if (activeVariablesInstanceId === params.sessionId) {
-                    const availableInstanceSessions = sessions.filter((session) =>
-                        variablesInstanceMap.has(session.id),
-                    );
-                    activeVariablesInstanceId = resolveActiveSessionId(
-                        availableInstanceSessions,
-                        undefined,
-                    );
-                }
-            },
-        );
-
-        rpc.onNotification(
-            "variables/activeInstanceChanged",
-            (params: { sessionId?: string }) => {
-                const previousActiveSessionId = activeSessionId;
-                selectionVersion++;
-                activeVariablesInstanceId = params.sessionId;
-                const nextActiveSessionId = resolveActiveSessionId(
-                    sessions,
-                    params.sessionId,
-                    activeSessionId,
+                activeVariablesInstanceId = resolveActiveSessionId(
+                    availableInstanceSessions,
+                    undefined,
                 );
-                if (nextActiveSessionId !== previousActiveSessionId) {
-                    saveSessionUiState(previousActiveSessionId);
-                }
-                activeSessionId = nextActiveSessionId;
-                if (activeSessionId && activeSessionId !== previousActiveSessionId) {
-                    restoreSessionUiState(activeSessionId);
-                }
+            }
+        });
 
-                if (
-                    activeSessionId &&
-                    activeSessionId !== previousActiveSessionId
-                ) {
-                    if (!getSessionData(activeSessionId).loaded) {
-                        void refreshEntries(activeSessionId);
-                    } else {
-                        loading = false;
-                    }
+        rpc.onNotification('variables/activeInstanceChanged', (params: { sessionId?: string }) => {
+            const previousActiveSessionId = activeSessionId;
+            selectionVersion++;
+            activeVariablesInstanceId = params.sessionId;
+            const nextActiveSessionId = resolveActiveSessionId(
+                sessions,
+                params.sessionId,
+                activeSessionId,
+            );
+            if (nextActiveSessionId !== previousActiveSessionId) {
+                saveSessionUiState(previousActiveSessionId);
+            }
+            activeSessionId = nextActiveSessionId;
+            if (activeSessionId && activeSessionId !== previousActiveSessionId) {
+                restoreSessionUiState(activeSessionId);
+            }
+
+            if (activeSessionId && activeSessionId !== previousActiveSessionId) {
+                if (!getSessionData(activeSessionId).loaded) {
+                    void refreshEntries(activeSessionId);
+                } else {
+                    loading = false;
                 }
-            },
-        );
+            }
+        });
 
         rpc.onNotification(
-            "variables/memoryUsageUpdated",
+            'variables/memoryUsageUpdated',
             (params: { snapshot: MemoryUsageSnapshot }) => {
                 memoryUsageEnabled = true;
                 memoryUsageSnapshot = params.snapshot;
@@ -456,7 +413,7 @@
         );
 
         rpc.onNotification(
-            "variables/memoryUsageEnabledChanged",
+            'variables/memoryUsageEnabledChanged',
             (params: { enabled: boolean }) => {
                 memoryUsageEnabled = params.enabled;
                 if (!params.enabled) {
@@ -466,33 +423,33 @@
         );
 
         rpc.onNotification(
-            "variables/listCommand",
-            (params: {
-                command: "expand" | "collapse" | "copyAsText" | "copyAsHtml";
-            }) => {
+            'variables/listCommand',
+            (params: { command: 'expand' | 'collapse' | 'copyAsText' | 'copyAsHtml' }) => {
                 const entry = getSelectedEntry();
                 if (!entry || activeInstanceDisabled) return;
                 switch (params.command) {
-                    case "expand":
+                    case 'expand':
                         if (isVariableGroup(entry) && !entry.isExpanded) void toggleGroup(entry);
-                        if (isVariableItem(entry) && entry.hasChildren && !entry.isExpanded) void toggleItem(entry);
+                        if (isVariableItem(entry) && entry.hasChildren && !entry.isExpanded)
+                            void toggleItem(entry);
                         break;
-                    case "collapse":
+                    case 'collapse':
                         if (isVariableGroup(entry) && entry.isExpanded) void toggleGroup(entry);
-                        if (isVariableItem(entry) && entry.hasChildren && entry.isExpanded) void toggleItem(entry);
+                        if (isVariableItem(entry) && entry.hasChildren && entry.isExpanded)
+                            void toggleItem(entry);
                         break;
-                    case "copyAsText":
-                        void copySelectedEntry(entry, "text/plain");
+                    case 'copyAsText':
+                        void copySelectedEntry(entry, 'text/plain');
                         break;
-                    case "copyAsHtml":
-                        void copySelectedEntry(entry, "text/html");
+                    case 'copyAsHtml':
+                        void copySelectedEntry(entry, 'text/html');
                         break;
                 }
             },
         );
 
-        rpc.sendNotification("variables/ready");
-        void rpc.sendRequest("variables/setReducedMotionPreference", {
+        rpc.sendNotification('variables/ready');
+        void rpc.sendRequest('variables/setReducedMotionPreference', {
             reduced: !DEFAULT_HIGHLIGHT_RECENT,
         });
         void hydrateMemoryUsage(rpc);
@@ -542,7 +499,7 @@
             highlightRecent &&
             Date.now() - lastManualScrollTime > 1000
         ) {
-            void tick().then(() => scrollEntryIntoView(recentIds[0], "smooth"));
+            void tick().then(() => scrollEntryIntoView(recentIds[0], 'smooth'));
         }
     }
 
@@ -587,54 +544,52 @@
 
         const request = {};
         entryRequests.set(targetSessionId, request);
-        if (activeSessionId === targetSessionId) { loading = true; }
+        if (activeSessionId === targetSessionId) {
+            loading = true;
+        }
         try {
-            const result = (await connection.sendRequest(
-                "variables/listEntries",
-                {
-                    sessionId: targetSessionId,
-                    knownRevision: ensureSessionData(targetSessionId).revision,
-                },
-            )) as { entries: VariableEntry[]; revision: number; unchanged: boolean };
+            const result = (await connection.sendRequest('variables/listEntries', {
+                sessionId: targetSessionId,
+                knownRevision: ensureSessionData(targetSessionId).revision,
+            })) as { entries: VariableEntry[]; revision: number; unchanged: boolean };
 
-            if (entryRequests.get(targetSessionId) !== request) { return; }
+            if (entryRequests.get(targetSessionId) !== request) {
+                return;
+            }
             const data = ensureSessionData(targetSessionId);
             data.loaded = true;
             data.revision = result.revision;
             if (result.unchanged) {
                 return;
             }
-            const { entries, changed } = patchEntries(
-                data.entries,
-                result.entries,
-            );
+            const { entries, changed } = patchEntries(data.entries, result.entries);
             if (changed) {
                 data.entries = entries;
                 sessionDataMap.set(targetSessionId, { ...data });
             }
             applyRecentEntries(targetSessionId, result.entries);
         } catch (error) {
-            console.error("Failed to fetch variable entries:", error);
+            console.error('Failed to fetch variable entries:', error);
         } finally {
             if (entryRequests.get(targetSessionId) === request) {
                 entryRequests.delete(targetSessionId);
-                if (activeSessionId === targetSessionId) { loading = false; }
+                if (activeSessionId === targetSessionId) {
+                    loading = false;
+                }
             }
         }
     }
 
     async function hydrateMemoryUsage(rpc: MessageConnection) {
         try {
-            const state = (await rpc.sendRequest(
-                "variables/getMemoryUsage",
-            )) as {
+            const state = (await rpc.sendRequest('variables/getMemoryUsage')) as {
                 enabled: boolean;
                 snapshot?: MemoryUsageSnapshot;
             };
             memoryUsageEnabled = state.enabled;
             memoryUsageSnapshot = state.enabled ? state.snapshot : undefined;
         } catch (error) {
-            console.error("Failed to fetch memory usage:", error);
+            console.error('Failed to fetch memory usage:', error);
         }
     }
 
@@ -642,11 +597,11 @@
         if (!connection || !activeSessionId) return;
 
         try {
-            await connection.sendRequest("variables/refresh", {
+            await connection.sendRequest('variables/refresh', {
                 sessionId: activeSessionId,
             });
         } catch (error) {
-            console.error("Failed to refresh variables:", error);
+            console.error('Failed to refresh variables:', error);
         }
     }
 
@@ -656,10 +611,12 @@
         const version = ++selectionVersion;
         try {
             saveSessionUiState(activeSessionId);
-            await connection.sendRequest("variables/setActiveSession", {
+            await connection.sendRequest('variables/setActiveSession', {
                 sessionId,
             });
-            if (version !== selectionVersion) { return; }
+            if (version !== selectionVersion) {
+                return;
+            }
             activeVariablesInstanceId = sessionId;
             activeSessionId = sessionId;
             restoreSessionUiState(sessionId);
@@ -669,7 +626,7 @@
                 loading = false;
             }
         } catch (error) {
-            console.error("Failed to select variables session:", error);
+            console.error('Failed to select variables session:', error);
         }
     }
 
@@ -701,9 +658,9 @@
         if (!connection) return;
 
         try {
-            await connection.sendRequest("variables/setGrouping", { grouping });
+            await connection.sendRequest('variables/setGrouping', { grouping });
         } catch (error) {
-            console.error("Failed to set variables grouping:", error);
+            console.error('Failed to set variables grouping:', error);
         }
     }
 
@@ -712,9 +669,9 @@
         if (!connection) return;
 
         try {
-            await connection.sendRequest("variables/setSorting", { sorting });
+            await connection.sendRequest('variables/setSorting', { sorting });
         } catch (error) {
-            console.error("Failed to set variables sorting:", error);
+            console.error('Failed to set variables sorting:', error);
         }
     }
 
@@ -724,7 +681,7 @@
             clearTimeout(filterTimer);
             filterTimer = undefined;
         }
-        if (text === "") {
+        if (text === '') {
             void sendFilterText(text);
             return;
         }
@@ -738,11 +695,11 @@
         if (!connection) return;
 
         try {
-            await connection.sendRequest("variables/setFilter", {
+            await connection.sendRequest('variables/setFilter', {
                 filterText: text,
             });
         } catch (error) {
-            console.error("Failed to set variables filter:", error);
+            console.error('Failed to set variables filter:', error);
         }
     }
 
@@ -751,11 +708,11 @@
         if (!connection) return;
 
         try {
-            await connection.sendRequest("variables/setHighlightRecent", {
+            await connection.sendRequest('variables/setHighlightRecent', {
                 highlightRecent: value,
             });
         } catch (error) {
-            console.error("Failed to set highlight recent:", error);
+            console.error('Failed to set highlight recent:', error);
         }
     }
 
@@ -766,11 +723,7 @@
         variablesContainer?.focus();
     }
 
-    function handleGroupContextMenu(
-        entry: IVariableGroup,
-        x: number,
-        y: number,
-    ) {
+    function handleGroupContextMenu(entry: IVariableGroup, x: number, y: number) {
         selectedEntryId = entry.id;
         persistSelection();
         showContextMenu(entry, x, y);
@@ -781,16 +734,14 @@
 
         try {
             await connection.sendRequest(
-                entry.isExpanded
-                    ? "variables/collapseGroup"
-                    : "variables/expandGroup",
+                entry.isExpanded ? 'variables/collapseGroup' : 'variables/expandGroup',
                 {
                     groupId: entry.id,
                     sessionId: activeSessionId,
                 },
             );
         } catch (error) {
-            console.error("Failed to toggle variable group:", error);
+            console.error('Failed to toggle variable group:', error);
         }
     }
 
@@ -804,16 +755,14 @@
 
         try {
             await connection.sendRequest(
-                entry.isExpanded
-                    ? "variables/collapseItem"
-                    : "variables/expandItem",
+                entry.isExpanded ? 'variables/collapseItem' : 'variables/expandItem',
                 {
                     path: entry.path,
                     sessionId: activeSessionId,
                 },
             );
         } catch (error) {
-            console.error("Failed to toggle variable item:", error);
+            console.error('Failed to toggle variable item:', error);
         }
     }
 
@@ -829,11 +778,7 @@
         variablesContainer?.focus();
     }
 
-    function handleItemContextMenu(
-        id: string,
-        x: number,
-        y: number,
-    ) {
+    function handleItemContextMenu(id: string, x: number, y: number) {
         const entry = findItemById(id);
         if (!entry) return;
         if (activeInstanceDisabled) {
@@ -861,7 +806,7 @@
         if (activeInstanceDisabled) return;
         selectedEntryId = entry.id;
         persistSelection();
-        scrollEntryIntoView(entry.id, "auto", index);
+        scrollEntryIntoView(entry.id, 'auto', index);
     }
 
     function clearSelection() {
@@ -897,13 +842,11 @@
         if (isVariableGroup(entry)) {
             return [
                 {
-                    id: entry.isExpanded ? "collapse-group" : "expand-group",
+                    id: entry.isExpanded ? 'collapse-group' : 'expand-group',
                     label: entry.isExpanded
-                        ? localize("variables.collapse", "Collapse")
-                        : localize("variables.expand", "Expand"),
-                    icon: entry.isExpanded
-                        ? "codicon-chevron-up"
-                        : "codicon-chevron-down",
+                        ? localize('variables.collapse', 'Collapse')
+                        : localize('variables.expand', 'Expand'),
+                    icon: entry.isExpanded ? 'codicon-chevron-up' : 'codicon-chevron-down',
                 },
             ];
         }
@@ -915,9 +858,9 @@
         if (activeInstanceDisabled) {
             return [
                 {
-                    id: "copy-name",
-                    label: localize("variables.copyName", "Copy Name"),
-                    icon: "codicon-copy",
+                    id: 'copy-name',
+                    label: localize('variables.copyName', 'Copy Name'),
+                    icon: 'codicon-copy',
                 },
             ];
         }
@@ -933,55 +876,57 @@
         if (entry.hasViewer) {
             const isLoading = viewerLoadingEntryIds.has(entry.id);
             items.push({
-                id: "view",
+                id: 'view',
                 label:
-                    entry.kind === "table"
-                          ? localize("variables.viewDataTable", "View Data Table")
-                        : entry.kind === "connection"
-                          ? localize("variables.viewConnection", "View Connection")
-                          : localize("variables.view", "View"),
-                icon: isLoading ? "codicon-loading" : "codicon-open-preview",
+                    entry.kind === 'table'
+                        ? localize('variables.viewDataTable', 'View Data Table')
+                        : entry.kind === 'connection'
+                          ? localize('variables.viewConnection', 'View Connection')
+                          : localize('variables.view', 'View'),
+                icon: isLoading ? 'codicon-loading' : 'codicon-open-preview',
                 disabled: isLoading,
             });
         }
 
         if (entry.hasChildren) {
             if (items.length > 0) {
-                items.push({ id: "sep-expand", label: "", separator: true });
+                items.push({ id: 'sep-expand', label: '', separator: true });
             }
             items.push({
-                id: entry.isExpanded ? "collapse-item" : "expand-item",
+                id: entry.isExpanded ? 'collapse-item' : 'expand-item',
                 label: entry.isExpanded
-                    ? localize("variables.collapse", "Collapse")
-                    : localize("variables.expand", "Expand"),
-                icon: entry.isExpanded
-                    ? "codicon-chevron-up"
-                    : "codicon-chevron-down",
+                    ? localize('variables.collapse', 'Collapse')
+                    : localize('variables.expand', 'Expand'),
+                icon: entry.isExpanded ? 'codicon-chevron-up' : 'codicon-chevron-down',
             });
         }
 
         if (items.length > 0) {
-            items.push({ id: "sep-copy", label: "", separator: true });
+            items.push({ id: 'sep-copy', label: '', separator: true });
         }
         items.push({
-            id: "copy-name",
-            label: localize("variables.copyName", "Copy Name"),
-            icon: "codicon-copy",
+            id: 'copy-name',
+            label: localize('variables.copyName', 'Copy Name'),
+            icon: 'codicon-copy',
         });
         items.push({
-            id: "copy-value",
-            label: localize("variables.copyValue", "Copy Value"),
-            icon: "codicon-copy",
+            id: 'copy-value',
+            label: localize('variables.copyValue', 'Copy Value'),
+            icon: 'codicon-copy',
         });
-        items.push({ id: "sep-format", label: "", separator: true });
-        items.push({ id: "copy-as-text", label: localize("variables.copyAsText", "Copy as Text") });
-        items.push({ id: "copy-as-html", label: localize("variables.copyAsHtml", "Copy as HTML") });
+        items.push({ id: 'sep-format', label: '', separator: true });
+        items.push({ id: 'copy-as-text', label: localize('variables.copyAsText', 'Copy as Text') });
+        items.push({ id: 'copy-as-html', label: localize('variables.copyAsHtml', 'Copy as HTML') });
 
         return items;
     }
 
     async function handleContextMenuSelect(actionId: string) {
-        if (!contextMenuEntry || !contextMenuSessionId || contextMenuSessionId !== activeSessionId) {
+        if (
+            !contextMenuEntry ||
+            !contextMenuSessionId ||
+            contextMenuSessionId !== activeSessionId
+        ) {
             closeContextMenu();
             return;
         }
@@ -989,10 +934,7 @@
         const sessionId = contextMenuSessionId;
 
         if (isVariableGroup(entry)) {
-            if (
-                actionId === "expand-group" ||
-                actionId === "collapse-group"
-            ) {
+            if (actionId === 'expand-group' || actionId === 'collapse-group') {
                 await toggleGroup(entry);
             }
             return;
@@ -1003,45 +945,37 @@
         }
 
         switch (actionId) {
-            case "copy-name":
+            case 'copy-name':
                 await navigator.clipboard.writeText(entry.displayName);
                 break;
-            case "copy-value":
-                await navigator.clipboard.writeText(
-                    entry.displayValue,
-                );
+            case 'copy-value':
+                await navigator.clipboard.writeText(entry.displayValue);
                 break;
-            case "copy-as-text": {
+            case 'copy-as-text': {
                 if (!activeSessionId || !connection) break;
-                const text = (await connection.sendRequest(
-                    "variables/formatForClipboard",
-                    {
-                        path: entry.path,
-                        format: "text/plain",
-                        sessionId,
-                    },
-                )) as string;
+                const text = (await connection.sendRequest('variables/formatForClipboard', {
+                    path: entry.path,
+                    format: 'text/plain',
+                    sessionId,
+                })) as string;
                 await navigator.clipboard.writeText(text);
                 break;
             }
-            case "copy-as-html": {
+            case 'copy-as-html': {
                 if (!activeSessionId || !connection) break;
-                const text = (await connection.sendRequest(
-                    "variables/formatForClipboard",
-                    {
-                        path: entry.path,
-                        format: "text/html",
-                        sessionId,
-                    },
-                )) as string;
-                await writeClipboardContent(text, "text/html");
+                const text = (await connection.sendRequest('variables/formatForClipboard', {
+                    path: entry.path,
+                    format: 'text/html',
+                    sessionId,
+                })) as string;
+                await writeClipboardContent(text, 'text/html');
                 break;
             }
-            case "expand-item":
-            case "collapse-item":
+            case 'expand-item':
+            case 'collapse-item':
                 await toggleItem(entry);
                 break;
-            case "view":
+            case 'view':
                 await viewVariable(entry);
                 break;
         }
@@ -1051,12 +985,12 @@
         if (!connection || !activeSessionId || activeInstanceDisabled) return;
 
         try {
-            await connection.sendRequest("variables/clear", {
+            await connection.sendRequest('variables/clear', {
                 sessionId: activeSessionId,
             });
             showDeleteAllDialog = false;
         } catch (error) {
-            console.error("Failed to delete all variables:", error);
+            console.error('Failed to delete all variables:', error);
         }
     }
 
@@ -1066,12 +1000,12 @@
         viewerLoadingEntryIds.add(entry.id);
 
         try {
-            await connection.sendRequest("variables/view", {
+            await connection.sendRequest('variables/view', {
                 path: entry.path,
                 sessionId: activeSessionId,
             });
         } catch (error) {
-            console.error("Failed to view variable:", error);
+            console.error('Failed to view variable:', error);
         } finally {
             viewerLoadingEntryIds.delete(entry.id);
         }
@@ -1086,15 +1020,15 @@
             : -1;
 
         switch (event.key) {
-            case "Home":
+            case 'Home':
                 event.preventDefault();
                 selectEntry(currentEntries[0], 0);
                 return;
-            case "End":
+            case 'End':
                 event.preventDefault();
                 selectEntry(currentEntries[currentEntries.length - 1], currentEntries.length - 1);
                 return;
-            case "PageDown": {
+            case 'PageDown': {
                 event.preventDefault();
                 const pageSize = Math.max(1, Math.floor(containerHeight / VARIABLE_ROW_HEIGHT));
                 const nextIndex = Math.min(
@@ -1104,14 +1038,14 @@
                 selectEntry(currentEntries[nextIndex], nextIndex);
                 return;
             }
-            case "PageUp": {
+            case 'PageUp': {
                 event.preventDefault();
                 const pageSize = Math.max(1, Math.floor(containerHeight / VARIABLE_ROW_HEIGHT));
                 const nextIndex = Math.max(0, (currentIndex === -1 ? 0 : currentIndex) - pageSize);
                 selectEntry(currentEntries[nextIndex], nextIndex);
                 return;
             }
-            case "ArrowDown": {
+            case 'ArrowDown': {
                 event.preventDefault();
                 const nextIndex =
                     currentIndex < currentEntries.length - 1
@@ -1120,16 +1054,14 @@
                 selectEntry(currentEntries[nextIndex], nextIndex);
                 return;
             }
-            case "ArrowUp": {
+            case 'ArrowUp': {
                 event.preventDefault();
                 const nextIndex =
-                    currentIndex === -1
-                        ? currentEntries.length - 1
-                        : Math.max(currentIndex - 1, 0);
+                    currentIndex === -1 ? currentEntries.length - 1 : Math.max(currentIndex - 1, 0);
                 selectEntry(currentEntries[nextIndex], nextIndex);
                 return;
             }
-            case "Enter": {
+            case 'Enter': {
                 event.preventDefault();
                 if (!selectedEntry) return;
                 if (isVariableGroup(selectedEntry)) {
@@ -1143,17 +1075,14 @@
                 }
                 return;
             }
-            case "Escape":
+            case 'Escape':
                 event.preventDefault();
                 clearSelection();
                 return;
-            case "ArrowRight":
+            case 'ArrowRight':
                 event.preventDefault();
                 if (!selectedEntry) return;
-                if (
-                    isVariableGroup(selectedEntry) &&
-                    !selectedEntry.isExpanded
-                ) {
+                if (isVariableGroup(selectedEntry) && !selectedEntry.isExpanded) {
                     void toggleGroup(selectedEntry);
                 } else if (
                     isVariableItem(selectedEntry) &&
@@ -1163,13 +1092,10 @@
                     void toggleItem(selectedEntry);
                 }
                 return;
-            case "ArrowLeft":
+            case 'ArrowLeft':
                 event.preventDefault();
                 if (!selectedEntry) return;
-                if (
-                    isVariableGroup(selectedEntry) &&
-                    selectedEntry.isExpanded
-                ) {
+                if (isVariableGroup(selectedEntry) && selectedEntry.isExpanded) {
                     void toggleGroup(selectedEntry);
                 } else if (
                     isVariableItem(selectedEntry) &&
@@ -1181,15 +1107,15 @@
                 return;
         }
 
-        if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "c" && selectedEntry) {
+        if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'c' && selectedEntry) {
             event.preventDefault();
-            void copySelectedEntry(selectedEntry, event.shiftKey ? "text/html" : "text/plain");
+            void copySelectedEntry(selectedEntry, event.shiftKey ? 'text/html' : 'text/plain');
         }
     }
 
-    async function copySelectedEntry(entry: VariableEntry, format: "text/plain" | "text/html") {
+    async function copySelectedEntry(entry: VariableEntry, format: 'text/plain' | 'text/html') {
         if (!isVariableItem(entry) || !connection || !activeSessionId) return;
-        const text = (await connection.sendRequest("variables/formatForClipboard", {
+        const text = (await connection.sendRequest('variables/formatForClipboard', {
             path: entry.path,
             format,
             sessionId: activeSessionId,
@@ -1197,18 +1123,15 @@
         await writeClipboardContent(text, format);
     }
 
-    async function writeClipboardContent(
-        text: string,
-        format: "text/plain" | "text/html",
-    ) {
+    async function writeClipboardContent(text: string, format: 'text/plain' | 'text/html') {
         if (
-            format === "text/html" &&
-            typeof ClipboardItem !== "undefined" &&
-            typeof navigator.clipboard.write === "function"
+            format === 'text/html' &&
+            typeof ClipboardItem !== 'undefined' &&
+            typeof navigator.clipboard.write === 'function'
         ) {
             await navigator.clipboard.write([
                 new ClipboardItem({
-                    "text/html": new Blob([text], { type: "text/html" }),
+                    'text/html': new Blob([text], { type: 'text/html' }),
                 }),
             ]);
             return;
@@ -1216,15 +1139,10 @@
         await navigator.clipboard.writeText(text);
     }
 
-    function scrollEntryIntoView(
-        id: string,
-        behavior: ScrollBehavior = "auto",
-        knownIndex = -1,
-    ) {
+    function scrollEntryIntoView(id: string, behavior: ScrollBehavior = 'auto', knownIndex = -1) {
         if (!variablesContainer) return;
-        const index = knownIndex >= 0
-            ? knownIndex
-            : currentEntries.findIndex((entry) => entry.id === id);
+        const index =
+            knownIndex >= 0 ? knownIndex : currentEntries.findIndex((entry) => entry.id === id);
         if (index < 0) return;
         const top = index * VARIABLE_ROW_HEIGHT;
         const bottom = top + VARIABLE_ROW_HEIGHT;
@@ -1239,10 +1157,7 @@
     }
 
     function beginResizeNameColumn() {
-        const bounds = getNameColumnBounds(
-            containerWidth,
-            MINIMUM_NAME_COLUMN_WIDTH,
-        );
+        const bounds = getNameColumnBounds(containerWidth, MINIMUM_NAME_COLUMN_WIDTH);
         return {
             minimumWidth: bounds.minimum,
             maximumWidth: bounds.maximum,
@@ -1310,10 +1225,10 @@
 
 <div class="positron-variables">
     <ActionBars
-        filterText={filterText}
+        {filterText}
         grouping={groupingMode}
         sorting={sortingMode}
-        highlightRecent={highlightRecent}
+        {highlightRecent}
         instances={variablesInstances}
         activeInstanceId={activeVariablesInstanceId ?? activeSessionId}
         hasActiveInstance={variablesInstances.length > 0}
@@ -1327,8 +1242,7 @@
         onsortingChange={handleSortingChange}
         onhighlightRecentChange={handleHighlightRecentChange}
         onselectInstance={selectVariablesInstance}
-        onconfigureMemory={() =>
-            connection?.sendRequest("variables/openMemorySettings")}
+        onconfigureMemory={() => connection?.sendRequest('variables/openMemorySettings')}
     />
 
     {#if showBusyProgress}
@@ -1345,9 +1259,7 @@
         bind:clientHeight={containerHeight}
         tabindex="0"
         role="tree"
-        aria-activedescendant={selectedEntryId
-            ? `variable-entry-${selectedEntryId}`
-            : undefined}
+        aria-activedescendant={selectedEntryId ? `variable-entry-${selectedEntryId}` : undefined}
         data-saved-scroll-offset={activeSessionId
             ? getSessionData(activeSessionId).scrollOffset
             : 0}
@@ -1365,7 +1277,7 @@
             <VariablesEmpty
                 hasFilter={filterText.length > 0}
                 message={!activeSessionId
-                    ? localize("variables.noActiveSession", "There is no active session.")
+                    ? localize('variables.noActiveSession', 'There is no active session.')
                     : undefined}
             />
         {:else}
@@ -1377,69 +1289,66 @@
                     class="variables-list-window"
                     style:transform={`translateY(${visibleStartIndex * VARIABLE_ROW_HEIGHT}px)`}
                 >
-                {#each visibleEntries as entry (entry.id)}
-                    {#if isVariableGroup(entry)}
-                        <VariableGroup
-                            groupId={entry.id}
-                            title={entry.title}
-                            expanded={entry.isExpanded}
-                            selected={selectedEntryId === entry.id}
-                            {focused}
-                            disabled={activeInstanceDisabled}
-                            onselect={() => handleGroupSelect(entry)}
-                            ondeselect={clearSelection}
-                            ontoggleExpand={() => toggleGroup(entry)}
-                            oncontextMenu={({ x, y }) =>
-                                handleGroupContextMenu(entry, x, y)}
-                        />
-                    {:else if isVariableItem(entry)}
-                        <VariableItem
-                            id={entry.id}
-                            indentLevel={entry.indentLevel}
-                            displayName={entry.displayName}
-                            displayValue={entry.displayValue}
-                            hasChildren={entry.hasChildren}
-                            hasViewer={entry.hasViewer}
-                            isExpanded={entry.isExpanded}
-                            kind={entry.kind}
-                            {nameColumnWidth}
-                            {detailsColumnWidth}
-                            {rightColumnVisible}
-                            selected={selectedEntryId === entry.id}
-                            {focused}
-                            disabled={activeInstanceDisabled}
-                            recent={highlightRecent &&
-                                currentRecentEntryIds.has(entry.id)}
-                            viewerLoading={viewerLoadingEntryIds.has(entry.id)}
-                            rightText={sortingMode === "size" &&
-                            entry.size !== undefined
-                                ? formatSize(entry.size)
-                                : entry.displayType}
-                            onselect={handleItemSelect}
-                            ondeselect={clearSelection}
-                            ontoggleExpand={handleItemToggle}
-                            onview={handleItemView}
-                            oncontextMenu={handleItemContextMenu}
-                            onBeginResizeNameColumn={beginResizeNameColumn}
-                            onResizeNameColumn={resizeNameColumn}
-                        />
-                    {:else if isVariableOverflow(entry)}
-                        <VariableOverflow
-                            entryId={entry.id}
-                            overflowValues={entry.overflowValues}
-                            indentLevel={entry.indentLevel}
-                            {nameColumnWidth}
-                            {detailsColumnWidth}
-                            selected={selectedEntryId === entry.id}
-                            {focused}
-                            disabled={activeInstanceDisabled}
-                            onBeginResizeNameColumn={beginResizeNameColumn}
-                            onResizeNameColumn={resizeNameColumn}
-                            onselect={() => handleOverflowSelect(entry)}
-                            ondeselect={clearSelection}
-                        />
-                    {/if}
-                {/each}
+                    {#each visibleEntries as entry (entry.id)}
+                        {#if isVariableGroup(entry)}
+                            <VariableGroup
+                                groupId={entry.id}
+                                title={entry.title}
+                                expanded={entry.isExpanded}
+                                selected={selectedEntryId === entry.id}
+                                {focused}
+                                disabled={activeInstanceDisabled}
+                                onselect={() => handleGroupSelect(entry)}
+                                ondeselect={clearSelection}
+                                ontoggleExpand={() => toggleGroup(entry)}
+                                oncontextMenu={({ x, y }) => handleGroupContextMenu(entry, x, y)}
+                            />
+                        {:else if isVariableItem(entry)}
+                            <VariableItem
+                                id={entry.id}
+                                indentLevel={entry.indentLevel}
+                                displayName={entry.displayName}
+                                displayValue={entry.displayValue}
+                                hasChildren={entry.hasChildren}
+                                hasViewer={entry.hasViewer}
+                                isExpanded={entry.isExpanded}
+                                kind={entry.kind}
+                                {nameColumnWidth}
+                                {detailsColumnWidth}
+                                {rightColumnVisible}
+                                selected={selectedEntryId === entry.id}
+                                {focused}
+                                disabled={activeInstanceDisabled}
+                                recent={highlightRecent && currentRecentEntryIds.has(entry.id)}
+                                viewerLoading={viewerLoadingEntryIds.has(entry.id)}
+                                rightText={sortingMode === 'size' && entry.size !== undefined
+                                    ? formatSize(entry.size)
+                                    : entry.displayType}
+                                onselect={handleItemSelect}
+                                ondeselect={clearSelection}
+                                ontoggleExpand={handleItemToggle}
+                                onview={handleItemView}
+                                oncontextMenu={handleItemContextMenu}
+                                onBeginResizeNameColumn={beginResizeNameColumn}
+                                onResizeNameColumn={resizeNameColumn}
+                            />
+                        {:else if isVariableOverflow(entry)}
+                            <VariableOverflow
+                                entryId={entry.id}
+                                overflowValues={entry.overflowValues}
+                                indentLevel={entry.indentLevel}
+                                {nameColumnWidth}
+                                {detailsColumnWidth}
+                                selected={selectedEntryId === entry.id}
+                                {focused}
+                                disabled={activeInstanceDisabled}
+                                onBeginResizeNameColumn={beginResizeNameColumn}
+                                onResizeNameColumn={resizeNameColumn}
+                                onselect={() => handleOverflowSelect(entry)}
+                                ondeselect={clearSelection}
+                            />
+                        {/if}
+                    {/each}
                 </div>
             </div>
         {/if}
@@ -1460,10 +1369,13 @@
 
 {#if showDeleteAllDialog}
     <ConfirmDialog
-        title={localize("variables.deleteAllTitle", "Delete All Variables")}
-        message={localize("variables.deleteAllMessage", "Are you sure you want to delete all variables? This operation cannot be undone.")}
-        confirmLabel={localize("variables.delete", "Delete")}
-        cancelLabel={localize("common.cancel", "Cancel")}
+        title={localize('variables.deleteAllTitle', 'Delete All Variables')}
+        message={localize(
+            'variables.deleteAllMessage',
+            'Are you sure you want to delete all variables? This operation cannot be undone.',
+        )}
+        confirmLabel={localize('variables.delete', 'Delete')}
+        cancelLabel={localize('common.cancel', 'Cancel')}
         onConfirm={deleteAllVariables}
         onCancel={() => (showDeleteAllDialog = false)}
     />
@@ -1493,8 +1405,7 @@
         overflow: hidden;
         background: color-mix(
             in srgb,
-            var(--vscode-progressBar-background, var(--vscode-focusBorder))
-                18%,
+            var(--vscode-progressBar-background, var(--vscode-focusBorder)) 18%,
             transparent
         );
     }
@@ -1503,10 +1414,7 @@
         position: absolute;
         inset: 0 auto 0 0;
         width: 38%;
-        background: var(
-            --vscode-progressBar-background,
-            var(--vscode-focusBorder)
-        );
+        background: var(--vscode-progressBar-background, var(--vscode-focusBorder));
         animation: variables-progress-slide 1.1s ease-in-out infinite;
     }
 

@@ -1,16 +1,15 @@
 <script lang="ts">
-    import { onMount } from "svelte";
+    import { onMount } from 'svelte';
     import {
         ensureLanguageTextMateTokenizerReady,
         loadLanguageMonacoSupportModule,
-    } from "$lib/monaco/languageSupport";
+    } from '$lib/monaco/languageSupport';
 
-    type MonacoApi = typeof import("monaco-editor/editor");
-    type MonacoEditor =
-        import("monaco-editor/editor").editor.IStandaloneCodeEditor;
-    type MonacoModel = import("monaco-editor/editor").editor.ITextModel;
+    type MonacoApi = typeof import('monaco-editor/editor');
+    type MonacoEditor = import('monaco-editor/editor').editor.IStandaloneCodeEditor;
+    type MonacoModel = import('monaco-editor/editor').editor.ITextModel;
     type MonacoEditorOptions =
-        import("monaco-editor/editor").editor.IStandaloneEditorConstructionOptions;
+        import('monaco-editor/editor').editor.IStandaloneEditorConstructionOptions;
 
     interface Props {
         code?: string;
@@ -18,11 +17,7 @@
         editorOptions?: MonacoEditorOptions;
     }
 
-    let {
-        code = "",
-        language = "plaintext",
-        editorOptions,
-    }: Props = $props();
+    let { code = '', language = 'plaintext', editorOptions }: Props = $props();
 
     let containerRef = $state<HTMLDivElement | null>(null);
     let monacoApi = $state<MonacoApi | null>(null);
@@ -31,85 +26,80 @@
     let languageSyncVersion = 0;
 
     async function ensureMonacoSupport(): Promise<MonacoApi> {
-        const { ensureMonacoRuntime } = await import("$lib/monaco/setup");
+        const { ensureMonacoRuntime } = await import('$lib/monaco/setup');
         return ensureMonacoRuntime();
     }
 
     function resolveTheme(): string {
         const classList = document.body.classList;
 
-        if (classList.contains("vscode-high-contrast-light")) {
-            return "hc-light";
+        if (classList.contains('vscode-high-contrast-light')) {
+            return 'hc-light';
         }
 
-        if (classList.contains("vscode-high-contrast")) {
-            return "hc-black";
+        if (classList.contains('vscode-high-contrast')) {
+            return 'hc-black';
         }
 
-        if (classList.contains("vscode-dark")) {
-            return "vs-dark";
+        if (classList.contains('vscode-dark')) {
+            return 'vs-dark';
         }
 
-        return "vs";
+        return 'vs';
     }
 
     function resolveLanguageId(nextLanguage: string): string {
         const normalized = nextLanguage.trim().toLowerCase();
 
         if (!normalized) {
-            return "plaintext";
+            return 'plaintext';
         }
 
         if (
-            normalized === "r" ||
-            normalized.includes("tidyverse") ||
-            normalized.includes("data.table")
+            normalized === 'r' ||
+            normalized.includes('tidyverse') ||
+            normalized.includes('data.table')
         ) {
-            return "r";
+            return 'r';
         }
 
-        if (normalized.includes("python") || normalized.includes("pandas")) {
-            return "python";
+        if (normalized.includes('python') || normalized.includes('pandas')) {
+            return 'python';
         }
 
-        if (normalized.includes("polars")) {
-            return "python";
+        if (normalized.includes('polars')) {
+            return 'python';
         }
 
-        if (normalized.includes("typescript")) {
-            return "typescript";
+        if (normalized.includes('typescript')) {
+            return 'typescript';
         }
 
-        if (normalized.includes("javascript") || normalized === "js") {
-            return "javascript";
+        if (normalized.includes('javascript') || normalized === 'js') {
+            return 'javascript';
         }
 
-        if (normalized.includes("sql")) {
-            return "sql";
+        if (normalized.includes('sql')) {
+            return 'sql';
         }
 
-        if (normalized.includes("json")) {
-            return "json";
+        if (normalized.includes('json')) {
+            return 'json';
         }
 
-        if (
-            normalized.includes("shell") ||
-            normalized === "sh" ||
-            normalized === "bash"
-        ) {
-            return "shell";
+        if (normalized.includes('shell') || normalized === 'sh' || normalized === 'bash') {
+            return 'shell';
         }
 
-        return "plaintext";
+        return 'plaintext';
     }
 
     async function ensureLanguageRegistered(languageId: string): Promise<void> {
-        if (languageId !== "r" || !monacoApi) {
+        if (languageId !== 'r' || !monacoApi) {
             return;
         }
 
-        const languageSupport =
-            await loadLanguageMonacoSupportModule(languageId);
+        const languageSupport = await loadLanguageMonacoSupportModule(languageId);
         languageSupport?.registerLanguage(monacoApi);
         await ensureLanguageTextMateTokenizerReady(monacoApi, languageId);
     }
@@ -135,7 +125,7 @@
             return;
         }
 
-        const nextCode = code ?? "";
+        const nextCode = code ?? '';
         if (model.getValue() !== nextCode) {
             model.setValue(nextCode);
         }
@@ -168,7 +158,7 @@
             }
 
             monacoApi = runtime;
-            model = runtime.editor.createModel(code ?? "", languageId);
+            model = runtime.editor.createModel(code ?? '', languageId);
             editor = runtime.editor.create(containerRef, {
                 model,
                 theme: resolveTheme(),
@@ -177,18 +167,18 @@
                 minimap: { enabled: false },
                 scrollBeyondLastLine: false,
                 automaticLayout: true,
-                wordWrap: "bounded",
+                wordWrap: 'bounded',
                 wordWrapColumn: 2048,
                 glyphMargin: false,
                 folding: false,
                 fixedOverflowWidgets: true,
-                lineNumbers: "off",
+                lineNumbers: 'off',
                 lineDecorationsWidth: 10,
                 overviewRulerLanes: 0,
                 rulers: [],
-                renderLineHighlight: "none",
-                renderValidationDecorations: "off",
-                occurrencesHighlight: "off",
+                renderLineHighlight: 'none',
+                renderValidationDecorations: 'off',
+                occurrencesHighlight: 'off',
                 selectionHighlight: false,
                 scrollbar: {
                     useShadows: false,

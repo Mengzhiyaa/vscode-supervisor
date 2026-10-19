@@ -81,8 +81,9 @@ export class ConsoleSyncCoordinator implements vscode.Disposable {
             return;
         }
         while (this._inFlight.size < this._maxInFlight) {
-            const index = this._pending.findIndex(chunk =>
-                (this._inFlightBySession.get(chunk.sessionId) ?? 0) < this._maxPerSession,
+            const index = this._pending.findIndex(
+                (chunk) =>
+                    (this._inFlightBySession.get(chunk.sessionId) ?? 0) < this._maxPerSession,
             );
             if (index < 0) {
                 return;
@@ -93,22 +94,25 @@ export class ConsoleSyncCoordinator implements vscode.Disposable {
                 chunk.sessionId,
                 (this._inFlightBySession.get(chunk.sessionId) ?? 0) + 1,
             );
-            this._ackTimers.set(chunk.chunkId, setTimeout(() => {
-                const timedOut = this._inFlight.get(chunk.chunkId);
-                if (!timedOut) {
-                    return;
-                }
-                this._inFlight.delete(chunk.chunkId);
-                this._ackTimers.delete(chunk.chunkId);
-                const count = this._inFlightBySession.get(chunk.sessionId) ?? 1;
-                if (count <= 1) {
-                    this._inFlightBySession.delete(chunk.sessionId);
-                } else {
-                    this._inFlightBySession.set(chunk.sessionId, count - 1);
-                }
-                this._onAckTimeout(chunk);
-                this._pump();
-            }, this._ackTimeoutMs));
+            this._ackTimers.set(
+                chunk.chunkId,
+                setTimeout(() => {
+                    const timedOut = this._inFlight.get(chunk.chunkId);
+                    if (!timedOut) {
+                        return;
+                    }
+                    this._inFlight.delete(chunk.chunkId);
+                    this._ackTimers.delete(chunk.chunkId);
+                    const count = this._inFlightBySession.get(chunk.sessionId) ?? 1;
+                    if (count <= 1) {
+                        this._inFlightBySession.delete(chunk.sessionId);
+                    } else {
+                        this._inFlightBySession.set(chunk.sessionId, count - 1);
+                    }
+                    this._onAckTimeout(chunk);
+                    this._pump();
+                }, this._ackTimeoutMs),
+            );
             chunk.send();
         }
     }

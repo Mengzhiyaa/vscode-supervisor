@@ -65,10 +65,12 @@ export abstract class RuntimeItem {
 
     constructor(
         public readonly id: string,
-        public readonly when: Date
-    ) { }
+        public readonly when: Date,
+    ) {}
 
-    get isHidden(): boolean { return this._isHidden; }
+    get isHidden(): boolean {
+        return this._isHidden;
+    }
 
     getClipboardRepresentation(_commentPrefix: string): string[] {
         return [];
@@ -93,7 +95,7 @@ abstract class RuntimeItemStandard extends RuntimeItem {
     constructor(
         id: string,
         when: Date,
-        protected readonly text: string
+        protected readonly text: string,
     ) {
         super(id, when);
     }
@@ -129,7 +131,7 @@ export class RuntimeItemActivity extends RuntimeItem {
 
     constructor(
         public readonly parentId: string,
-        initialItem: ActivityItem
+        initialItem: ActivityItem,
     ) {
         super(initialItem.id, initialItem.when);
         this._activityItems.push(initialItem);
@@ -140,7 +142,9 @@ export class RuntimeItemActivity extends RuntimeItem {
     }
 
     override getClipboardRepresentation(commentPrefix: string): string[] {
-        return this._activityItems.flatMap((item) => item.getClipboardRepresentation(commentPrefix));
+        return this._activityItems.flatMap((item) =>
+            item.getClipboardRepresentation(commentPrefix),
+        );
     }
 
     addActivityItem(item: ActivityItem): void {
@@ -182,7 +186,7 @@ export class RuntimeItemActivity extends RuntimeItem {
      */
     clearOutputItems(): void {
         this._activityItems = this._activityItems.filter(
-            item => item instanceof ActivityItemInput
+            (item) => item instanceof ActivityItemInput,
         );
     }
 
@@ -192,7 +196,13 @@ export class RuntimeItemActivity extends RuntimeItem {
             | ActivityItemOutputMessage
             | ActivityItemOutputHtml
             | ActivityItemOutputPlot
-            | ((existingId: string) => ActivityItemOutputMessage | ActivityItemOutputHtml | ActivityItemOutputPlot | undefined)
+            | ((
+                  existingId: string,
+              ) =>
+                  | ActivityItemOutputMessage
+                  | ActivityItemOutputHtml
+                  | ActivityItemOutputPlot
+                  | undefined),
     ): boolean {
         let replaced = false;
         for (let i = this._activityItems.length - 1; i >= 0; i--) {
@@ -203,12 +213,15 @@ export class RuntimeItemActivity extends RuntimeItem {
                     existing instanceof ActivityItemOutputPlot) &&
                 existing.outputId === outputId
             ) {
-                const next = typeof replacement === 'function' ? replacement(existing.id) : replacement;
+                const next =
+                    typeof replacement === 'function' ? replacement(existing.id) : replacement;
                 if (next) {
                     this._activityItems[i] = next;
                     replaced = true;
                 }
-                if (typeof replacement !== 'function') { break; }
+                if (typeof replacement !== 'function') {
+                    break;
+                }
             }
         }
         return replaced;
@@ -240,7 +253,7 @@ export class RuntimeItemStartup extends RuntimeItemStandard {
         id: string,
         when: Date,
         public readonly banner: string,
-        public readonly version: string
+        public readonly version: string,
     ) {
         super(id, when, banner);
     }
@@ -269,7 +282,7 @@ export class RuntimeItemStarted extends RuntimeItemStandard {
     constructor(
         id: string,
         when: Date,
-        public readonly sessionName: string
+        public readonly sessionName: string,
     ) {
         super(id, when, `${sessionName} started.`);
     }
@@ -283,7 +296,7 @@ export class RuntimeItemRestarted extends RuntimeItemStandard {
     constructor(
         id: string,
         when: Date,
-        public readonly sessionName: string
+        public readonly sessionName: string,
     ) {
         super(id, when, `${sessionName} restarted.`);
     }
@@ -297,7 +310,7 @@ export class RuntimeItemReconnected extends RuntimeItemStandard {
     constructor(
         id: string,
         when: Date,
-        public readonly sessionName: string
+        public readonly sessionName: string,
     ) {
         super(id, when, `${sessionName} reconnected.`);
     }
@@ -313,7 +326,7 @@ export class RuntimeItemExited extends RuntimeItemStandard {
         when: Date,
         public readonly sessionName: string,
         public readonly exitCode: number,
-        public readonly reason: string
+        public readonly reason: string,
     ) {
         super(id, when, `${sessionName} exited (code: ${exitCode})${reason ? `\n${reason}` : ''}`);
     }
@@ -327,15 +340,9 @@ export class RuntimeItemTrace extends RuntimeItemStandard {
     constructor(
         id: string,
         when: Date,
-        public readonly trace: string
+        public readonly trace: string,
     ) {
-        super(
-            id,
-            when,
-            trace
-                .replaceAll('\x1b', 'ESC')
-                .replaceAll('\x9B', 'CSI')
-        );
+        super(id, when, trace.replaceAll('\x1b', 'ESC').replaceAll('\x9B', 'CSI'));
     }
 }
 
@@ -348,7 +355,7 @@ export class RuntimeItemOffline extends RuntimeItemStandard {
         id: string,
         when: Date,
         public readonly sessionName: string,
-        public readonly reason: string
+        public readonly reason: string,
     ) {
         super(id, when, `${sessionName} is offline.${reason ? `\n${reason}` : ''}`);
     }
@@ -373,7 +380,8 @@ export class RuntimeItemPendingInput extends RuntimeItemStandard {
         public readonly attribution: RuntimeItemPendingInputAttribution,
         public readonly executionId: string | undefined,
         public readonly code: string,
-        public readonly mode: 'interactive' | 'non-interactive' | 'silent' | 'transient' = 'interactive',
+        public readonly mode:
+            'interactive' | 'non-interactive' | 'silent' | 'transient' = 'interactive',
         public readonly submitting: boolean = false,
     ) {
         super(id, when, code);
@@ -389,7 +397,7 @@ export class RuntimeItemStarting extends RuntimeItemStandard {
         id: string,
         when: Date,
         public readonly message: string,
-        public readonly attachMode: SessionAttachMode
+        public readonly attachMode: SessionAttachMode,
     ) {
         super(id, when, message);
     }
@@ -404,7 +412,7 @@ export class RuntimeItemRestartButton extends RuntimeItem {
         id: string,
         when: Date,
         public readonly sessionId: string,
-        public readonly onRestart: () => void
+        public readonly onRestart: () => void,
     ) {
         super(id, when);
     }
@@ -420,10 +428,12 @@ export abstract class ActivityItem {
     constructor(
         public readonly id: string,
         public readonly parentId: string,
-        public readonly when: Date
-    ) { }
+        public readonly when: Date,
+    ) {}
 
-    get isHidden(): boolean { return this._isHidden; }
+    get isHidden(): boolean {
+        return this._isHidden;
+    }
 
     getClipboardRepresentation(_commentPrefix: string): string[] {
         return [];
@@ -456,7 +466,7 @@ export class ActivityItemInput extends ActivityItem {
         public readonly inputPrompt: string,
         public readonly continuationPrompt: string,
         public readonly code: string,
-        public readonly attribution?: ConsoleExecutionAttribution
+        public readonly attribution?: ConsoleExecutionAttribution,
     ) {
         super(id, parentId, when);
     }
@@ -478,7 +488,7 @@ export class ActivityItemStream extends ActivityItem {
         parentId: string,
         when: Date,
         public readonly streamType: ActivityItemStreamType,
-        text: string
+        text: string,
     ) {
         super(id, parentId, when);
         this.text = text;
@@ -512,14 +522,17 @@ export class ActivityItemErrorMessage extends ActivityItem {
         when: Date,
         public readonly name: string,
         public readonly message: string,
-        public readonly traceback: string[]
+        public readonly traceback: string[],
     ) {
         super(id, parentId, when);
     }
 
     override getClipboardRepresentation(commentPrefix: string): string[] {
         const lines = [
-            ...formatConsoleTextForClipboard(!this.name ? this.message : `${this.name}: ${this.message}`, commentPrefix),
+            ...formatConsoleTextForClipboard(
+                !this.name ? this.message : `${this.name}: ${this.message}`,
+                commentPrefix,
+            ),
             ...this.traceback.flatMap((line) => formatConsoleTextForClipboard(line, commentPrefix)),
         ];
         return lines;
@@ -528,7 +541,10 @@ export class ActivityItemErrorMessage extends ActivityItem {
     override optimizeScrollback(scrollbackSize: number): number {
         const outputLines =
             countConsoleTextLines(!this.name ? this.message : `${this.name}: ${this.message}`) +
-            this.traceback.reduce((count, line) => count + countConsoleTextLines(line, line.length > 0 ? 1 : 0), 0);
+            this.traceback.reduce(
+                (count, line) => count + countConsoleTextLines(line, line.length > 0 ? 1 : 0),
+                0,
+            );
 
         if (outputLines <= scrollbackSize) {
             this._isHidden = false;
@@ -567,7 +583,7 @@ export class ActivityItemOutputMessage extends ActivityItem {
         parentId: string,
         when: Date,
         public readonly data: ILanguageRuntimeMessageOutputData,
-        public readonly outputId?: string
+        public readonly outputId?: string,
     ) {
         super(id, parentId, when);
     }
@@ -601,7 +617,7 @@ export class ActivityItemOutputHtml extends ActivityItem {
         when: Date,
         public readonly html: string,
         public readonly resource?: string,
-        public readonly outputId?: string
+        public readonly outputId?: string,
     ) {
         super(id, parentId, when);
     }
@@ -622,7 +638,7 @@ export class ActivityItemOutputPlot extends ActivityItem {
         when: Date,
         public readonly data: ILanguageRuntimeMessageOutputData,
         public readonly onSelected: () => void,
-        public readonly outputId?: string
+        public readonly outputId?: string,
     ) {
         super(id, parentId, when);
     }
@@ -658,7 +674,7 @@ export class ActivityItemPrompt extends ActivityItem {
         parentId: string,
         when: Date,
         public readonly prompt: string,
-        public readonly password: boolean
+        public readonly password: boolean,
     ) {
         super(id, parentId, when);
     }

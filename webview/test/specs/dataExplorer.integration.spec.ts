@@ -42,19 +42,14 @@ async function initializeExplorerFixture(
             type_display: 'string',
         }),
     ];
-    backend.onNotification(
-        DataExplorerMethods.requestSchema,
-        async (notification) => {
-            const params = notification.params as SchemaRequestParams;
-            const requestedColumns = new Set(params.columns);
-            await backend.notify(DataExplorerMethods.schema, {
-                columns: schemaColumns.filter((column) =>
-                    requestedColumns.has(column.column_index),
-                ),
-                requestId: params.requestId,
-            });
-        },
-    );
+    backend.onNotification(DataExplorerMethods.requestSchema, async (notification) => {
+        const params = notification.params as SchemaRequestParams;
+        const requestedColumns = new Set(params.columns);
+        await backend.notify(DataExplorerMethods.schema, {
+            columns: schemaColumns.filter((column) => requestedColumns.has(column.column_index)),
+            requestId: params.requestId,
+        });
+    });
     await backend.notify(DataExplorerMethods.initialize, {
         identifier: 'fixture-table',
         displayName: 'Fixture Table',
@@ -83,17 +78,12 @@ async function initializeExplorerFixture(
         requestId: dataRequestParams.requestId,
         generation: dataRequestParams.generation,
         columns: data.map((column) =>
-            Array.from(
-                { length: requestedRowCount },
-                (_, rowOffset) => column[rowOffset] ?? '',
-            ),
+            Array.from({ length: requestedRowCount }, (_, rowOffset) => column[rowOffset] ?? ''),
         ),
     });
 }
 
-function mirrorDataExplorerPanelState(
-    backend: Awaited<ReturnType<typeof openWebviewPage>>,
-) {
+function mirrorDataExplorerPanelState(backend: Awaited<ReturnType<typeof openWebviewPage>>) {
     backend.onNotification(DataExplorerMethods.setLayout, async (notification) => {
         const params = notification.params as { layout: 'SummaryOnLeft' | 'SummaryOnRight' };
         await backend.notify(DataExplorerMethods.layoutChanged, {
@@ -155,10 +145,8 @@ test('data explorer initializes, renders schema, and requests visible data', asy
     await expect
         .poll(() => backend.notificationCount(DataExplorerMethods.requestData))
         .toBeGreaterThan(0);
-    const columnWidthRequest = backend
-        .notifications(DataExplorerMethods.requestData)[0];
-    const columnWidthRequestParams =
-        columnWidthRequest.params as DataRequestParams;
+    const columnWidthRequest = backend.notifications(DataExplorerMethods.requestData)[0];
+    const columnWidthRequestParams = columnWidthRequest.params as DataRequestParams;
     expect(columnWidthRequestParams.rowIndices).toHaveLength(10);
     await backend.notify(DataExplorerMethods.data, {
         startRow: columnWidthRequestParams.startRow,
@@ -168,9 +156,7 @@ test('data explorer initializes, renders schema, and requests visible data', asy
         requestId: columnWidthRequestParams.requestId,
         generation: columnWidthRequestParams.generation,
         columns: columnWidthRequestParams.columns.map((columnIndex) =>
-            columnWidthRequestParams.rowIndices!.map(
-                (rowIndex) => `${columnIndex}:${rowIndex}`,
-            ),
+            columnWidthRequestParams.rowIndices!.map((rowIndex) => `${columnIndex}:${rowIndex}`),
         ),
     });
     await expect
@@ -216,23 +202,29 @@ test('data explorer initializes, renders schema, and requests visible data', asy
         generation: dataRequestParams.generation,
         columns: [
             dataRequestParams.rowIndices!.map((rowIndex) => `${rowIndex + 1}`),
-            dataRequestParams.rowIndices!.map((rowIndex) =>
-                ['setosa', 'versicolor', 'virginica'][rowIndex] ?? '',
+            dataRequestParams.rowIndices!.map(
+                (rowIndex) => ['setosa', 'versicolor', 'virginica'][rowIndex] ?? '',
             ),
         ],
     });
 
     await expect(
-        page.locator('.right-column .data-grid-column-header .title').getByText('id', { exact: true }),
+        page
+            .locator('.right-column .data-grid-column-header .title')
+            .getByText('id', { exact: true }),
     ).toBeVisible();
     await expect(
-        page.locator('.right-column .data-grid-column-header .title').getByText('species', { exact: true }),
+        page
+            .locator('.right-column .data-grid-column-header .title')
+            .getByText('species', { exact: true }),
     ).toBeVisible();
     await expect(page.locator('.status-bar')).toContainText('120');
     await expect(page.locator('.status-bar')).toContainText('2');
 });
 
-test('data explorer keeps scrollbar thumbs synchronized without changing the other axis', async ({ page }) => {
+test('data explorer keeps scrollbar thumbs synchronized without changing the other axis', async ({
+    page,
+}) => {
     const backend = await openWebviewPage(page, 'dataExplorer');
     await expect(page.locator('.positron-data-explorer')).toBeVisible({ timeout: 15_000 });
 
@@ -256,8 +248,9 @@ test('data explorer keeps scrollbar thumbs synchronized without changing the oth
             requestId: params.requestId,
             generation: params.generation,
             columns: params.columns.map((columnIndex) =>
-                Array.from({ length: rowCount }, (_, rowOffset) =>
-                    `${columnIndex}:${params.startRow + rowOffset}`,
+                Array.from(
+                    { length: rowCount },
+                    (_, rowOffset) => `${columnIndex}:${params.startRow + rowOffset}`,
                 ),
             ),
         });
@@ -277,9 +270,7 @@ test('data explorer keeps scrollbar thumbs synchronized without changing the oth
     const horizontalScrollbar = tableGrid.locator(
         '[role="scrollbar"][aria-orientation="horizontal"]',
     );
-    const verticalScrollbar = tableGrid.locator(
-        '[role="scrollbar"][aria-orientation="vertical"]',
-    );
+    const verticalScrollbar = tableGrid.locator('[role="scrollbar"][aria-orientation="vertical"]');
     const horizontalThumb = horizontalScrollbar.locator('.thumb');
     const verticalThumb = verticalScrollbar.locator('.thumb');
 
@@ -310,9 +301,9 @@ test('data explorer keeps scrollbar thumbs synchronized without changing the oth
         .toBeGreaterThan(0);
     await expect(verticalScrollbar).toHaveAttribute('aria-valuenow', '0');
     await page.waitForTimeout(100);
-    expect(
-        backend.notificationCount(DataExplorerMethods.requestData),
-    ).toBe(requestCountBeforeHorizontalScroll);
+    expect(backend.notificationCount(DataExplorerMethods.requestData)).toBe(
+        requestCountBeforeHorizontalScroll,
+    );
 
     const horizontalPosition = await horizontalScrollbar.getAttribute('aria-valuenow');
     const verticalThumbBox = await verticalThumb.boundingBox();
@@ -331,31 +322,25 @@ test('data explorer keeps scrollbar thumbs synchronized without changing the oth
     await expect
         .poll(async () => Number(await verticalScrollbar.getAttribute('aria-valuenow')))
         .toBeGreaterThan(0);
-    await expect(horizontalScrollbar).toHaveAttribute(
-        'aria-valuenow',
-        horizontalPosition!,
-    );
+    await expect(horizontalScrollbar).toHaveAttribute('aria-valuenow', horizontalPosition!);
 
     await waffle.hover();
     await page.mouse.wheel(0, 1_600);
     const firstVisibleRow = Number(
-        await tableGrid
-            .locator('.data-grid-row-header')
-            .first()
-            .getAttribute('data-row-index'),
+        await tableGrid.locator('.data-grid-row-header').first().getAttribute('data-row-index'),
     );
     expect(
         backend
             .notifications(DataExplorerMethods.requestData)
             .some((notification) =>
-                (notification.params as DataRequestParams).rowIndices?.includes(
-                    firstVisibleRow,
-                ),
+                (notification.params as DataRequestParams).rowIndices?.includes(firstVisibleRow),
             ),
     ).toBe(true);
 });
 
-test('data explorer overscans rows and only processes the latest viewport while loading', async ({ page }) => {
+test('data explorer overscans rows and only processes the latest viewport while loading', async ({
+    page,
+}) => {
     const backend = await openWebviewPage(page, 'dataExplorer');
     await expect(page.locator('.positron-data-explorer')).toBeVisible({
         timeout: 15_000,
@@ -385,8 +370,7 @@ test('data explorer overscans rows and only processes the latest viewport while 
     await expect
         .poll(() => backend.notificationCount(DataExplorerMethods.requestData))
         .toBeGreaterThan(0);
-    const columnWidthRequest = backend
-        .notifications(DataExplorerMethods.requestData)[0];
+    const columnWidthRequest = backend.notifications(DataExplorerMethods.requestData)[0];
     const columnWidthParams = columnWidthRequest.params as DataRequestParams;
     expect(columnWidthParams.rowIndices).toHaveLength(10);
     await backend.notify(DataExplorerMethods.data, {
@@ -397,41 +381,30 @@ test('data explorer overscans rows and only processes the latest viewport while 
         requestId: columnWidthParams.requestId,
         generation: columnWidthParams.generation,
         columns: columnWidthParams.columns.map((columnIndex) =>
-            columnWidthParams.rowIndices!.map(
-                (rowIndex) => `${columnIndex}:${rowIndex}`,
-            ),
+            columnWidthParams.rowIndices!.map((rowIndex) => `${columnIndex}:${rowIndex}`),
         ),
     });
 
-    await expect
-        .poll(() => backend.notificationCount(DataExplorerMethods.requestData))
-        .toBe(2);
-    const initialRequest = backend
-        .notifications(DataExplorerMethods.requestData)[1];
+    await expect.poll(() => backend.notificationCount(DataExplorerMethods.requestData)).toBe(2);
+    const initialRequest = backend.notifications(DataExplorerMethods.requestData)[1];
     const initialParams = initialRequest.params as DataRequestParams;
     expect(initialParams.rowIndices?.length).toBeGreaterThan(50);
 
     const tableGrid = page.locator('.data-grid[data-grid-role="table"]');
     const waffle = tableGrid.locator('.data-grid-waffle');
-    const verticalScrollbar = tableGrid.locator(
-        '[role="scrollbar"][aria-orientation="vertical"]',
-    );
+    const verticalScrollbar = tableGrid.locator('[role="scrollbar"][aria-orientation="vertical"]');
     await waffle.hover();
     await page.mouse.wheel(0, 2_000);
     await page.mouse.wheel(0, 4_000);
     await page.mouse.wheel(0, 8_000);
     await expect
-        .poll(async () =>
-            Number(await verticalScrollbar.getAttribute('aria-valuenow')),
-        )
+        .poll(async () => Number(await verticalScrollbar.getAttribute('aria-valuenow')))
         .toBeGreaterThan(0);
 
     // The first request remains in flight. Like Positron, intermediate
     // viewports are overwritten instead of being sent to the kernel.
     await page.waitForTimeout(100);
-    expect(
-        backend.notificationCount(DataExplorerMethods.requestData),
-    ).toBe(2);
+    expect(backend.notificationCount(DataExplorerMethods.requestData)).toBe(2);
 
     await backend.notify(DataExplorerMethods.data, {
         startRow: initialParams.startRow,
@@ -441,18 +414,13 @@ test('data explorer overscans rows and only processes the latest viewport while 
         requestId: initialParams.requestId,
         generation: initialParams.generation,
         columns: initialParams.columns.map((columnIndex) =>
-            initialParams.rowIndices!.map(
-                (rowIndex) => `${columnIndex}:${rowIndex}`,
-            ),
+            initialParams.rowIndices!.map((rowIndex) => `${columnIndex}:${rowIndex}`),
         ),
     });
 
-    await expect
-        .poll(() => backend.notificationCount(DataExplorerMethods.requestData))
-        .toBe(3);
-    const latestParams = backend
-        .notifications(DataExplorerMethods.requestData)
-        .at(-1)!.params as DataRequestParams;
+    await expect.poll(() => backend.notificationCount(DataExplorerMethods.requestData)).toBe(3);
+    const latestParams = backend.notifications(DataExplorerMethods.requestData).at(-1)!
+        .params as DataRequestParams;
     const firstVisibleRow = Number(
         await tableGrid
             .locator('.data-grid-row-header[data-row-index]')
@@ -462,7 +430,9 @@ test('data explorer overscans rows and only processes the latest viewport while 
     expect(latestParams.rowIndices).toContain(firstVisibleRow);
 });
 
-test('data explorer preserves numeric special-value sentinels without reclassifying literal strings', async ({ page }) => {
+test('data explorer preserves numeric special-value sentinels without reclassifying literal strings', async ({
+    page,
+}) => {
     const backend = await openWebviewPage(page, 'dataExplorer');
     await expect(page.locator('.positron-data-explorer')).toBeVisible({ timeout: 15_000 });
 
@@ -530,8 +500,16 @@ test('data explorer requests visible schema for a zero-row table', async ({ page
         generation: params.generation,
     });
 
-    await expect(page.locator('.data-grid-column-header[data-column-index="0"]').getByText('id', { exact: true })).toBeVisible();
-    await expect(page.locator('.data-grid-column-header[data-column-index="1"]').getByText('species', { exact: true })).toBeVisible();
+    await expect(
+        page
+            .locator('.data-grid-column-header[data-column-index="0"]')
+            .getByText('id', { exact: true }),
+    ).toBeVisible();
+    await expect(
+        page
+            .locator('.data-grid-column-header[data-column-index="1"]')
+            .getByText('species', { exact: true }),
+    ).toBeVisible();
     await expect(page.locator('.status-bar')).toContainText('0');
 });
 
@@ -565,8 +543,7 @@ test('data explorer ignores a data response from an invalidated generation', asy
         .notifications(DataExplorerMethods.requestData)
         .find(
             (request) =>
-                (request.params as DataRequestParams).generation ===
-                initialParams.generation + 1,
+                (request.params as DataRequestParams).generation === initialParams.generation + 1,
         )!;
     const currentParams = currentRequest.params as DataRequestParams;
 
@@ -583,18 +560,20 @@ test('data explorer ignores a data response from an invalidated generation', asy
         endRow: currentParams.endRow,
         rowIndices: currentParams.rowIndices,
         columnIndices: currentParams.columns,
-        columns: currentParams.columns.map(() =>
-            currentParams.rowIndices!.map(() => 'fresh'),
-        ),
+        columns: currentParams.columns.map(() => currentParams.rowIndices!.map(() => 'fresh')),
         requestId: currentParams.requestId,
         generation: currentParams.generation,
     });
 
-    await expect(page.locator('.data-grid-row-cell').filter({ hasText: 'fresh' }).first()).toBeVisible();
+    await expect(
+        page.locator('.data-grid-row-cell').filter({ hasText: 'fresh' }).first(),
+    ).toBeVisible();
     await expect(page.getByText('stale')).toHaveCount(0);
 });
 
-test('data explorer renders row-label placeholders until row labels are cached', async ({ page }) => {
+test('data explorer renders row-label placeholders until row labels are cached', async ({
+    page,
+}) => {
     const backend = await openWebviewPage(page, 'dataExplorer');
     await expect(page.locator('.positron-data-explorer')).toBeVisible({ timeout: 15_000 });
     await expect
@@ -706,7 +685,9 @@ test('data explorer sends toolbar and schema-expansion notifications', async ({ 
     });
 });
 
-test('data explorer notifies summary collapse changes from the splitter control', async ({ page }) => {
+test('data explorer notifies summary collapse changes from the splitter control', async ({
+    page,
+}) => {
     const backend = await openWebviewPage(page, 'dataExplorer');
     mirrorDataExplorerPanelState(backend);
     await expect(page.locator('.positron-data-explorer')).toBeVisible({ timeout: 15_000 });
@@ -720,7 +701,9 @@ test('data explorer notifies summary collapse changes from the splitter control'
     const splitterButton = page.locator('.vertical-splitter > .expand-collapse-button');
     await expect.poll(() => splitterButton.getAttribute('aria-label')).toBe('Collapse summary');
 
-    const collapseSummary = backend.waitForNextNotification(DataExplorerMethods.setSummaryCollapsed);
+    const collapseSummary = backend.waitForNextNotification(
+        DataExplorerMethods.setSummaryCollapsed,
+    );
     await splitterButton.focus();
     await splitterButton.press('Enter');
     expect((await collapseSummary).params).toEqual({
@@ -738,7 +721,9 @@ test('data explorer notifies summary collapse changes from the splitter control'
     await expect.poll(() => splitterButton.getAttribute('aria-label')).toBe('Collapse summary');
 });
 
-test('data explorer summary uses Positron font, action bar, and splitter geometry', async ({ page }) => {
+test('data explorer summary uses Positron font, action bar, and splitter geometry', async ({
+    page,
+}) => {
     const backend = await openWebviewPage(page, 'dataExplorer');
     mirrorDataExplorerPanelState(backend);
     await expect(page.locator('.positron-data-explorer')).toBeVisible({ timeout: 15_000 });
@@ -779,8 +764,7 @@ test('data explorer summary uses Positron font, action bar, and splitter geometr
             summaryFontFamily: getComputedStyle(summaryRows).fontFamily,
             tableFontFamily: getComputedStyle(tableRows).fontFamily,
             splitterCenter: splitterRect.left + splitterRect.width / 2,
-            splitterFaceCenter:
-                splitterFaceRect.left + splitterFaceRect.width / 2,
+            splitterFaceCenter: splitterFaceRect.left + splitterFaceRect.width / 2,
             splitterFaceWidth: splitterFaceRect.width,
             splitterFaceHeight: splitterFaceRect.height,
             splitterFaceBorderRadius: splitterFaceStyle.borderRadius,
@@ -834,7 +818,9 @@ test('data explorer toggles the summary layout from splitter double click', asyn
     await expect(page.locator('.data-explorer')).toHaveClass(/summary-on-left/);
 });
 
-test('data explorer supports keyboard resizing, collapse, and layout inversion', async ({ page }) => {
+test('data explorer supports keyboard resizing, collapse, and layout inversion', async ({
+    page,
+}) => {
     const backend = await openWebviewPage(page, 'dataExplorer');
     mirrorDataExplorerPanelState(backend);
     await expect(page.locator('.positron-data-explorer')).toBeVisible({ timeout: 15_000 });
@@ -867,7 +853,9 @@ test('data explorer supports keyboard resizing, collapse, and layout inversion',
     });
 });
 
-test('data explorer publishes model-owned summary width and selection intents', async ({ page }) => {
+test('data explorer publishes model-owned summary width and selection intents', async ({
+    page,
+}) => {
     const backend = await openWebviewPage(page, 'dataExplorer');
     mirrorDataExplorerPanelState(backend);
     await expect(page.locator('.positron-data-explorer')).toBeVisible({ timeout: 15_000 });
@@ -1005,7 +993,9 @@ test('data explorer bridges convert-to-code, file options, and focus changes', a
     });
 });
 
-test('data explorer restores the last focused control when the host regains focus', async ({ page }) => {
+test('data explorer restores the last focused control when the host regains focus', async ({
+    page,
+}) => {
     const backend = await openWebviewPage(page, 'dataExplorer');
     await expect(page.locator('.positron-data-explorer')).toBeVisible({ timeout: 15_000 });
     await initializeExplorerFixture(backend);
@@ -1053,7 +1043,9 @@ test('data explorer disables advanced features for large-column datasets', async
     await expect(filterInput).toHaveAttribute('disabled', '');
 });
 
-test('data explorer syncs model-owned panel state, metadata, status indicators, and closed overlays', async ({ page }) => {
+test('data explorer syncs model-owned panel state, metadata, status indicators, and closed overlays', async ({
+    page,
+}) => {
     const backend = await openWebviewPage(page, 'dataExplorer', {
         initialState: {
             dataExplorerPanel: {
@@ -1098,14 +1090,19 @@ test('data explorer syncs model-owned panel state, metadata, status indicators, 
     await backend.notify(DataExplorerMethods.loading, {
         isLoading: true,
     });
-    await expect(page.locator('.status-bar-indicator .icon')).toHaveAttribute('aria-label', 'Computing');
+    await expect(page.locator('.status-bar-indicator .icon')).toHaveAttribute(
+        'aria-label',
+        'Computing',
+    );
 
     await backend.notify(DataExplorerMethods.loading, {
         isLoading: false,
     });
-    await expect.poll(async () => {
-        return page.locator('.status-bar-indicator .icon').getAttribute('aria-label');
-    }).toBe('Idle');
+    await expect
+        .poll(async () => {
+            return page.locator('.status-bar-indicator .icon').getAttribute('aria-label');
+        })
+        .toBe('Idle');
 
     await backend.notify(DataExplorerMethods.error, {
         message: 'Broken backend',
@@ -1114,7 +1111,10 @@ test('data explorer syncs model-owned panel state, metadata, status indicators, 
         recoverable: true,
         requestId: 9,
     });
-    await expect(page.locator('.status-bar-indicator .icon')).toHaveAttribute('aria-label', 'Error');
+    await expect(page.locator('.status-bar-indicator .icon')).toHaveAttribute(
+        'aria-label',
+        'Error',
+    );
     const errorBanner = page.locator('.data-explorer-error-banner');
     await expect(errorBanner).toContainText('Broken backend');
     await expect(errorBanner).toHaveAttribute('data-operation', 'requestData');
@@ -1146,7 +1146,9 @@ test('data explorer syncs model-owned panel state, metadata, status indicators, 
     await expect(page.getByText('Connection Closed')).toBeVisible();
 });
 
-test('data explorer bridges copy, open, and data-grid context menu notifications', async ({ page }) => {
+test('data explorer bridges copy, open, and data-grid context menu notifications', async ({
+    page,
+}) => {
     const backend = await openWebviewPage(page, 'dataExplorer');
     await expect(page.locator('.positron-data-explorer')).toBeVisible({ timeout: 15_000 });
     await expect
@@ -1171,7 +1173,9 @@ test('data explorer bridges copy, open, and data-grid context menu notifications
     await expect(page.getByText('Add Filter')).toBeVisible();
     await page.keyboard.press('Escape');
 
-    const copyCurrentSelection = backend.waitForNextNotification(DataExplorerMethods.copyToClipboard);
+    const copyCurrentSelection = backend.waitForNextNotification(
+        DataExplorerMethods.copyToClipboard,
+    );
     await backend.notify(DataExplorerMethods.copy);
     expect((await copyCurrentSelection).params).toEqual({
         type: 'copyToClipboard',
@@ -1210,7 +1214,9 @@ test('data explorer bridges copy, open, and data-grid context menu notifications
     await expect(page.locator('.drop-down-column-selector')).toContainText('id');
 });
 
-test('data explorer requests summary schema and column profiles from summary interactions', async ({ page }) => {
+test('data explorer requests summary schema and column profiles from summary interactions', async ({
+    page,
+}) => {
     const backend = await openWebviewPage(page, 'dataExplorer');
     await expect(page.locator('.positron-data-explorer')).toBeVisible({ timeout: 15_000 });
     await expect
@@ -1254,11 +1260,7 @@ test('data explorer requests summary schema and column profiles from summary int
         schemaChanged: true,
     });
     await expect
-        .poll(() =>
-            backend.notificationCount(
-                DataExplorerMethods.requestColumnProfiles,
-            ),
-        )
+        .poll(() => backend.notificationCount(DataExplorerMethods.requestColumnProfiles))
         .toBeGreaterThan(profileCountBeforeInvalidation);
     const initialProfileRequest = backend
         .notifications(DataExplorerMethods.requestColumnProfiles)
@@ -1270,9 +1272,7 @@ test('data explorer requests summary schema and column profiles from summary int
     });
 
     const summarySearchInput = page.locator('.summary-row-filter-bar input[placeholder="Filter"]');
-    const searchCountBeforeFiltering = backend.notificationCount(
-        DataExplorerMethods.searchSchema,
-    );
+    const searchCountBeforeFiltering = backend.notificationCount(DataExplorerMethods.searchSchema);
     const cancelCountBeforeFiltering = backend.notificationCount(
         DataExplorerMethods.cancelColumnProfiles,
     );
@@ -1327,13 +1327,14 @@ test('data explorer requests summary schema and column profiles from summary int
             },
         ],
         requestId: (basicProfileRequest?.params as { requestId?: number } | undefined)?.requestId,
-        generation: (basicProfileRequest?.params as { generation?: number } | undefined)?.generation,
+        generation: (basicProfileRequest?.params as { generation?: number } | undefined)
+            ?.generation,
     });
 
-    const profileRequest = backend.waitForNextNotification(DataExplorerMethods.requestColumnProfiles);
-    const summaryToggleButton = page
-        .locator('.column-summary .expand-collapse-button')
-        .first();
+    const profileRequest = backend.waitForNextNotification(
+        DataExplorerMethods.requestColumnProfiles,
+    );
+    const summaryToggleButton = page.locator('.column-summary .expand-collapse-button').first();
     await summaryToggleButton.click();
     const expandedProfileRequest = await profileRequest;
     expect(expandedProfileRequest.params).toMatchObject({
@@ -1369,7 +1370,9 @@ test('data explorer requests summary schema and column profiles from summary int
         .toBe(requestCountAfterExpanded);
 });
 
-test('data explorer chunks visible profile requests into Positron-sized batches', async ({ page }) => {
+test('data explorer chunks visible profile requests into Positron-sized batches', async ({
+    page,
+}) => {
     const backend = await openWebviewPage(page, 'dataExplorer');
     await expect(page.locator('.positron-data-explorer')).toBeVisible({ timeout: 15_000 });
     const columns = Array.from({ length: 12 }, (_, columnIndex) =>
@@ -1388,14 +1391,11 @@ test('data explorer chunks visible profile requests into Positron-sized batches'
         columns,
         data: columns.map((_, columnIndex) => [`${columnIndex}:0`]),
     });
-    const summaryGrid = page.locator(
-        '.data-grid[data-grid-role="summary"]',
-    );
+    const summaryGrid = page.locator('.data-grid[data-grid-role="summary"]');
     await summaryGrid.evaluate((element) => {
         (element as HTMLElement).style.height = '500px';
     });
-    await expect.poll(() => summaryGrid.evaluate((element) => element.clientHeight))
-        .toBe(500);
+    await expect.poll(() => summaryGrid.evaluate((element) => element.clientHeight)).toBe(500);
     await expect
         .poll(() => summaryGrid.locator('.data-grid-row').count())
         .toBeGreaterThanOrEqual(columns.length);
@@ -1409,9 +1409,7 @@ test('data explorer chunks visible profile requests into Positron-sized batches'
     await expect
         .poll(() => backend.notificationCount(DataExplorerMethods.requestColumnProfiles))
         .toBeGreaterThan(profileCountBeforeInvalidation);
-    const firstRequest = backend.notifications(
-        DataExplorerMethods.requestColumnProfiles,
-    ).at(-1)!;
+    const firstRequest = backend.notifications(DataExplorerMethods.requestColumnProfiles).at(-1)!;
     const firstRequestParams = firstRequest.params as {
         columnIndices: number[];
         requestId: number;
@@ -1430,27 +1428,29 @@ test('data explorer chunks visible profile requests into Positron-sized batches'
     await expect
         .poll(() => backend.notificationCount(DataExplorerMethods.requestColumnProfiles))
         .toBeGreaterThan(profileCountBeforeInvalidation + 1);
-    const requests = backend.notifications(
-        DataExplorerMethods.requestColumnProfiles,
-    ).slice(profileCountBeforeInvalidation);
-    const requestedColumns = requests.flatMap((request) =>
-        (request.params as { columnIndices: number[] }).columnIndices,
+    const requests = backend
+        .notifications(DataExplorerMethods.requestColumnProfiles)
+        .slice(profileCountBeforeInvalidation);
+    const requestedColumns = requests.flatMap(
+        (request) => (request.params as { columnIndices: number[] }).columnIndices,
     );
     for (const request of requests) {
-        expect((request.params as { columnIndices: number[] }).columnIndices.length)
-            .toBeLessThanOrEqual(8);
+        expect(
+            (request.params as { columnIndices: number[] }).columnIndices.length,
+        ).toBeLessThanOrEqual(8);
     }
     expect(new Set(requestedColumns).size).toBe(12);
 });
 
-test('data explorer renders, searches, and selects columns in the row-filter selector', async ({ page }) => {
+test('data explorer renders, searches, and selects columns in the row-filter selector', async ({
+    page,
+}) => {
     const backend = await openWebviewPage(page, 'dataExplorer');
     await expect(page.locator('.positron-data-explorer')).toBeVisible({ timeout: 15_000 });
 
     const columns = Array.from({ length: 12 }, (_, columnIndex) =>
         createDataExplorerSchemaColumn({
-            column_name:
-                columnIndex === 11 ? 'target_column' : `field_${columnIndex}`,
+            column_name: columnIndex === 11 ? 'target_column' : `field_${columnIndex}`,
             column_index: columnIndex,
             type_name: 'INTEGER',
             type_display: 'integer',
@@ -1470,9 +1470,7 @@ test('data explorer renders, searches, and selects columns in the row-filter sel
     await page.getByRole('button', { name: 'Add Filter' }).click();
     await page.locator('.drop-down-column-selector').click();
 
-    const selectorGrid = page.locator(
-        '.data-grid[data-grid-role="column-selector"]',
-    );
+    const selectorGrid = page.locator('.data-grid[data-grid-role="column-selector"]');
     await expect(selectorGrid).toBeVisible();
     await expect(page.getByRole('option', { name: 'field_0' })).toBeVisible();
     const selectorPopup = page
@@ -1487,17 +1485,13 @@ test('data explorer renders, searches, and selects columns in the row-filter sel
     await expect
         .poll(() => backend.notificationCount(DataExplorerMethods.searchSchema))
         .toBeGreaterThan(0);
-    const searchRequest = backend
-        .notifications(DataExplorerMethods.searchSchema)
-        .at(-1)!;
+    const searchRequest = backend.notifications(DataExplorerMethods.searchSchema).at(-1)!;
     await backend.notify(DataExplorerMethods.summarySchema, {
         columns: [],
         columnIndices: [11],
         requestId: (searchRequest.params as { requestId: number }).requestId,
     });
-    await expect(
-        page.getByRole('option', { name: 'target_column' }),
-    ).toBeVisible();
+    await expect(page.getByRole('option', { name: 'target_column' })).toBeVisible();
     await expect(page.getByRole('option', { name: 'field_0' })).toHaveCount(0);
     await expect
         .poll(async () => (await selectorPopup.boundingBox())?.height ?? 0)
@@ -1505,12 +1499,12 @@ test('data explorer renders, searches, and selects columns in the row-filter sel
 
     await searchInput.press('Enter');
     await expect(selectorGrid).toHaveCount(0);
-    await expect(page.locator('.drop-down-column-selector')).toContainText(
-        'target_column',
-    );
+    await expect(page.locator('.drop-down-column-selector')).toContainText('target_column');
 });
 
-test('data explorer adds, updates, removes, and clears row filters through the UI', async ({ page }) => {
+test('data explorer adds, updates, removes, and clears row filters through the UI', async ({
+    page,
+}) => {
     const backend = await openWebviewPage(page, 'dataExplorer');
     await expect(page.locator('.positron-data-explorer')).toBeVisible({ timeout: 15_000 });
     await expect

@@ -11,9 +11,11 @@ export function isLocalhostUrl(value: string): boolean {
 export function shouldOpenUrlInViewer(value: string, openLocalhostUrls: boolean): boolean {
     try {
         const url = new URL(value);
-        return (url.protocol === 'http:' || url.protocol === 'https:') &&
+        return (
+            (url.protocol === 'http:' || url.protocol === 'https:') &&
             openLocalhostUrls &&
-            isLocalhostUrl(value);
+            isLocalhostUrl(value)
+        );
     } catch {
         return true;
     }

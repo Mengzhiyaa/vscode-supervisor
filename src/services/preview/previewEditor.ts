@@ -13,14 +13,18 @@ export async function openPreviewInEditor(
         });
         return true;
     } catch (error) {
-        outputChannel.debug(`[PreviewEditor] simpleBrowser.api.open failed for ${uri}: ${getErrorMessage(error)}`);
+        outputChannel.debug(
+            `[PreviewEditor] simpleBrowser.api.open failed for ${uri}: ${getErrorMessage(error)}`,
+        );
     }
 
     try {
         await vscode.commands.executeCommand('simpleBrowser.show', uri.toString(true));
         return true;
     } catch (error) {
-        outputChannel.warn(`[PreviewEditor] Failed to open ${uri} in an editor: ${getErrorMessage(error)}`);
+        outputChannel.warn(
+            `[PreviewEditor] Failed to open ${uri} in an editor: ${getErrorMessage(error)}`,
+        );
         return false;
     }
 }

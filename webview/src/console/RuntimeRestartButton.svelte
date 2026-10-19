@@ -3,7 +3,7 @@
   1:1 Positron replication - Restart button displayed after session exit
 -->
 <script lang="ts">
-    import { localize } from "$lib/localization";
+    import { localize } from '$lib/localization';
     // Props using Svelte 5 runes
     interface Props {
         languageName?: string;
@@ -11,16 +11,14 @@
         onrestart?: () => void | Promise<void>;
     }
 
-    let { languageName = "R", disabled = false, onrestart }: Props = $props();
+    let { languageName = 'R', disabled = false, onrestart }: Props = $props();
 
     // svelte-ignore non_reactive_update
     let buttonRef: HTMLButtonElement;
     let restarting = $state(false);
     const isDisabled = $derived(disabled || restarting);
 
-    let restartLabel = $derived(
-        localize("console.restartLanguage", "Restart {0}", languageName),
-    );
+    let restartLabel = $derived(localize('console.restartLanguage', 'Restart {0}', languageName));
 
     async function handleRestart() {
         if (isDisabled || !onrestart) {
@@ -31,7 +29,7 @@
         try {
             await onrestart();
         } catch (error) {
-            console.error("Restart session failed:", error);
+            console.error('Restart session failed:', error);
         } finally {
             restarting = false;
         }

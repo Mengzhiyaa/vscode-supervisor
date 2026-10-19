@@ -1,9 +1,6 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
-import {
-    LanguageRuntimeSessionLocation,
-    LanguageRuntimeStartupBehavior,
-} from '../api';
+import { LanguageRuntimeSessionLocation, LanguageRuntimeStartupBehavior } from '../api';
 import type {
     ILanguageRuntimeProvider,
     ISupervisorFrameworkApi,
@@ -17,7 +14,8 @@ suite('[Integration] Supervisor extension API', () => {
     let api: ISupervisorFrameworkApi;
 
     suiteSetup(async () => {
-        const extension = vscode.extensions.getExtension<ISupervisorFrameworkApi>(SUPERVISOR_EXTENSION_ID);
+        const extension =
+            vscode.extensions.getExtension<ISupervisorFrameworkApi>(SUPERVISOR_EXTENSION_ID);
         assert.ok(extension, `Expected ${SUPERVISOR_EXTENSION_ID} to be registered`);
         api = await extension.activate();
     });
@@ -84,11 +82,12 @@ suite('[Integration] Supervisor extension API', () => {
         };
 
         const sessionManager = {} as any;
-        const beginRegistration = () => api.languages
-            .forExtension(SUPERVISOR_EXTENSION_ID)
-            .begin({ languageId, registrationId: 'integration-test', revision: 1 })
-            .setRuntimeProvider(provider)
-            .setSessionManager(sessionManager);
+        const beginRegistration = () =>
+            api.languages
+                .forExtension(SUPERVISOR_EXTENSION_ID)
+                .begin({ languageId, registrationId: 'integration-test', revision: 1 })
+                .setRuntimeProvider(provider)
+                .setSessionManager(sessionManager);
         const first = beginRegistration().commit();
 
         await pollForSuccess(() => {
@@ -98,7 +97,11 @@ suite('[Integration] Supervisor extension API', () => {
         const callsAfterRegistration = discoveryCalls;
         const second = beginRegistration().commit();
         assert.strictEqual(second.generation, first.generation);
-        assert.strictEqual(discoveryCalls, callsAfterRegistration, 'Expected duplicate registration to be idempotent');
+        assert.strictEqual(
+            discoveryCalls,
+            callsAfterRegistration,
+            'Expected duplicate registration to be idempotent',
+        );
         first.dispose();
         second.dispose();
     });

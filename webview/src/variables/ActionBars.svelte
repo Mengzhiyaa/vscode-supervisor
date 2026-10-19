@@ -4,27 +4,25 @@
   Mirrors: positron/positronVariables/browser/components/actionBars.tsx
 -->
 <script lang="ts">
-    import ActionBarButton from "../shared/ActionBarButton.svelte";
-    import ActionBarFilter from "../shared/ActionBarFilter.svelte";
-    import DynamicActionBar, {
-        type DynamicAction,
-    } from "../shared/DynamicActionBar.svelte";
-    import GroupingMenuButton from "./GroupingMenuButton.svelte";
-    import MemoryUsageMeter from "./MemoryUsageMeter.svelte";
-    import SortingMenuButton from "./SortingMenuButton.svelte";
-    import VariablesInstanceMenuButton from "./VariablesInstanceMenuButton.svelte";
-    import type { MemoryUsageSnapshot } from "../types/memory";
+    import ActionBarButton from '../shared/ActionBarButton.svelte';
+    import ActionBarFilter from '../shared/ActionBarFilter.svelte';
+    import DynamicActionBar, { type DynamicAction } from '../shared/DynamicActionBar.svelte';
+    import GroupingMenuButton from './GroupingMenuButton.svelte';
+    import MemoryUsageMeter from './MemoryUsageMeter.svelte';
+    import SortingMenuButton from './SortingMenuButton.svelte';
+    import VariablesInstanceMenuButton from './VariablesInstanceMenuButton.svelte';
+    import type { MemoryUsageSnapshot } from '../types/memory';
     import type {
         VariablesInstance,
         VariablesGrouping,
         VariablesSorting,
-    } from "../types/variables";
-    import { localize } from "$lib/localization";
+    } from '../types/variables';
+    import { localize } from '$lib/localization';
     import {
         formatMemoryBytes,
         getMemoryMeterLabelWidth,
         getMemoryMeterSizing,
-    } from "./memoryUsageLayout";
+    } from './memoryUsageLayout';
 
     // Props using Svelte 5 runes
     interface Props {
@@ -49,9 +47,9 @@
     }
 
     let {
-        filterText = "",
-        grouping = "none",
-        sorting = "name",
+        filterText = '',
+        grouping = 'none',
+        sorting = 'name',
         highlightRecent = false,
         instances = [],
         activeInstanceId,
@@ -75,9 +73,10 @@
             ? formatMemoryBytes(
                   memoryUsageSnapshot.kernelTotalBytes +
                       (memoryUsageSnapshot.supervisorOverheadBytes ?? 0) +
-                      (memoryUsageSnapshot.applicationOverheadBytes ?? memoryUsageSnapshot.extensionHostOverheadBytes),
+                      (memoryUsageSnapshot.applicationOverheadBytes ??
+                          memoryUsageSnapshot.extensionHostOverheadBytes),
               )
-            : localize("memory.mem", "Mem");
+            : localize('memory.mem', 'Mem');
         // Reserve grouping, sorting, refresh, clear, their separator, the
         // overflow button and both paddings before allocating the meter.
         const baseWidth = 36 * 2 + 24 * 2 + 7 + 24 + 8 * 2;
@@ -89,8 +88,8 @@
     });
 
     // Localized strings (matching Positron)
-    const refreshObjectsLabel = localize("variables.refreshObjects", "Refresh Objects");
-    const deleteAllObjectsLabel = localize("variables.deleteAllObjects", "Delete All Objects");
+    const refreshObjectsLabel = localize('variables.refreshObjects', 'Refresh Objects');
+    const deleteAllObjectsLabel = localize('variables.deleteAllObjects', 'Delete All Objects');
 
     function handleFilterTextChanged(value: string) {
         onfilterChange?.(value);
@@ -120,7 +119,7 @@
     ]);
 
     const rightActions: DynamicAction[] = $derived([
-        ...(memoryUsageEnabled && memoryMeterSizing.layout !== "hidden"
+        ...(memoryUsageEnabled && memoryMeterSizing.layout !== 'hidden'
             ? [
                   {
                       fixedWidth: memoryMeterSizing.width,
@@ -135,7 +134,7 @@
             component: refreshSnippet,
             overflowMenuItem: {
                 label: refreshObjectsLabel,
-                icon: "refresh",
+                icon: 'refresh',
                 onSelected: handleRefresh,
             },
         },
@@ -145,7 +144,7 @@
             component: deleteAllSnippet,
             overflowMenuItem: {
                 label: deleteAllObjectsLabel,
-                icon: "trash",
+                icon: 'trash',
                 disabled: activeInstanceDisabled,
                 onSelected: handleDeleteAll,
             },
@@ -214,17 +213,13 @@
             style="padding-left: 8px; padding-right: 8px;"
         >
             <div class="action-bar-region left">
-                <VariablesInstanceMenuButton
-                    {instances}
-                    {activeInstanceId}
-                    {onselectInstance}
-                />
+                <VariablesInstanceMenuButton {instances} {activeInstanceId} {onselectInstance} />
             </div>
             <div class="action-bar-region right">
                 <ActionBarFilter
                     width="100%"
                     initialFilterText={filterText}
-                    placeholder={localize("variables.filter", "Filter")}
+                    placeholder={localize('variables.filter', 'Filter')}
                     onFilterTextChanged={handleFilterTextChanged}
                 />
             </div>

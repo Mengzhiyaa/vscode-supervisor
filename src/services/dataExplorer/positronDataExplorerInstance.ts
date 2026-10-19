@@ -36,12 +36,22 @@ export class PositronDataExplorerInstance implements IPositronDataExplorerInstan
     private _clientDisposables: vscode.Disposable[] = [];
     private readonly _onDidClose = this._registerEmitter(new vscode.EventEmitter<void>());
     private readonly _onDidDispose = this._registerEmitter(new vscode.EventEmitter<void>());
-    private readonly _onDidUpdateBackendState = this._registerEmitter(new vscode.EventEmitter<BackendState>());
+    private readonly _onDidUpdateBackendState = this._registerEmitter(
+        new vscode.EventEmitter<BackendState>(),
+    );
     private readonly _onDidRequestFocus = this._registerEmitter(new vscode.EventEmitter<void>());
-    private readonly _onDidChangeUiState = this._registerEmitter(new vscode.EventEmitter<PositronDataExplorerUiState>());
-    private readonly _onDidChangeForegroundLoading = this._registerEmitter(new vscode.EventEmitter<boolean>());
-    private readonly _onDidInvalidateData = this._registerEmitter(new vscode.EventEmitter<{ generation: number; schemaChanged: boolean }>());
-    private readonly _onDidChangeSelection = this._registerEmitter(new vscode.EventEmitter<PositronDataExplorerSelection | undefined>());
+    private readonly _onDidChangeUiState = this._registerEmitter(
+        new vscode.EventEmitter<PositronDataExplorerUiState>(),
+    );
+    private readonly _onDidChangeForegroundLoading = this._registerEmitter(
+        new vscode.EventEmitter<boolean>(),
+    );
+    private readonly _onDidInvalidateData = this._registerEmitter(
+        new vscode.EventEmitter<{ generation: number; schemaChanged: boolean }>(),
+    );
+    private readonly _onDidChangeSelection = this._registerEmitter(
+        new vscode.EventEmitter<PositronDataExplorerSelection | undefined>(),
+    );
     private readonly _schemaCache = new Map<number, TableSchema['columns'][number]>();
     private _schemaCacheTrimHandle: ReturnType<typeof setTimeout> | undefined;
     private readonly _visibilityOwners = new Set<string>();
@@ -81,28 +91,63 @@ export class PositronDataExplorerInstance implements IPositronDataExplorerInstan
         return emitter;
     }
 
-    get identifier(): string { return this._identifier; }
-    get displayName(): string { return this.backendState?.display_name ?? 'Data'; }
-    get languageName(): string { return this._languageName; }
-    get sessionId(): string | undefined { return this._sessionId; }
-    get clientInstance(): DataExplorerClientInstance { return this._clientInstance; }
-    get backendState(): BackendState | undefined { return this._clientInstance.cachedBackendState; }
-    get numColumns(): number { return this.backendState?.table_shape.num_columns ?? 0; }
-    get numRows(): number { return this.backendState?.table_shape.num_rows ?? 0; }
-    get supportsFileOptions(): boolean { return this.identifier.startsWith('duckdb:'); }
-    get fileHasHeaderRow(): boolean { return this.backendState?.file_import_options?.has_header_row ?? this._fileHasHeaderRow; }
-    get fileAvailableSheets(): readonly string[] { return this.backendState?.available_sheets ?? []; }
+    get identifier(): string {
+        return this._identifier;
+    }
+    get displayName(): string {
+        return this.backendState?.display_name ?? 'Data';
+    }
+    get languageName(): string {
+        return this._languageName;
+    }
+    get sessionId(): string | undefined {
+        return this._sessionId;
+    }
+    get clientInstance(): DataExplorerClientInstance {
+        return this._clientInstance;
+    }
+    get backendState(): BackendState | undefined {
+        return this._clientInstance.cachedBackendState;
+    }
+    get numColumns(): number {
+        return this.backendState?.table_shape.num_columns ?? 0;
+    }
+    get numRows(): number {
+        return this.backendState?.table_shape.num_rows ?? 0;
+    }
+    get supportsFileOptions(): boolean {
+        return this.identifier.startsWith('duckdb:');
+    }
+    get fileHasHeaderRow(): boolean {
+        return this.backendState?.file_import_options?.has_header_row ?? this._fileHasHeaderRow;
+    }
+    get fileAvailableSheets(): readonly string[] {
+        return this.backendState?.available_sheets ?? [];
+    }
     get fileSelectedSheet(): string | undefined {
         const committed = this.backendState?.file_import_options;
-        return committed ? committed.sheet_name ?? this.fileAvailableSheets[0]
-            : this._fileSheetName ?? this.fileAvailableSheets[0];
+        return committed
+            ? (committed.sheet_name ?? this.fileAvailableSheets[0])
+            : (this._fileSheetName ?? this.fileAvailableSheets[0]);
     }
-    get inlineOnly(): boolean { return this._inlineOnly; }
-    get uiState(): PositronDataExplorerUiState { return this._uiState; }
-    get focused(): boolean { return this._focused; }
-    get dataGeneration(): number { return this._dataGeneration; }
-    get lastDataRequest(): PositronDataExplorerDataRequest | undefined { return this._lastDataRequest; }
-    get selection(): PositronDataExplorerSelection | undefined { return this._selection; }
+    get inlineOnly(): boolean {
+        return this._inlineOnly;
+    }
+    get uiState(): PositronDataExplorerUiState {
+        return this._uiState;
+    }
+    get focused(): boolean {
+        return this._focused;
+    }
+    get dataGeneration(): number {
+        return this._dataGeneration;
+    }
+    get lastDataRequest(): PositronDataExplorerDataRequest | undefined {
+        return this._lastDataRequest;
+    }
+    get selection(): PositronDataExplorerSelection | undefined {
+        return this._selection;
+    }
 
     readonly onDidClose = this._onDidClose.event;
     readonly onDidDispose = this._onDidDispose.event;
@@ -113,29 +158,39 @@ export class PositronDataExplorerInstance implements IPositronDataExplorerInstan
     readonly onDidInvalidateData = this._onDidInvalidateData.event;
     readonly onDidChangeSelection = this._onDidChangeSelection.event;
 
-    requestFocus(): void { this._onDidRequestFocus.fire(); }
+    requestFocus(): void {
+        this._onDidRequestFocus.fire();
+    }
 
     setLayout(layout: PositronDataExplorerLayout): void {
-        if (this._uiState.layout === layout) { return; }
+        if (this._uiState.layout === layout) {
+            return;
+        }
         this._uiState = { ...this._uiState, layout };
         this._onDidChangeUiState.fire(this._uiState);
     }
 
     setSummaryCollapsed(summaryCollapsed: boolean): void {
-        if (this._uiState.summaryCollapsed === summaryCollapsed) { return; }
+        if (this._uiState.summaryCollapsed === summaryCollapsed) {
+            return;
+        }
         this._uiState = { ...this._uiState, summaryCollapsed };
         this._onDidChangeUiState.fire(this._uiState);
     }
 
     setSummaryWidth(summaryWidth: number): void {
         const normalizedWidth = Math.max(200, Math.min(800, Math.round(summaryWidth)));
-        if (this._uiState.summaryWidth === normalizedWidth) { return; }
+        if (this._uiState.summaryWidth === normalizedWidth) {
+            return;
+        }
         this._uiState = { ...this._uiState, summaryWidth: normalizedWidth };
         this._onDidChangeUiState.fire(this._uiState);
     }
 
     setFocused(focused: boolean): void {
-        if (this._focused === focused) { return; }
+        if (this._focused === focused) {
+            return;
+        }
         this._focused = focused;
     }
 
@@ -146,7 +201,9 @@ export class PositronDataExplorerInstance implements IPositronDataExplorerInstan
         this._visibilityOwners.add(ownerId);
         let disposed = false;
         return new vscode.Disposable(() => {
-            if (disposed) { return; }
+            if (disposed) {
+                return;
+            }
             disposed = true;
             this._visibilityOwners.delete(ownerId);
         });
@@ -175,7 +232,10 @@ export class PositronDataExplorerInstance implements IPositronDataExplorerInstan
             }
         };
         const queuedMutation = this._dataMutationQueue.then(runMutation, runMutation);
-        this._dataMutationQueue = queuedMutation.then(() => undefined, () => undefined);
+        this._dataMutationQueue = queuedMutation.then(
+            () => undefined,
+            () => undefined,
+        );
         await queuedMutation;
     }
 
@@ -200,7 +260,9 @@ export class PositronDataExplorerInstance implements IPositronDataExplorerInstan
     }
 
     setSelection(selection: PositronDataExplorerSelection | undefined): void {
-        if (JSON.stringify(this._selection) === JSON.stringify(selection)) { return; }
+        if (JSON.stringify(this._selection) === JSON.stringify(selection)) {
+            return;
+        }
         this._selection = selection;
         this._onDidChangeSelection.fire(selection);
     }
@@ -219,7 +281,9 @@ export class PositronDataExplorerInstance implements IPositronDataExplorerInstan
         }
         if (clientInstance.clientId !== this.identifier) {
             clientInstance.dispose();
-            throw new Error(`Cannot reconnect ${this.identifier} with client ${clientInstance.clientId}.`);
+            throw new Error(
+                `Cannot reconnect ${this.identifier} with client ${clientInstance.clientId}.`,
+            );
         }
         this._disposeClientBindings();
         const previousClientInstance = this._clientInstance;
@@ -236,22 +300,28 @@ export class PositronDataExplorerInstance implements IPositronDataExplorerInstan
     }
 
     async getSchema(columnIndices: number[]): Promise<TableSchema> {
-        if (this._disposed || columnIndices.length === 0) { return { columns: [] }; }
+        if (this._disposed || columnIndices.length === 0) {
+            return { columns: [] };
+        }
         const generation = this._schemaGeneration;
         const client = this._clientInstance;
         const uniqueColumnIndices = [...new Set(columnIndices)];
-        const missing = uniqueColumnIndices.filter(index => !this._schemaCache.has(index));
+        const missing = uniqueColumnIndices.filter((index) => !this._schemaCache.has(index));
         if (missing.length > 0) {
             const schema = await client.getSchema(missing);
-            if (this._disposed || generation !== this._schemaGeneration || client !== this._clientInstance) {
+            if (
+                this._disposed ||
+                generation !== this._schemaGeneration ||
+                client !== this._clientInstance
+            ) {
                 return { columns: [] };
             }
-            schema.columns.forEach(column => this._schemaCache.set(column.column_index, column));
+            schema.columns.forEach((column) => this._schemaCache.set(column.column_index, column));
         }
         this._scheduleSchemaCacheTrim(uniqueColumnIndices);
         return {
             columns: columnIndices
-                .map(index => this._schemaCache.get(index))
+                .map((index) => this._schemaCache.get(index))
                 .filter((column): column is TableSchema['columns'][number] => Boolean(column)),
         };
     }
@@ -281,22 +351,30 @@ export class PositronDataExplorerInstance implements IPositronDataExplorerInstan
         );
     }
 
-    async setDatasetImportOptions(options: DatasetImportOptions): Promise<SetDatasetImportOptionsResult> {
+    async setDatasetImportOptions(
+        options: DatasetImportOptions,
+    ): Promise<SetDatasetImportOptionsResult> {
         let result: SetDatasetImportOptionsResult = {};
         await this.runDataMutation(async () => {
             result = await this._clientInstance.setDatasetImportOptions(options);
             if (result.error_message) {
                 return;
             }
-            if (options.has_header_row !== undefined) { this._fileHasHeaderRow = options.has_header_row; }
-            if (Object.prototype.hasOwnProperty.call(options, 'sheet_name')) { this._fileSheetName = options.sheet_name; }
+            if (options.has_header_row !== undefined) {
+                this._fileHasHeaderRow = options.has_header_row;
+            }
+            if (Object.prototype.hasOwnProperty.call(options, 'sheet_name')) {
+                this._fileSheetName = options.sheet_name;
+            }
             await this._clientInstance.updateBackendState();
         }, true);
         return result;
     }
 
     dispose(): void {
-        if (this._disposed) { return; }
+        if (this._disposed) {
+            return;
+        }
         this._disposed = true;
         this._visibilityOwners.clear();
         this._disposeClientBindings();
@@ -305,7 +383,7 @@ export class PositronDataExplorerInstance implements IPositronDataExplorerInstan
         this._clearSchemaCacheTrimTimeout();
         this._clientInstance.dispose();
         this._onDidDispose.fire();
-        this._disposables.forEach(disposable => disposable.dispose());
+        this._disposables.forEach((disposable) => disposable.dispose());
     }
 
     private _bindClientInstance(): void {
@@ -314,31 +392,31 @@ export class PositronDataExplorerInstance implements IPositronDataExplorerInstan
         this._emitLoadingIfChanged();
         this._clientDisposables = [
             this._clientInstance.onDidClose(() => {
-                if (this._disposed) { return; }
+                if (this._disposed) {
+                    return;
+                }
                 this.invalidateData(true);
                 this._onDidClose.fire();
             }),
-            this._clientInstance.onDidUpdateBackendState(state => {
+            this._clientInstance.onDidUpdateBackendState((state) => {
                 this._onDidUpdateBackendState.fire(state);
             }),
             this._clientInstance.onDidSchemaUpdate(() => this.invalidateData(true)),
             this._clientInstance.onDidDataUpdate(() => this.invalidateData(false)),
-            this._clientInstance.onDidStatusUpdate(status => {
-                this._backendTaskLoading =
-                    status === DataExplorerClientStatus.Computing;
+            this._clientInstance.onDidStatusUpdate((status) => {
+                this._backendTaskLoading = status === DataExplorerClientStatus.Computing;
                 this._emitLoadingIfChanged();
             }),
         ];
     }
 
     private _disposeClientBindings(): void {
-        this._clientDisposables.forEach(disposable => disposable.dispose());
+        this._clientDisposables.forEach((disposable) => disposable.dispose());
         this._clientDisposables = [];
     }
 
     private _emitLoadingIfChanged(): void {
-        const loading =
-            this._foregroundLoadingCount > 0 || this._backendTaskLoading;
+        const loading = this._foregroundLoadingCount > 0 || this._backendTaskLoading;
         if (this._loading === loading) {
             return;
         }
@@ -368,7 +446,6 @@ export class PositronDataExplorerInstance implements IPositronDataExplorerInstan
             this._schemaCacheTrimHandle = undefined;
         }
     }
-
 }
 
 export type {

@@ -76,7 +76,13 @@ export interface SupervisorInstanceDetail extends SupervisorInstanceSummary {
             id: string;
             name: string;
             connected: boolean;
-            clients: Array<{ id: number; name?: string; version?: string; pid?: number; connectedAt: string }>;
+            clients: Array<{
+                id: number;
+                name?: string;
+                version?: string;
+                pid?: number;
+                connectedAt: string;
+            }>;
         }>;
     };
 }
@@ -92,7 +98,8 @@ export interface SupervisorManagerState {
     detail?: SupervisorInstanceDetail;
 }
 
-export type SupervisorManagerAction = 'showLogs' | 'openWorkspace' | 'restart' | 'shutdown' | 'openSettings';
+export type SupervisorManagerAction =
+    'showLogs' | 'openWorkspace' | 'restart' | 'shutdown' | 'openSettings';
 
 export interface SupervisorManagerActionRequest {
     instanceId: string;

@@ -17,7 +17,7 @@ import { TableSummaryCache } from '../../services/dataExplorer/common/tableSumma
 
 function deferred<T>() {
     let resolve!: (value: T) => void;
-    const promise = new Promise<T>(currentResolve => {
+    const promise = new Promise<T>((currentResolve) => {
         resolve = currentResolve;
     });
     return { promise, resolve };
@@ -42,7 +42,10 @@ function createBackendState(rows = 2, columns = 2): BackendState {
             },
             get_column_profiles: { support_status: SupportStatus.Unsupported, supported_types: [] },
             set_sort_columns: { support_status: SupportStatus.Unsupported },
-            export_data_selection: { support_status: SupportStatus.Unsupported, supported_formats: [] },
+            export_data_selection: {
+                support_status: SupportStatus.Unsupported,
+                supported_formats: [],
+            },
             convert_to_code: { support_status: SupportStatus.Unsupported, code_syntaxes: [] },
         },
     };
@@ -59,11 +62,7 @@ function selectionRows(selection: ColumnSelection): number[] {
     );
 }
 
-function createClient(
-    clientId = 'lifecycle-client',
-    rows = 2,
-    columns = 2,
-) {
+function createClient(clientId = 'lifecycle-client', rows = 2, columns = 2) {
     const closeEmitter = new vscode.EventEmitter<void>();
     const schemaEmitter = new vscode.EventEmitter<{}>();
     const dataEmitter = new vscode.EventEmitter<{}>();
@@ -79,9 +78,11 @@ function createClient(
         onDidDataUpdate: dataEmitter.event,
         onDidUpdateBackendState: backendEmitter.event,
         status: DataExplorerClientStatus.Idle,
-        onDidStatusUpdate: (() => ({ dispose: () => undefined })) as vscode.Event<DataExplorerClientStatus>,
+        onDidStatusUpdate: (() => ({
+            dispose: () => undefined,
+        })) as vscode.Event<DataExplorerClientStatus>,
         getSchema: async (indices: number[]) => ({
-            columns: indices.map(column_index => ({
+            columns: indices.map((column_index) => ({
                 column_index,
                 column_name: `column_${column_index}`,
                 type_name: 'string',
@@ -91,23 +92,31 @@ function createClient(
         getDataValues: async (selections: ColumnSelection[]): Promise<TableData> => {
             dataRequests++;
             return {
-                columns: selections.map(selection => selectionRows(selection).map(row => {
-                    if (selection.column_index === 0 && row === 0) {
-                        return 0;
-                    }
-                    return `${selection.column_index}:${row}`;
-                })),
+                columns: selections.map((selection) =>
+                    selectionRows(selection).map((row) => {
+                        if (selection.column_index === 0 && row === 0) {
+                            return 0;
+                        }
+                        return `${selection.column_index}:${row}`;
+                    }),
+                ),
             };
         },
         requestColumnProfiles: async () => [],
         setDatasetImportOptions: async () => ({}),
-        dispose: () => { disposed = true; },
+        dispose: () => {
+            disposed = true;
+        },
     } as unknown as DataExplorerClientInstance;
     return {
         client,
         close: () => closeEmitter.fire(),
-        get dataRequests() { return dataRequests; },
-        get disposed() { return disposed; },
+        get dataRequests() {
+            return dataRequests;
+        },
+        get disposed() {
+            return disposed;
+        },
         dispose: () => {
             closeEmitter.dispose();
             schemaEmitter.dispose();
@@ -143,12 +152,7 @@ suite('[Unit] Positron Data Explorer model lifecycle', () => {
         firstMutation.resolve();
         await Promise.all([first, second]);
 
-        assert.deepStrictEqual(events, [
-            'first:start',
-            'first:end',
-            'second:start',
-            'second:end',
-        ]);
+        assert.deepStrictEqual(events, ['first:start', 'first:end', 'second:start', 'second:end']);
         assert.deepStrictEqual(generations, [1, 2]);
         instance.dispose();
         fixture.dispose();
@@ -160,16 +164,18 @@ suite('[Unit] Positron Data Explorer model lifecycle', () => {
         const client = {
             getDataValues: async () => {
                 requests++;
-                return new Promise<TableData>(resolve => {
+                return new Promise<TableData>((resolve) => {
                     resolveRequest = resolve;
                 });
             },
         } as unknown as DataExplorerClientInstance;
         const cache = new TableDataCache(client);
-        const selection: ColumnSelection[] = [{
-            column_index: 0,
-            spec: { first_index: 0, last_index: 2 },
-        }];
+        const selection: ColumnSelection[] = [
+            {
+                column_index: 0,
+                spec: { first_index: 0, last_index: 2 },
+            },
+        ];
 
         const first = cache.getDataValues(selection, 0);
         const second = cache.getDataValues(selection, 0);
@@ -186,7 +192,7 @@ suite('[Unit] Positron Data Explorer model lifecycle', () => {
         const client = {
             requestColumnProfiles: async (requests: Array<{ column_index: number }>) => {
                 chunkSizes.push(requests.length);
-                return requests.map(request => ({ null_count: request.column_index }));
+                return requests.map((request) => ({ null_count: request.column_index }));
             },
         } as unknown as DataExplorerClientInstance;
         const cache = new TableSummaryCache(client);
@@ -207,7 +213,7 @@ suite('[Unit] Positron Data Explorer model lifecycle', () => {
         const fixture = createClient();
         const instance = new PositronDataExplorerInstance(fixture.client, 'Python');
         const loadingStates: boolean[] = [];
-        instance.onDidChangeForegroundLoading(loading => loadingStates.push(loading));
+        instance.onDidChangeForegroundLoading((loading) => loadingStates.push(loading));
 
         instance.setLayout('SummaryOnRight');
         instance.setSummaryCollapsed(true);
@@ -265,10 +271,12 @@ suite('[Unit] Positron Data Explorer model lifecycle', () => {
     test('shares cached values and invalidates them by generation', async () => {
         const fixture = createClient();
         const instance = new PositronDataExplorerInstance(fixture.client, 'Python');
-        const selection: ColumnSelection[] = [{
-            column_index: 1,
-            spec: { first_index: 0, last_index: 1 },
-        }];
+        const selection: ColumnSelection[] = [
+            {
+                column_index: 1,
+                spec: { first_index: 0, last_index: 1 },
+            },
+        ];
 
         await instance.getDataValues(selection, instance.dataGeneration);
         await instance.getDataValues(selection, instance.dataGeneration);
@@ -286,7 +294,9 @@ suite('[Unit] Positron Data Explorer model lifecycle', () => {
         const instance = new PositronDataExplorerInstance(fixture.client, 'Python');
         const progress: number[] = [];
 
-        const tsv = await instance.getTableDataTsv(undefined, completed => progress.push(completed));
+        const tsv = await instance.getTableDataTsv(undefined, (completed) =>
+            progress.push(completed),
+        );
 
         assert.ok(tsv.startsWith('NULL\t1:0\n0:1\t1:1'));
         assert.strictEqual(tsv.split('\n').length, 101);
@@ -304,7 +314,7 @@ suite('[Unit] Positron Data Explorer model lifecycle', () => {
 
         await assert.rejects(
             () => instance.getTableDataTsv(tokenSource.token),
-            error => error instanceof vscode.CancellationError,
+            (error) => error instanceof vscode.CancellationError,
         );
         assert.strictEqual(fixture.dataRequests, 0);
         tokenSource.dispose();

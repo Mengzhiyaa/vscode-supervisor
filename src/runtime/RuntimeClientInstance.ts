@@ -74,12 +74,12 @@ class DeferredPromise<T> {
 
 /**
  * A client instance that communicates with the back end via a message channel.
- * 
+ *
  * This instance wraps a single comm (communication channel) and handles:
  * - State management (uninitialized, opening, connected, closing, closed)
  * - Message sending/receiving
  * - RPC request/response correlation
- * 
+ *
  * Matches Positron's ExtHostRuntimeClientInstance class.
  */
 export class RuntimeClientInstance implements vscode.Disposable {
@@ -120,7 +120,7 @@ export class RuntimeClientInstance implements vscode.Disposable {
     constructor(
         readonly message: LanguageRuntimeMessageCommOpen,
         readonly sender: RuntimeClientMessageSender,
-        readonly closer: () => void
+        readonly closer: () => void,
     ) {
         // These instances are created when the runtime emits a `comm_open`
         // message, so they begin in the "connected" state -- the back end is
@@ -150,7 +150,7 @@ export class RuntimeClientInstance implements vscode.Disposable {
             ) {
                 pending.promise.complete({
                     data: message.data as Record<string, unknown>,
-                    buffers: message.buffers
+                    buffers: message.buffers,
                 });
                 this.deletePendingRpc(message.parent_id);
                 return;
@@ -160,7 +160,7 @@ export class RuntimeClientInstance implements vscode.Disposable {
         // Not an RPC response, or didn't match response keys: treat as event.
         this._onDidSendEvent.fire({
             data: message.data as Record<string, unknown>,
-            buffers: message.buffers
+            buffers: message.buffers,
         });
     }
 
@@ -184,18 +184,19 @@ export class RuntimeClientInstance implements vscode.Disposable {
     performRpcWithBuffers<T>(
         data: Record<string, unknown>,
         timeout?: number,
-        responseKeys: Array<string> = []
+        responseKeys: Array<string> = [],
     ): Promise<RuntimeClientOutput<T>> {
         // Preserve caller-provided JSON-RPC ids (used by nested JSON-RPC request semantics).
         const requestId = (data as any)?.id;
-        const id = (typeof requestId === 'string' || typeof requestId === 'number')
-            ? `${requestId}`
-            : `${this.getClientId()}-${this._messageCounter++}`;
+        const id =
+            typeof requestId === 'string' || typeof requestId === 'number'
+                ? `${requestId}`
+                : `${this.getClientId()}-${this._messageCounter++}`;
 
         const rpc = new DeferredPromise<RuntimeClientOutput<T>>();
         this._pendingRpcs.set(id, {
             promise: rpc,
-            responseKeys: [...responseKeys]
+            responseKeys: [...responseKeys],
         });
 
         // If timeout is omitted, use the historical default (10s).
@@ -221,7 +222,7 @@ export class RuntimeClientInstance implements vscode.Disposable {
 
     /**
      * Performs an RPC call to the back end.
-     * 
+     *
      * This method is a convenience wrapper around `performRpcWithBuffers` that returns
      * only the data portion of the RPC response. Handles JSON-RPC 2.0 response format.
      *
@@ -232,7 +233,7 @@ export class RuntimeClientInstance implements vscode.Disposable {
     async performRpc<T>(
         data: Record<string, unknown>,
         timeout?: number,
-        responseKeys: Array<string> = []
+        responseKeys: Array<string> = [],
     ): Promise<T> {
         // Omitted timeouts use the default; explicit undefined disables the timeout.
         const effectiveTimeout = arguments.length >= 2 ? timeout : 10000;
@@ -269,7 +270,9 @@ export class RuntimeClientInstance implements vscode.Disposable {
                     }
 
                     maybePending.promise.error(
-                        new Error(`RPC request completed, but response not received after 5 seconds: ${JSON.stringify(message)}`)
+                        new Error(
+                            `RPC request completed, but response not received after 5 seconds: ${JSON.stringify(message)}`,
+                        ),
                     );
                     this.deletePendingRpc(message.parent_id);
                 }, 5000);
@@ -324,7 +327,9 @@ export class RuntimeClientInstance implements vscode.Disposable {
     dispose(): void {
         // Cancel any pending RPCs
         for (const [id, pending] of this._pendingRpcs) {
-            pending.promise.error(new Error(`Client '${this.getClientId()}' was disposed before RPC completed.`));
+            pending.promise.error(
+                new Error(`Client '${this.getClientId()}' was disposed before RPC completed.`),
+            );
             this.deletePendingRpc(id);
         }
 

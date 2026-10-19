@@ -4,9 +4,9 @@
  *--------------------------------------------------------------------------------------------*/
 
 export interface JupyterStreamOutput {
-	/** The stream the output belongs to, i.e. stdout/stderr */
-	name: string;
+    /** The stream the output belongs to, i.e. stdout/stderr */
+    name: string;
 
-	/** The text emitted from the stream */
-	text: string;
+    /** The text emitted from the stream */
+    text: string;
 }

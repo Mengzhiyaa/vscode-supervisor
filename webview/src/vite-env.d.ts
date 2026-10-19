@@ -28,12 +28,9 @@ declare global {
               setState(state: unknown): void;
           }
         | undefined;
-    var __arkLanguageMonacoSupportModules:
-        | Record<string, string>
-        | undefined;
+    var __arkLanguageMonacoSupportModules: Record<string, string> | undefined;
     var __arkLanguageTextMateGrammars:
-        | Record<string, { scopeName: string; grammarUrl: string }>
-        | undefined;
+        Record<string, { scopeName: string; grammarUrl: string }> | undefined;
     var __arkLocalization: Record<string, string> | undefined;
 }
 

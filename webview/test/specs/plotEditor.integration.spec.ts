@@ -1,9 +1,15 @@
 import { expect, test } from '@playwright/test';
 import { PlotEditorMethods, SMALL_PNG_DATA_URI } from '../harness/domains';
-import { clearClipboardRecords, getClipboardRecords, installClipboardMock } from '../harness/browser';
+import {
+    clearClipboardRecords,
+    getClipboardRecords,
+    installClipboardMock,
+} from '../harness/browser';
 import { openWebviewPage } from '../harness/page';
 
-test('plot editor notifies readiness, requests renders, and displays render results', async ({ page }) => {
+test('plot editor notifies readiness, requests renders, and displays render results', async ({
+    page,
+}) => {
     const backend = await openWebviewPage(page, 'plotEditor');
 
     await expect.poll(() => backend.notificationCount(PlotEditorMethods.ready)).toBeGreaterThan(0);
@@ -51,7 +57,9 @@ test('plot editor sends save, copy fallback, and close notifications', async ({ 
     await close;
 });
 
-test('plot editor updates zoom UI and uses the browser clipboard when available', async ({ page }) => {
+test('plot editor updates zoom UI and uses the browser clipboard when available', async ({
+    page,
+}) => {
     await installClipboardMock(page);
     const backend = await openWebviewPage(page, 'plotEditor');
 
@@ -70,16 +78,22 @@ test('plot editor updates zoom UI and uses the browser clipboard when available'
     const copyCountBefore = backend.notificationCount(PlotEditorMethods.copy);
     await page.getByLabel('Copy plot to clipboard').click();
 
-    await expect.poll(() => backend.notificationCount(PlotEditorMethods.copy)).toBe(copyCountBefore);
-    await expect.poll(() => getClipboardRecords(page)).toEqual([
-        {
-            kind: 'write',
-            itemCount: 1,
-        },
-    ]);
+    await expect
+        .poll(() => backend.notificationCount(PlotEditorMethods.copy))
+        .toBe(copyCountBefore);
+    await expect
+        .poll(() => getClipboardRecords(page))
+        .toEqual([
+            {
+                kind: 'write',
+                itemCount: 1,
+            },
+        ]);
 });
 
-test('plot editor suppresses duplicate renders and re-renders after real resize changes', async ({ page }) => {
+test('plot editor suppresses duplicate renders and re-renders after real resize changes', async ({
+    page,
+}) => {
     const backend = await openWebviewPage(page, 'plotEditor');
 
     await expect.poll(() => backend.notificationCount(PlotEditorMethods.ready)).toBeGreaterThan(0);
@@ -97,7 +111,9 @@ test('plot editor suppresses duplicate renders and re-renders after real resize 
     expect(backend.notificationCount(PlotEditorMethods.render)).toBe(initialRenderCount);
 
     await page.setViewportSize({ width: 1200, height: 900 });
-    await expect.poll(() => backend.notificationCount(PlotEditorMethods.render)).toBe(initialRenderCount + 1);
+    await expect
+        .poll(() => backend.notificationCount(PlotEditorMethods.render))
+        .toBe(initialRenderCount + 1);
 
     const resizedRender = backend.notifications(PlotEditorMethods.render)[initialRenderCount]
         .params as { width: number; height: number };
@@ -117,9 +133,12 @@ const dynamicContent = {
     ],
 };
 
-test('plot editor inherits sizing and rerenders at the same viewport after each policy change', async ({ page }) => {
+test('plot editor inherits sizing and rerenders at the same viewport after each policy change', async ({
+    page,
+}) => {
     const backend = await openWebviewPage(page, 'plotEditor', {
-        configure: backend => backend.onRequest(PlotEditorMethods.selectSizingPolicy, request => request.params),
+        configure: (backend) =>
+            backend.onRequest(PlotEditorMethods.selectSizingPolicy, (request) => request.params),
     });
     await expect.poll(() => backend.notificationCount(PlotEditorMethods.ready)).toBeGreaterThan(0);
     await backend.notify(PlotEditorMethods.setContent, dynamicContent);
@@ -134,8 +153,12 @@ test('plot editor inherits sizing and rerenders at the same viewport after each 
         await menu.click();
         await page.getByRole('menuitemcheckbox', { name: policy.name, exact: true }).click();
         await expect(menu).toContainText(policy.name);
-        await expect.poll(() => backend.notificationCount(PlotEditorMethods.render)).toBe(before + 1);
-        expect(backend.requests(PlotEditorMethods.selectSizingPolicy).at(-1)!.params).toEqual({ policyId: policy.id });
+        await expect
+            .poll(() => backend.notificationCount(PlotEditorMethods.render))
+            .toBe(before + 1);
+        expect(backend.requests(PlotEditorMethods.selectSizingPolicy).at(-1)!.params).toEqual({
+            policyId: policy.id,
+        });
         expect(backend.notifications(PlotEditorMethods.render).at(-1)!.params).toEqual(previous);
     }
 
@@ -150,22 +173,30 @@ test('plot editor inherits sizing and rerenders at the same viewport after each 
 });
 
 for (const outcome of ['success', 'failure'] as const) {
-    test(`plot editor retains keyboard focus during a pending sizing change (${outcome})`, async ({ page }) => {
+    test(`plot editor retains keyboard focus during a pending sizing change (${outcome})`, async ({
+        page,
+    }) => {
         let complete!: () => void;
         const response = new Promise<{ policyId: string }>((resolve, reject) => {
-            complete = () => outcome === 'success'
-                ? resolve({ policyId: 'auto' })
-                : reject(new Error('Plot closed'));
+            complete = () =>
+                outcome === 'success'
+                    ? resolve({ policyId: 'auto' })
+                    : reject(new Error('Plot closed'));
         });
         const backend = await openWebviewPage(page, 'plotEditor', {
-            configure: backend => backend.onRequest(PlotEditorMethods.selectSizingPolicy, () => response),
+            configure: (backend) =>
+                backend.onRequest(PlotEditorMethods.selectSizingPolicy, () => response),
         });
-        await expect.poll(() => backend.notificationCount(PlotEditorMethods.ready)).toBeGreaterThan(0);
+        await expect
+            .poll(() => backend.notificationCount(PlotEditorMethods.ready))
+            .toBeGreaterThan(0);
         await backend.notify(PlotEditorMethods.setContent, dynamicContent);
         const menu = page.getByLabel(sizingTooltip);
         await menu.focus();
         await page.keyboard.press('ArrowDown');
-        await expect(page.getByRole('menuitemcheckbox', { name: 'Auto', exact: true })).toBeFocused();
+        await expect(
+            page.getByRole('menuitemcheckbox', { name: 'Auto', exact: true }),
+        ).toBeFocused();
         await page.keyboard.press('Enter');
         await expect.poll(() => backend.requestCount(PlotEditorMethods.selectSizingPolicy)).toBe(1);
 
@@ -174,7 +205,9 @@ for (const outcome of ['success', 'failure'] as const) {
         await expect(menu).toBeFocused();
         await page.keyboard.press('ArrowDown');
         for (const policy of dynamicContent.sizingPolicies) {
-            await expect(page.getByRole('menuitemcheckbox', { name: policy.name, exact: true })).toBeDisabled();
+            await expect(
+                page.getByRole('menuitemcheckbox', { name: policy.name, exact: true }),
+            ).toBeDisabled();
         }
         expect(backend.requestCount(PlotEditorMethods.selectSizingPolicy)).toBe(1);
         await page.keyboard.press('Escape');
@@ -187,15 +220,18 @@ for (const outcome of ['success', 'failure'] as const) {
         await expect(menu).toContainText(outcome === 'success' ? 'Auto' : 'Landscape');
         await expect(menu).toBeFocused();
         await page.keyboard.press('ArrowDown');
-        await expect(page.getByRole('menuitemcheckbox', { name: 'Fill', exact: true })).toBeEnabled();
+        await expect(
+            page.getByRole('menuitemcheckbox', { name: 'Fill', exact: true }),
+        ).toBeEnabled();
     });
 }
 
 test('plot editor preserves its policy and reports a rejected sizing change', async ({ page }) => {
     const backend = await openWebviewPage(page, 'plotEditor', {
-        configure: backend => backend.onRequest(PlotEditorMethods.selectSizingPolicy, () => {
-            throw new Error('Plot closed');
-        }),
+        configure: (backend) =>
+            backend.onRequest(PlotEditorMethods.selectSizingPolicy, () => {
+                throw new Error('Plot closed');
+            }),
     });
     await expect.poll(() => backend.notificationCount(PlotEditorMethods.ready)).toBeGreaterThan(0);
     await backend.notify(PlotEditorMethods.setContent, dynamicContent);

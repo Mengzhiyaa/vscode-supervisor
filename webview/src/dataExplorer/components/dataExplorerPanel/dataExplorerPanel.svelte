@@ -3,9 +3,9 @@
   Port from Positron's dataExplorerPanel.tsx
 -->
 <script lang="ts">
-    import StatusBar from "./components/statusBar.svelte";
-    import RowFilterBar from "./components/rowFilterBar/rowFilterBar.svelte";
-    import DataExplorer from "./components/dataExplorer.svelte";
+    import StatusBar from './components/statusBar.svelte';
+    import RowFilterBar from './components/rowFilterBar/rowFilterBar.svelte';
+    import DataExplorer from './components/dataExplorer.svelte';
 </script>
 
 <div class="data-explorer-panel">

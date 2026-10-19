@@ -5,7 +5,7 @@ export interface SerializedPlotRecord {
     id: string;
     thumbnail?: string;
     initialData?: string;
-    initialRenderSettings?: { width: number; height: number; pixelRatio: number; };
+    initialRenderSettings?: { width: number; height: number; pixelRatio: number };
     renderVersion: number;
     sessionId?: string;
     kind?: 'static' | 'dynamic' | 'html';
@@ -31,8 +31,7 @@ export interface PlotHistoryEntry {
 
 /** Sort plots by creation time while preserving registration order for ties. */
 export function orderedPlots<T extends PlotHistoryEntry>(plots: Iterable<T>): T[] {
-    return Array.from(plots).sort((left, right) =>
-        (left.created || 0) - (right.created || 0));
+    return Array.from(plots).sort((left, right) => (left.created || 0) - (right.created || 0));
 }
 
 function cloneSize(size: IPlotSize | undefined): IPlotSize | undefined {

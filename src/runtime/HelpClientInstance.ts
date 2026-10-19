@@ -22,7 +22,7 @@ export class HelpClientInstance implements vscode.Disposable {
      */
     constructor(
         client: RuntimeClientInstance,
-        readonly languageId: string
+        readonly languageId: string,
     ) {
         this._comm = new PositronHelpComm(client);
         this.onDidShowHelp = this._comm.onDidShowHelp;

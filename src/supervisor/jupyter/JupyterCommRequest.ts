@@ -9,6 +9,6 @@
  * @link https://jupyter-client.readthedocs.io/en/stable/messaging.html#messages-on-the-stdin-router-dealer-channel
  */
 export interface JupyterCommRequest {
-	method: string;
-	params: Record<string, unknown>;
+    method: string;
+    params: Record<string, unknown>;
 }

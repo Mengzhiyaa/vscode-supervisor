@@ -24,12 +24,12 @@ const DUCKDB_INITIALIZATION_TIMEOUT_MS = 30_000;
 
 // Dynamically load the Node.js entry of duckdb-wasm — esbuild will bundle this
 // along with its apache-arrow dependency into extension.js.
- 
+
 const duckdb: typeof DuckDBTypes = require('@duckdb/duckdb-wasm/dist/duckdb-node.cjs');
 
 // Load worker_threads using Node's native require.
 // esbuild treats Node.js builtins as external automatically.
- 
+
 const workerThreads: typeof import('worker_threads') = require('worker_threads');
 
 type DuckDBWorkerEvent = 'message' | 'error' | 'close';
@@ -45,7 +45,10 @@ type DuckDBWorkerListener = (event: unknown) => void;
  */
 class NodeWebWorkerAdapter {
     private readonly _worker: import('worker_threads').Worker;
-    private readonly _listeners = new Map<DuckDBWorkerEvent, Map<DuckDBWorkerListener, (...args: any[]) => void>>();
+    private readonly _listeners = new Map<
+        DuckDBWorkerEvent,
+        Map<DuckDBWorkerListener, (...args: any[]) => void>
+    >();
     private readonly _failure: Promise<never>;
     private _rejectFailure: (error: Error) => void = () => undefined;
     private _terminating = false;
@@ -61,13 +64,17 @@ class NodeWebWorkerAdapter {
             workerData: { mod: workerModulePath },
         });
         this._worker.once('error', (error: Error) => {
-            this._rejectFailure(new Error(`DuckDB worker failed: ${error.message}`, {
-                cause: error,
-            }));
+            this._rejectFailure(
+                new Error(`DuckDB worker failed: ${error.message}`, {
+                    cause: error,
+                }),
+            );
         });
-        this._worker.once('exit', code => {
+        this._worker.once('exit', (code) => {
             if (!this._terminating) {
-                this._rejectFailure(new Error(`DuckDB worker exited unexpectedly with code ${code}.`));
+                this._rejectFailure(
+                    new Error(`DuckDB worker exited unexpectedly with code ${code}.`),
+                );
             }
         });
     }
@@ -128,7 +135,10 @@ class NodeWebWorkerAdapter {
     }
 
     postMessage(message: unknown, transferList?: readonly unknown[]): void {
-        this._worker.postMessage(message, transferList as readonly import('worker_threads').TransferListItem[] | undefined);
+        this._worker.postMessage(
+            message,
+            transferList as readonly import('worker_threads').TransferListItem[] | undefined,
+        );
     }
 
     terminate(): Promise<number> {
@@ -160,7 +170,7 @@ export class DuckDBInstance {
     private _runningQuery: Promise<void> = Promise.resolve();
     private _disposePromise: Promise<void> | undefined;
 
-    private constructor() { }
+    private constructor() {}
 
     /**
      * Get or create the singleton instance.
@@ -269,9 +279,11 @@ export class DuckDBInstance {
                 guardedOperation,
                 new Promise<never>((_resolve, reject) => {
                     timeout = setTimeout(() => {
-                        reject(new Error(
-                            `Timed out after ${timeoutMs}ms while attempting to ${description}.`,
-                        ));
+                        reject(
+                            new Error(
+                                `Timed out after ${timeoutMs}ms while attempting to ${description}.`,
+                            ),
+                        );
                     }, timeoutMs);
                 }),
             ]);
@@ -319,8 +331,12 @@ export class DuckDBInstance {
                             for (;;) {
                                 throwIfImportCancelled(token);
                                 const chunk = await bindings.fetchQueryResults(connectionId);
-                                if (chunk === null) { continue; }
-                                if (chunk.byteLength === 0) { return; }
+                                if (chunk === null) {
+                                    continue;
+                                }
+                                if (chunk.byteLength === 0) {
+                                    return;
+                                }
                                 yield chunk;
                             }
                         }
@@ -335,7 +351,10 @@ export class DuckDBInstance {
                 await cancellation;
             }
         });
-        this._runningQuery = query.then(() => undefined, () => undefined);
+        this._runningQuery = query.then(
+            () => undefined,
+            () => undefined,
+        );
         return query;
     }
 
@@ -359,10 +378,7 @@ export class DuckDBInstance {
     async dropFile(name: string): Promise<void> {
         if (this._db) {
             try {
-                await this._runWorkerOperation(
-                    this._db.dropFile(name),
-                    'drop a DuckDB-WASM file',
-                );
+                await this._runWorkerOperation(this._db.dropFile(name), 'drop a DuckDB-WASM file');
             } catch {
                 // Ignore errors when dropping files that may not exist
             }
@@ -373,7 +389,9 @@ export class DuckDBInstance {
      * Dispose the DuckDB instance and free resources.
      */
     dispose(): Promise<void> {
-        if (this._disposePromise) { return this._disposePromise; }
+        if (this._disposePromise) {
+            return this._disposePromise;
+        }
         this._disposed = true;
         this._disposePromise = (async () => {
             await this._initPromise?.catch(() => undefined);
@@ -383,7 +401,9 @@ export class DuckDBInstance {
             await this._db?.terminate().catch(() => undefined);
             this._db = undefined;
             this._worker = undefined;
-            if (DuckDBInstance._instance === this) { DuckDBInstance._instance = undefined; }
+            if (DuckDBInstance._instance === this) {
+                DuckDBInstance._instance = undefined;
+            }
         })();
         return this._disposePromise;
     }

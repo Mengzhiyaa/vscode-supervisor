@@ -6,10 +6,7 @@
   and overflows excess actions into a context menu.
 -->
 <script lang="ts">
-    import ContextMenu, {
-        type ContextMenuEntry,
-        type ContextMenuItem,
-    } from './ContextMenu.svelte';
+    import ContextMenu, { type ContextMenuEntry, type ContextMenuItem } from './ContextMenu.svelte';
 
     /** Width constants matching Positron's defaults */
     const BUTTON_WIDTH = 24;
@@ -154,13 +151,13 @@
                         continue;
                     }
 
-                    const requiredShrink =
-                        appliedSeparatorWidth + preferredWidth - remainingWidth;
+                    const requiredShrink = appliedSeparatorWidth + preferredWidth - remainingWidth;
                     const shrinkableEntries = gridEntries.filter(
                         (entry) => entry.width > entry.minWidth,
                     );
                     const totalShrinkCapacity =
-                        (preferredWidth - minWidth) +
+                        preferredWidth -
+                        minWidth +
                         shrinkableEntries.reduce(
                             (sum, entry) => sum + (entry.width - entry.minWidth),
                             0,
@@ -175,10 +172,7 @@
                     let remainingShrink = requiredShrink;
                     let reclaimedWidth = 0;
 
-                    const currentShrink = Math.min(
-                        remainingShrink,
-                        nextWidth - minWidth,
-                    );
+                    const currentShrink = Math.min(remainingShrink, nextWidth - minWidth);
                     nextWidth -= currentShrink;
                     remainingShrink -= currentShrink;
 
@@ -188,10 +182,7 @@
                         index--
                     ) {
                         const entry = shrinkableEntries[index];
-                        const entryShrink = Math.min(
-                            remainingShrink,
-                            entry.width - entry.minWidth,
-                        );
+                        const entryShrink = Math.min(remainingShrink, entry.width - entry.minWidth);
                         entry.width -= entryShrink;
                         reclaimedWidth += entryShrink;
                         remainingShrink -= entryShrink;
@@ -203,10 +194,7 @@
                         action,
                     });
                     remainingWidth =
-                        remainingWidth +
-                        reclaimedWidth -
-                        appliedSeparatorWidth -
-                        nextWidth;
+                        remainingWidth + reclaimedWidth - appliedSeparatorWidth - nextWidth;
                     appendSep = action.separator;
                 }
 
@@ -233,15 +221,12 @@
                 rightGridEntries: rightLayout.gridEntries,
                 leftOverflowActions,
                 rightOverflowActions,
-                hasOverflow:
-                    leftOverflowActions.length + rightOverflowActions.length > 0,
+                hasOverflow: leftOverflowActions.length + rightOverflowActions.length > 0,
             };
         }
 
         const initialLayout = runLayoutPass(false);
-        const resolvedLayout = initialLayout.hasOverflow
-            ? runLayoutPass(true)
-            : initialLayout;
+        const resolvedLayout = initialLayout.hasOverflow ? runLayoutPass(true) : initialLayout;
         const {
             leftGridEntries,
             rightGridEntries,
@@ -279,11 +264,7 @@
         }
 
         // Build final gridTemplateColumns
-        const gridTemplateColumns = [
-            ...leftGrid.cols,
-            '1fr',
-            ...rightGrid.cols,
-        ].join(' ');
+        const gridTemplateColumns = [...leftGrid.cols, '1fr', ...rightGrid.cols].join(' ');
 
         return {
             gridTemplateColumns,
@@ -299,10 +280,7 @@
     // --- Overflow menu entries ---
     const overflowMenuEntries = $derived.by((): ContextMenuEntry[] => {
         const entries: ContextMenuEntry[] = [];
-        const appendEntries = (
-            actions: DynamicAction[],
-            addLeadingSeparator: boolean,
-        ) => {
+        const appendEntries = (actions: DynamicAction[], addLeadingSeparator: boolean) => {
             let shouldAddLeadingSeparator = addLeadingSeparator;
             actions.forEach((action, index) => {
                 if (!action.overflowMenuItem && !action.overflowSubmenu) {
@@ -401,11 +379,7 @@
 </script>
 
 <!-- Off-screen element for text measurement font reference -->
-<div
-    bind:this={exemplarEl}
-    class="exemplar"
-    aria-hidden="true"
-></div>
+<div bind:this={exemplarEl} class="exemplar" aria-hidden="true"></div>
 
 <div
     bind:clientWidth={containerWidth}

@@ -1,20 +1,16 @@
-import {
-    createOnigScanner,
-    createOnigString,
-    loadWASM,
-} from "vscode-oniguruma";
+import { createOnigScanner, createOnigString, loadWASM } from 'vscode-oniguruma';
 import {
     INITIAL,
     Registry,
     type IGrammar,
     type IRawGrammar,
     type StateStack,
-} from "vscode-textmate";
-import type * as MonacoTypes from "monaco-editor/editor";
-import onigWasmUrl from "vscode-oniguruma/release/onig.wasm?url";
-import type { ConsoleThemeData } from "./languageSupport";
+} from 'vscode-textmate';
+import type * as MonacoTypes from 'monaco-editor/editor';
+import onigWasmUrl from 'vscode-oniguruma/release/onig.wasm?url';
+import type { ConsoleThemeData } from './languageSupport';
 
-type MonacoApi = typeof import("monaco-editor/editor");
+type MonacoApi = typeof import('monaco-editor/editor');
 
 export interface LanguageTextMateGrammarDefinition {
     scopeName: string;
@@ -46,28 +42,23 @@ function normalizeHexColor(color?: string): string | undefined {
         return undefined;
     }
 
-    return trimmed.startsWith("#") ? trimmed.slice(1) : trimmed;
+    return trimmed.startsWith('#') ? trimmed.slice(1) : trimmed;
 }
 
 function loadArrayBuffer(url: string): Promise<ArrayBuffer> {
     return new Promise<ArrayBuffer>((resolve, reject) => {
         const xhr = new XMLHttpRequest();
-        xhr.open("GET", url, true);
-        xhr.responseType = "arraybuffer";
+        xhr.open('GET', url, true);
+        xhr.responseType = 'arraybuffer';
         xhr.onload = () => {
             if (xhr.status === 200 || xhr.status === 0) {
                 resolve(xhr.response as ArrayBuffer);
                 return;
             }
 
-            reject(
-                new Error(
-                    `Failed to load '${url}': HTTP ${xhr.status}`,
-                ),
-            );
+            reject(new Error(`Failed to load '${url}': HTTP ${xhr.status}`));
         };
-        xhr.onerror = () =>
-            reject(new Error(`Failed to load '${url}' via XHR`));
+        xhr.onerror = () => reject(new Error(`Failed to load '${url}' via XHR`));
         xhr.send();
     });
 }
@@ -84,22 +75,17 @@ async function loadText(url: string): Promise<string> {
 
     return new Promise<string>((resolve, reject) => {
         const xhr = new XMLHttpRequest();
-        xhr.open("GET", url, true);
-        xhr.responseType = "text";
+        xhr.open('GET', url, true);
+        xhr.responseType = 'text';
         xhr.onload = () => {
             if (xhr.status === 200 || xhr.status === 0) {
                 resolve(xhr.responseText);
                 return;
             }
 
-            reject(
-                new Error(
-                    `Failed to load '${url}': HTTP ${xhr.status}`,
-                ),
-            );
+            reject(new Error(`Failed to load '${url}': HTTP ${xhr.status}`));
         };
-        xhr.onerror = () =>
-            reject(new Error(`Failed to load '${url}' via XHR`));
+        xhr.onerror = () => reject(new Error(`Failed to load '${url}' via XHR`));
         xhr.send();
     });
 }
@@ -120,9 +106,7 @@ async function ensureOnigWasmReady(): Promise<void> {
     return onigWasmReadyPromise;
 }
 
-async function loadGrammar(
-    definition: LanguageTextMateGrammarDefinition,
-): Promise<IRawGrammar> {
+async function loadGrammar(definition: LanguageTextMateGrammarDefinition): Promise<IRawGrammar> {
     const existingPromise = grammarCache.get(definition.grammarUrl);
     if (existingPromise) {
         return existingPromise;
@@ -173,7 +157,7 @@ function scopesToMonacoToken(scopes: string[], rootScopeName: string): string {
         }
     }
 
-    return "";
+    return '';
 }
 
 function registerTextMateTokensProvider(
@@ -262,12 +246,7 @@ export async function ensureLanguageTextMateTokenizerReady(
             return;
         }
 
-        registerTextMateTokensProvider(
-            monaco,
-            normalizedLanguageId,
-            definition.scopeName,
-            grammar,
-        );
+        registerTextMateTokensProvider(monaco, normalizedLanguageId, definition.scopeName, grammar);
     })().catch((error) => {
         const currentEntry = tokenizerCache.get(normalizedLanguageId);
         if (currentEntry?.requestId === requestId) {
@@ -298,14 +277,13 @@ export function getTextMateThemeRules(
 }
 
 class TextMateState implements MonacoTypes.languages.IState {
-    constructor(public readonly ruleStack: StateStack) { }
+    constructor(public readonly ruleStack: StateStack) {}
 
     clone(): TextMateState {
         return new TextMateState(this.ruleStack.clone());
     }
 
     equals(other: MonacoTypes.languages.IState): boolean {
-        return other instanceof TextMateState &&
-            this.ruleStack.equals(other.ruleStack);
+        return other instanceof TextMateState && this.ruleStack.equals(other.ruleStack);
     }
 }

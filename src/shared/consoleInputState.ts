@@ -21,8 +21,12 @@ export function reconcileConsoleInputEdit(
         // Legacy/unmounted inputs may accept a restore only while empty.
         return current.code ? current.code : replacement;
     }
-    if (current.clientId !== expected.clientId) { return current.code; }
-    if (current.version === expected.version && current.code === expected.code) { return replacement; }
+    if (current.clientId !== expected.clientId) {
+        return current.code;
+    }
+    if (current.version === expected.version && current.code === expected.code) {
+        return replacement;
+    }
     if (current.code.startsWith(expected.code)) {
         const tail = current.code.slice(expected.code.length);
         return replacement && tail ? `${replacement}\n${tail}` : replacement + tail;

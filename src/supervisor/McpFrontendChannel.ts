@@ -27,9 +27,13 @@ export class McpFrontendChannel implements vscode.Disposable {
         private readonly _log: (message: string) => void,
     ) {
         this._disposables = [
-            positron.runtime.onDidChangeForegroundSession(() => { void this.sendForeground(); }),
-            vscode.window.onDidChangeWindowState(state => {
-                if (state.focused) { this.send({ kind: 'focused' }); }
+            positron.runtime.onDidChangeForegroundSession(() => {
+                void this.sendForeground();
+            }),
+            vscode.window.onDidChangeWindowState((state) => {
+                if (state.focused) {
+                    this.send({ kind: 'focused' });
+                }
             }),
         ];
         this.connect();
@@ -44,40 +48,64 @@ export class McpFrontendChannel implements vscode.Disposable {
         const socket = this._socket;
         const id = await this.foregroundId();
         if (this._socket === socket) {
-            this.send({ kind: 'foreground_changed', session_id: id && this._sessionIds().includes(id) ? id : null });
+            this.send({
+                kind: 'foreground_changed',
+                session_id: id && this._sessionIds().includes(id) ? id : null,
+            });
         }
     }
 
     private async foregroundId(): Promise<string | undefined> {
-        try { return (await positron.runtime.getForegroundSession())?.metadata.sessionId; }
-        catch { return undefined; }
+        try {
+            return (await positron.runtime.getForegroundSession())?.metadata.sessionId;
+        } catch {
+            return undefined;
+        }
     }
 
     private connect(): void {
-        if (this._disposed) { return; }
+        if (this._disposed) {
+            return;
+        }
         try {
             const socket = createWebSocket(this._uri, undefined, { headers: this._headers });
             this._socket = socket;
-            socket.on('open', () => { void this.sayHello(socket); });
-            socket.on('message', data => {
-                if (this._socket !== socket) { return; }
+            socket.on('open', () => {
+                void this.sayHello(socket);
+            });
+            socket.on('message', (data) => {
+                if (this._socket !== socket) {
+                    return;
+                }
                 try {
                     const message = JSON.parse(data.toString());
                     if (message?.kind === 'clients_changed' && Array.isArray(message.clients)) {
                         this._clientsChanged(message.clients);
-                    } else if (message?.kind === 'command_request' && typeof message.id === 'string') {
+                    } else if (
+                        message?.kind === 'command_request' &&
+                        typeof message.id === 'string'
+                    ) {
                         // Session tools are handled by Kallichore. Positron's private
                         // AI command catalog has no equivalent in this extension.
-                        this.send({ kind: 'command_reply', id: message.id, ok: false,
-                            reason: 'not-found', message: 'This frontend does not publish editor commands.' });
+                        this.send({
+                            kind: 'command_reply',
+                            id: message.id,
+                            ok: false,
+                            reason: 'not-found',
+                            message: 'This frontend does not publish editor commands.',
+                        });
                     }
                 } catch {
                     this._log('Ignored an invalid MCP frontend frame.');
                 }
             });
-            socket.on('error', () => { this._log('MCP frontend channel connection failed.'); });
+            socket.on('error', () => {
+                this._log('MCP frontend channel connection failed.');
+            });
             socket.on('close', () => {
-                if (this._socket !== socket) { return; }
+                if (this._socket !== socket) {
+                    return;
+                }
                 this._socket = undefined;
                 this._ready = false;
                 this._clientsChanged([]);
@@ -91,25 +119,36 @@ export class McpFrontendChannel implements vscode.Disposable {
 
     private async sayHello(socket: WebSocket): Promise<void> {
         const id = await this.foregroundId();
-        if (this._disposed || this._socket !== socket || socket.readyState !== WebSocket.OPEN) { return; }
+        if (this._disposed || this._socket !== socket || socket.readyState !== WebSocket.OPEN) {
+            return;
+        }
         this._delay = 1000;
         this._ready = true;
         const sessionIds = this._sessionIds();
-        this.send({ kind: 'hello', commands: [], guide: {}, session_ids: sessionIds,
+        this.send({
+            kind: 'hello',
+            commands: [],
+            guide: {},
+            session_ids: sessionIds,
             foreground_session_id: id && sessionIds.includes(id) ? id : undefined,
-            focused: vscode.window.state.focused });
+            focused: vscode.window.state.focused,
+        });
     }
 
     private send(message: unknown): void {
         if (!this._disposed && this._ready && this._socket?.readyState === WebSocket.OPEN) {
-            this._socket.send(JSON.stringify(message), error => {
-                if (error) { this._log('Could not send an MCP frontend frame.'); }
+            this._socket.send(JSON.stringify(message), (error) => {
+                if (error) {
+                    this._log('Could not send an MCP frontend frame.');
+                }
             });
         }
     }
 
     private scheduleReconnect(): void {
-        if (this._disposed || this._timer) { return; }
+        if (this._disposed || this._timer) {
+            return;
+        }
         this._timer = setTimeout(() => {
             this._timer = undefined;
             this.connect();
@@ -119,14 +158,19 @@ export class McpFrontendChannel implements vscode.Disposable {
 
     public dispose(): void {
         this._disposed = true;
-        if (this._timer) { clearTimeout(this._timer); }
+        if (this._timer) {
+            clearTimeout(this._timer);
+        }
         const socket = this._socket;
         this._socket = undefined;
         if (socket) {
-            if (socket.readyState === WebSocket.CONNECTING) { socket.terminate(); }
-            else { socket.close(); }
+            if (socket.readyState === WebSocket.CONNECTING) {
+                socket.terminate();
+            } else {
+                socket.close();
+            }
         }
-        this._disposables.forEach(disposable => disposable.dispose());
+        this._disposables.forEach((disposable) => disposable.dispose());
         this._clientsChanged([]);
     }
 }

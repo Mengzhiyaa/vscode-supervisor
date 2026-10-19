@@ -84,7 +84,7 @@ export const SearchSchemaSortOrder = {
 } as const;
 
 export type SearchSchemaSortOrder =
-    typeof SearchSchemaSortOrder[keyof typeof SearchSchemaSortOrder];
+    (typeof SearchSchemaSortOrder)[keyof typeof SearchSchemaSortOrder];
 
 export interface ColumnSchema {
     column_name: string;
@@ -131,14 +131,9 @@ export interface FilterMatchDataTypes {
 }
 
 export type RowFilterParams =
-    | FilterBetween
-    | FilterComparison
-    | FilterSetMembership
-    | FilterTextSearch;
+    FilterBetween | FilterComparison | FilterSetMembership | FilterTextSearch;
 
-export type ColumnFilterParams =
-    | FilterTextSearch
-    | FilterMatchDataTypes;
+export type ColumnFilterParams = FilterTextSearch | FilterMatchDataTypes;
 
 export interface RowFilter {
     filter_id: string;

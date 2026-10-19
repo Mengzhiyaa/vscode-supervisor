@@ -36,7 +36,7 @@ export class LocalSupervisorApi implements vscode.Disposable {
 
     constructor(
         private readonly _context: vscode.ExtensionContext,
-        private readonly _outputChannel: vscode.LogOutputChannel
+        private readonly _outputChannel: vscode.LogOutputChannel,
     ) {
         this._supervisorLog = vscode.window.createOutputChannel('Kernel Supervisor');
         this._disposables.push(this._supervisorLog);
@@ -75,21 +75,27 @@ export class LocalSupervisorApi implements vscode.Disposable {
             // Create the Kallichore adapter API with supervisor log
             this._adapterApi = new KCApi(
                 this._context,
-                this._supervisorLog,  // Use supervisor-specific log channel
+                this._supervisorLog, // Use supervisor-specific log channel
                 transport,
-                true // enable session reconnect
+                true, // enable session reconnect
             );
 
             // Restore the supervisor-management commands that upstream Positron
             // exposes at extension activation time.
             this._adapterApi.registerCommands();
             this._disposables.push(
-                vscode.commands.registerCommand('positron.supervisor.showRunningSupervisors', () => {
-                    return KallichoreInstances.showRunningSupervisors();
-                }),
-                vscode.commands.registerCommand('positron.supervisor.showKernelSupervisorLog', () => {
-                    this.showLog();
-                }),
+                vscode.commands.registerCommand(
+                    'positron.supervisor.showRunningSupervisors',
+                    () => {
+                        return KallichoreInstances.showRunningSupervisors();
+                    },
+                ),
+                vscode.commands.registerCommand(
+                    'positron.supervisor.showKernelSupervisorLog',
+                    () => {
+                        this.showLog();
+                    },
+                ),
             );
 
             // Log Kallichore path
@@ -100,8 +106,13 @@ export class LocalSupervisorApi implements vscode.Disposable {
 
             this.log('Local supervisor initialized successfully');
         } catch (error) {
-            this.log(`Failed to initialize supervisor: ${getErrorMessage(error)}`, vscode.LogLevel.Error);
-            this._outputChannel.error(`Failed to initialize Kernel Supervisor: ${getErrorMessage(error)}. See the Kernel Supervisor output channel for details.`);
+            this.log(
+                `Failed to initialize supervisor: ${getErrorMessage(error)}`,
+                vscode.LogLevel.Error,
+            );
+            this._outputChannel.error(
+                `Failed to initialize Kernel Supervisor: ${getErrorMessage(error)}. See the Kernel Supervisor output channel for details.`,
+            );
             throw error;
         }
     }
@@ -114,7 +125,7 @@ export class LocalSupervisorApi implements vscode.Disposable {
         sessionMetadata: IRuntimeSessionMetadata,
         kernelSpec: JupyterKernelSpec,
         dynState: LanguageRuntimeDynState,
-        extra?: JupyterKernelExtra
+        extra?: JupyterKernelExtra,
     ): Promise<JupyterLanguageRuntimeSession> {
         if (!this._adapterApi) {
             throw new Error('Supervisor not initialized');
@@ -124,14 +135,17 @@ export class LocalSupervisorApi implements vscode.Disposable {
         this.log(`Runtime: ${runtimeMetadata.runtimeName}`, vscode.LogLevel.Debug);
         this.log(`Session name: ${sessionMetadata.sessionName}`, vscode.LogLevel.Debug);
         this.log(`Session mode: ${sessionMetadata.sessionMode}`, vscode.LogLevel.Debug);
-        this.log(`Kernel spec contains ${kernelSpec.argv.length} argument(s)`, vscode.LogLevel.Trace);
+        this.log(
+            `Kernel spec contains ${kernelSpec.argv.length} argument(s)`,
+            vscode.LogLevel.Trace,
+        );
 
         const session = await this._adapterApi.createSession(
             runtimeMetadata,
             sessionMetadata,
             kernelSpec,
             dynState,
-            extra
+            extra,
         );
 
         this.log(`Session ${sessionMetadata.sessionId} created successfully`);
@@ -147,7 +161,10 @@ export class LocalSupervisorApi implements vscode.Disposable {
         }
         this.log(`Validating session ${sessionId}...`, vscode.LogLevel.Debug);
         const valid = await this._adapterApi.validateSession(sessionId);
-        this.log(`Session ${sessionId} validation: ${valid ? 'valid' : 'invalid'}`, vscode.LogLevel.Debug);
+        this.log(
+            `Session ${sessionId} validation: ${valid ? 'valid' : 'invalid'}`,
+            vscode.LogLevel.Debug,
+        );
         return valid;
     }
 
@@ -157,7 +174,7 @@ export class LocalSupervisorApi implements vscode.Disposable {
     async restoreSession(
         runtimeMetadata: LanguageRuntimeMetadata,
         sessionMetadata: IRuntimeSessionMetadata,
-        dynState: LanguageRuntimeDynState
+        dynState: LanguageRuntimeDynState,
     ): Promise<JupyterLanguageRuntimeSession> {
         if (!this._adapterApi) {
             throw new Error('Supervisor not initialized');
@@ -168,7 +185,7 @@ export class LocalSupervisorApi implements vscode.Disposable {
         const session = await this._adapterApi.restoreSession(
             runtimeMetadata,
             sessionMetadata,
-            dynState
+            dynState,
         );
 
         this.log(`Session ${sessionMetadata.sessionId} restored successfully`);
@@ -198,12 +215,16 @@ export class LocalSupervisorApi implements vscode.Disposable {
     }
 
     async restartSupervisor(): Promise<void> {
-        if (!this._adapterApi) { throw new Error('Supervisor not initialized'); }
+        if (!this._adapterApi) {
+            throw new Error('Supervisor not initialized');
+        }
         await this._adapterApi.restartSupervisor();
     }
 
     async shutdownSupervisor(): Promise<void> {
-        if (!this._adapterApi) { throw new Error('Supervisor not initialized'); }
+        if (!this._adapterApi) {
+            throw new Error('Supervisor not initialized');
+        }
         await this._adapterApi.shutdownSupervisor();
     }
 
@@ -212,7 +233,9 @@ export class LocalSupervisorApi implements vscode.Disposable {
     }
 
     async reconnectSession(sessionId: string): Promise<void> {
-        if (!this._adapterApi) { throw new Error('Supervisor not initialized'); }
+        if (!this._adapterApi) {
+            throw new Error('Supervisor not initialized');
+        }
         await this._adapterApi.reconnectSession(sessionId);
     }
 
@@ -228,6 +251,6 @@ export class LocalSupervisorApi implements vscode.Disposable {
     dispose(): void {
         this.log('Disposing supervisor...');
         this._adapterApi?.dispose();
-        this._disposables.forEach(d => d.dispose());
+        this._disposables.forEach((d) => d.dispose());
     }
 }

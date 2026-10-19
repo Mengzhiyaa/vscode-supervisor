@@ -1,4 +1,4 @@
-export type LowMemoryUnit = "percent" | "megabytes";
+export type LowMemoryUnit = 'percent' | 'megabytes';
 
 export interface LowMemoryStatus {
     unit: LowMemoryUnit;
@@ -25,7 +25,7 @@ export interface MemoryUsageSnapshot {
     applicationOverheadBytes?: number;
     otherProcessesBytes: number;
     source: {
-        providerKind: "local" | "remote";
+        providerKind: 'local' | 'remote';
         machineId: string;
         remoteName?: string;
     };

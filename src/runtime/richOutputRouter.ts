@@ -33,10 +33,7 @@ import {
     RuntimeOutputMime,
     type RuntimeOutputConsumerId,
 } from './runtimeOutputContract';
-export {
-    RuntimeOutputConsumers,
-    type RuntimeOutputConsumerId,
-} from './runtimeOutputContract';
+export { RuntimeOutputConsumers, type RuntimeOutputConsumerId } from './runtimeOutputContract';
 
 const MaxRouteRecords = 200;
 
@@ -51,7 +48,8 @@ export interface RichOutputRouteRecord {
     readonly outputId?: string;
     readonly kind: RuntimeOutputKind;
     readonly consumer: RuntimeOutputConsumerId;
-    readonly status: 'accepted' | 'instance-created' | 'surface-opened' | 'routed' | 'fallback' | 'failed';
+    readonly status:
+        'accepted' | 'instance-created' | 'surface-opened' | 'routed' | 'fallback' | 'failed';
     readonly phase?: 'accepted' | 'instance-created' | 'surface-opened';
     readonly rendererCompatible: boolean;
     readonly detail?: string;
@@ -123,7 +121,7 @@ function parseJsonRecord(value: unknown): Record<string, unknown> | undefined {
         }
     }
     return candidate && typeof candidate === 'object' && !Array.isArray(candidate)
-        ? candidate as Record<string, unknown>
+        ? (candidate as Record<string, unknown>)
         : undefined;
 }
 
@@ -174,25 +172,27 @@ export class RichOutputRouter implements vscode.Disposable {
         }
 
         this._disposables.push(
-            this._sessionManager.onDidCreateSession(session => this._attachSession(session)),
-            this._sessionManager.onDidDeleteRuntimeSession(sessionId => {
+            this._sessionManager.onDidCreateSession((session) => this._attachSession(session)),
+            this._sessionManager.onDidDeleteRuntimeSession((sessionId) => {
                 this._detachSession(sessionId);
                 const outputDirectory = vscode.Uri.joinPath(
                     this._context.globalStorageUri,
                     'rich-output',
                     safePathSegment(sessionId),
                 );
-                void vscode.workspace.fs.delete(outputDirectory, { recursive: true, useTrash: false }).then(
-                    () => undefined,
-                    () => undefined,
-                );
+                void vscode.workspace.fs
+                    .delete(outputDirectory, { recursive: true, useTrash: false })
+                    .then(
+                        () => undefined,
+                        () => undefined,
+                    );
             }),
         );
     }
 
     getRouteRecords(sessionId?: string): readonly RichOutputRouteRecord[] {
         return sessionId
-            ? this._routeRecords.filter(record => record.sessionId === sessionId)
+            ? this._routeRecords.filter((record) => record.sessionId === sessionId)
             : [...this._routeRecords];
     }
 
@@ -231,13 +231,15 @@ export class RichOutputRouter implements vscode.Disposable {
         }
 
         const disposables = [
-            session.onDidReceiveRuntimeMessageOutput(message => this._enqueue(session, message)),
-            session.onDidReceiveRuntimeMessageResult(message => this._enqueue(session, message)),
-            session.onDidReceiveRuntimeMessageUpdateOutput(message => this._enqueue(session, message)),
-            session.onDidReceiveRuntimeMessageClearOutput(message => {
+            session.onDidReceiveRuntimeMessageOutput((message) => this._enqueue(session, message)),
+            session.onDidReceiveRuntimeMessageResult((message) => this._enqueue(session, message)),
+            session.onDidReceiveRuntimeMessageUpdateOutput((message) =>
+                this._enqueue(session, message),
+            ),
+            session.onDidReceiveRuntimeMessageClearOutput((message) => {
                 this._handleClearOutput(session, message);
             }),
-            session.onDidReceiveRuntimeMessageIPyWidget(message => {
+            session.onDidReceiveRuntimeMessageIPyWidget((message) => {
                 this._enqueue(session, this._toRichIPyWidgetMessage(message));
             }),
         ];
@@ -245,7 +247,7 @@ export class RichOutputRouter implements vscode.Disposable {
     }
 
     private _detachSession(sessionId: string): void {
-        this._sessionDisposables.get(sessionId)?.forEach(disposable => disposable.dispose());
+        this._sessionDisposables.get(sessionId)?.forEach((disposable) => disposable.dispose());
         this._sessionDisposables.delete(sessionId);
         for (const key of this._routeChains.keys()) {
             if (key.startsWith(`${sessionId}:`)) {
@@ -289,8 +291,16 @@ export class RichOutputRouter implements vscode.Disposable {
         const previous = this._routeChains.get(key) ?? Promise.resolve();
         const current = previous
             .catch(() => undefined)
-            .then(() => this._isRouteCurrent(signal) ? this._routeOutput(session, message, signal) : undefined)
-            .catch(error => this._isRouteCurrent(signal) ? this._handleRouteFailure(session, message, error) : undefined)
+            .then(() =>
+                this._isRouteCurrent(signal)
+                    ? this._routeOutput(session, message, signal)
+                    : undefined,
+            )
+            .catch((error) =>
+                this._isRouteCurrent(signal)
+                    ? this._handleRouteFailure(session, message, error)
+                    : undefined,
+            )
             .finally(() => {
                 this._routingOperations.delete(operation);
                 if (this._routeChains.get(key) === current) {
@@ -300,10 +310,7 @@ export class RichOutputRouter implements vscode.Disposable {
         this._routeChains.set(key, current);
     }
 
-    private _handleClearOutput(
-        session: RuntimeSession,
-        message: RuntimeClearOutputMessage,
-    ): void {
+    private _handleClearOutput(session: RuntimeSession, message: RuntimeClearOutputMessage): void {
         const key = `${session.sessionId}:${message.parent_id}`;
         if (message.wait) {
             this._pendingClears.add(key);
@@ -315,8 +322,10 @@ export class RichOutputRouter implements vscode.Disposable {
 
     private _clearManagedOutputs(sessionId: string, parentId?: string): void {
         for (const operation of this._routingOperations) {
-            if (operation.sessionId === sessionId &&
-                (parentId === undefined || operation.parentId === parentId)) {
+            if (
+                operation.sessionId === sessionId &&
+                (parentId === undefined || operation.parentId === parentId)
+            ) {
                 operation.controller.abort();
             }
         }
@@ -362,8 +371,11 @@ export class RichOutputRouter implements vscode.Disposable {
                 }
                 await this._routeWithRenderer(renderer, latest.session, latest.message, signal);
             })
-            .catch(error => this._isRouteCurrent(signal)
-                ? this._handleRouteFailure(managed.session, managed.message, error) : undefined)
+            .catch((error) =>
+                this._isRouteCurrent(signal)
+                    ? this._handleRouteFailure(managed.session, managed.message, error)
+                    : undefined,
+            )
             .finally(() => {
                 this._routingOperations.delete(operation);
                 if (this._routeChains.get(key) === current) {
@@ -384,25 +396,27 @@ export class RichOutputRouter implements vscode.Disposable {
     ): LanguageRuntimeOutputWithKind {
         const original = message.original_message as Partial<LanguageRuntimeOutput>;
         const originalData = original.data;
-        const data = originalData && typeof originalData === 'object' && !Array.isArray(originalData)
-            ? originalData
-            : {
-                'application/vnd.vscode-supervisor.ipywidget-message+json':
-                    message.original_message,
-            };
+        const data =
+            originalData && typeof originalData === 'object' && !Array.isArray(originalData)
+                ? originalData
+                : {
+                      'application/vnd.vscode-supervisor.ipywidget-message+json':
+                          message.original_message,
+                  };
 
         return {
             ...message,
             kind: RuntimeOutputKind.IPyWidget,
             data,
-            output_id: typeof original.output_id === 'string'
-                ? original.output_id
-                : undefined,
+            output_id: typeof original.output_id === 'string' ? original.output_id : undefined,
             outputMetadata: original.outputMetadata,
         };
     }
 
-    private _createRoutingOperation(session: RuntimeSession, message: RichOutputMessage): RoutingOperation {
+    private _createRoutingOperation(
+        session: RuntimeSession,
+        message: RichOutputMessage,
+    ): RoutingOperation {
         const operation = {
             sessionId: session.sessionId,
             parentId: message.parent_id,
@@ -421,10 +435,16 @@ export class RichOutputRouter implements vscode.Disposable {
         message: RichOutputMessage,
         signal: AbortSignal = new AbortController().signal,
     ): Promise<void> {
-        if (message.kind === RuntimeOutputKind.PlotWidget && !this._plotsService.getPlotsPaneBehavior(session.sessionId).surface) {
+        if (
+            message.kind === RuntimeOutputKind.PlotWidget &&
+            !this._plotsService.getPlotsPaneBehavior(session.sessionId).surface
+        ) {
             return; // A plain notebook owns this output inline.
         }
-        if (!this._isRouteCurrent(signal) || await this._routeWithRegisteredRenderer(session, message, signal)) {
+        if (
+            !this._isRouteCurrent(signal) ||
+            (await this._routeWithRegisteredRenderer(session, message, signal))
+        ) {
             return;
         }
         if (!this._isRouteCurrent(signal)) {
@@ -465,7 +485,10 @@ export class RichOutputRouter implements vscode.Disposable {
         signal: AbortSignal,
     ): Promise<boolean> {
         for (const renderer of this._renderers.values()) {
-            if (!this._isRouteCurrent(signal) || await this._routeWithRenderer(renderer, session, message, signal)) {
+            if (
+                !this._isRouteCurrent(signal) ||
+                (await this._routeWithRenderer(renderer, session, message, signal))
+            ) {
                 return true;
             }
         }
@@ -477,12 +500,12 @@ export class RichOutputRouter implements vscode.Disposable {
         message: RichOutputMessage,
     ): boolean {
         const mimeTypes = Object.keys(message.data);
-        return !(
-            renderer.outputKinds?.length &&
-            !renderer.outputKinds.includes(message.kind)
-        ) && !(
-            renderer.mimeTypes?.length &&
-            !renderer.mimeTypes.some(mimeType => mimeTypes.includes(mimeType))
+        return (
+            !(renderer.outputKinds?.length && !renderer.outputKinds.includes(message.kind)) &&
+            !(
+                renderer.mimeTypes?.length &&
+                !renderer.mimeTypes.some((mimeType) => mimeTypes.includes(mimeType))
+            )
         );
     }
 
@@ -559,13 +582,13 @@ export class RichOutputRouter implements vscode.Disposable {
         try {
             await renderer.disposeOutput?.(this._rendererContext({ session, message }));
         } catch (error) {
-            this._outputChannel.warn(`[RichOutputRouter] Renderer '${renderer.id}' failed to dispose output: ${getErrorMessage(error)}`);
+            this._outputChannel.warn(
+                `[RichOutputRouter] Renderer '${renderer.id}' failed to dispose output: ${getErrorMessage(error)}`,
+            );
         }
     }
 
-    private _rendererContext(
-        managed: Pick<ManagedRichOutput, 'session' | 'message'>,
-    ) {
+    private _rendererContext(managed: Pick<ManagedRichOutput, 'session' | 'message'>) {
         return {
             session: managed.session,
             outputKind: managed.message.kind,
@@ -604,15 +627,24 @@ export class RichOutputRouter implements vscode.Disposable {
         }
 
         if (rendered.target === 'plot') {
-            this._plotsService.addHtmlOutputPlot(session.sessionId, {
-                uri: uri!,
-                title: rendered.title ?? 'Runtime Plot',
-            }, message);
+            this._plotsService.addHtmlOutputPlot(
+                session.sessionId,
+                {
+                    uri: uri!,
+                    title: rendered.title ?? 'Runtime Plot',
+                },
+                message,
+            );
         } else if (htmlFile) {
-            await this._previewService.showRuntimeOutputHtml(session.sessionId, htmlFile, {
-                title: rendered.title ?? 'Runtime Viewer Output',
-                outputId: message.output_id,
-            }, signal);
+            await this._previewService.showRuntimeOutputHtml(
+                session.sessionId,
+                htmlFile,
+                {
+                    title: rendered.title ?? 'Runtime Viewer Output',
+                    outputId: message.output_id,
+                },
+                signal,
+            );
         } else {
             await this._previewService.showRuntimeOutputUrl(
                 session.sessionId,
@@ -624,18 +656,18 @@ export class RichOutputRouter implements vscode.Disposable {
         if (!this._isRouteCurrent(signal)) {
             return;
         }
-        this._record(
-            session,
-            message,
-            'renderer',
-            'routed',
-            `${rendererId}:${uri!.toString()}`,
-        );
+        this._record(session, message, 'renderer', 'routed', `${rendererId}:${uri!.toString()}`);
     }
 
-    private async _routeViewerOutput(session: RuntimeSession, message: RichOutputMessage, signal: AbortSignal): Promise<void> {
+    private async _routeViewerOutput(
+        session: RuntimeSession,
+        message: RichOutputMessage,
+        signal: AbortSignal,
+    ): Promise<void> {
         if (message.data[RuntimeOutputMime.positronDataExplorer] !== undefined) {
-            const dataExplorerPayload = parseJsonRecord(message.data[RuntimeOutputMime.positronDataExplorer]);
+            const dataExplorerPayload = parseJsonRecord(
+                message.data[RuntimeOutputMime.positronDataExplorer],
+            );
             const commId = dataExplorerPayload?.comm_id;
             if (typeof commId === 'string' && commId.length > 0) {
                 const isNotebook = session.sessionMetadata.sessionMode === 'notebook';
@@ -681,10 +713,15 @@ export class RichOutputRouter implements vscode.Disposable {
             if (!this._isRouteCurrent(signal)) {
                 return;
             }
-            await this._previewService.showRuntimeOutputHtml(session.sessionId, fileUri, {
-                title: viewerPayload?.title ?? 'Runtime Viewer Output',
-                outputId: message.output_id,
-            }, signal);
+            await this._previewService.showRuntimeOutputHtml(
+                session.sessionId,
+                fileUri,
+                {
+                    title: viewerPayload?.title ?? 'Runtime Viewer Output',
+                    outputId: message.output_id,
+                },
+                signal,
+            );
             if (!this._isRouteCurrent(signal)) {
                 return;
             }
@@ -694,10 +731,15 @@ export class RichOutputRouter implements vscode.Disposable {
 
         if (viewerPayload?.path) {
             const fileUri = vscode.Uri.file(viewerPayload.path);
-            await this._previewService.showRuntimeOutputHtml(session.sessionId, fileUri, {
-                title: viewerPayload.title ?? 'Runtime Viewer Output',
-                outputId: message.output_id,
-            }, signal);
+            await this._previewService.showRuntimeOutputHtml(
+                session.sessionId,
+                fileUri,
+                {
+                    title: viewerPayload.title ?? 'Runtime Viewer Output',
+                    outputId: message.output_id,
+                },
+                signal,
+            );
             if (!this._isRouteCurrent(signal)) {
                 return;
             }
@@ -705,9 +747,10 @@ export class RichOutputRouter implements vscode.Disposable {
             return;
         }
 
-        const reason = message.data[RuntimeOutputMime.positronDataExplorer] !== undefined
-            ? 'Inline Data Explorer output requires a dedicated inline surface; the payload is preserved here.'
-            : 'No supported URL or HTML representation was present in the Viewer output.';
+        const reason =
+            message.data[RuntimeOutputMime.positronDataExplorer] !== undefined
+                ? 'Inline Data Explorer output requires a dedicated inline surface; the payload is preserved here.'
+                : 'No supported URL or HTML representation was present in the Viewer output.';
         await this._routeFallback(session, message, reason, signal);
     }
 
@@ -719,7 +762,12 @@ export class RichOutputRouter implements vscode.Disposable {
     ): Promise<void> {
         this._record(session, message, 'data-explorer', 'accepted', commId, 'accepted');
 
-        const instanceCreated = await this._waitForDataExplorerPhase(commId, 'instance-created', 10_000, signal);
+        const instanceCreated = await this._waitForDataExplorerPhase(
+            commId,
+            'instance-created',
+            10_000,
+            signal,
+        );
         if (!this._isRouteCurrent(signal)) {
             return;
         }
@@ -733,9 +781,21 @@ export class RichOutputRouter implements vscode.Disposable {
             );
             return;
         }
-        this._record(session, message, 'data-explorer', 'instance-created', commId, 'instance-created');
+        this._record(
+            session,
+            message,
+            'data-explorer',
+            'instance-created',
+            commId,
+            'instance-created',
+        );
 
-        const surfaceOpened = await this._waitForDataExplorerPhase(commId, 'surface-opened', 10_000, signal);
+        const surfaceOpened = await this._waitForDataExplorerPhase(
+            commId,
+            'surface-opened',
+            10_000,
+            signal,
+        );
         if (!this._isRouteCurrent(signal)) {
             return;
         }
@@ -768,15 +828,18 @@ export class RichOutputRouter implements vscode.Disposable {
             if (!model) {
                 return false;
             }
-            return phase === 'instance-created' || model.attachments.some(
-                attachment => attachment.kind === SurfaceKind.DataExplorerEditor,
+            return (
+                phase === 'instance-created' ||
+                model.attachments.some(
+                    (attachment) => attachment.kind === SurfaceKind.DataExplorerEditor,
+                )
             );
         };
         if (isSatisfied()) {
             return Promise.resolve(true);
         }
 
-        return new Promise(resolve => {
+        return new Promise((resolve) => {
             let settled = false;
             let listener: vscode.Disposable | undefined;
             let timer: NodeJS.Timeout | undefined;
@@ -794,7 +857,7 @@ export class RichOutputRouter implements vscode.Disposable {
             };
             const onAbort = () => finish(false);
             signal?.addEventListener('abort', onAbort, { once: true });
-            listener = lifecycle.onDidChange(event => {
+            listener = lifecycle.onDidChange((event) => {
                 if (event.model.id === modelId && isSatisfied()) {
                     finish(true);
                 }
@@ -809,7 +872,11 @@ export class RichOutputRouter implements vscode.Disposable {
         });
     }
 
-    private async _routePlotOutput(session: RuntimeSession, message: RichOutputMessage, signal: AbortSignal): Promise<void> {
+    private async _routePlotOutput(
+        session: RuntimeSession,
+        message: RichOutputMessage,
+        signal: AbortSignal,
+    ): Promise<void> {
         const plotPayload = parseRichPayload(message.data[RuntimeOutputMime.positronPlot]);
         let uri: vscode.Uri | undefined;
         if (plotPayload?.url) {
@@ -817,7 +884,12 @@ export class RichOutputRouter implements vscode.Disposable {
         } else {
             const html = plotPayload?.html ?? asString(message.data[RuntimeOutputMime.textHtml]);
             if (html) {
-                const fileUri = await this._writeHtmlOutput(session.sessionId, message, html, undefined);
+                const fileUri = await this._writeHtmlOutput(
+                    session.sessionId,
+                    message,
+                    html,
+                    undefined,
+                );
                 if (!this._isRouteCurrent(signal)) {
                     return;
                 }
@@ -829,10 +901,14 @@ export class RichOutputRouter implements vscode.Disposable {
             return;
         }
         if (uri) {
-            this._plotsService.addHtmlOutputPlot(session.sessionId, {
-                uri,
-                title: plotPayload?.title ?? 'Runtime Plot',
-            }, message);
+            this._plotsService.addHtmlOutputPlot(
+                session.sessionId,
+                {
+                    uri,
+                    title: plotPayload?.title ?? 'Runtime Plot',
+                },
+                message,
+            );
             this._record(session, message, 'plots', 'routed', uri.toString());
             return;
         }
@@ -856,17 +932,22 @@ export class RichOutputRouter implements vscode.Disposable {
         if (!this._isRouteCurrent(signal)) {
             return;
         }
-        await this._previewService.showRuntimeOutputHtml(session.sessionId, fileUri, {
-            title: `${message.kind} output (fallback)`,
-            outputId: message.output_id,
-            fallbackReason: reason,
-        }, signal);
+        await this._previewService.showRuntimeOutputHtml(
+            session.sessionId,
+            fileUri,
+            {
+                title: `${message.kind} output (fallback)`,
+                outputId: message.output_id,
+                fallbackReason: reason,
+            },
+            signal,
+        );
         if (!this._isRouteCurrent(signal)) {
             return;
         }
         this._record(session, message, 'viewer-fallback', 'fallback', reason);
         this._outputChannel.warn(
-            `[RichOutputRouter] ${message.kind} output ${message.output_id ?? message.id} used fallback: ${reason}`
+            `[RichOutputRouter] ${message.kind} output ${message.output_id ?? message.id} used fallback: ${reason}`,
         );
     }
 
@@ -883,7 +964,10 @@ export class RichOutputRouter implements vscode.Disposable {
             id: createSurfaceModelId(SurfaceModelKind.Widget, session.sessionId, identity),
             kind: SurfaceModelKind.Widget,
             resourceId: identity,
-            title: message.kind === RuntimeOutputKind.IPyWidget ? 'Notebook Widget' : 'Notebook Webview Output',
+            title:
+                message.kind === RuntimeOutputKind.IPyWidget
+                    ? 'Notebook Widget'
+                    : 'Notebook Webview Output',
             source: {
                 kind: SurfaceSourceKind.Runtime,
                 id: session.sessionId,
@@ -917,9 +1001,7 @@ export class RichOutputRouter implements vscode.Disposable {
             directory,
             `${safePathSegment(message.output_id ?? message.id)}.html`,
         );
-        const document = fallbackReason
-            ? content
-            : this._asHtmlDocument(content, message.kind);
+        const document = fallbackReason ? content : this._asHtmlDocument(content, message.kind);
         await vscode.workspace.fs.writeFile(fileUri, new TextEncoder().encode(document));
         return fileUri;
     }
@@ -937,10 +1019,12 @@ export class RichOutputRouter implements vscode.Disposable {
 
     private _buildFallbackHtml(message: RichOutputMessage, reason: string): string {
         const plainText = asString(message.data[RuntimeOutputMime.textPlain]);
-        const entries = Object.entries(message.data).map(([mime, value]) => {
-            const serialized = asString(value) ?? '';
-            return `<details><summary>${escapeHtml(mime)}</summary><pre>${escapeHtml(serialized)}</pre></details>`;
-        }).join('\n');
+        const entries = Object.entries(message.data)
+            .map(([mime, value]) => {
+                const serialized = asString(value) ?? '';
+                return `<details><summary>${escapeHtml(mime)}</summary><pre>${escapeHtml(serialized)}</pre></details>`;
+            })
+            .join('\n');
 
         return `<!DOCTYPE html>
 <html lang="en">
@@ -975,8 +1059,7 @@ ${plainText ? `<pre>${escapeHtml(plainText)}</pre>` : ''}
             consumer,
             status,
             phase,
-            rendererCompatible:
-                status === 'routed' || status === 'surface-opened',
+            rendererCompatible: status === 'routed' || status === 'surface-opened',
             detail,
             timestamp: Date.now(),
         };
@@ -995,14 +1078,14 @@ ${plainText ? `<pre>${escapeHtml(plainText)}</pre>` : ''}
         const detail = getErrorMessage(error);
         this._record(session, message, 'rich-output-router', 'failed', detail);
         this._outputChannel.error(
-            `[RichOutputRouter] Failed to route ${message.kind} output ${message.output_id ?? message.id}: ${detail}`
+            `[RichOutputRouter] Failed to route ${message.kind} output ${message.output_id ?? message.id}: ${detail}`,
         );
 
         const failureKey = `${session.sessionId}:${message.kind}`;
         if (!this._reportedFailures.has(failureKey)) {
             this._reportedFailures.add(failureKey);
             await vscode.window.showWarningMessage(
-                `A ${message.kind} runtime output could not be displayed. See the Ark output log for details.`
+                `A ${message.kind} runtime output could not be displayed. See the Ark output log for details.`,
             );
         }
     }
@@ -1017,17 +1100,17 @@ ${plainText ? `<pre>${escapeHtml(plainText)}</pre>` : ''}
         }
         this._routingOperations.clear();
         const sessionIds = new Set(
-            [...this._managedOutputs.values()].map(output => output.session.sessionId),
+            [...this._managedOutputs.values()].map((output) => output.session.sessionId),
         );
-        sessionIds.forEach(sessionId => this._clearManagedOutputs(sessionId));
+        sessionIds.forEach((sessionId) => this._clearManagedOutputs(sessionId));
         for (const disposables of this._sessionDisposables.values()) {
-            disposables.forEach(disposable => disposable.dispose());
+            disposables.forEach((disposable) => disposable.dispose());
         }
         this._sessionDisposables.clear();
         this._routeChains.clear();
         this._managedOutputs.clear();
         this._pendingClears.clear();
         this._renderers.clear();
-        this._disposables.forEach(disposable => disposable.dispose());
+        this._disposables.forEach((disposable) => disposable.dispose());
     }
 }

@@ -12,7 +12,7 @@ installWebviewContextMenuGuard();
 
 // Mount the Data Explorer component using Svelte 5 API
 const app = mount(PositronDataExplorer, {
-    target: document.getElementById('app') || document.body
+    target: document.getElementById('app') || document.body,
 });
 
 export default app;

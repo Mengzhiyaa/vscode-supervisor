@@ -5,14 +5,14 @@
     Mirrors: positron/.../components/consoleInstanceInfoButton.tsx
 -->
 <script lang="ts">
-    import ActionBarButton from "../shared/ActionBarButton.svelte";
-    import ModalPopup from "../shared/ModalPopup.svelte";
-    import { getRpcConnection } from "../lib/rpc/client";
-    import { localize } from "../lib/localization";
-    import type { ConsoleState } from "../types/console";
-    import { getRuntimeDisplayPath } from "./utils/runtimeDisplayPath";
+    import ActionBarButton from '../shared/ActionBarButton.svelte';
+    import ModalPopup from '../shared/ModalPopup.svelte';
+    import { getRpcConnection } from '../lib/rpc/client';
+    import { localize } from '../lib/localization';
+    import type { ConsoleState } from '../types/console';
+    import { getRuntimeDisplayPath } from './utils/runtimeDisplayPath';
 
-    type SessionOutputChannel = "console" | "kernel" | "lsp";
+    type SessionOutputChannel = 'console' | 'kernel' | 'lsp';
 
     interface SessionInfo {
         id: string;
@@ -34,17 +34,11 @@
     let showPopup = $state(false);
     let anchorElement = $state<HTMLDivElement | null>(null);
     let outputChannels = $state<SessionOutputChannel[]>([]);
-    const sessionLabel = $derived(
-        session?.name || session?.runtimeName || "",
-    );
+    const sessionLabel = $derived(session?.name || session?.runtimeName || '');
     const displayPath = $derived(
         getRuntimeDisplayPath(session?.runtimePath, session?.runtimeDisplayPath),
     );
-    const outputChannelOrder: SessionOutputChannel[] = [
-        "kernel",
-        "console",
-        "lsp",
-    ];
+    const outputChannelOrder: SessionOutputChannel[] = ['kernel', 'console', 'lsp'];
 
     // Handle button click
     function handleClick() {
@@ -73,26 +67,26 @@
     // State label mapping
     function getStateLabel(state: ConsoleState): string {
         switch (state) {
-            case "uninitialized":
-                return localize("console.state.uninitialized", "Uninitialized");
-            case "ready":
-                return localize("console.state.ready", "Ready");
-            case "busy":
-                return localize("console.state.busy", "Busy");
-            case "interrupting":
-                return localize("console.state.interrupting", "Interrupting");
-            case "starting":
-                return localize("console.state.starting", "Starting");
-            case "restarting":
-                return localize("console.state.restarting", "Restarting");
-            case "exiting":
-                return localize("console.state.exiting", "Shutting Down");
-            case "exited":
-                return localize("console.state.exited", "Exited");
-            case "offline":
-                return localize("console.state.offline", "Offline");
-            case "disconnected":
-                return localize("console.state.disconnected", "Disconnected");
+            case 'uninitialized':
+                return localize('console.state.uninitialized', 'Uninitialized');
+            case 'ready':
+                return localize('console.state.ready', 'Ready');
+            case 'busy':
+                return localize('console.state.busy', 'Busy');
+            case 'interrupting':
+                return localize('console.state.interrupting', 'Interrupting');
+            case 'starting':
+                return localize('console.state.starting', 'Starting');
+            case 'restarting':
+                return localize('console.state.restarting', 'Restarting');
+            case 'exiting':
+                return localize('console.state.exiting', 'Shutting Down');
+            case 'exited':
+                return localize('console.state.exited', 'Exited');
+            case 'offline':
+                return localize('console.state.offline', 'Offline');
+            case 'disconnected':
+                return localize('console.state.disconnected', 'Disconnected');
             default:
                 return state;
         }
@@ -101,17 +95,9 @@
     function getOutputChannelLabel(channel: SessionOutputChannel): string {
         const channelName = localize(
             `console.info.channel.${channel}`,
-            channel === "kernel"
-                ? "Kernel"
-                : channel === "console"
-                  ? "Supervisor"
-                  : "LSP",
+            channel === 'kernel' ? 'Kernel' : channel === 'console' ? 'Supervisor' : 'LSP',
         );
-        return localize(
-            "console.info.showOutputChannel",
-            "Show {0} Output Channel",
-            channelName,
-        );
+        return localize('console.info.showOutputChannel', 'Show {0} Output Channel', channelName);
     }
 
     async function loadOutputChannels() {
@@ -121,22 +107,18 @@
         }
 
         try {
-            const result = (await getRpcConnection().sendRequest(
-                "session/listOutputChannels",
-                { sessionId: session.id },
-            )) as { channels?: SessionOutputChannel[] } | undefined;
+            const result = (await getRpcConnection().sendRequest('session/listOutputChannels', {
+                sessionId: session.id,
+            })) as { channels?: SessionOutputChannel[] } | undefined;
 
-            const channels = Array.isArray(result?.channels)
-                ? result.channels
-                : [];
+            const channels = Array.isArray(result?.channels) ? result.channels : [];
 
             outputChannels = [...channels].sort(
                 (left, right) =>
-                    outputChannelOrder.indexOf(left) -
-                    outputChannelOrder.indexOf(right),
+                    outputChannelOrder.indexOf(left) - outputChannelOrder.indexOf(right),
             );
         } catch (error) {
-            console.warn("Failed to load console info output channels:", error);
+            console.warn('Failed to load console info output channels:', error);
             outputChannels = [];
         }
     }
@@ -147,13 +129,13 @@
         }
 
         try {
-            await getRpcConnection().sendRequest("session/showOutputChannel", {
+            await getRpcConnection().sendRequest('session/showOutputChannel', {
                 sessionId: session.id,
                 channel,
             });
             handleClose();
         } catch (error) {
-            console.error("Failed to show output channel:", error);
+            console.error('Failed to show output channel:', error);
         }
     }
 </script>
@@ -161,8 +143,8 @@
 <div class="console-info-button-container" bind:this={anchorElement}>
     <ActionBarButton
         icon="info"
-        ariaLabel={localize("console.info.title", "Console Information")}
-        tooltip={localize("console.info.title", "Console Information")}
+        ariaLabel={localize('console.info.title', 'Console Information')}
+        tooltip={localize('console.info.title', 'Console Information')}
         disabled={!session}
         onclick={handleClick}
     />
@@ -184,16 +166,12 @@
 
                         <div class="top-separator">
                             <p class="line session-id" data-testid="session-id">
-                                {localize(
-                                    "console.info.sessionId",
-                                    "Session ID: {0}",
-                                    session.id,
-                                )}
+                                {localize('console.info.sessionId', 'Session ID: {0}', session.id)}
                             </p>
                             <p class="line" data-testid="session-state">
                                 {localize(
-                                    "console.info.state",
-                                    "State: {0}",
+                                    'console.info.state',
+                                    'State: {0}',
                                     getStateLabel(session.runtimeState),
                                 )}
                             </p>
@@ -202,18 +180,14 @@
                         <div class="top-separator">
                             {#if displayPath}
                                 <p class="line path" data-testid="session-path">
-                                    {localize(
-                                        "console.info.runtimePath",
-                                        "Path: {0}",
-                                        displayPath,
-                                    )}
+                                    {localize('console.info.runtimePath', 'Path: {0}', displayPath)}
                                 </p>
                             {/if}
                             {#if session.runtimeSource}
                                 <p class="line" data-testid="session-source">
                                     {localize(
-                                        "console.info.runtimeSource",
-                                        "Source: {0}",
+                                        'console.info.runtimeSource',
+                                        'Source: {0}',
                                         session.runtimeSource,
                                     )}
                                 </p>
@@ -271,9 +245,7 @@
     }
 
     .actions {
-        background-color: var(
-            --vscode-editorHoverWidget-statusBarBackground
-        );
+        background-color: var(--vscode-editorHoverWidget-statusBarBackground);
         padding-bottom: 4px;
     }
 

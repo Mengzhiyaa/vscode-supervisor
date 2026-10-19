@@ -13,19 +13,13 @@ type DataExplorerConfiguration = Pick<vscode.WorkspaceConfiguration, 'get'>;
 export function DataExplorerSummaryCollapseEnabled(
     configuration: DataExplorerConfiguration = vscode.workspace.getConfiguration(),
 ): boolean {
-    return configuration.get<boolean>(
-        USE_DATA_EXPLORER_SUMMARY_COLLAPSED_KEY,
-        false,
-    );
+    return configuration.get<boolean>(USE_DATA_EXPLORER_SUMMARY_COLLAPSED_KEY, false);
 }
 
 export function DefaultDataExplorerSummaryLayout(
     configuration: DataExplorerConfiguration = vscode.workspace.getConfiguration(),
 ): PositronDataExplorerLayout {
-    return configuration.get<string>(
-        USE_DATA_EXPLORER_SUMMARY_LAYOUT_KEY,
-        'left',
-    ) === 'right'
+    return configuration.get<string>(USE_DATA_EXPLORER_SUMMARY_LAYOUT_KEY, 'left') === 'right'
         ? 'SummaryOnRight'
         : 'SummaryOnLeft';
 }
@@ -33,10 +27,7 @@ export function DefaultDataExplorerSummaryLayout(
 export function DataExplorerPreviewEnabled(
     configuration: DataExplorerConfiguration = vscode.workspace.getConfiguration(),
 ): boolean {
-    return configuration.get<boolean>(
-        DATA_EXPLORER_ENABLE_PREVIEW_KEY,
-        false,
-    );
+    return configuration.get<boolean>(DATA_EXPLORER_ENABLE_PREVIEW_KEY, false);
 }
 
 export function createDefaultDataExplorerUiState(

@@ -33,12 +33,14 @@ function state(revision: number, text: string): SerializedConsoleState {
         version: 3,
         generation: 'generation-1',
         revision,
-        items: [{
-            type: 'trace',
-            id: `trace-${revision}`,
-            when: Date.now(),
-            trace: text,
-        }],
+        items: [
+            {
+                type: 'trace',
+                id: `trace-${revision}`,
+                when: Date.now(),
+                trace: text,
+            },
+        ],
         inputHistory: [],
         trace: false,
         wordWrap: true,

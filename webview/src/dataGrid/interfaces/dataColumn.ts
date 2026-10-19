@@ -8,7 +8,7 @@
 export enum DataColumnAlignment {
     Left = 'left',
     Center = 'center',
-    Right = 'right'
+    Right = 'right',
 }
 
 /**

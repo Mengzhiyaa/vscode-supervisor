@@ -46,10 +46,14 @@ function routeIcon(status: RichOutputRouteRecord['status']): vscode.ThemeIcon {
 }
 
 /** Read-only session/client/output routing diagnostics for P0 supportability. */
-export class RuntimeSessionsTreeProvider implements vscode.TreeDataProvider<DiagnosticNode>, vscode.Disposable {
+export class RuntimeSessionsTreeProvider
+    implements vscode.TreeDataProvider<DiagnosticNode>, vscode.Disposable
+{
     private readonly _disposables: vscode.Disposable[] = [];
     private readonly _sessionDisposables = new Map<string, vscode.Disposable[]>();
-    private readonly _onDidChangeTreeDataEmitter = new vscode.EventEmitter<DiagnosticNode | undefined>();
+    private readonly _onDidChangeTreeDataEmitter = new vscode.EventEmitter<
+        DiagnosticNode | undefined
+    >();
 
     readonly onDidChangeTreeData = this._onDidChangeTreeDataEmitter.event;
 
@@ -60,11 +64,11 @@ export class RuntimeSessionsTreeProvider implements vscode.TreeDataProvider<Diag
     ) {
         this._disposables.push(
             this._onDidChangeTreeDataEmitter,
-            this._sessionManager.onDidCreateSession(session => {
+            this._sessionManager.onDidCreateSession((session) => {
                 this._watchSession(session);
                 this.refresh();
             }),
-            this._sessionManager.onDidDeleteRuntimeSession(sessionId => {
+            this._sessionManager.onDidDeleteRuntimeSession((sessionId) => {
                 this._unwatchSession(sessionId);
                 this.refresh();
             }),
@@ -89,7 +93,8 @@ export class RuntimeSessionsTreeProvider implements vscode.TreeDataProvider<Diag
         switch (element.kind) {
             case 'session': {
                 const item = new vscode.TreeItem(
-                    element.session.sessionMetadata.sessionName || element.session.runtimeMetadata.runtimeName,
+                    element.session.sessionMetadata.sessionName ||
+                        element.session.runtimeMetadata.runtimeName,
                     vscode.TreeItemCollapsibleState.Expanded,
                 );
                 item.id = `session:${element.session.sessionId}`;
@@ -106,27 +111,41 @@ export class RuntimeSessionsTreeProvider implements vscode.TreeDataProvider<Diag
             }
             case 'clients': {
                 const count = element.session.clientManager?.clientInstances.length ?? 0;
-                const item = new vscode.TreeItem('Runtime Clients', vscode.TreeItemCollapsibleState.Collapsed);
+                const item = new vscode.TreeItem(
+                    'Runtime Clients',
+                    vscode.TreeItemCollapsibleState.Collapsed,
+                );
                 item.description = String(count);
                 item.iconPath = new vscode.ThemeIcon('plug');
                 return item;
             }
             case 'client': {
-                const item = new vscode.TreeItem(element.clientType, vscode.TreeItemCollapsibleState.None);
+                const item = new vscode.TreeItem(
+                    element.clientType,
+                    vscode.TreeItemCollapsibleState.None,
+                );
                 item.description = element.clientId;
                 item.tooltip = `Client ${element.clientId}\nType: ${element.clientType}\nSession: ${element.session.sessionId}`;
                 item.iconPath = new vscode.ThemeIcon('radio-tower');
                 return item;
             }
             case 'routes': {
-                const count = this._richOutputRouter.getRouteRecords(element.session.sessionId).length;
-                const item = new vscode.TreeItem('Recent Rich Outputs', vscode.TreeItemCollapsibleState.Collapsed);
+                const count = this._richOutputRouter.getRouteRecords(
+                    element.session.sessionId,
+                ).length;
+                const item = new vscode.TreeItem(
+                    'Recent Rich Outputs',
+                    vscode.TreeItemCollapsibleState.Collapsed,
+                );
                 item.description = String(count);
                 item.iconPath = new vscode.ThemeIcon('output');
                 return item;
             }
             case 'route': {
-                const item = new vscode.TreeItem(element.record.kind, vscode.TreeItemCollapsibleState.None);
+                const item = new vscode.TreeItem(
+                    element.record.kind,
+                    vscode.TreeItemCollapsibleState.None,
+                );
                 item.description = `${element.record.status} → ${element.record.consumer}`;
                 item.tooltip = [
                     `Message: ${element.record.messageId}`,
@@ -134,19 +153,27 @@ export class RuntimeSessionsTreeProvider implements vscode.TreeDataProvider<Diag
                     `Consumer: ${element.record.consumer}`,
                     `Status: ${element.record.status}`,
                     element.record.detail ? `Detail: ${element.record.detail}` : undefined,
-                ].filter((line): line is string => !!line).join('\n');
+                ]
+                    .filter((line): line is string => !!line)
+                    .join('\n');
                 item.iconPath = routeIcon(element.record.status);
                 return item;
             }
             case 'consumer-contract': {
-                const item = new vscode.TreeItem('Output Consumer Contract', vscode.TreeItemCollapsibleState.Collapsed);
+                const item = new vscode.TreeItem(
+                    'Output Consumer Contract',
+                    vscode.TreeItemCollapsibleState.Collapsed,
+                );
                 item.description = `${Object.values(RuntimeOutputKind).length} kinds`;
                 item.iconPath = new vscode.ThemeIcon('symbol-interface');
                 return item;
             }
             case 'consumer': {
                 const consumers = RuntimeOutputConsumers[element.outputKind];
-                const item = new vscode.TreeItem(element.outputKind, vscode.TreeItemCollapsibleState.None);
+                const item = new vscode.TreeItem(
+                    element.outputKind,
+                    vscode.TreeItemCollapsibleState.None,
+                );
                 item.description = consumers.join(', ');
                 item.tooltip = `${element.outputKind} → ${consumers.join(', ')}`;
                 item.iconPath = new vscode.ThemeIcon(consumers.length > 0 ? 'pass' : 'error');
@@ -154,7 +181,10 @@ export class RuntimeSessionsTreeProvider implements vscode.TreeDataProvider<Diag
             }
             case 'surface-models': {
                 const count = this._surfaceLifecycle?.getModels().length ?? 0;
-                const item = new vscode.TreeItem('Surface Models', vscode.TreeItemCollapsibleState.Collapsed);
+                const item = new vscode.TreeItem(
+                    'Surface Models',
+                    vscode.TreeItemCollapsibleState.Collapsed,
+                );
                 item.description = String(count);
                 item.tooltip = 'Surface-neutral models and their current UI attachments';
                 item.iconPath = new vscode.ThemeIcon('layers');
@@ -183,7 +213,10 @@ export class RuntimeSessionsTreeProvider implements vscode.TreeDataProvider<Diag
                 return item;
             }
             case 'surface-attachment': {
-                const item = new vscode.TreeItem(element.attachment.kind, vscode.TreeItemCollapsibleState.None);
+                const item = new vscode.TreeItem(
+                    element.attachment.kind,
+                    vscode.TreeItemCollapsibleState.None,
+                );
                 item.description = element.attachment.surfaceId;
                 item.tooltip = [
                     `Attachment: ${element.attachment.id}`,
@@ -194,15 +227,25 @@ export class RuntimeSessionsTreeProvider implements vscode.TreeDataProvider<Diag
                 return item;
             }
             case 'compatibility': {
-                const item = new vscode.TreeItem('Positron Compatibility', vscode.TreeItemCollapsibleState.Collapsed);
+                const item = new vscode.TreeItem(
+                    'Positron Compatibility',
+                    vscode.TreeItemCollapsibleState.Collapsed,
+                );
                 item.iconPath = new vscode.ThemeIcon('shield');
                 return item;
             }
             case 'capability': {
-                const item = new vscode.TreeItem(element.label, vscode.TreeItemCollapsibleState.None);
+                const item = new vscode.TreeItem(
+                    element.label,
+                    vscode.TreeItemCollapsibleState.None,
+                );
                 item.description = element.value;
                 item.iconPath = new vscode.ThemeIcon(
-                    element.value === 'false' ? 'error' : element.value.includes('subset') ? 'warning' : 'pass'
+                    element.value === 'false'
+                        ? 'error'
+                        : element.value.includes('subset')
+                          ? 'warning'
+                          : 'pass',
                 );
                 return item;
             }
@@ -212,7 +255,9 @@ export class RuntimeSessionsTreeProvider implements vscode.TreeDataProvider<Diag
     getChildren(element?: DiagnosticNode): DiagnosticNode[] {
         if (!element) {
             return [
-                ...this._sessionManager.sessions.map(session => ({ kind: 'session', session } as const)),
+                ...this._sessionManager.sessions.map(
+                    (session) => ({ kind: 'session', session }) as const,
+                ),
                 { kind: 'consumer-contract' },
                 { kind: 'surface-models' },
                 { kind: 'compatibility' },
@@ -226,7 +271,7 @@ export class RuntimeSessionsTreeProvider implements vscode.TreeDataProvider<Diag
                     { kind: 'routes', session: element.session },
                 ];
             case 'clients':
-                return (element.session.clientManager?.clientInstances ?? []).map(client => ({
+                return (element.session.clientManager?.clientInstances ?? []).map((client) => ({
                     kind: 'client',
                     session: element.session,
                     clientId: client.getClientId(),
@@ -236,15 +281,21 @@ export class RuntimeSessionsTreeProvider implements vscode.TreeDataProvider<Diag
                 return [...this._richOutputRouter.getRouteRecords(element.session.sessionId)]
                     .reverse()
                     .slice(0, 20)
-                    .map(record => ({ kind: 'route', record }));
+                    .map((record) => ({ kind: 'route', record }));
             case 'consumer-contract':
-                return Object.values(RuntimeOutputKind).map(outputKind => ({ kind: 'consumer', outputKind }));
+                return Object.values(RuntimeOutputKind).map((outputKind) => ({
+                    kind: 'consumer',
+                    outputKind,
+                }));
             case 'surface-models':
                 return [...(this._surfaceLifecycle?.getModels() ?? [])]
                     .sort((left, right) => right.updatedAt - left.updatedAt)
-                    .map(model => ({ kind: 'surface-model', model }));
+                    .map((model) => ({ kind: 'surface-model', model }));
             case 'surface-model':
-                return element.model.attachments.map(attachment => ({ kind: 'surface-attachment', attachment }));
+                return element.model.attachments.map((attachment) => ({
+                    kind: 'surface-attachment',
+                    attachment,
+                }));
             case 'compatibility': {
                 const capabilities = getPositronCompatibilityCapabilities();
                 return Object.entries(capabilities).map(([label, value]) => ({
@@ -265,7 +316,9 @@ export class RuntimeSessionsTreeProvider implements vscode.TreeDataProvider<Diag
 
         const disposables: vscode.Disposable[] = [
             session.onDidChangeRuntimeState(() => this.refresh()),
-            session.onDidCreateClientManager(manager => this._watchClientManager(session, manager, disposables)),
+            session.onDidCreateClientManager((manager) =>
+                this._watchClientManager(session, manager, disposables),
+            ),
         ];
         if (session.clientManager) {
             this._watchClientManager(session, session.clientManager, disposables);
@@ -291,15 +344,15 @@ export class RuntimeSessionsTreeProvider implements vscode.TreeDataProvider<Diag
     }
 
     private _unwatchSession(sessionId: string): void {
-        this._sessionDisposables.get(sessionId)?.forEach(disposable => disposable.dispose());
+        this._sessionDisposables.get(sessionId)?.forEach((disposable) => disposable.dispose());
         this._sessionDisposables.delete(sessionId);
     }
 
     dispose(): void {
         for (const disposables of this._sessionDisposables.values()) {
-            disposables.forEach(disposable => disposable.dispose());
+            disposables.forEach((disposable) => disposable.dispose());
         }
         this._sessionDisposables.clear();
-        this._disposables.forEach(disposable => disposable.dispose());
+        this._disposables.forEach((disposable) => disposable.dispose());
     }
 }

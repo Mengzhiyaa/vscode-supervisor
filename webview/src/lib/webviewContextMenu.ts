@@ -7,15 +7,13 @@ const guardedDocuments = new WeakSet<Document>();
  * listener does not stop propagation. VS Code's webview bridge observes the
  * cancelled event and therefore does not open its Cut/Copy/Paste menu.
  */
-export function installWebviewContextMenuGuard(
-    targetDocument: Document = document,
-): void {
+export function installWebviewContextMenuGuard(targetDocument: Document = document): void {
     if (guardedDocuments.has(targetDocument)) {
         return;
     }
 
     targetDocument.addEventListener(
-        "contextmenu",
+        'contextmenu',
         (event) => {
             event.preventDefault();
         },

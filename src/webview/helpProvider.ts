@@ -26,13 +26,16 @@ export class HelpViewProvider extends BaseWebviewProvider {
         this._bindEntry(this._helpService.currentHelpEntry);
 
         this._disposables.push(
-            this._helpService.onDidChangeCurrentHelpEntry(entry => {
+            this._helpService.onDidChangeCurrentHelpEntry((entry) => {
                 this._bindEntry(entry);
                 void this._sendState();
             }),
             vscode.window.onDidChangeActiveColorTheme(() => {
                 if (this._webviewReady) {
-                    void this._connection?.sendNotification(HelpProtocol.HelpThemeChangedNotification.type, {});
+                    void this._connection?.sendNotification(
+                        HelpProtocol.HelpThemeChangedNotification.type,
+                        {},
+                    );
                 }
             }),
         );
@@ -56,14 +59,17 @@ export class HelpViewProvider extends BaseWebviewProvider {
             }
             await vscode.window.showTextDocument(editorToRestore.document, {
                 viewColumn: editorToRestore.viewColumn,
-                preserveFocus: false
+                preserveFocus: false,
             });
         };
 
         try {
             await vscode.commands.executeCommand(ViewCommands.helpFocus);
         } catch (err) {
-            this.log(`Failed to reveal help view: ${getErrorMessage(err)}`, vscode.LogLevel.Warning);
+            this.log(
+                `Failed to reveal help view: ${getErrorMessage(err)}`,
+                vscode.LogLevel.Warning,
+            );
             await vscode.commands.executeCommand(WorkbenchViewContainerCommands.help);
         } finally {
             await restoreFocus();
@@ -89,7 +95,7 @@ export class HelpViewProvider extends BaseWebviewProvider {
     protected _registerRpcHandlers(connection: MessageConnection): void {
         this._webviewReady = false;
         this._stateGeneration++;
-        connection.onNotification(HelpProtocol.HelpNavigateNotification.type, params => {
+        connection.onNotification(HelpProtocol.HelpNavigateNotification.type, (params) => {
             if (!this._isCurrentEntry(params.entryId)) {
                 return;
             }
@@ -112,7 +118,7 @@ export class HelpViewProvider extends BaseWebviewProvider {
             this._helpService.navigateForward();
         });
 
-        connection.onNotification(HelpProtocol.HelpHistoryOpenNotification.type, params => {
+        connection.onNotification(HelpProtocol.HelpHistoryOpenNotification.type, (params) => {
             this._helpService.openHelpEntryIndex(params.index);
         });
 
@@ -120,19 +126,19 @@ export class HelpViewProvider extends BaseWebviewProvider {
             this._helpService.showWelcomePage();
         });
 
-        connection.onNotification(HelpProtocol.HelpScrollNotification.type, params => {
+        connection.onNotification(HelpProtocol.HelpScrollNotification.type, (params) => {
             if (this._isCurrentEntry(params.entryId)) {
                 this._helpService.updateCurrentEntryScroll(params.scrollX, params.scrollY);
             }
         });
 
-        connection.onNotification(HelpProtocol.HelpCompleteNotification.type, params => {
+        connection.onNotification(HelpProtocol.HelpCompleteNotification.type, (params) => {
             if (this._isCurrentEntry(params.entryId)) {
                 this._helpService.updateCurrentEntryTitle(params.title);
             }
         });
 
-        connection.onNotification(HelpProtocol.HelpStylesNotification.type, params => {
+        connection.onNotification(HelpProtocol.HelpStylesNotification.type, (params) => {
             this._helpService.setProxyServerStyles(params.styles);
             // The frontend sends styles only after installing all its listeners.
             // Use that handshake to replay state, including after a webview reload.
@@ -144,21 +150,26 @@ export class HelpViewProvider extends BaseWebviewProvider {
             }
         });
 
-        connection.onNotification(HelpProtocol.HelpExecuteCommandNotification.type, params => {
+        connection.onNotification(HelpProtocol.HelpExecuteCommandNotification.type, (params) => {
             void vscode.commands.executeCommand(params.command);
         });
 
-        connection.onNotification(HelpProtocol.HelpCopySelectionNotification.type, params => {
+        connection.onNotification(HelpProtocol.HelpCopySelectionNotification.type, (params) => {
             if (params.selection) {
                 void vscode.env.clipboard.writeText(params.selection);
             }
         });
-
     }
 
     protected _getHtmlContent(webview: vscode.Webview): string {
         const scriptUri = this._getWebviewUri(webview, 'webview', 'dist', 'help', 'index.js');
-        const commonStyleUri = this._getWebviewUri(webview, 'webview', 'dist', 'common', 'index.css');
+        const commonStyleUri = this._getWebviewUri(
+            webview,
+            'webview',
+            'dist',
+            'common',
+            'index.css',
+        );
         const styleUri = this._getWebviewUri(webview, 'webview', 'dist', 'help', 'index.css');
         const nonce = this._getNonce();
 
@@ -226,37 +237,44 @@ export class HelpViewProvider extends BaseWebviewProvider {
             }
             for (const action of this._pendingActions) {
                 void connection.sendNotification(
-                    action === 'find' ? HelpProtocol.HelpFindNotification.type : HelpProtocol.HelpFocusNotification.type,
+                    action === 'find'
+                        ? HelpProtocol.HelpFindNotification.type
+                        : HelpProtocol.HelpFocusNotification.type,
                     {},
                 );
             }
             this._pendingActions.clear();
         } catch (error) {
-            this.log(`Failed to synchronize help view: ${getErrorMessage(error)}`, vscode.LogLevel.Warning);
+            this.log(
+                `Failed to synchronize help view: ${getErrorMessage(error)}`,
+                vscode.LogLevel.Warning,
+            );
         }
     }
 
     private _publishState(connection: MessageConnection): Promise<void> {
         const current = this._helpService.currentHelpEntry;
-        const history = this._helpService.helpEntries.map(entry => ({
+        const history = this._helpService.helpEntries.map((entry) => ({
             sourceUrl: entry.sourceUrl,
             targetUrl: entry.targetUrl,
-            title: entry.title
+            title: entry.title,
         }));
 
         return connection.sendNotification(HelpProtocol.HelpStateNotification.type, {
-            entry: current ? {
-                entryId: this._getEntryId(current),
-                sourceUrl: current.sourceUrl,
-                targetUrl: current.targetUrl,
-                title: current.title,
-                scrollX: current.scrollX,
-                scrollY: current.scrollY,
-                isWelcome: current.sourceUrl === 'help://welcome'
-            } : undefined,
+            entry: current
+                ? {
+                      entryId: this._getEntryId(current),
+                      sourceUrl: current.sourceUrl,
+                      targetUrl: current.targetUrl,
+                      title: current.title,
+                      scrollX: current.scrollX,
+                      scrollY: current.scrollY,
+                      isWelcome: current.sourceUrl === 'help://welcome',
+                  }
+                : undefined,
             history,
             canNavigateBackward: this._helpService.canNavigateBackward,
-            canNavigateForward: this._helpService.canNavigateForward
+            canNavigateForward: this._helpService.canNavigateForward,
         });
     }
 
@@ -269,7 +287,7 @@ export class HelpViewProvider extends BaseWebviewProvider {
     dispose(): void {
         this._onDidDisposeWebviewView();
         this._currentEntryDisposable?.dispose();
-        this._disposables.forEach(disposable => disposable.dispose());
+        this._disposables.forEach((disposable) => disposable.dispose());
         this._connection?.dispose();
         this._helpService.setHelpViewProvider(undefined);
     }

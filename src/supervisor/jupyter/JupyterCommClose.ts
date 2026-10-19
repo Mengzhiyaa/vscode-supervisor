@@ -9,9 +9,9 @@
  * @link https://jupyter-client.readthedocs.io/en/stable/messaging.html#tearing-down-comms
  */
 export interface JupyterCommClose {
-	/** The ID of the comm to tear down (as a GUID) */
-	comm_id: string;
+    /** The ID of the comm to tear down (as a GUID) */
+    comm_id: string;
 
-	/** The message payload */
-	data: object;
+    /** The message payload */
+    data: object;
 }

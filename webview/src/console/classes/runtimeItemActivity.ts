@@ -28,12 +28,10 @@ export { ActivityItemPrompt, ActivityItemPromptState } from './activityItemPromp
 
 /** The ActivityItemOutput type alias (Positron pattern). */
 export type ActivityItemOutput =
-    ActivityItemOutputHtml |
-    ActivityItemOutputMessage |
-    ActivityItemOutputPlot;
+    ActivityItemOutputHtml | ActivityItemOutputMessage | ActivityItemOutputPlot;
 
 const isOutputActivityItem = (
-    activityItem: ActivityItem | ActivityItemOutput
+    activityItem: ActivityItem | ActivityItemOutput,
 ): activityItem is ActivityItemOutput =>
     activityItem instanceof ActivityItemOutputHtml ||
     activityItem instanceof ActivityItemOutputMessage ||
@@ -44,7 +42,7 @@ const isOutputActivityItem = (
  */
 const isSameActivityItemStream = (
     activityItemStream1: ActivityItemStream,
-    activityItemStream2: ActivityItemStream
+    activityItemStream2: ActivityItemStream,
 ): boolean =>
     activityItemStream1.type === activityItemStream2.type &&
     activityItemStream1.parentId === activityItemStream2.parentId;
@@ -60,21 +58,23 @@ export class RuntimeItemActivity extends RuntimeItem {
      * Gets or sets the activity items.
      */
     private _activityItems: (
-        ActivityItem |
-        ActivityItemStream |
-        ActivityItemErrorMessage |
-        ActivityItemErrorSuggestion |
-        ActivityItemInput |
-        ActivityItemOutput
+        | ActivityItem
+        | ActivityItemStream
+        | ActivityItemErrorMessage
+        | ActivityItemErrorSuggestion
+        | ActivityItemInput
+        | ActivityItemOutput
     )[] = [];
-    private readonly _activityItemsStore = writable<(
-        ActivityItem |
-        ActivityItemStream |
-        ActivityItemErrorMessage |
-        ActivityItemErrorSuggestion |
-        ActivityItemInput |
-        ActivityItemOutput
-    )[]>([]);
+    private readonly _activityItemsStore = writable<
+        (
+            | ActivityItem
+            | ActivityItemStream
+            | ActivityItemErrorMessage
+            | ActivityItemErrorSuggestion
+            | ActivityItemInput
+            | ActivityItemOutput
+        )[]
+    >([]);
 
     //#endregion Private Properties
 
@@ -84,11 +84,11 @@ export class RuntimeItemActivity extends RuntimeItem {
      * Gets the activity items.
      */
     public get activityItems(): (
-        ActivityItem |
-        ActivityItemStream |
-        ActivityItemErrorMessage |
-        ActivityItemInput |
-        ActivityItemOutput
+        | ActivityItem
+        | ActivityItemStream
+        | ActivityItemErrorMessage
+        | ActivityItemInput
+        | ActivityItemOutput
     )[] {
         return this._activityItems;
     }
@@ -96,13 +96,15 @@ export class RuntimeItemActivity extends RuntimeItem {
     /**
      * Gets the activity items as a store for reactive updates.
      */
-    public get activityItemsStore(): Readable<(
-        ActivityItem |
-        ActivityItemStream |
-        ActivityItemErrorMessage |
-        ActivityItemInput |
-        ActivityItemOutput
-    )[]> {
+    public get activityItemsStore(): Readable<
+        (
+            | ActivityItem
+            | ActivityItemStream
+            | ActivityItemErrorMessage
+            | ActivityItemInput
+            | ActivityItemOutput
+        )[]
+    > {
         return this._activityItemsStore;
     }
 
@@ -145,7 +147,8 @@ export class RuntimeItemActivity extends RuntimeItem {
                     // being added to the last ActivityItemStream.
                     if (isSameActivityItemStream(lastActivityItem, activityItem)) {
                         // Add the ActivityItemStream being added to the last ActivityItemStream.
-                        const activityItemStream = lastActivityItem.addActivityItemStream(activityItem);
+                        const activityItemStream =
+                            lastActivityItem.addActivityItemStream(activityItem);
                         if (!activityItemStream) {
                             this._setActivityItems([...this._activityItems]);
                             return;
@@ -155,15 +158,20 @@ export class RuntimeItemActivity extends RuntimeItem {
                         activityItem = activityItemStream;
                     }
                 }
-            } else if (activityItem instanceof ActivityItemInput && activityItem.state !== ActivityItemInputState.Provisional) {
+            } else if (
+                activityItem instanceof ActivityItemInput &&
+                activityItem.state !== ActivityItemInputState.Provisional
+            ) {
                 // When a non-provisional ActivityItemInput is being added, see if there's a
                 // provisional or already-completed ActivityItemInput for it in the activity items.
                 for (let i = this._activityItems.length - 1; i >= 0; --i) {
                     const activityItemToCheck = this._activityItems[i];
                     if (activityItemToCheck instanceof ActivityItemInput) {
-                        if ((activityItemToCheck.state === ActivityItemInputState.Provisional ||
-                            activityItemToCheck.state === ActivityItemInputState.Completed) &&
-                            activityItemToCheck.parentId === activityItem.parentId) {
+                        if (
+                            (activityItemToCheck.state === ActivityItemInputState.Provisional ||
+                                activityItemToCheck.state === ActivityItemInputState.Completed) &&
+                            activityItemToCheck.parentId === activityItem.parentId
+                        ) {
                             if (activityItemToCheck.state === ActivityItemInputState.Completed) {
                                 activityItem.state = ActivityItemInputState.Completed;
                             }
@@ -188,23 +196,28 @@ export class RuntimeItemActivity extends RuntimeItem {
      */
     public replaceOutputItemByOutputId(
         outputId: string,
-        activityItem: ActivityItemOutput | ((existingId: string) => ActivityItemOutput | undefined)
+        activityItem: ActivityItemOutput | ((existingId: string) => ActivityItemOutput | undefined),
     ): boolean {
         const nextActivityItems = [...this._activityItems];
         let replaced = false;
         for (let i = this._activityItems.length - 1; i >= 0; --i) {
             const existing = this._activityItems[i];
             if (isOutputActivityItem(existing) && existing.outputId === outputId) {
-                const next = typeof activityItem === 'function' ? activityItem(existing.id) : activityItem;
+                const next =
+                    typeof activityItem === 'function' ? activityItem(existing.id) : activityItem;
                 if (next) {
                     nextActivityItems[i] = next;
                     replaced = true;
                 }
-                if (typeof activityItem !== 'function') { break; }
+                if (typeof activityItem !== 'function') {
+                    break;
+                }
             }
         }
 
-        if (replaced) { this._setActivityItems(nextActivityItems); }
+        if (replaced) {
+            this._setActivityItems(nextActivityItems);
+        }
         return replaced;
     }
 
@@ -214,8 +227,8 @@ export class RuntimeItemActivity extends RuntimeItem {
      * @returns The clipboard representation of the runtime item.
      */
     public override getClipboardRepresentation(commentPrefix: string): string[] {
-        return this._activityItems.flatMap(activityItem =>
-            activityItem.getClipboardRepresentation(commentPrefix)
+        return this._activityItems.flatMap((activityItem) =>
+            activityItem.getClipboardRepresentation(commentPrefix),
         );
     }
 
@@ -279,13 +292,15 @@ export class RuntimeItemActivity extends RuntimeItem {
 
     //#region Private Methods
 
-    private _setActivityItems(activityItems: (
-        ActivityItem |
-        ActivityItemStream |
-        ActivityItemErrorMessage |
-        ActivityItemInput |
-        ActivityItemOutput
-    )[]): void {
+    private _setActivityItems(
+        activityItems: (
+            | ActivityItem
+            | ActivityItemStream
+            | ActivityItemErrorMessage
+            | ActivityItemInput
+            | ActivityItemOutput
+        )[],
+    ): void {
         this._activityItems = activityItems;
         this._activityItemsStore.set(activityItems);
     }

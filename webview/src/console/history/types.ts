@@ -1,6 +1,6 @@
 /**
  * types.ts
- * 
+ *
  * Common types for console history.
  * Mirrors: positron/.../services/positronHistory/common/executionHistoryService.ts
  */

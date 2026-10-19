@@ -36,9 +36,10 @@ export class PlotSizingPolicyAuto implements IPositronPlotSizingPolicy {
         const plotSize = { ...viewportSize };
 
         // Compute the aspect ratio of the viewport.
-        const aspectRatio = viewportSize.width > viewportSize.height ?
-            viewportSize.width / viewportSize.height :
-            viewportSize.height / viewportSize.width;
+        const aspectRatio =
+            viewportSize.width > viewportSize.height
+                ? viewportSize.width / viewportSize.height
+                : viewportSize.height / viewportSize.width;
 
         // If the viewport is very tall or very wide, then use the golden ratio to determine the
         // plot size.

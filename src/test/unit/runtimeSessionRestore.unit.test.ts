@@ -89,10 +89,7 @@ suite('[Unit] runtime session persisted restore state', () => {
         const normalized = (service as any)._normalizeRuntimeMetadata(metadata);
 
         assert.strictEqual(normalized.extensionId, extensionId);
-        assert.strictEqual(
-            normalized.startupBehavior,
-            LanguageRuntimeStartupBehavior.Explicit,
-        );
+        assert.strictEqual(normalized.startupBehavior, LanguageRuntimeStartupBehavior.Explicit);
         service.dispose();
     });
 

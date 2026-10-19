@@ -3,7 +3,6 @@
  *  Licensed under the Elastic License 2.0. See LICENSE.txt for license information.
  *--------------------------------------------------------------------------------------------*/
 
-
 import { getErrorMessage, formatErrorForLogging } from '../shared/errors';
 import * as vscode from 'vscode';
 import { LanguageRuntimeClientType, LanguageRuntimeSessionMode } from '../api';
@@ -17,7 +16,12 @@ import { PlotSizingPolicyFill } from './sizingPolicyFill';
 import { PlotSizingPolicySquare } from './sizingPolicySquare';
 import { PlotSizingPolicyLandscape } from './sizingPolicyLandscape';
 import { PlotSizingPolicyPortrait } from './sizingPolicyPortrait';
-import { createPlotClient, PlotClientInstance, PlotMetadata as PlotClientMetadata, ZoomLevel } from './PlotClientInstance';
+import {
+    createPlotClient,
+    PlotClientInstance,
+    PlotMetadata as PlotClientMetadata,
+    ZoomLevel,
+} from './PlotClientInstance';
 import { PositronPlotCommProxy } from './comms/positronPlotCommProxy';
 import { PositronPlotRenderQueue, type IRuntimeSession } from './positronPlotRenderQueue';
 import { StaticPlotClient } from './staticPlotClient';
@@ -31,15 +35,8 @@ import {
 } from './runtimeOutputKind';
 import { RuntimeSession } from './session';
 import { RuntimeSessionService } from './runtimeSession';
-import {
-    type LanguageRuntimeMessageCommOpen,
-    RuntimeClientType,
-} from '../internal/runtimeTypes';
-import {
-    parseDarkFilter,
-    parseHistoryPolicy,
-    parseHistoryPosition,
-} from '../shared/plots';
+import { type LanguageRuntimeMessageCommOpen, RuntimeClientType } from '../internal/runtimeTypes';
+import { parseDarkFilter, parseHistoryPolicy, parseHistoryPosition } from '../shared/plots';
 import {
     type IPositronPlotsService,
     type IPositronPlotClient,
@@ -59,7 +56,8 @@ const MaxRecentExecutions = 10;
 const MaxActiveWebviewPlots = 5;
 
 const PlotMetadataStorageKeyPrefix = 'vscode-supervisor.plot.metadata.';
-const CachedPlotThumbnailDescriptorsStorageKey = 'vscode-supervisor.plots.cachedPlotThumbnailDescriptors';
+const CachedPlotThumbnailDescriptorsStorageKey =
+    'vscode-supervisor.plots.cachedPlotThumbnailDescriptors';
 const SelectedSizingPolicyStorageKey = 'vscode-supervisor.plots.selectedSizingPolicy';
 const CustomPlotSizeStorageKey = 'vscode-supervisor.plots.customPlotSize';
 const SelectedHistoryPolicyStorageKey = 'vscode-supervisor.plots.selectedHistoryPolicy';
@@ -88,11 +86,15 @@ export function resolveInitialPlotSizingPolicy(
     if (metadata.sizing_policy?.id === 'custom' && metadata.sizing_policy.size) {
         return new PlotSizingPolicyCustom(metadata.sizing_policy.size);
     }
-    const languageDefault = metadata.language?.toLowerCase() === 'python' &&
+    const languageDefault =
+        metadata.language?.toLowerCase() === 'python' &&
         defaultSizingPolicy.id === PlotSizingPolicyAuto.ID
-        ? sizingPolicies.find(policy => policy.id === PlotSizingPolicyIntrinsic.ID) ?? defaultSizingPolicy
-        : defaultSizingPolicy;
-    return sizingPolicies.find(policy => policy.id === metadata.sizing_policy?.id) ?? languageDefault;
+            ? (sizingPolicies.find((policy) => policy.id === PlotSizingPolicyIntrinsic.ID) ??
+              defaultSizingPolicy)
+            : defaultSizingPolicy;
+    return (
+        sizingPolicies.find((policy) => policy.id === metadata.sizing_policy?.id) ?? languageDefault
+    );
 }
 
 /**
@@ -103,7 +105,10 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
     /**
      * Cached plot thumbnail descriptors.
      */
-    private readonly _cachedPlotThumbnailDescriptors = new Map<string, ICachedPlotThumbnailDescriptor>();
+    private readonly _cachedPlotThumbnailDescriptors = new Map<
+        string,
+        ICachedPlotThumbnailDescriptor
+    >();
 
     /**
      * The list of all plot instances.
@@ -161,7 +166,7 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
     private _renderSettings: PlotRenderSettings = {
         size: { width: 800, height: 600 },
         pixel_ratio: 1,
-        format: PlotRenderFormat.Png
+        format: PlotRenderFormat.Png,
     };
 
     /**
@@ -195,11 +200,17 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
      */
     private readonly _recentExecutions = new Map<string, string>();
     private readonly _recentExecutionIds: string[] = [];
-    private readonly _surfacedPlotMessages = new Map<string, {
-        session: RuntimeSession;
-        htmlMetadata?: PlotClientMetadata;
-        message: LanguageRuntimeOutputWithKind | LanguageRuntimeResultWithKind | LanguageRuntimeUpdateOutputWithKind;
-    }>();
+    private readonly _surfacedPlotMessages = new Map<
+        string,
+        {
+            session: RuntimeSession;
+            htmlMetadata?: PlotClientMetadata;
+            message:
+                | LanguageRuntimeOutputWithKind
+                | LanguageRuntimeResultWithKind
+                | LanguageRuntimeUpdateOutputWithKind;
+        }
+    >();
     private readonly _lastSelectedTimeByPlotId = new Map<string, number>();
     private _selectionSequence = 0;
     private readonly _htmlPlotDisposables = new Map<string, vscode.Disposable>();
@@ -225,15 +236,20 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
     private readonly _onDidSelectPlot = new vscode.EventEmitter<string>();
     private readonly _onDidEmitPlot = new vscode.EventEmitter<IPositronPlotClient>();
     private readonly _onDidRemovePlot = new vscode.EventEmitter<IPositronPlotClient>();
-    private readonly _onDidChangeSizingPolicy = new vscode.EventEmitter<IPositronPlotSizingPolicy>();
+    private readonly _onDidChangeSizingPolicy =
+        new vscode.EventEmitter<IPositronPlotSizingPolicy>();
     private readonly _onDidChangeHistoryPolicy = new vscode.EventEmitter<HistoryPolicy>();
     private readonly _onDidChangeHistoryPosition = new vscode.EventEmitter<HistoryPosition>();
     private readonly _onDidReplacePlots = new vscode.EventEmitter<IPositronPlotClient[]>();
     private readonly _onDidChangeDarkFilterMode = new vscode.EventEmitter<DarkFilter>();
-    private readonly _onDidChangePlotsRenderSettings = new vscode.EventEmitter<PlotRenderSettings>();
+    private readonly _onDidChangePlotsRenderSettings =
+        new vscode.EventEmitter<PlotRenderSettings>();
     private readonly _onDidUpdatePlotMetadata = new vscode.EventEmitter<string>();
     private readonly _onDidChangeDisplayLocation = new vscode.EventEmitter<PlotsDisplayLocation>();
-    private readonly _onDidChangeHtmlPlotState = new vscode.EventEmitter<{ plotId: string; active: boolean }>();
+    private readonly _onDidChangeHtmlPlotState = new vscode.EventEmitter<{
+        plotId: string;
+        active: boolean;
+    }>();
 
     private readonly _onDidRequestShowPlot = new vscode.EventEmitter<string>();
     readonly onDidRequestShowPlot = this._onDidRequestShowPlot.event;
@@ -321,13 +337,15 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
         // Listen for configuration changes
         this._disposables.push(
             vscode.workspace.onDidChangeConfiguration((e) => {
-                if (e.affectsConfiguration(PlotsConfiguration.defaultSizingPolicy) ||
+                if (
+                    e.affectsConfiguration(PlotsConfiguration.defaultSizingPolicy) ||
                     e.affectsConfiguration(PlotsConfiguration.historyPolicy) ||
                     e.affectsConfiguration(PlotsConfiguration.darkFilter) ||
-                    e.affectsConfiguration(PlotsConfiguration.legacyDarkFilterMode)) {
+                    e.affectsConfiguration(PlotsConfiguration.legacyDarkFilterMode)
+                ) {
                     this._loadConfiguration();
                 }
-            })
+            }),
         );
 
         // Listen for plot selection and update selected plot ID
@@ -339,14 +357,14 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
                     // several selections occur in the same millisecond.
                     this._lastSelectedTimeByPlotId.set(id, ++this._selectionSequence);
                 }
-                const selectedPlot = this._plots.find(plot => plot.id === id);
+                const selectedPlot = this._plots.find((plot) => plot.id === id);
                 if (selectedPlot instanceof PlotClientInstance) {
                     this._selectedSizingPolicy = selectedPlot.sizingPolicy;
                     this._onDidChangeSizingPolicy.fire(selectedPlot.sizingPolicy);
                 }
 
                 this._storeSelectedSizingPolicy();
-            })
+            }),
         );
     }
 
@@ -357,7 +375,10 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
         const config = vscode.workspace.getConfiguration();
 
         // Load history policy
-        const historyPolicySetting = config.get<string>(PlotsConfiguration.historyPolicy, HistoryPolicy.Automatic);
+        const historyPolicySetting = config.get<string>(
+            PlotsConfiguration.historyPolicy,
+            HistoryPolicy.Automatic,
+        );
         this._historyPolicy = parseHistoryPolicy(historyPolicySetting);
 
         // Load dark filter mode
@@ -365,8 +386,11 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
         this._darkFilterMode = parseDarkFilter(darkFilterSetting);
 
         // Load default sizing policy
-        const sizingPolicySetting = config.get<string>(PlotsConfiguration.defaultSizingPolicy, 'auto');
-        const policy = this._sizingPolicies.find(p => p.id === sizingPolicySetting);
+        const sizingPolicySetting = config.get<string>(
+            PlotsConfiguration.defaultSizingPolicy,
+            'auto',
+        );
+        const policy = this._sizingPolicies.find((p) => p.id === sizingPolicySetting);
         if (policy) {
             this._selectedSizingPolicy = policy;
         }
@@ -383,7 +407,9 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
             if (customSize) {
                 this.setCustomPlotSize(customSize);
             } else {
-                const selectedSizingPolicyId = this._getWorkspaceState<string>(SelectedSizingPolicyStorageKey);
+                const selectedSizingPolicyId = this._getWorkspaceState<string>(
+                    SelectedSizingPolicyStorageKey,
+                );
                 if (selectedSizingPolicyId) {
                     try {
                         this.selectSizingPolicy(selectedSizingPolicyId);
@@ -393,19 +419,25 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
                 }
             }
 
-            const selectedHistoryPolicy = this._getWorkspaceState<string>(SelectedHistoryPolicyStorageKey);
+            const selectedHistoryPolicy = this._getWorkspaceState<string>(
+                SelectedHistoryPolicyStorageKey,
+            );
             if (typeof selectedHistoryPolicy === 'string') {
                 this._historyPolicy = parseHistoryPolicy(selectedHistoryPolicy);
             }
 
-            const selectedHistoryPosition = this._getWorkspaceState<string>(SelectedHistoryPositionStorageKey);
+            const selectedHistoryPosition = this._getWorkspaceState<string>(
+                SelectedHistoryPositionStorageKey,
+            );
             if (typeof selectedHistoryPosition === 'string') {
                 this._historyPosition = parseHistoryPosition(selectedHistoryPosition);
             }
 
             const preferredEditorTarget =
                 this._getWorkspaceState<PreferredEditorTarget>(PreferredEditorTargetStorageKey) ??
-                this._getWorkspaceState<PreferredEditorTarget>(LegacyPreferredEditorTargetStorageKey);
+                this._getWorkspaceState<PreferredEditorTarget>(
+                    LegacyPreferredEditorTargetStorageKey,
+                );
             switch (preferredEditorTarget) {
                 case 'activeGroup':
                 case 'sideGroup':
@@ -518,12 +550,16 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
             return;
         }
 
-        const stored = this._getWorkspaceState<Record<string, PlotClientMetadata>>(AllPlotMetadataStorageKey);
+        const stored =
+            this._getWorkspaceState<Record<string, PlotClientMetadata>>(AllPlotMetadataStorageKey);
         if (stored) {
             for (const [key, metadata] of Object.entries(stored)) {
                 if (metadata?.id && metadata?.session_id) {
                     // Old versions silently truncated exactly at this boundary.
-                    if (metadata.code_is_truncated === undefined && metadata.code?.length === LegacyPersistedPlotCodeChars) {
+                    if (
+                        metadata.code_is_truncated === undefined &&
+                        metadata.code?.length === LegacyPersistedPlotCodeChars
+                    ) {
                         metadata.code_is_truncated = true;
                     }
                     const location = this._storageLocationFromKey(key);
@@ -531,7 +567,7 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
                     if (minimized) {
                         this._allPlotMetadata.set(
                             this._plotStorageKey(minimized.session_id, minimized.id, location),
-                            minimized
+                            minimized,
                         );
                     }
                 }
@@ -539,7 +575,11 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
         }
     }
 
-    private _plotStorageKey(sessionId: string, plotId: string, location = PlotStorageLocationView): string {
+    private _plotStorageKey(
+        sessionId: string,
+        plotId: string,
+        location = PlotStorageLocationView,
+    ): string {
         return `${PlotMetadataStorageKeyPrefix}${sessionId}.${plotId}.${location}`;
     }
 
@@ -570,10 +610,9 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
         return PlotStorageLocationView;
     }
 
-
     private _toPersistedPlotMetadata(
         metadata: PlotClientMetadata,
-        location: string
+        location: string,
     ): PlotClientMetadata | undefined {
         if (!metadata?.id || !metadata?.session_id) {
             return undefined;
@@ -601,7 +640,7 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
             suggested_file_name: metadata.suggested_file_name,
             html_uri: metadata.html_uri,
             language: metadata.language,
-            sizing_policy: metadata.sizing_policy
+            sizing_policy: metadata.sizing_policy,
         };
 
         if (typeof metadata.zoom_level !== 'undefined') {
@@ -614,7 +653,7 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
     private _getStoredPlotMetadata(
         sessionId: string,
         plotId: string,
-        location = PlotStorageLocationView
+        location = PlotStorageLocationView,
     ): PlotClientMetadata | undefined {
         const key = this._plotStorageKey(sessionId, plotId, location);
         return this._allPlotMetadata.get(key);
@@ -624,9 +663,10 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
         return Array.from(this._allPlotMetadata.entries());
     }
 
-
-
-    private _storePlotMetadata(metadata: PlotClientMetadata, location = PlotStorageLocationView): void {
+    private _storePlotMetadata(
+        metadata: PlotClientMetadata,
+        location = PlotStorageLocationView,
+    ): void {
         if (!this._workspaceState || this._isRestoring || this._isShuttingDown) {
             return;
         }
@@ -638,18 +678,21 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
 
         this._allPlotMetadata.set(
             this._plotStorageKey(metadata.session_id, metadata.id, location),
-            storedMetadata
+            storedMetadata,
         );
         this._plotMetadataDirty = true;
     }
 
-    private _removeStoredPlotMetadata(metadata: PlotClientMetadata, location = PlotStorageLocationView): void {
+    private _removeStoredPlotMetadata(
+        metadata: PlotClientMetadata,
+        location = PlotStorageLocationView,
+    ): void {
         if (!this._workspaceState || this._isShuttingDown) {
             return;
         }
 
         this._allPlotMetadata.delete(
-            this._plotStorageKey(metadata.session_id, metadata.id, location)
+            this._plotStorageKey(metadata.session_id, metadata.id, location),
         );
         this._plotMetadataDirty = true;
 
@@ -705,7 +748,7 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
     cachePlotThumbnailURI(plotId: string, thumbnailURI: string): void {
         this._cachedPlotThumbnailDescriptors.set(plotId, {
             plotClientId: plotId,
-            thumbnailURI
+            thumbnailURI,
         });
         this._persistCachedPlotThumbnails();
     }
@@ -714,7 +757,7 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
      * Selects the plot with the specified ID.
      */
     selectPlot(id: string): void {
-        const plot = this._plots.find(p => p.id === id);
+        const plot = this._plots.find((p) => p.id === id);
         if (plot) {
             this._onDidSelectPlot.fire(id);
             return;
@@ -722,7 +765,10 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
         const cached = this._surfacedPlotMessages.get(id);
         if (cached) {
             const recreated = cached.htmlMetadata?.html_uri
-                ? HtmlPlotClient.fromMetadata(cached.htmlMetadata, vscode.Uri.parse(cached.htmlMetadata.html_uri))
+                ? HtmlPlotClient.fromMetadata(
+                      cached.htmlMetadata,
+                      vscode.Uri.parse(cached.htmlMetadata.html_uri),
+                  )
                 : this._createPlotFromOutput(cached.message, cached.session);
             if (recreated) {
                 this.registerNewPlotClient(recreated);
@@ -749,7 +795,7 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
             return;
         }
 
-        const currentIndex = this._plots.findIndex(p => p.id === this._selectedPlotId);
+        const currentIndex = this._plots.findIndex((p) => p.id === this._selectedPlotId);
         if (currentIndex === -1) {
             // Current plot not found, select first
             this._onDidSelectPlot.fire(this._plots[0].id);
@@ -774,7 +820,7 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
             return;
         }
 
-        const currentIndex = this._plots.findIndex(p => p.id === this._selectedPlotId);
+        const currentIndex = this._plots.findIndex((p) => p.id === this._selectedPlotId);
         if (currentIndex === -1) {
             // Current plot not found, select last
             this._onDidSelectPlot.fire(this._plots[this._plots.length - 1].id);
@@ -789,7 +835,7 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
      * Removes the plot with the specified ID.
      */
     removePlot(id: string): void {
-        const index = this._plots.findIndex(p => p.id === id);
+        const index = this._plots.findIndex((p) => p.id === id);
         if (index === -1) {
             return;
         }
@@ -833,7 +879,9 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
     removeAllPlots(): void {
         // Detach the whole list before disposal: close events may re-enter removal.
         const plots = this._plots.splice(0);
-        for (const plot of plots) { this.unregisterPlotClient(plot); }
+        for (const plot of plots) {
+            this.unregisterPlotClient(plot);
+        }
 
         this._selectedPlotId = undefined;
         this._cachedPlotThumbnailDescriptors.clear();
@@ -852,7 +900,7 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
             return;
         }
 
-        const policy = this._sizingPolicies.find(p => p.id === id);
+        const policy = this._sizingPolicies.find((p) => p.id === id);
         if (!policy) {
             throw new Error(`Invalid sizing policy ID: ${id}`);
         }
@@ -952,36 +1000,55 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
     }
 
     async saveViewPlot(): Promise<void> {
-        const plot = this._plots.find(candidate => candidate.id === this._selectedPlotId);
+        const plot = this._plots.find((candidate) => candidate.id === this._selectedPlotId);
         await this._saveImagePlot(plot);
     }
 
     async exportPlot(plotId: string, editor = false): Promise<vscode.Uri | undefined> {
-        const plot = (editor ? this._editorPlotClients.get(plotId) : undefined) ??
-            this._plots.find(plot => plot.id === plotId);
+        const plot =
+            (editor ? this._editorPlotClients.get(plotId) : undefined) ??
+            this._plots.find((plot) => plot.id === plotId);
         // RPC and editor handlers report their own errors. A write/render
         // failure must not be reported to those callers as user cancellation.
         return this._saveImagePlot(plot, false);
     }
 
-    private async _saveImagePlot(plot: IPositronPlotClient | undefined, reportErrors = true): Promise<vscode.Uri | undefined> {
-        const data = plot instanceof StaticPlotClient ? plot.uri
-            : plot instanceof PlotClientInstance ? plot.lastRender?.uri : undefined;
+    private async _saveImagePlot(
+        plot: IPositronPlotClient | undefined,
+        reportErrors = true,
+    ): Promise<vscode.Uri | undefined> {
+        const data =
+            plot instanceof StaticPlotClient
+                ? plot.uri
+                : plot instanceof PlotClientInstance
+                  ? plot.lastRender?.uri
+                  : undefined;
         if (!plot || (!(plot instanceof PlotClientInstance) && !data)) {
             void vscode.window.showWarningMessage('No rendered plot available to save.');
             return;
         }
         try {
-            const uri = plot instanceof PlotClientInstance
-                ? await saveDynamicPlot(plot)
-                : await savePlotImage(data!, `plot-${plot.id}`, plot.metadata.suggested_file_name);
+            const uri =
+                plot instanceof PlotClientInstance
+                    ? await saveDynamicPlot(plot)
+                    : await savePlotImage(
+                          data!,
+                          `plot-${plot.id}`,
+                          plot.metadata.suggested_file_name,
+                      );
             if (uri) {
-                void vscode.window.showInformationMessage(vscode.l10n.t('Plot exported to {0}', uri.fsPath));
+                void vscode.window.showInformationMessage(
+                    vscode.l10n.t('Plot exported to {0}', uri.fsPath),
+                );
             }
             return uri;
         } catch (error) {
-            if (!reportErrors) { throw error; }
-            void vscode.window.showErrorMessage(vscode.l10n.t('Failed to export plot: {0}', getErrorMessage(error)));
+            if (!reportErrors) {
+                throw error;
+            }
+            void vscode.window.showErrorMessage(
+                vscode.l10n.t('Failed to export plot: {0}', getErrorMessage(error)),
+            );
         }
     }
 
@@ -1021,11 +1088,13 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
         // R kernel, which re-renders ALL existing plot comms and sends the
         // full base64 pre_render data back through the comm channel — a huge
         // amount of SSH traffic in Remote-SSH environments.
-        if (this._renderSettings &&
+        if (
+            this._renderSettings &&
             this._renderSettings.size.width === settings.size.width &&
             this._renderSettings.size.height === settings.size.height &&
             this._renderSettings.pixel_ratio === settings.pixel_ratio &&
-            this._renderSettings.format === settings.format) {
+            this._renderSettings.format === settings.format
+        ) {
             return;
         }
 
@@ -1043,19 +1112,30 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
     /**
      * Removes the plot client and if no other clients are connected to the plot comm, disposes it.
      */
-    unregisterPlotClient(plotClient: IPositronPlotClient, location = PlotStorageLocationView): void {
+    unregisterPlotClient(
+        plotClient: IPositronPlotClient,
+        location = PlotStorageLocationView,
+    ): void {
         const id = plotClient.id;
         if (location === PlotStorageLocationEditor) {
-            if (this._editorPlotClients.get(id) === plotClient) { this._editorPlotClients.delete(id); }
+            if (this._editorPlotClients.get(id) === plotClient) {
+                this._editorPlotClients.delete(id);
+            }
         } else if (this._plotClients.get(id) === plotClient) {
             this._plotClients.delete(id);
         }
-        if (!this._isShuttingDown) { this._removeStoredPlotMetadata(plotClient.metadata, location); }
+        if (!this._isShuttingDown) {
+            this._removeStoredPlotMetadata(plotClient.metadata, location);
+        }
 
         // HTML models may be shared directly by the view and editor. Dynamic
         // editor clients are distinct instances sharing only the comm proxy.
-        if (this._plots.includes(plotClient) || this._editorPlotClients.get(id) === plotClient) { return; }
-        if (!this._plots.some(plot => plot.id === id)) { this._lastSelectedTimeByPlotId.delete(id); }
+        if (this._plots.includes(plotClient) || this._editorPlotClients.get(id) === plotClient) {
+            return;
+        }
+        if (!this._plots.some((plot) => plot.id === id)) {
+            this._lastSelectedTimeByPlotId.delete(id);
+        }
         if (plotClient instanceof HtmlPlotClient) {
             this._htmlPlotDisposables.get(id)?.dispose();
             this._htmlPlotDisposables.delete(id);
@@ -1063,7 +1143,9 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
         if (plotClient instanceof PlotClientInstance) {
             const clients = this._plotClientsByComm.get(id);
             const index = clients?.indexOf(plotClient) ?? -1;
-            if (index >= 0) { clients!.splice(index, 1); }
+            if (index >= 0) {
+                clients!.splice(index, 1);
+            }
             plotClient.dispose();
             if (clients?.length === 0) {
                 const proxy = this._plotCommProxies.get(id);
@@ -1085,7 +1167,7 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
             return;
         }
 
-        const policy = this._sizingPolicies.find(p => p.id === policyId);
+        const policy = this._sizingPolicies.find((p) => p.id === policyId);
         if (!policy) {
             vscode.window.showWarningMessage(`Invalid sizing policy: ${policyId}`);
             return;
@@ -1097,28 +1179,46 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
      * Saves the plot from the editor tab.
      */
     async saveEditorPlot(plotId: string): Promise<void> {
-        await this._saveImagePlot(this._editorPlotClients.get(plotId) ??
-            this._plots.find(plot => plot.id === plotId));
+        await this._saveImagePlot(
+            this._editorPlotClients.get(plotId) ?? this._plots.find((plot) => plot.id === plotId),
+        );
     }
 
     async copyEditorPlotToClipboard(plotId: string): Promise<void> {
         await offerPlotImageExport(() => this.saveEditorPlot(plotId));
     }
-    restoreStaticEditorInstance(metadata: PlotClientMetadata, mimeType: string, data: string): StaticPlotClient {
+    restoreStaticEditorInstance(
+        metadata: PlotClientMetadata,
+        mimeType: string,
+        data: string,
+    ): StaticPlotClient {
         const plot = StaticPlotClient.fromMetadata(metadata, mimeType, data);
         plot.zoomLevel = metadata.zoom_level ?? ZoomLevel.Fit;
         this._editorPlotClients.set(plot.id, plot);
         this._storePlotMetadata(plot.metadata, PlotStorageLocationEditor);
-        this._disposables.push(plot.onDidChangeZoomLevel(() => this._storePlotMetadata(plot.metadata, PlotStorageLocationEditor)));
+        this._disposables.push(
+            plot.onDidChangeZoomLevel(() =>
+                this._storePlotMetadata(plot.metadata, PlotStorageLocationEditor),
+            ),
+        );
         this._onDidCreateEditorPlot.fire(plot);
         return plot;
     }
 
     /** Restore the editor model without opening a second panel. */
-    getOrCreateEditorInstance(plotId: string, metadata?: PlotClientMetadata): IPositronPlotClient | undefined {
-        const viewPlot = this._plots.find(plot => plot.id === plotId);
-        if (!viewPlot) { return this._editorPlotClients.get(plotId); }
-        metadata ??= this._getStoredPlotMetadata(viewPlot.metadata.session_id, plotId, PlotStorageLocationEditor);
+    getOrCreateEditorInstance(
+        plotId: string,
+        metadata?: PlotClientMetadata,
+    ): IPositronPlotClient | undefined {
+        const viewPlot = this._plots.find((plot) => plot.id === plotId);
+        if (!viewPlot) {
+            return this._editorPlotClients.get(plotId);
+        }
+        metadata ??= this._getStoredPlotMetadata(
+            viewPlot.metadata.session_id,
+            plotId,
+            PlotStorageLocationEditor,
+        );
         let editorPlot = this._editorPlotClients.get(plotId);
         if (!editorPlot) {
             if (viewPlot instanceof PlotClientInstance) {
@@ -1136,13 +1236,18 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
                 };
 
                 const plotCopy = this.createRuntimePlotClient(commProxy, editorMetadata, viewPlot);
-                if (!metadata?.sizing_policy) { plotCopy.sizingPolicy = viewPlot.sizingPolicy; }
+                if (!metadata?.sizing_policy) {
+                    plotCopy.sizingPolicy = viewPlot.sizingPolicy;
+                }
                 plotCopy.zoomLevel = metadata?.zoom_level ?? viewPlot.zoomLevel;
                 this._editorPlotClients.set(plotId, plotCopy);
                 this._storePlotMetadata(plotCopy.metadata, PlotStorageLocationEditor);
                 this._disposables.push(
                     plotCopy.onDidClose(() => {
-                        this._removeStoredPlotMetadata(plotCopy.metadata, PlotStorageLocationEditor);
+                        this._removeStoredPlotMetadata(
+                            plotCopy.metadata,
+                            PlotStorageLocationEditor,
+                        );
                         if (this._editorPlotClients.get(plotId) === plotCopy) {
                             this._editorPlotClients.delete(plotId);
                         }
@@ -1155,19 +1260,23 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
                     }),
                     plotCopy.onDidChangeSizingPolicy(() => {
                         this._storePlotMetadata(plotCopy.metadata, PlotStorageLocationEditor);
-                    })
+                    }),
                 );
                 editorPlot = plotCopy;
             } else if (viewPlot instanceof StaticPlotClient) {
                 const plotCopy = StaticPlotClient.fromMetadata(
                     { ...viewPlot.metadata, ...metadata },
                     viewPlot.mimeType,
-                    viewPlot.data
+                    viewPlot.data,
                 );
                 plotCopy.zoomLevel = metadata?.zoom_level ?? viewPlot.zoomLevel;
                 this._editorPlotClients.set(plotId, plotCopy);
                 this._storePlotMetadata(plotCopy.metadata, PlotStorageLocationEditor);
-                this._disposables.push(plotCopy.onDidChangeZoomLevel(() => this._storePlotMetadata(plotCopy.metadata, PlotStorageLocationEditor)));
+                this._disposables.push(
+                    plotCopy.onDidChangeZoomLevel(() =>
+                        this._storePlotMetadata(plotCopy.metadata, PlotStorageLocationEditor),
+                    ),
+                );
                 editorPlot = plotCopy;
             } else if (viewPlot instanceof HtmlPlotClient) {
                 // The editor renders the URI in its own iframe. Reuse the
@@ -1176,32 +1285,40 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
                 this._editorPlotClients.set(plotId, viewPlot);
                 this._storePlotMetadata(viewPlot.metadata, PlotStorageLocationEditor);
             } else {
-                vscode.window.showWarningMessage('Opening this plot type in editor is not supported yet.');
+                vscode.window.showWarningMessage(
+                    'Opening this plot type in editor is not supported yet.',
+                );
                 return;
             }
         }
 
-        if (editorPlot) { this._onDidCreateEditorPlot.fire(editorPlot); }
+        if (editorPlot) {
+            this._onDidCreateEditorPlot.fire(editorPlot);
+        }
         return editorPlot;
     }
 
     /**
      * Opens the given plot in an editor.
      */
-    async openEditor(plotId: string, groupType?: number, metadata?: PlotClientMetadata, moveToNewWindow?: boolean): Promise<void> {
-        const viewPlot = this._plots.find(plot => plot.id === plotId);
+    async openEditor(
+        plotId: string,
+        groupType?: number,
+        metadata?: PlotClientMetadata,
+        moveToNewWindow?: boolean,
+    ): Promise<void> {
+        const viewPlot = this._plots.find((plot) => plot.id === plotId);
         if (!viewPlot) {
             vscode.window.showWarningMessage('Plot not found.');
             return;
         }
 
         const editorPlot = this.getOrCreateEditorInstance(plotId, metadata);
-        if (!editorPlot) { return; }
+        if (!editorPlot) {
+            return;
+        }
 
-        let plotData:
-            | string
-            | { kind: 'html'; uri: string; title?: string }
-            | undefined;
+        let plotData: string | { kind: 'html'; uri: string; title?: string } | undefined;
         if (editorPlot instanceof PlotClientInstance) {
             let rendered = editorPlot.lastRender;
             if (!rendered) {
@@ -1209,10 +1326,12 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
                     rendered = await editorPlot.renderWithSizingPolicy(
                         this._renderSettings.size,
                         this._renderSettings.pixel_ratio,
-                        this._renderSettings.format
+                        this._renderSettings.format,
                     );
                 } catch (error) {
-                    vscode.window.showErrorMessage(`Failed to render plot for editor: ${getErrorMessage(error)}`);
+                    vscode.window.showErrorMessage(
+                        `Failed to render plot for editor: ${getErrorMessage(error)}`,
+                    );
                     return;
                 }
             }
@@ -1235,13 +1354,12 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
         const selectedTarget: PreferredEditorTarget = moveToNewWindow
             ? 'newWindow'
             : groupType === vscode.ViewColumn.Beside
-                ? 'sideGroup'
-                : typeof groupType === 'number'
-                    ? 'activeGroup'
-                    : this._preferredEditorTarget;
-        const viewColumn = selectedTarget === 'sideGroup'
-            ? vscode.ViewColumn.Beside
-            : vscode.ViewColumn.Active;
+              ? 'sideGroup'
+              : typeof groupType === 'number'
+                ? 'activeGroup'
+                : this._preferredEditorTarget;
+        const viewColumn =
+            selectedTarget === 'sideGroup' ? vscode.ViewColumn.Beside : vscode.ViewColumn.Active;
 
         await vscode.commands.executeCommand(
             CoreCommandIds.openPlotInEditor,
@@ -1309,9 +1427,11 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
 
         // Replay the latest settings for existing, newly created and recreated UI clients.
         // Global settings deduplication must not suppress a new client's initial sync.
-        disposables.push(session.watchRuntimeClient(LanguageRuntimeClientType.Ui, () => {
-            void session.updatePlotsRenderSettings(this.getPlotsRenderSettings());
-        }));
+        disposables.push(
+            session.watchRuntimeClient(LanguageRuntimeClientType.Ui, () => {
+                void session.updatePlotsRenderSettings(this.getPlotsRenderSettings());
+            }),
+        );
 
         // Direct typed message subscriptions (1:1 Positron pattern)
         disposables.push(
@@ -1328,22 +1448,22 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
                     }
                 }
                 this._recentExecutions.set(msg.parent_id, code);
-            })
+            }),
         );
         disposables.push(
             session.onDidReceiveRuntimeMessageOutput((msg) => {
                 this._handleStaticPlotOutput(session, msg);
-            })
+            }),
         );
         disposables.push(
             session.onDidReceiveRuntimeMessageResult((msg) => {
                 this._handleStaticPlotOutput(session, msg);
-            })
+            }),
         );
         disposables.push(
             session.onDidReceiveRuntimeMessageUpdateOutput((msg) => {
                 this._handleUpdateOutput(session, msg);
-            })
+            }),
         );
 
         // Plot comm/client manager attachment
@@ -1365,7 +1485,7 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
             disposables.push(
                 manager.watchClient(RuntimeClientType.Plot, (client, message) => {
                     this._handlePlotClient(session, client, message);
-                })
+                }),
             );
         };
 
@@ -1376,7 +1496,7 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
             disposables.push(
                 session.onDidChangeRuntimeState(() => {
                     tryAttachClientManager();
-                })
+                }),
             );
         }
     }
@@ -1389,7 +1509,7 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
         }
         const disposables = this._sessionDisposables.get(sessionId);
         if (disposables) {
-            disposables.forEach(d => d.dispose());
+            disposables.forEach((d) => d.dispose());
             this._sessionDisposables.delete(sessionId);
         }
 
@@ -1422,23 +1542,30 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
         }
     }
 
-
-
     getPlotsPaneBehavior(sessionId: string): { surface: boolean; raisePane: boolean } {
         const session = this._sessionManager?.getSession(sessionId);
-        if (!session || session.sessionMetadata.sessionMode === LanguageRuntimeSessionMode.Console) {
+        if (
+            !session ||
+            session.sessionMetadata.sessionMode === LanguageRuntimeSessionMode.Console
+        ) {
             return { surface: true, raisePane: true };
         }
         return {
-            surface: session.sessionMetadata.sessionMode === LanguageRuntimeSessionMode.Notebook &&
+            surface:
+                session.sessionMetadata.sessionMode === LanguageRuntimeSessionMode.Notebook &&
                 this._sessionManager?.getActiveSession(sessionId)?.hasConsole === true,
             raisePane: false,
         };
     }
 
-    private _handleStaticPlotOutput(session: RuntimeSession, message: LanguageRuntimeOutputWithKind | LanguageRuntimeResultWithKind): void {
+    private _handleStaticPlotOutput(
+        session: RuntimeSession,
+        message: LanguageRuntimeOutputWithKind | LanguageRuntimeResultWithKind,
+    ): void {
         const behavior = this.getPlotsPaneBehavior(session.sessionId);
-        if (!behavior.surface) { return; }
+        if (!behavior.surface) {
+            return;
+        }
         if (this.hasPlot(session.sessionId, message.id)) {
             return;
         }
@@ -1463,9 +1590,14 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
         this.registerNewPlotClient(plot, behavior.raisePane);
     }
 
-    private _handleUpdateOutput(session: RuntimeSession, message: LanguageRuntimeUpdateOutputWithKind): void {
+    private _handleUpdateOutput(
+        session: RuntimeSession,
+        message: LanguageRuntimeUpdateOutputWithKind,
+    ): void {
         const behavior = this.getPlotsPaneBehavior(session.sessionId);
-        if (!behavior.surface) { return; }
+        if (!behavior.surface) {
+            return;
+        }
         const plot = this._createPlotFromOutput(message, session);
         if (!plot) {
             return;
@@ -1477,8 +1609,11 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
             this._rememberSurfacedPlot(plot.id, message, session);
             this.replacePlot(existingPlot.id, plot, behavior.raisePane);
         } else {
-            const cached = [...this._surfacedPlotMessages].find(([, entry]) =>
-                entry.session.sessionId === session.sessionId && entry.message.output_id === message.output_id);
+            const cached = [...this._surfacedPlotMessages].find(
+                ([, entry]) =>
+                    entry.session.sessionId === session.sessionId &&
+                    entry.message.output_id === message.output_id,
+            );
             if (cached) {
                 this._surfacedPlotMessages.delete(cached[0]);
                 this._rememberSurfacedPlot(plot.id, message, session);
@@ -1488,34 +1623,49 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
 
     private _rememberSurfacedPlot(
         id: string,
-        message: LanguageRuntimeOutputWithKind | LanguageRuntimeResultWithKind | LanguageRuntimeUpdateOutputWithKind,
+        message:
+            | LanguageRuntimeOutputWithKind
+            | LanguageRuntimeResultWithKind
+            | LanguageRuntimeUpdateOutputWithKind,
         session: RuntimeSession,
     ): void {
-        if (!this.getPlotsPaneBehavior(session.sessionId).surface) { return; }
+        if (!this.getPlotsPaneBehavior(session.sessionId).surface) {
+            return;
+        }
         this._surfacedPlotMessages.delete(id);
         this._surfacedPlotMessages.set(id, { message, session });
         if (this._surfacedPlotMessages.size > 32) {
             const oldest = this._surfacedPlotMessages.keys().next().value;
-            if (oldest !== undefined) { this._surfacedPlotMessages.delete(oldest); }
+            if (oldest !== undefined) {
+                this._surfacedPlotMessages.delete(oldest);
+            }
         }
     }
 
-    private _originForExecution(session: RuntimeSession, executionId: string): PlotClientMetadata['origin'] {
+    private _originForExecution(
+        session: RuntimeSession,
+        executionId: string,
+    ): PlotClientMetadata['origin'] {
         const location = session.getExecutionCodeLocation?.(executionId);
-        return location && {
-            uri: location.uri.toString(),
-            range: {
-                start_line: location.range.start.line,
-                start_character: location.range.start.character,
-                end_line: location.range.end.line,
-                end_character: location.range.end.character,
-            },
-        };
+        return (
+            location && {
+                uri: location.uri.toString(),
+                range: {
+                    start_line: location.range.start.line,
+                    start_character: location.range.start.character,
+                    end_line: location.range.end.line,
+                    end_character: location.range.end.character,
+                },
+            }
+        );
     }
 
     private _createPlotFromOutput(
-        message: LanguageRuntimeOutputWithKind | LanguageRuntimeResultWithKind | LanguageRuntimeUpdateOutputWithKind,
-        session: RuntimeSession
+        message:
+            | LanguageRuntimeOutputWithKind
+            | LanguageRuntimeResultWithKind
+            | LanguageRuntimeUpdateOutputWithKind,
+        session: RuntimeSession,
     ): IPositronPlotClient | undefined {
         const code = this._recentExecutions.get(message.parent_id) ?? '';
 
@@ -1525,7 +1675,9 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
                 return undefined;
             }
 
-            const imageEntry = Object.entries(data).find(([mimeType]) => mimeType.startsWith('image/'));
+            const imageEntry = Object.entries(data).find(([mimeType]) =>
+                mimeType.startsWith('image/'),
+            );
             if (!imageEntry) {
                 return undefined;
             }
@@ -1539,7 +1691,7 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
                 mimeType,
                 payload,
                 code,
-                message.output_id
+                message.output_id,
             );
             plot.metadata.origin = this._originForExecution(session, message.parent_id);
             plot.metadata.language = session.runtimeMetadata.languageId;
@@ -1558,11 +1710,12 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
     private _handlePlotClient(
         session: RuntimeSession,
         client: RuntimeClientInstance,
-        message: LanguageRuntimeMessageCommOpen
+        message: LanguageRuntimeMessageCommOpen,
     ): void {
         const clientId = client.message.comm_id;
         const existingPlot = this._plots.find(
-            plot => plot.metadata.session_id === session.sessionId && plot.metadata.id === clientId
+            (plot) =>
+                plot.metadata.session_id === session.sessionId && plot.metadata.id === clientId,
         );
         if (existingPlot && existingPlot instanceof PlotClientInstance) {
             return;
@@ -1574,34 +1727,38 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
         const storedMetadata = this._getStoredPlotMetadata(
             session.sessionId,
             clientId,
-            PlotStorageLocationView
+            PlotStorageLocationView,
         );
 
-        const metadata: PlotClientMetadata = storedMetadata ? {
-            ...storedMetadata,
-            id: clientId,
-            session_id: session.sessionId,
-            language: session.runtimeMetadata.languageId,
-            pre_render: data?.pre_render ?? storedMetadata.pre_render,
-            execution_id: (message.data as any)?.execution_id ?? storedMetadata.execution_id,
-            code: code || storedMetadata.code || '',
-            code_is_truncated: code ? false : storedMetadata.code_is_truncated
-        } : {
-            id: clientId,
-            created: Date.parse(message.when),
-            session_id: session.sessionId,
-            code,
-            pre_render: data?.pre_render,
-            zoom_level: ZoomLevel.Fit,
-            language: session.runtimeMetadata.languageId,
-            execution_id: (message.data as any)?.execution_id
-        };
+        const metadata: PlotClientMetadata = storedMetadata
+            ? {
+                  ...storedMetadata,
+                  id: clientId,
+                  session_id: session.sessionId,
+                  language: session.runtimeMetadata.languageId,
+                  pre_render: data?.pre_render ?? storedMetadata.pre_render,
+                  execution_id: (message.data as any)?.execution_id ?? storedMetadata.execution_id,
+                  code: code || storedMetadata.code || '',
+                  code_is_truncated: code ? false : storedMetadata.code_is_truncated,
+              }
+            : {
+                  id: clientId,
+                  created: Date.parse(message.when),
+                  session_id: session.sessionId,
+                  code,
+                  pre_render: data?.pre_render,
+                  zoom_level: ZoomLevel.Fit,
+                  language: session.runtimeMetadata.languageId,
+                  execution_id: (message.data as any)?.execution_id,
+              };
 
         metadata.origin ??= this._originForExecution(session, message.parent_id);
         const commProxy = this.createCommProxy(client, metadata);
         const plotClient = this.createRuntimePlotClient(commProxy, metadata, client);
         if (storedMetadata?.sizing_policy?.id) {
-            const preferredPolicy = this._sizingPolicies.find(policy => policy.id === storedMetadata.sizing_policy?.id);
+            const preferredPolicy = this._sizingPolicies.find(
+                (policy) => policy.id === storedMetadata.sizing_policy?.id,
+            );
             if (preferredPolicy) {
                 this._selectedSizingPolicy = preferredPolicy;
                 this._storeSelectedSizingPolicy();
@@ -1619,10 +1776,15 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
         } else {
             this.registerPlotClient(plotClient, true);
         }
-        const editorMetadata = this._getStoredPlotMetadata(session.sessionId, clientId, PlotStorageLocationEditor);
-        if (editorMetadata) { this.getOrCreateEditorInstance(clientId, editorMetadata); }
+        const editorMetadata = this._getStoredPlotMetadata(
+            session.sessionId,
+            clientId,
+            PlotStorageLocationEditor,
+        );
+        if (editorMetadata) {
+            this.getOrCreateEditorInstance(clientId, editorMetadata);
+        }
     }
-
 
     /**
      * Initializes the plots service and attaches to runtime sessions.
@@ -1643,16 +1805,15 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
                 sessionManager.onWillStartSession(({ session }) => {
                     this._restorePlotMetadataForSessions([session]);
                     this._attachSession(session);
-                })
+                }),
             );
 
             // Clean up per-session resources when sessions are deleted
             this._disposables.push(
                 sessionManager.onDidDeleteRuntimeSession((sessionId) => {
                     this._detachSession(sessionId);
-                })
+                }),
             );
-
         }
     }
 
@@ -1661,7 +1822,7 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
             return;
         }
 
-        const validSessionIds = new Set(sessions.map(session => session.sessionId));
+        const validSessionIds = new Set(sessions.map((session) => session.sessionId));
         const restoredHtml = new Set<string>();
 
         for (const [, metadata] of this._listStoredPlotMetadataEntries()) {
@@ -1670,15 +1831,27 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
             }
 
             if (metadata.location === PlotStorageLocationEditor) {
-                if (metadata.kind === 'html' && metadata.html_uri && !this._editorPlotClients.has(metadata.id)) {
-                    const restored = HtmlPlotClient.fromMetadata(metadata, vscode.Uri.parse(metadata.html_uri));
+                if (
+                    metadata.kind === 'html' &&
+                    metadata.html_uri &&
+                    !this._editorPlotClients.has(metadata.id)
+                ) {
+                    const restored = HtmlPlotClient.fromMetadata(
+                        metadata,
+                        vscode.Uri.parse(metadata.html_uri),
+                    );
                     this._editorPlotClients.set(restored.id, restored);
                     this._onDidCreateEditorPlot.fire(restored);
                 }
                 continue;
             }
 
-            if (this._plots.some(plot => plot.metadata.session_id === metadata.session_id && plot.id === metadata.id)) {
+            if (
+                this._plots.some(
+                    (plot) =>
+                        plot.metadata.session_id === metadata.session_id && plot.id === metadata.id,
+                )
+            ) {
                 continue;
             }
 
@@ -1689,12 +1862,21 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
                 }
 
                 try {
-                    const restored = HtmlPlotClient.fromMetadata(metadata, vscode.Uri.parse(storedUri));
+                    const restored = HtmlPlotClient.fromMetadata(
+                        metadata,
+                        vscode.Uri.parse(storedUri),
+                    );
                     this._plots.push(restored);
                     this._registerWebviewPlotClient(restored);
                     this._storePlotMetadata(restored.metadata, PlotStorageLocationView);
                     restoredHtml.add(restored.id);
-                    if (this._getStoredPlotMetadata(restored.metadata.session_id, restored.id, PlotStorageLocationEditor)) {
+                    if (
+                        this._getStoredPlotMetadata(
+                            restored.metadata.session_id,
+                            restored.id,
+                            PlotStorageLocationEditor,
+                        )
+                    ) {
                         this.getOrCreateEditorInstance(restored.id);
                     }
                 } catch {
@@ -1704,9 +1886,14 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
         }
 
         if (restoredHtml.size > 0) {
-            this._plots.sort((left, right) => (left.metadata.created ?? 0) - (right.metadata.created ?? 0));
+            this._plots.sort(
+                (left, right) => (left.metadata.created ?? 0) - (right.metadata.created ?? 0),
+            );
             this._onDidReplacePlots.fire([...this._plots]);
-            if (!this._selectedPlotId || !this._plots.some(plot => plot.id === this._selectedPlotId)) {
+            if (
+                !this._selectedPlotId ||
+                !this._plots.some((plot) => plot.id === this._selectedPlotId)
+            ) {
                 const lastPlot = this._plots[this._plots.length - 1];
                 if (lastPlot) {
                     this._onDidSelectPlot.fire(lastPlot.id);
@@ -1717,22 +1904,24 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
 
     private createCommProxy(
         client: RuntimeClientInstance,
-        metadata: PlotClientMetadata
+        metadata: PlotClientMetadata,
     ): PositronPlotCommProxy {
         let renderQueue = this._renderQueues.get(metadata.session_id);
         if (!renderQueue) {
             const session = this._sessionManager?.getSession(metadata.session_id);
             if (!session) {
                 this._outputChannel?.error(
-                    `[PositronPlotsService] Cannot find session ${metadata.session_id} for plot ${metadata.id}`
+                    `[PositronPlotsService] Cannot find session ${metadata.session_id} for plot ${metadata.id}`,
                 );
-                throw new Error(`Cannot find session ${metadata.session_id} for plot ${metadata.id}`);
+                throw new Error(
+                    `Cannot find session ${metadata.session_id} for plot ${metadata.id}`,
+                );
             }
 
             const runtimeSession: IRuntimeSession = {
                 sessionId: session.sessionId,
                 getRuntimeState: () => session.state as any,
-                onDidChangeRuntimeState: session.onDidChangeRuntimeState as any
+                onDidChangeRuntimeState: session.onDidChangeRuntimeState as any,
             };
 
             renderQueue = new PositronPlotRenderQueue(runtimeSession);
@@ -1747,11 +1936,13 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
             commProxy.onDidClose(() => {
                 const plotClients = this._plotClientsByComm.get(metadata.id);
                 if (plotClients) {
-                    for (const plotClient of [...plotClients]) { plotClient.dispose(); }
+                    for (const plotClient of [...plotClients]) {
+                        plotClient.dispose();
+                    }
                 }
                 this._plotClientsByComm.delete(metadata.id);
                 this._plotCommProxies.delete(metadata.id);
-            })
+            }),
         );
 
         this._disposables.push(commProxy);
@@ -1761,7 +1952,7 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
     private createRuntimePlotClient(
         commProxy: PositronPlotCommProxy,
         metadata: PlotClientMetadata,
-        client: RuntimeClientInstance
+        client: RuntimeClientInstance,
     ): PlotClientInstance {
         const sizingPolicy = resolveInitialPlotSizingPolicy(
             metadata,
@@ -1774,18 +1965,20 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
             () => undefined, // The shared comm proxy owns the kernel client.
             metadata.session_id,
             sizingPolicy,
-            commProxy
+            commProxy,
         );
 
         // Merge in session-specific metadata (code, pre_render, language, etc.)
         plotClient.updateMetadata(metadata);
 
         if (plotClient.sizingPolicy.id === PlotSizingPolicyAuto.ID) {
-            this._disposables.push(plotClient.onDidSetIntrinsicSize(intrinsicSize => {
-                if (intrinsicSize && plotClient.sizingPolicy.id === PlotSizingPolicyAuto.ID) {
-                    plotClient.sizingPolicy = this._getIntrinsicSizingPolicy();
-                }
-            }));
+            this._disposables.push(
+                plotClient.onDidSetIntrinsicSize((intrinsicSize) => {
+                    if (intrinsicSize && plotClient.sizingPolicy.id === PlotSizingPolicyAuto.ID) {
+                        plotClient.sizingPolicy = this._getIntrinsicSizingPolicy();
+                    }
+                }),
+            );
         }
 
         let plotClients = this._plotClientsByComm.get(metadata.id);
@@ -1801,7 +1994,7 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
     private async fetchAndUpdateMetadata(
         commProxy: PositronPlotCommProxy,
         metadata: PlotClientMetadata,
-        plotClient?: PlotClientInstance
+        plotClient?: PlotClientInstance,
     ): Promise<void> {
         try {
             const backendMetadata = await commProxy.getMetadata();
@@ -1832,12 +2025,16 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
             this._onDidUpdatePlotMetadata.fire(metadata.id);
         } catch (err) {
             this._outputChannel?.warn(
-                `[PositronPlotsService] Failed to fetch metadata for plot ${metadata.id}: ${formatErrorForLogging(err)}`
+                `[PositronPlotsService] Failed to fetch metadata for plot ${metadata.id}: ${formatErrorForLogging(err)}`,
             );
         }
     }
 
-    private registerPlotClient(plotClient: PlotClientInstance, fireEvents: boolean, index = this._plots.length): void {
+    private registerPlotClient(
+        plotClient: PlotClientInstance,
+        fireEvents: boolean,
+        index = this._plots.length,
+    ): void {
         // Add to plots list
         this._plots.splice(index, 0, plotClient);
 
@@ -1849,7 +2046,10 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
                 // A background plot can freeze when its first render finishes.
                 // Keep its policy local and project the actual policy object
                 // only when this plot is selected (custom sizes are per plot).
-                if (this._selectedPlotId === plotClient.id && this._selectedSizingPolicy !== policy) {
+                if (
+                    this._selectedPlotId === plotClient.id &&
+                    this._selectedSizingPolicy !== policy
+                ) {
                     this._selectedSizingPolicy = policy;
                     this._onDidChangeSizingPolicy.fire(policy);
                     this._storeSelectedSizingPolicy();
@@ -1865,7 +2065,7 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
             }),
             plotClient.onDidUpdateMetadata((metadata) => {
                 this._storePlotMetadata(metadata, PlotStorageLocationView);
-            })
+            }),
         );
 
         this._storePlotMetadata(plotClient.metadata, PlotStorageLocationView);
@@ -1882,7 +2082,7 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
                 if (this._plots.includes(plotClient)) {
                     this.removePlot(plotClient.id);
                 }
-            })
+            }),
         );
     }
 
@@ -1897,11 +2097,13 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
 
         this._onDidEmitPlot.fire(client);
         this._onDidSelectPlot.fire(client.id);
-        if (raisePane) { this._onDidRequestShowPlot.fire(client.id); }
+        if (raisePane) {
+            this._onDidRequestShowPlot.fire(client.id);
+        }
     }
 
     private replacePlot(id: string, newPlot: IPositronPlotClient, raisePane = true): void {
-        const index = this._plots.findIndex(plot => plot.id === id);
+        const index = this._plots.findIndex((plot) => plot.id === id);
         if (index < 0) {
             return;
         }
@@ -1926,7 +2128,7 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
                     this._disposables.push(
                         newPlot.onDidChangeZoomLevel(() => {
                             this._storePlotMetadata(newPlot.metadata, PlotStorageLocationView);
-                        })
+                        }),
                     );
                 }
             }
@@ -1935,20 +2137,23 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
         this._onDidRemovePlot.fire(oldPlot);
         this._onDidEmitPlot.fire(newPlot);
         this._onDidSelectPlot.fire(newPlot.id);
-        if (raisePane) { this._onDidRequestShowPlot.fire(newPlot.id); }
+        if (raisePane) {
+            this._onDidRequestShowPlot.fire(newPlot.id);
+        }
     }
 
     private _getDefaultSizingPolicy(): IPositronPlotSizingPolicy {
-        const id = vscode.workspace.getConfiguration().get<string>(
-            PlotsConfiguration.defaultSizingPolicy,
-            PlotSizingPolicyAuto.ID,
+        const id = vscode.workspace
+            .getConfiguration()
+            .get<string>(PlotsConfiguration.defaultSizingPolicy, PlotSizingPolicyAuto.ID);
+        return (
+            this._sizingPolicies.find((policy) => policy.id === id) ??
+            this._sizingPolicies.find((policy) => policy.id === PlotSizingPolicyAuto.ID)!
         );
-        return this._sizingPolicies.find(policy => policy.id === id)
-            ?? this._sizingPolicies.find(policy => policy.id === PlotSizingPolicyAuto.ID)!;
     }
 
     private _getIntrinsicSizingPolicy(): IPositronPlotSizingPolicy {
-        return this._sizingPolicies.find(policy => policy.id === PlotSizingPolicyIntrinsic.ID)!;
+        return this._sizingPolicies.find((policy) => policy.id === PlotSizingPolicyIntrinsic.ID)!;
     }
 
     private _registerWebviewPlotClient(plotClient: HtmlPlotClient): void {
@@ -1957,17 +2162,18 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
             plotClient.onDidActivate(() => {
                 this._onDidChangeHtmlPlotState.fire({ plotId: plotClient.id, active: true });
                 const activeWebviewPlots = this._plots.filter(
-                    (plot): plot is HtmlPlotClient => plot instanceof HtmlPlotClient && plot.isActive,
+                    (plot): plot is HtmlPlotClient =>
+                        plot instanceof HtmlPlotClient && plot.isActive,
                 );
                 if (activeWebviewPlots.length <= MaxActiveWebviewPlots) {
                     return;
                 }
 
-                const oldest = activeWebviewPlots
-                    .sort((left, right) =>
+                const oldest = activeWebviewPlots.sort(
+                    (left, right) =>
                         (this._lastSelectedTimeByPlotId.get(left.id) ?? 0) -
-                        (this._lastSelectedTimeByPlotId.get(right.id) ?? 0)
-                    )[0];
+                        (this._lastSelectedTimeByPlotId.get(right.id) ?? 0),
+                )[0];
                 if (oldest) {
                     this._outputChannel?.debug(
                         `[PositronPlotsService] Deactivating HTML plot '${oldest.id}'; maximum active webviews reached.`,
@@ -1979,17 +2185,25 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
                 this._onDidChangeHtmlPlotState.fire({ plotId: plotClient.id, active: false });
             }),
         ];
-        this._htmlPlotDisposables.set(plotClient.id, new vscode.Disposable(() => {
-            disposables.forEach(disposable => disposable.dispose());
-        }));
+        this._htmlPlotDisposables.set(
+            plotClient.id,
+            new vscode.Disposable(() => {
+                disposables.forEach((disposable) => disposable.dispose());
+            }),
+        );
     }
 
     private getPlotForOutput(sessionId: string, outputId: string): IPositronPlotClient | undefined {
-        return this._plots.find(plot => plot.metadata.session_id === sessionId && plot.metadata.output_id === outputId);
+        return this._plots.find(
+            (plot) =>
+                plot.metadata.session_id === sessionId && plot.metadata.output_id === outputId,
+        );
     }
 
     private hasPlot(sessionId: string, plotId: string): boolean {
-        return this._plots.some(plot => plot.metadata.session_id === sessionId && plot.metadata.id === plotId);
+        return this._plots.some(
+            (plot) => plot.metadata.session_id === sessionId && plot.metadata.id === plotId,
+        );
     }
 
     /**
@@ -2005,9 +2219,10 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
      */
     addHtmlPlot(sessionId: string, event: IShowHtmlUriEvent): void {
         // Get the most recent execution ID and code, if available.
-        const executionId = this._recentExecutionIds.length > 0
-            ? this._recentExecutionIds[this._recentExecutionIds.length - 1]
-            : undefined;
+        const executionId =
+            this._recentExecutionIds.length > 0
+                ? this._recentExecutionIds[this._recentExecutionIds.length - 1]
+                : undefined;
         const code = executionId ? this._recentExecutions.get(executionId) : undefined;
 
         const plotClient = new HtmlPlotClient(sessionId, event, executionId, code);
@@ -2023,10 +2238,15 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
     addHtmlOutputPlot(
         sessionId: string,
         event: IShowHtmlUriEvent,
-        message: LanguageRuntimeOutputWithKind | LanguageRuntimeResultWithKind | LanguageRuntimeUpdateOutputWithKind,
+        message:
+            | LanguageRuntimeOutputWithKind
+            | LanguageRuntimeResultWithKind
+            | LanguageRuntimeUpdateOutputWithKind,
     ): void {
         const behavior = this.getPlotsPaneBehavior(sessionId);
-        if (!behavior.surface) { return; }
+        if (!behavior.surface) {
+            return;
+        }
         const plotClient = new HtmlPlotClient(
             sessionId,
             event,
@@ -2043,16 +2263,20 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
             plotClient.metadata.language = session.runtimeMetadata.languageId;
             this._rememberSurfacedPlot(plotClient.id, message, session);
             const cached = this._surfacedPlotMessages.get(plotClient.id);
-            if (cached) { cached.htmlMetadata = { ...plotClient.metadata }; }
+            if (cached) {
+                cached.htmlMetadata = { ...plotClient.metadata };
+            }
         }
 
         const existingPlot = message.output_id
             ? this.getPlotForOutput(sessionId, message.output_id)
-            : this._plots.find(plot =>
-                plot.metadata.session_id === sessionId && plot.id === plotClient.id
-            );
+            : this._plots.find(
+                  (plot) => plot.metadata.session_id === sessionId && plot.id === plotClient.id,
+              );
         if (existingPlot) {
-            if (existingPlot.id !== plotClient.id) { this._surfacedPlotMessages.delete(existingPlot.id); }
+            if (existingPlot.id !== plotClient.id) {
+                this._surfacedPlotMessages.delete(existingPlot.id);
+            }
             this.replacePlot(existingPlot.id, plotClient, behavior.raisePane);
             return;
         }
@@ -2080,7 +2304,7 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
         this._flushPlotMetadataPersistence();
         this._isShuttingDown = true;
         this._flushThumbnailPersistence(true);
-        this._persistCachedPlotThumbnails = () => { }; // prevent further debounced writes
+        this._persistCachedPlotThumbnails = () => {}; // prevent further debounced writes
         this._storeSelectedSizingPolicy();
         this._storeCustomPlotSize();
 
@@ -2094,6 +2318,6 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
         this._plotClients.clear();
 
         // Dispose all disposables
-        this._disposables.forEach(d => d.dispose());
+        this._disposables.forEach((d) => d.dispose());
     }
 }

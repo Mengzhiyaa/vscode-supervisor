@@ -62,7 +62,9 @@ function output(kind: RuntimeOutputKind, data: Record<string, unknown>): RichOut
 
 function deferred<T>() {
     let resolve!: (value: T) => void;
-    const promise = new Promise<T>(complete => { resolve = complete; });
+    const promise = new Promise<T>((complete) => {
+        resolve = complete;
+    });
     return { promise, resolve };
 }
 
@@ -78,11 +80,19 @@ suite('[Unit] P0 rich output and compatibility contracts', () => {
                 let disposed = 0;
                 const uri = vscode.Uri.parse('http://localhost/widget');
                 const router = new RichOutputRouter(
-                    {} as any, {} as any,
-                    { getPlotsPaneBehavior: () => ({ surface: true, raisePane: true }), addHtmlOutputPlot: () => { shown++; } } as any,
+                    {} as any,
+                    {} as any,
+                    {
+                        getPlotsPaneBehavior: () => ({ surface: true, raisePane: true }),
+                        addHtmlOutputPlot: () => {
+                            shown++;
+                        },
+                    } as any,
                     {
                         resolveRuntimeOutputHtmlUri: async () => uri,
-                        showRuntimeOutputHtml: async () => { shown++; },
+                        showRuntimeOutputHtml: async () => {
+                            shown++;
+                        },
                     } as any,
                     makeNoopLogChannel(),
                     {
@@ -90,9 +100,13 @@ suite('[Unit] P0 rich output and compatibility contracts', () => {
                         disposeModel: (id: string) => models.delete(id),
                     } as any,
                 );
-                (router as any)._writeHtmlOutput = async () => { entered.resolve(); return htmlFile.promise; };
+                (router as any)._writeHtmlOutput = async () => {
+                    entered.resolve();
+                    return htmlFile.promise;
+                };
                 router.registerRenderer({
-                    id: 'slow-renderer', outputKinds: [RuntimeOutputKind.WebviewPreload],
+                    id: 'slow-renderer',
+                    outputKinds: [RuntimeOutputKind.WebviewPreload],
                     render: async () => {
                         if (stage === 'render') {
                             entered.resolve();
@@ -100,16 +114,23 @@ suite('[Unit] P0 rich output and compatibility contracts', () => {
                         }
                         return { target: 'plot', html: '<div>widget</div>' };
                     },
-                    disposeOutput: async () => { disposed++; },
+                    disposeOutput: async () => {
+                        disposed++;
+                    },
                 });
                 const session = { sessionId: 'slow-session' } as any;
                 const message = output(RuntimeOutputKind.WebviewPreload, {});
                 (router as any)._enqueue(session, message);
-                const route = (router as any)._routeChains.get(`${session.sessionId}:${message.output_id}`);
+                const route = (router as any)._routeChains.get(
+                    `${session.sessionId}:${message.output_id}`,
+                );
                 try {
                     await entered.promise;
                     if (action === 'clear') {
-                        (router as any)._handleClearOutput(session, { parent_id: message.parent_id, wait: false });
+                        (router as any)._handleClearOutput(session, {
+                            parent_id: message.parent_id,
+                            wait: false,
+                        });
                     } else if (action === 'delete-session') {
                         (router as any)._detachSession(session.sessionId);
                     } else {
@@ -133,9 +154,16 @@ suite('[Unit] P0 rich output and compatibility contracts', () => {
 
     test('does not render an output cleared before its queued route starts', async () => {
         let renders = 0;
-        const router = new RichOutputRouter({} as any, {} as any, {} as any, {} as any, makeNoopLogChannel());
+        const router = new RichOutputRouter(
+            {} as any,
+            {} as any,
+            {} as any,
+            {} as any,
+            makeNoopLogChannel(),
+        );
         router.registerRenderer({
-            id: 'queued-renderer', render: async () => {
+            id: 'queued-renderer',
+            render: async () => {
                 renders++;
                 return { target: 'plot', uri: vscode.Uri.parse('http://localhost/widget') };
             },
@@ -174,29 +202,48 @@ suite('[Unit] P0 rich output and compatibility contracts', () => {
             } else {
                 (preview as any)._proxyService.resolvePath = resolveProxy;
             }
-            const listener = preview.onDidShowPreview(() => { shown++; });
-            const router = new RichOutputRouter({} as any, {} as any, {} as any, preview, makeNoopLogChannel());
+            const listener = preview.onDidShowPreview(() => {
+                shown++;
+            });
+            const router = new RichOutputRouter(
+                {} as any,
+                {} as any,
+                {} as any,
+                preview,
+                makeNoopLogChannel(),
+            );
             (router as any)._writeHtmlOutput = async () => fileUri;
             router.registerRenderer({
                 id: 'slow-viewer',
-                render: async () => target === 'html'
-                    ? { target: 'viewer', html: '<div>widget</div>' } : { target: 'viewer', uri },
-                disposeOutput: async () => { disposals++; },
+                render: async () =>
+                    target === 'html'
+                        ? { target: 'viewer', html: '<div>widget</div>' }
+                        : { target: 'viewer', uri },
+                disposeOutput: async () => {
+                    disposals++;
+                },
             });
             const session = { sessionId: 'slow-viewer-session' } as any;
             const message = output(RuntimeOutputKind.WebviewPreload, {});
             (router as any)._enqueue(session, message);
-            const route = (router as any)._routeChains.get(`${session.sessionId}:${message.output_id}`);
+            const route = (router as any)._routeChains.get(
+                `${session.sessionId}:${message.output_id}`,
+            );
             try {
                 await entered.promise;
-                (router as any)._handleClearOutput(session, { parent_id: message.parent_id, wait: false });
+                (router as any)._handleClearOutput(session, {
+                    parent_id: message.parent_id,
+                    wait: false,
+                });
                 proxy.resolve(uri);
                 await route;
                 assert.strictEqual(shown, 0);
                 assert.strictEqual(disposals, 1);
                 assert.strictEqual(router.getRouteRecords().length, 0);
                 if (target === 'html') {
-                    await preview.showRuntimeOutputHtml(session.sessionId, fileUri, { title: 'Current' });
+                    await preview.showRuntimeOutputHtml(session.sessionId, fileUri, {
+                        title: 'Current',
+                    });
                 } else {
                     await preview.showRuntimeOutputUrl(session.sessionId, uri.toString());
                 }
@@ -216,9 +263,15 @@ suite('[Unit] P0 rich output and compatibility contracts', () => {
         let renders = 0;
         let disposals = 0;
         const router = new RichOutputRouter(
-            {} as any, {} as any,
-            { getPlotsPaneBehavior: () => ({ surface: true, raisePane: true }), addHtmlOutputPlot: (_sessionId: string, event: { uri: vscode.Uri }) => plots.push(event.uri.toString()) } as any,
-            {} as any, makeNoopLogChannel(),
+            {} as any,
+            {} as any,
+            {
+                getPlotsPaneBehavior: () => ({ surface: true, raisePane: true }),
+                addHtmlOutputPlot: (_sessionId: string, event: { uri: vscode.Uri }) =>
+                    plots.push(event.uri.toString()),
+            } as any,
+            {} as any,
+            makeNoopLogChannel(),
         );
         router.registerRenderer({
             id: 'replacing-renderer',
@@ -229,7 +282,9 @@ suite('[Unit] P0 rich output and compatibility contracts', () => {
                 }
                 return { target: 'plot', uri: vscode.Uri.parse('http://localhost/new') };
             },
-            disposeOutput: async () => { disposals++; },
+            disposeOutput: async () => {
+                disposals++;
+            },
         });
         const session = { sessionId: 'replacing-session' } as any;
         const message = output(RuntimeOutputKind.WebviewPreload, {});
@@ -266,7 +321,7 @@ suite('[Unit] P0 rich output and compatibility contracts', () => {
         const source = new vscode.EventEmitter<number>();
         const widths: number[] = [];
         const sourceRegistration = setConsoleWidthSource(source.event, () => 101);
-        const listener = positronWindow.onDidChangeConsoleWidth(width => widths.push(width));
+        const listener = positronWindow.onDidChangeConsoleWidth((width) => widths.push(width));
 
         source.fire(132);
 
@@ -285,7 +340,7 @@ suite('[Unit] P0 rich output and compatibility contracts', () => {
         const widths: number[] = [];
         const firstRegistration = setConsoleWidthSource(first.event, () => 80);
         const secondRegistration = setConsoleWidthSource(second.event, () => 120);
-        const listener = positronWindow.onDidChangeConsoleWidth(width => widths.push(width));
+        const listener = positronWindow.onDidChangeConsoleWidth((width) => widths.push(width));
 
         firstRegistration.dispose();
         second.fire(140);
@@ -299,18 +354,22 @@ suite('[Unit] P0 rich output and compatibility contracts', () => {
     });
 
     test('returns explicitly registered environment contributions', async () => {
-        const registration = registerEnvironmentContributions('example.language', [{
-            action: vscode.EnvironmentVariableMutatorType.Prepend,
-            name: 'PATH',
-            value: '/example/bin:',
-        }]);
+        const registration = registerEnvironmentContributions('example.language', [
+            {
+                action: vscode.EnvironmentVariableMutatorType.Prepend,
+                name: 'PATH',
+                value: '/example/bin:',
+            },
+        ]);
 
         const contributions = await environment.getEnvironmentContributions();
-        assert.deepStrictEqual(contributions['example.language'], [{
-            action: vscode.EnvironmentVariableMutatorType.Prepend,
-            name: 'PATH',
-            value: '/example/bin:',
-        }]);
+        assert.deepStrictEqual(contributions['example.language'], [
+            {
+                action: vscode.EnvironmentVariableMutatorType.Prepend,
+                name: 'PATH',
+                value: '/example/bin:',
+            },
+        ]);
 
         registration.dispose();
     });
@@ -334,14 +393,17 @@ suite('[Unit] P0 rich output and compatibility contracts', () => {
         const contributions = await environment.getEnvironmentContributions(
             EnvironmentContributionFilter.ProcessCreation,
         );
-        assert.deepStrictEqual(contributions['example.language']?.map(action => action.value), ['/process/bin:']);
+        assert.deepStrictEqual(
+            contributions['example.language']?.map((action) => action.value),
+            ['/process/bin:'],
+        );
         registration.dispose();
     });
 
     test('preserves execute-result count and MIME-level output metadata', () => {
         const emitter = new RuntimeMessageEmitter();
         const received: any[] = [];
-        const listener = emitter.event(message => received.push(message));
+        const listener = emitter.event((message) => received.push(message));
         const header = {
             msg_id: 'result-1',
             session: 'session-1',
@@ -378,7 +440,7 @@ suite('[Unit] P0 rich output and compatibility contracts', () => {
     test('does not promote Jupyter comm_close to a runtime message', () => {
         const emitter = new RuntimeMessageEmitter();
         const received: any[] = [];
-        const listener = emitter.event(message => received.push(message));
+        const listener = emitter.event((message) => received.push(message));
         const header = {
             msg_id: 'comm-close-1',
             session: 'session-1',
@@ -432,7 +494,8 @@ suite('[Unit] P0 rich output and compatibility contracts', () => {
                 onDidDeleteRuntimeSession: createEventStub(),
             } as any,
             {
-                getPlotsPaneBehavior: () => ({ surface: true, raisePane: true }), addHtmlOutputPlot: (_sessionId: string, event: { uri: vscode.Uri }) => {
+                getPlotsPaneBehavior: () => ({ surface: true, raisePane: true }),
+                addHtmlOutputPlot: (_sessionId: string, event: { uri: vscode.Uri }) => {
                     plots.push(event.uri.toString());
                 },
             } as any,
@@ -454,22 +517,38 @@ suite('[Unit] P0 rich output and compatibility contracts', () => {
             makeNoopLogChannel(),
         );
 
-        await (router as any)._routeOutput(session, output(RuntimeOutputKind.ViewerWidget, {
-            [RuntimeOutputMime.positronViewer]: JSON.stringify({ url: 'https://example.com/app' }),
-        }));
-        await (router as any)._routeOutput(session, output(RuntimeOutputKind.PlotWidget, {
-            [RuntimeOutputMime.textHtml]: '<div id="plot">plot</div>',
-        }));
-        await (router as any)._routeOutput(session, output(RuntimeOutputKind.IPyWidget, {
-            [RuntimeOutputMime.widgetView]: JSON.stringify({ model_id: 'widget-1' }),
-            [RuntimeOutputMime.textPlain]: 'Widget(model_id=widget-1)',
-        }));
-        await (router as any)._routeOutput({
-            sessionId: 'notebook-session-1',
-            sessionMetadata: { sessionMode: 'notebook' },
-        }, output(RuntimeOutputKind.ViewerWidget, {
-            [RuntimeOutputMime.positronDataExplorer]: JSON.stringify({ comm_id: 'data-explorer-1' }),
-        }));
+        await (router as any)._routeOutput(
+            session,
+            output(RuntimeOutputKind.ViewerWidget, {
+                [RuntimeOutputMime.positronViewer]: JSON.stringify({
+                    url: 'https://example.com/app',
+                }),
+            }),
+        );
+        await (router as any)._routeOutput(
+            session,
+            output(RuntimeOutputKind.PlotWidget, {
+                [RuntimeOutputMime.textHtml]: '<div id="plot">plot</div>',
+            }),
+        );
+        await (router as any)._routeOutput(
+            session,
+            output(RuntimeOutputKind.IPyWidget, {
+                [RuntimeOutputMime.widgetView]: JSON.stringify({ model_id: 'widget-1' }),
+                [RuntimeOutputMime.textPlain]: 'Widget(model_id=widget-1)',
+            }),
+        );
+        await (router as any)._routeOutput(
+            {
+                sessionId: 'notebook-session-1',
+                sessionMetadata: { sessionMode: 'notebook' },
+            },
+            output(RuntimeOutputKind.ViewerWidget, {
+                [RuntimeOutputMime.positronDataExplorer]: JSON.stringify({
+                    comm_id: 'data-explorer-1',
+                }),
+            }),
+        );
 
         assert.deepStrictEqual(shownUrls, ['https://example.com/app']);
         assert.strictEqual(plots.length, 1);
@@ -495,7 +574,8 @@ suite('[Unit] P0 rich output and compatibility contracts', () => {
                 onDidDeleteRuntimeSession: createEventStub(),
             } as any,
             {
-                getPlotsPaneBehavior: () => ({ surface: true, raisePane: true }), addHtmlOutputPlot: (_sessionId: string, event: { uri: vscode.Uri }) => {
+                getPlotsPaneBehavior: () => ({ surface: true, raisePane: true }),
+                addHtmlOutputPlot: (_sessionId: string, event: { uri: vscode.Uri }) => {
                     plots.push(event.uri.toString());
                 },
             } as any,
@@ -542,7 +622,10 @@ suite('[Unit] P0 rich output and compatibility contracts', () => {
                 onDidCreateSession: createEventStub(),
                 onDidDeleteRuntimeSession: createEventStub(),
             } as any,
-            { getPlotsPaneBehavior: () => ({ surface: true, raisePane: true }), addHtmlOutputPlot: () => undefined } as any,
+            {
+                getPlotsPaneBehavior: () => ({ surface: true, raisePane: true }),
+                addHtmlOutputPlot: () => undefined,
+            } as any,
             {
                 showRuntimeOutputHtml: async (
                     _sessionId: string,
@@ -575,7 +658,7 @@ suite('[Unit] P0 rich output and compatibility contracts', () => {
                 renderedOutputId = context.outputId;
                 return { target: 'plot', html: '<div>interactive widget</div>' };
             },
-            disposeOutput: async context => {
+            disposeOutput: async (context) => {
                 assert.strictEqual(context.outputId, message.output_id);
                 disposeCount++;
             },
@@ -615,7 +698,7 @@ suite('[Unit] P0 rich output and compatibility contracts', () => {
             {} as any,
             makeNoopLogChannel(),
             {
-                getModel: (modelId: string) => modelId === model.id ? model : undefined,
+                getModel: (modelId: string) => (modelId === model.id ? model : undefined),
                 onDidChange: createEventStub(),
             } as any,
         );
@@ -624,22 +707,26 @@ suite('[Unit] P0 rich output and compatibility contracts', () => {
             sessionMetadata: { sessionMode: 'console' },
         } as any;
 
-        await (router as any)._routeOutput(session, output(RuntimeOutputKind.ViewerWidget, {
-            [RuntimeOutputMime.positronDataExplorer]: JSON.stringify({ comm_id: commId }),
-        }));
+        await (router as any)._routeOutput(
+            session,
+            output(RuntimeOutputKind.ViewerWidget, {
+                [RuntimeOutputMime.positronDataExplorer]: JSON.stringify({ comm_id: commId }),
+            }),
+        );
 
         const records = router.getRouteRecords(session.sessionId);
-        assert.deepStrictEqual(records.map(record => record.status), [
-            'accepted',
-            'instance-created',
-            'surface-opened',
-        ]);
-        assert.deepStrictEqual(records.map(record => record.phase), [
-            'accepted',
-            'instance-created',
-            'surface-opened',
-        ]);
-        assert.deepStrictEqual(records.map(record => record.rendererCompatible), [false, false, true]);
+        assert.deepStrictEqual(
+            records.map((record) => record.status),
+            ['accepted', 'instance-created', 'surface-opened'],
+        );
+        assert.deepStrictEqual(
+            records.map((record) => record.phase),
+            ['accepted', 'instance-created', 'surface-opened'],
+        );
+        assert.deepStrictEqual(
+            records.map((record) => record.rendererCompatible),
+            [false, false, true],
+        );
         router.dispose();
     });
 });

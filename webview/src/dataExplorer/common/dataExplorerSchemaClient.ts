@@ -19,18 +19,10 @@ const SCHEMA_REQUEST_TIMEOUT = 60_000;
 export class DataExplorerSchemaClient {
     private _nextRequestId = 0;
     private _disposed = false;
-    private readonly _schemaRequests = new Map<
-        number,
-        PendingSchemaRequest<SchemaColumn[]>
-    >();
-    private readonly _searchRequests = new Map<
-        number,
-        PendingSchemaRequest<number[]>
-    >();
+    private readonly _schemaRequests = new Map<number, PendingSchemaRequest<SchemaColumn[]>>();
+    private readonly _searchRequests = new Map<number, PendingSchemaRequest<number[]>>();
 
-    constructor(
-        private readonly _postMessage: (message: WebviewMessage) => void,
-    ) {}
+    constructor(private readonly _postMessage: (message: WebviewMessage) => void) {}
 
     getSchema(columnIndices: number[]): Promise<SchemaColumn[]> {
         if (this._disposed || columnIndices.length === 0) {
@@ -79,10 +71,7 @@ export class DataExplorerSchemaClient {
         return promise;
     }
 
-    handleSchema(params: {
-        columns: SchemaColumn[];
-        requestId?: number;
-    }): boolean {
+    handleSchema(params: { columns: SchemaColumn[]; requestId?: number }): boolean {
         if (this._disposed) {
             return false;
         }
@@ -99,10 +88,7 @@ export class DataExplorerSchemaClient {
         return true;
     }
 
-    handleSearchSchema(params: {
-        columnIndices: number[];
-        requestId?: number;
-    }): void {
+    handleSearchSchema(params: { columnIndices: number[]; requestId?: number }): void {
         if (params.requestId === undefined) {
             return;
         }

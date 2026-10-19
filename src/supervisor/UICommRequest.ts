@@ -9,10 +9,10 @@ import { PromiseHandles } from './async';
  * A (possibly deferred) request to send a message to the UI comm.
  */
 export class UICommRequest {
-	constructor(
-		public readonly method: string,
-		public readonly rpcMethod: string,
-		public readonly params: Record<string, unknown> | undefined,
-		public readonly promise: PromiseHandles<any>) {
-	}
+    constructor(
+        public readonly method: string,
+        public readonly rpcMethod: string,
+        public readonly params: Record<string, unknown> | undefined,
+        public readonly promise: PromiseHandles<any>,
+    ) {}
 }

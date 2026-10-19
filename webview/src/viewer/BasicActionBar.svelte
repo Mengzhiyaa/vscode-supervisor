@@ -12,10 +12,7 @@
         onclear?: () => void;
     }
 
-    let {
-        title = '',
-        onclear,
-    }: Props = $props();
+    let { title = '', onclear }: Props = $props();
 </script>
 
 <div class="preview-action-bar">

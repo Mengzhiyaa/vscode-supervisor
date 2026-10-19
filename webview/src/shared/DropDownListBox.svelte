@@ -3,8 +3,8 @@
   Port from Positron's DropDownListBox behavior
 -->
 <script lang="ts">
-    import { tick } from "svelte";
-    import ModalPopup from "./ModalPopup.svelte";
+    import { tick } from 'svelte';
+    import ModalPopup from './ModalPopup.svelte';
 
     export interface DropDownListBoxEntry {
         identifier: string;
@@ -26,10 +26,10 @@
     }
 
     let {
-        className = "",
+        className = '',
         entries,
         selectedIdentifier,
-        title = "Select Condition",
+        title = 'Select Condition',
         disabled = false,
         onSelectionChanged,
     }: Props = $props();
@@ -40,20 +40,14 @@
     let highlightIndex = $state(-1);
 
     const itemEntries = $derived(entries.filter((entry) => !entry.isSeparator));
-    const navigableEntries = $derived(
-        itemEntries.filter((entry) => !entry.disabled),
-    );
+    const navigableEntries = $derived(itemEntries.filter((entry) => !entry.disabled));
 
     const selectedEntry = $derived.by(() =>
         itemEntries.find((entry) => entry.identifier === selectedIdentifier),
     );
 
     const highlightedEntry = $derived.by(() => {
-        if (
-            !showDropDown ||
-            highlightIndex < 0 ||
-            highlightIndex >= navigableEntries.length
-        ) {
+        if (!showDropDown || highlightIndex < 0 || highlightIndex >= navigableEntries.length) {
             return undefined;
         }
 
@@ -72,16 +66,11 @@
             return;
         }
 
-        const items = popupItemsRef.querySelectorAll<HTMLButtonElement>(
-            ".item:not(:disabled)",
-        );
-        const safeIndex = Math.max(
-            0,
-            Math.min(highlightIndex, items.length - 1),
-        );
+        const items = popupItemsRef.querySelectorAll<HTMLButtonElement>('.item:not(:disabled)');
+        const safeIndex = Math.max(0, Math.min(highlightIndex, items.length - 1));
         const item = items[safeIndex];
         item?.focus();
-        item?.scrollIntoView({ block: "nearest" });
+        item?.scrollIntoView({ block: 'nearest' });
     }
 
     function openDropDown() {
@@ -143,9 +132,7 @@
         }
 
         const current = highlightIndex < 0 ? 0 : highlightIndex;
-        highlightIndex =
-            (current + delta + navigableEntries.length) %
-            navigableEntries.length;
+        highlightIndex = (current + delta + navigableEntries.length) % navigableEntries.length;
 
         void tick().then(focusHighlightedItem);
     }
@@ -156,14 +143,14 @@
         }
 
         switch (event.code) {
-            case "Enter":
-            case "Space":
-            case "ArrowDown":
+            case 'Enter':
+            case 'Space':
+            case 'ArrowDown':
                 event.preventDefault();
                 openDropDown();
                 break;
 
-            case "ArrowUp":
+            case 'ArrowUp':
                 event.preventDefault();
                 openDropDown();
                 moveHighlight(-1);
@@ -173,23 +160,23 @@
 
     function handlePopupKeyDown(event: KeyboardEvent) {
         switch (event.code) {
-            case "Tab":
+            case 'Tab':
                 closeDropDown({ restoreFocus: false });
                 break;
-            case "ArrowDown":
+            case 'ArrowDown':
                 event.preventDefault();
                 moveHighlight(1);
                 break;
-            case "ArrowUp":
+            case 'ArrowUp':
                 event.preventDefault();
                 moveHighlight(-1);
                 break;
-            case "Home":
+            case 'Home':
                 event.preventDefault();
                 highlightIndex = 0;
                 void tick().then(focusHighlightedItem);
                 break;
-            case "End":
+            case 'End':
                 event.preventDefault();
                 highlightIndex = Math.max(navigableEntries.length - 1, 0);
                 void tick().then(focusHighlightedItem);
@@ -315,7 +302,8 @@
         background: transparent;
         grid-template-columns: [title] 1fr [chevron] 22px [end];
         color: var(--vscode-positronDropDownListBox-foreground, var(--vscode-dropdown-foreground));
-        border: 1px solid var(--vscode-positronDropDownListBox-border, var(--vscode-dropdown-border)) !important;
+        border: 1px solid
+            var(--vscode-positronDropDownListBox-border, var(--vscode-dropdown-border)) !important;
     }
 
     .drop-down-list-box:focus {
@@ -358,13 +346,19 @@
         margin: 4px;
         display: flex;
         flex-direction: column;
-        background: var(--vscode-positronDropDownListBox-background, var(--vscode-dropdown-background));
+        background: var(
+            --vscode-positronDropDownListBox-background,
+            var(--vscode-dropdown-background)
+        );
     }
 
     .drop-down-list-box-items .separator {
         height: 1px;
         margin: 4px 10px;
-        background: var(--vscode-positronDropDownListBox-separatorBackground, var(--vscode-menu-separatorBackground));
+        background: var(
+            --vscode-positronDropDownListBox-separatorBackground,
+            var(--vscode-menu-separatorBackground)
+        );
     }
 
     .drop-down-list-box-items .item {
@@ -389,8 +383,14 @@
     .drop-down-list-box-items .item:hover:not(.disabled),
     .drop-down-list-box-items .item.highlighted:not(.disabled) {
         border-radius: 4px;
-        color: var(--vscode-positronDropDownListBox-hoverForeground, var(--vscode-list-hoverForeground));
-        background: var(--vscode-positronDropDownListBox-hoverBackground, var(--vscode-list-hoverBackground));
+        color: var(
+            --vscode-positronDropDownListBox-hoverForeground,
+            var(--vscode-list-hoverForeground)
+        );
+        background: var(
+            --vscode-positronDropDownListBox-hoverBackground,
+            var(--vscode-list-hoverBackground)
+        );
     }
 
     .drop-down-list-box-items .item:focus {
@@ -403,7 +403,10 @@
     }
 
     .drop-down-list-box-items .item:not(.disabled):focus-visible {
-        background: var(--vscode-positronDropDownListBox-hoverBackground, var(--vscode-list-hoverBackground));
+        background: var(
+            --vscode-positronDropDownListBox-hoverBackground,
+            var(--vscode-list-hoverBackground)
+        );
     }
 
     .drop-down-list-box-items .item .dropdown-entry {

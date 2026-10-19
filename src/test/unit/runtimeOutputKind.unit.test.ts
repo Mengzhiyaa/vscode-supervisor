@@ -1,8 +1,5 @@
 import * as assert from 'assert';
-import {
-    inferPositronOutputKind,
-    RuntimeOutputKind,
-} from '../../runtime/runtimeOutputKind';
+import { inferPositronOutputKind, RuntimeOutputKind } from '../../runtime/runtimeOutputKind';
 import { RuntimeOutputMime } from '../../runtime/runtimeOutputContract';
 
 suite('[Unit] runtime output kind data explorer diagnostics', () => {

@@ -37,7 +37,7 @@ export class EditorWindowMover {
     constructor(
         private readonly _host: EditorWindowMoveHost = defaultHost,
         private readonly _stateTransitionTimeoutMs = DefaultStateTransitionTimeoutMs,
-    ) { }
+    ) {}
 
     move(panel: MovableWebviewPanel): Promise<vscode.TabGroup> {
         const pendingMove = this._pendingMoves.get(panel);
@@ -52,11 +52,13 @@ export class EditorWindowMover {
             () => undefined,
         );
 
-        void move.finally(() => {
-            if (this._pendingMoves.get(panel) === move) {
-                this._pendingMoves.delete(panel);
-            }
-        }).catch(() => undefined);
+        void move
+            .finally(() => {
+                if (this._pendingMoves.get(panel) === move) {
+                    this._pendingMoves.delete(panel);
+                }
+            })
+            .catch(() => undefined);
 
         return move;
     }
@@ -128,9 +130,15 @@ export class EditorWindowMover {
             for (const event of events) {
                 disposables.push(event(check));
             }
-            disposables.push(onDidDispose(() => {
-                finish(new Error('The target webview panel was disposed before the move completed.'));
-            }));
+            disposables.push(
+                onDidDispose(() => {
+                    finish(
+                        new Error(
+                            'The target webview panel was disposed before the move completed.',
+                        ),
+                    );
+                }),
+            );
 
             timeout = setTimeout(() => {
                 finish(new Error(timeoutMessage));
@@ -142,7 +150,9 @@ export class EditorWindowMover {
     }
 }
 
-export function findActivePanel<T extends { readonly active: boolean }>(panels: Iterable<T>): T | undefined {
+export function findActivePanel<T extends { readonly active: boolean }>(
+    panels: Iterable<T>,
+): T | undefined {
     for (const panel of panels) {
         if (panel.active) {
             return panel;

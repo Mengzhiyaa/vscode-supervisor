@@ -2,13 +2,7 @@
  *  Table data data grid instance
  *--------------------------------------------------------------------------------------------*/
 
-import {
-    derived,
-    get,
-    writable,
-    type Readable,
-    type Writable,
-} from 'svelte/store';
+import { derived, get, writable, type Readable, type Writable } from 'svelte/store';
 import {
     ClipboardCell,
     ClipboardCellIndexes,
@@ -107,13 +101,9 @@ function normalizeSortKeys(
         }));
 }
 
-function sortKeysSignature(
-    sortKeys: Array<{ columnIndex: number; ascending: boolean }>,
-) {
+function sortKeysSignature(sortKeys: Array<{ columnIndex: number; ascending: boolean }>) {
     return sortKeys
-        .map((sortKey) =>
-            `${sortKey.columnIndex}:${sortKey.ascending ? 'asc' : 'desc'}`,
-        )
+        .map((sortKey) => `${sortKey.columnIndex}:${sortKey.ascending ? 'asc' : 'desc'}`)
         .join('|');
 }
 
@@ -187,14 +177,11 @@ export class TableDataDataGridInstance extends DataGridInstance {
         this.sortKeysStore = writable(new Map());
         this.pinnedColumnsStore = writable([]);
 
-        this.visibleColumns = derived(
-            [this.viewport, this.columnsStore],
-            ([$viewport, $columns]) =>
-                this._calculateVisibleColumns($viewport, $columns),
+        this.visibleColumns = derived([this.viewport, this.columnsStore], ([$viewport, $columns]) =>
+            this._calculateVisibleColumns($viewport, $columns),
         );
-        this.visibleRows = derived(
-            [this.viewport, this.rowsStore],
-            ([$viewport, $rows]) => this._calculateVisibleRows($viewport, $rows),
+        this.visibleRows = derived([this.viewport, this.rowsStore], ([$viewport, $rows]) =>
+            this._calculateVisibleRows($viewport, $rows),
         );
 
         this._disposables.push(
@@ -220,13 +207,11 @@ export class TableDataDataGridInstance extends DataGridInstance {
                 this.pinnedColumnsStore.set(pinnedColumns);
             }),
         );
-        this._disposables.push(
-            {
-                dispose: this.viewport.subscribe(() => {
-                    this._updateVisibleDataCache();
-                }),
-            },
-        );
+        this._disposables.push({
+            dispose: this.viewport.subscribe(() => {
+                this._updateVisibleDataCache();
+            }),
+        });
         this._selectionSyncEnabled = true;
     }
 
@@ -329,8 +314,7 @@ export class TableDataDataGridInstance extends DataGridInstance {
 
     getColumnWidth(columnIndex: number): number {
         return (
-            this._columnLayoutManager.getLayoutEntry(columnIndex)?.size ??
-            this.defaultColumnWidth
+            this._columnLayoutManager.getLayoutEntry(columnIndex)?.size ?? this.defaultColumnWidth
         );
     }
 
@@ -338,11 +322,7 @@ export class TableDataDataGridInstance extends DataGridInstance {
         const previousColumns = this.columns;
         const previousRows = this.rows;
         const previousPinnedColumns = this.getPinnedColumnIndexes();
-        const dimensionsChanged = this._tableDataCache.setDimensions(
-            columns,
-            rows,
-            hasRowLabels,
-        );
+        const dimensionsChanged = this._tableDataCache.setDimensions(columns, rows, hasRowLabels);
         if (!dimensionsChanged) {
             return;
         }
@@ -351,12 +331,14 @@ export class TableDataDataGridInstance extends DataGridInstance {
         this.rowsStore.set(rows);
         this._columnLayoutManager.setEntries(columns);
         this._rowLayoutManager.setEntries(rows);
-        this._horizontalScrollOffset = Math.max(0, Math.min(
-            this._horizontalScrollOffset, this.maximumHorizontalScrollOffset,
-        ));
-        this._verticalScrollOffset = Math.max(0, Math.min(
-            this._verticalScrollOffset, this.maximumVerticalScrollOffset,
-        ));
+        this._horizontalScrollOffset = Math.max(
+            0,
+            Math.min(this._horizontalScrollOffset, this.maximumHorizontalScrollOffset),
+        );
+        this._verticalScrollOffset = Math.max(
+            0,
+            Math.min(this._verticalScrollOffset, this.maximumVerticalScrollOffset),
+        );
         if (previousPinnedColumns.length !== this.getPinnedColumnIndexes().length) {
             this.notifyPinnedColumnsChanged();
         }
@@ -419,18 +401,14 @@ export class TableDataDataGridInstance extends DataGridInstance {
         this._updating = false;
 
         if (activeRequest.kind === 'columnWidths') {
-            this._columnWidthCalculationColumnIndex +=
-                params.columnIndices?.length ?? 0;
+            this._columnWidthCalculationColumnIndex += params.columnIndices?.length ?? 0;
             if (this._requestNextColumnWidthPage()) {
                 return true;
             }
             this._columnWidthCalculationPending = false;
             this._columnWidthCalculationColumnIndex = 0;
             this._columnWidthsCalculatedGeneration = this._dataGeneration;
-        } else if (
-            this._columnWidthCalculationPending &&
-            this._requestNextColumnWidthPage()
-        ) {
+        } else if (this._columnWidthCalculationPending && this._requestNextColumnWidthPage()) {
             return true;
         }
 
@@ -452,9 +430,7 @@ export class TableDataDataGridInstance extends DataGridInstance {
         this._dataGeneration = generation;
         this._columnWidthsCalculatedGeneration = -1;
         this.clearPinnedRows();
-        this.invalidateCache(
-            schemaChanged ? InvalidateCacheFlags.All : InvalidateCacheFlags.Data,
-        );
+        this.invalidateCache(schemaChanged ? InvalidateCacheFlags.All : InvalidateCacheFlags.Data);
         this._scheduleColumnWidthCalculation();
         this._updateVisibleDataCache();
     }
@@ -527,9 +503,7 @@ export class TableDataDataGridInstance extends DataGridInstance {
         this.fireOnDidUpdateEvent();
     }
 
-    applyBackendSortKeys(
-        sortKeys: Array<{ columnIndex: number; ascending: boolean }>,
-    ): void {
+    applyBackendSortKeys(sortKeys: Array<{ columnIndex: number; ascending: boolean }>): void {
         const normalized = sortKeys.map((sortKey, sortIndex) => ({
             sortIndex,
             columnIndex: sortKey.columnIndex,
@@ -574,17 +548,12 @@ export class TableDataDataGridInstance extends DataGridInstance {
             typeof document === 'undefined'
                 ? '400 13px monospace'
                 : (() => {
-                      const rootStyle = getComputedStyle(
-                          document.documentElement,
-                      );
+                      const rootStyle = getComputedStyle(document.documentElement);
                       const fontFamily =
-                          rootStyle
-                              .getPropertyValue('--vscode-editor-font-family')
-                              .trim() || 'monospace';
+                          rootStyle.getPropertyValue('--vscode-editor-font-family').trim() ||
+                          'monospace';
                       const fontSize =
-                          rootStyle
-                              .getPropertyValue('--vscode-editor-font-size')
-                              .trim() || '13px';
+                          rootStyle.getPropertyValue('--vscode-editor-font-size').trim() || '13px';
                       return `400 ${fontSize} ${fontFamily}`;
                   })();
         const spaceWidth = calculator.measureSpaceWidth(editorFont);
@@ -606,10 +575,7 @@ export class TableDataDataGridInstance extends DataGridInstance {
         this._updateVisibleDataCache();
     }
 
-    override async setColumnWidth(
-        columnIndex: number,
-        columnWidth: number,
-    ): Promise<void> {
+    override async setColumnWidth(columnIndex: number, columnWidth: number): Promise<void> {
         this._autoSizingEnabled = false;
         await super.setColumnWidth(columnIndex, columnWidth);
     }
@@ -722,9 +688,7 @@ export class TableDataDataGridInstance extends DataGridInstance {
                 id: 'selectColumn',
                 label: localize('positron.dataExplorer.selectColumn', 'Select Column'),
                 icon: 'positron-select-column',
-                disabled:
-                    this.columnSelectionState(columnIndex) !==
-                    ColumnSelectionState.None,
+                disabled: this.columnSelectionState(columnIndex) !== ColumnSelectionState.None,
                 onClick: () => {
                     this.selectColumn(columnIndex);
                 },
@@ -737,10 +701,7 @@ export class TableDataDataGridInstance extends DataGridInstance {
                 this.isColumnPinned(columnIndex)
                     ? {
                           id: 'unpinColumn',
-                          label: localize(
-                              'positron.dataExplorer.unpinColumn',
-                              'Unpin Column',
-                          ),
+                          label: localize('positron.dataExplorer.unpinColumn', 'Unpin Column'),
                           icon: 'positron-unpin',
                           onClick: () => {
                               this.unpinColumn(columnIndex);
@@ -748,10 +709,7 @@ export class TableDataDataGridInstance extends DataGridInstance {
                       }
                     : {
                           id: 'pinColumn',
-                          label: localize(
-                              'positron.dataExplorer.pinColumn',
-                              'Pin Column',
-                          ),
+                          label: localize('positron.dataExplorer.pinColumn', 'Pin Column'),
                           icon: 'positron-pin',
                           onClick: () => {
                               this.pinColumn(columnIndex);
@@ -830,8 +788,7 @@ export class TableDataDataGridInstance extends DataGridInstance {
                 id: 'selectRow',
                 label: localize('positron.dataExplorer.selectRow', 'Select Row'),
                 icon: 'positron-select-row',
-                disabled:
-                    this.rowSelectionState(rowIndex) !== RowSelectionState.None,
+                disabled: this.rowSelectionState(rowIndex) !== RowSelectionState.None,
                 onClick: () => {
                     this.selectRow(rowIndex);
                 },
@@ -844,10 +801,7 @@ export class TableDataDataGridInstance extends DataGridInstance {
                 this.isRowPinned(rowIndex)
                     ? {
                           id: 'unpinRow',
-                          label: localize(
-                              'positron.dataExplorer.unpinRow',
-                              'Unpin Row',
-                          ),
+                          label: localize('positron.dataExplorer.unpinRow', 'Unpin Row'),
                           icon: 'positron-unpin',
                           onClick: () => {
                               this.unpinRow(rowIndex);
@@ -855,10 +809,7 @@ export class TableDataDataGridInstance extends DataGridInstance {
                       }
                     : {
                           id: 'pinRow',
-                          label: localize(
-                              'positron.dataExplorer.pinRow',
-                              'Pin Row',
-                          ),
+                          label: localize('positron.dataExplorer.pinRow', 'Pin Row'),
                           icon: 'positron-pin',
                           onClick: () => {
                               this.pinRow(rowIndex);
@@ -896,9 +847,7 @@ export class TableDataDataGridInstance extends DataGridInstance {
                 id: 'selectColumn',
                 label: localize('positron.dataExplorer.selectColumn', 'Select Column'),
                 icon: 'positron-select-column',
-                disabled:
-                    this.columnSelectionState(columnIndex) !==
-                    ColumnSelectionState.None,
+                disabled: this.columnSelectionState(columnIndex) !== ColumnSelectionState.None,
                 onClick: () => {
                     this.selectColumn(columnIndex);
                 },
@@ -907,8 +856,7 @@ export class TableDataDataGridInstance extends DataGridInstance {
                 id: 'selectRow',
                 label: localize('positron.dataExplorer.selectRow', 'Select Row'),
                 icon: 'positron-select-row',
-                disabled:
-                    this.rowSelectionState(rowIndex) !== RowSelectionState.None,
+                disabled: this.rowSelectionState(rowIndex) !== RowSelectionState.None,
                 onClick: () => {
                     this.selectRow(rowIndex);
                 },
@@ -923,10 +871,7 @@ export class TableDataDataGridInstance extends DataGridInstance {
                     this.isColumnPinned(columnIndex)
                         ? {
                               id: 'unpinColumn',
-                              label: localize(
-                                  'positron.dataExplorer.unpinColumn',
-                                  'Unpin Column',
-                              ),
+                              label: localize('positron.dataExplorer.unpinColumn', 'Unpin Column'),
                               icon: 'positron-unpin',
                               onClick: () => {
                                   this.unpinColumn(columnIndex);
@@ -934,10 +879,7 @@ export class TableDataDataGridInstance extends DataGridInstance {
                           }
                         : {
                               id: 'pinColumn',
-                              label: localize(
-                                  'positron.dataExplorer.pinColumn',
-                                  'Pin Column',
-                              ),
+                              label: localize('positron.dataExplorer.pinColumn', 'Pin Column'),
                               icon: 'positron-pin',
                               onClick: () => {
                                   this.pinColumn(columnIndex);
@@ -951,10 +893,7 @@ export class TableDataDataGridInstance extends DataGridInstance {
                     this.isRowPinned(rowIndex)
                         ? {
                               id: 'unpinRow',
-                              label: localize(
-                                  'positron.dataExplorer.unpinRow',
-                                  'Unpin Row',
-                              ),
+                              label: localize('positron.dataExplorer.unpinRow', 'Unpin Row'),
                               icon: 'positron-unpin',
                               onClick: () => {
                                   this.unpinRow(rowIndex);
@@ -962,10 +901,7 @@ export class TableDataDataGridInstance extends DataGridInstance {
                           }
                         : {
                               id: 'pinRow',
-                              label: localize(
-                                  'positron.dataExplorer.pinRow',
-                                  'Pin Row',
-                              ),
+                              label: localize('positron.dataExplorer.pinRow', 'Pin Row'),
                               icon: 'positron-pin',
                               onClick: () => {
                                   this.pinRow(rowIndex);
@@ -1086,11 +1022,9 @@ export class TableDataDataGridInstance extends DataGridInstance {
         const missingRowIndices = rowIndices.filter(
             (rowIndex) =>
                 columnIndices.some(
-                    (columnIndex) =>
-                        !this._tableDataCache.hasDataCell(rowIndex, columnIndex),
+                    (columnIndex) => !this._tableDataCache.hasDataCell(rowIndex, columnIndex),
                 ) ||
-                (this._tableDataCache.hasRowLabels &&
-                    !this._tableDataCache.hasRowLabel(rowIndex)),
+                (this._tableDataCache.hasRowLabels && !this._tableDataCache.hasRowLabel(rowIndex)),
         );
         const hasMissingSchema = columnIndices.some(
             (columnIndex) => !this._tableDataCache.getSchemaColumn(columnIndex),
@@ -1124,9 +1058,7 @@ export class TableDataDataGridInstance extends DataGridInstance {
         });
     }
 
-    private _scheduleCacheTrim(
-        updateDescriptor: UpdateDescriptor,
-    ): void {
+    private _scheduleCacheTrim(updateDescriptor: UpdateDescriptor): void {
         this._clearTrimCacheTimeout();
 
         if (!this._visible) {
@@ -1212,10 +1144,7 @@ export class TableDataDataGridInstance extends DataGridInstance {
             return;
         }
 
-        this._tableDataCache.trimData(
-            updateDescriptor.columnIndices,
-            updateDescriptor.rowIndices,
-        );
+        this._tableDataCache.trimData(updateDescriptor.columnIndices, updateDescriptor.rowIndices);
     }
 
     private _requestAddFilter(columnIndex: number): void {
@@ -1229,28 +1158,23 @@ export class TableDataDataGridInstance extends DataGridInstance {
     private _supportsCopy(): boolean {
         const backendState = get(this._stores.state).backendState;
         return (
-            backendState?.supported_features?.export_data_selection
-                ?.support_status === 'supported'
+            backendState?.supported_features?.export_data_selection?.support_status === 'supported'
         );
     }
 
     private _supportsSort(): boolean {
         const backendState = get(this._stores.state).backendState;
         return (
-            backendState?.supported_features?.set_sort_columns?.support_status ===
-                'supported' &&
-            (backendState?.table_shape.num_columns ?? 0) <
-                MAX_ADVANCED_LAYOUT_ENTRY_COUNT
+            backendState?.supported_features?.set_sort_columns?.support_status === 'supported' &&
+            (backendState?.table_shape.num_columns ?? 0) < MAX_ADVANCED_LAYOUT_ENTRY_COUNT
         );
     }
 
     private _supportsFilter(): boolean {
         const backendState = get(this._stores.state).backendState;
         return (
-            backendState?.supported_features?.set_row_filters?.support_status ===
-                'supported' &&
-            (backendState?.table_shape.num_columns ?? 0) <
-                MAX_ADVANCED_LAYOUT_ENTRY_COUNT
+            backendState?.supported_features?.set_row_filters?.support_status === 'supported' &&
+            (backendState?.table_shape.num_columns ?? 0) < MAX_ADVANCED_LAYOUT_ENTRY_COUNT
         );
     }
 
@@ -1288,19 +1212,13 @@ export class TableDataDataGridInstance extends DataGridInstance {
         });
     }
 
-    private _calculateVisibleColumns(
-        viewport: ViewportState,
-        columns: number,
-    ): ColumnDescriptor[] {
+    private _calculateVisibleColumns(viewport: ViewportState, columns: number): ColumnDescriptor[] {
         const result: ColumnDescriptor[] = [];
         let left = 0;
 
         for (let columnIndex = 0; columnIndex < columns; columnIndex++) {
             const width = this.getColumnWidth(columnIndex);
-            if (
-                left + width > viewport.scrollLeft &&
-                left < viewport.scrollLeft + viewport.width
-            ) {
+            if (left + width > viewport.scrollLeft && left < viewport.scrollLeft + viewport.width) {
                 result.push({
                     columnIndex,
                     left: left - viewport.scrollLeft,
@@ -1317,10 +1235,7 @@ export class TableDataDataGridInstance extends DataGridInstance {
         return result;
     }
 
-    private _calculateVisibleRows(
-        viewport: ViewportState,
-        rows: number,
-    ): RowDescriptor[] {
+    private _calculateVisibleRows(viewport: ViewportState, rows: number): RowDescriptor[] {
         const result: RowDescriptor[] = [];
         const rowHeight = this.defaultRowHeight;
         const startRow = Math.max(0, Math.floor(viewport.scrollTop / rowHeight));
@@ -1341,14 +1256,12 @@ export class TableDataDataGridInstance extends DataGridInstance {
     }
 
     private _calculateVisibleRowCount(height: number): number {
-        const availableHeight =
-            height - this.columnHeadersHeight - this.scrollbarThickness;
+        const availableHeight = height - this.columnHeadersHeight - this.scrollbarThickness;
         return Math.ceil(availableHeight / this.defaultRowHeight) + 1;
     }
 
     private _calculateVisibleColumnCount(width: number): number {
-        const availableWidth =
-            width - this.rowHeadersWidth - this.scrollbarThickness;
+        const availableWidth = width - this.rowHeadersWidth - this.scrollbarThickness;
         return Math.ceil(availableWidth / this.defaultColumnWidth) + 1;
     }
 
@@ -1364,10 +1277,7 @@ export class TableDataDataGridInstance extends DataGridInstance {
     }
 
     private _applyAutoColumnWidths(columnIndices?: number[]): void {
-        if (
-            !this._autoSizingEnabled ||
-            !this._widthCalculators
-        ) {
+        if (!this._autoSizingEnabled || !this._widthCalculators) {
             return;
         }
 

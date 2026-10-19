@@ -16,8 +16,8 @@ export const MCP_DEFINITION_PROVIDER_ID = 'supervisor-sessions';
 
 /** The slice of the MCP frontend the provider follows. */
 export interface McpConnectionSource {
-	readonly connection: McpConnection | undefined;
-	readonly onDidChangeConnection: vscode.Event<void>;
+    readonly connection: McpConnection | undefined;
+    readonly onDidChangeConnection: vscode.Event<void>;
 }
 
 /**
@@ -34,67 +34,69 @@ export interface McpConnectionSource {
  * stored anywhere.
  */
 export class McpServerDefinitions
-	implements vscode.McpServerDefinitionProvider<vscode.McpHttpServerDefinition>, vscode.Disposable {
+    implements vscode.McpServerDefinitionProvider<vscode.McpHttpServerDefinition>, vscode.Disposable
+{
+    private readonly _onDidChangeMcpServerDefinitions = new vscode.EventEmitter<void>();
 
-	private readonly _onDidChangeMcpServerDefinitions = new vscode.EventEmitter<void>();
+    public readonly onDidChangeMcpServerDefinitions: vscode.Event<void> =
+        this._onDidChangeMcpServerDefinitions.event;
 
-	public readonly onDidChangeMcpServerDefinitions: vscode.Event<void> =
-		this._onDidChangeMcpServerDefinitions.event;
+    private readonly _disposables: vscode.Disposable[] = [];
 
-	private readonly _disposables: vscode.Disposable[] = [];
+    /**
+     * @param _source The frontend holding the registration, watched so the
+     *  editor is told when the endpoint appears, moves, or goes away.
+     */
+    constructor(private readonly _source: McpConnectionSource) {
+        this._disposables.push(
+            _source.onDidChangeConnection(() => this._onDidChangeMcpServerDefinitions.fire()),
+        );
+    }
 
-	/**
-	 * @param _source The frontend holding the registration, watched so the
-	 *  editor is told when the endpoint appears, moves, or goes away.
-	 */
-	constructor(private readonly _source: McpConnectionSource) {
-		this._disposables.push(_source.onDidChangeConnection(
-			() => this._onDidChangeMcpServerDefinitions.fire()));
-	}
+    /**
+     * The server, while this window has one. Called eagerly, including before
+     * the supervisor is up, so an empty list here means "not yet" as often as
+     * it means "turned off"; either way the change event brings the editor back.
+     *
+     * @returns The server definition, without its token.
+     */
+    public provideMcpServerDefinitions(): vscode.McpHttpServerDefinition[] {
+        const connection = this._source.connection;
+        if (!connection) {
+            return [];
+        }
+        // No headers: what is returned here is cached by the editor, and the
+        // token does not belong anywhere it can outlive the registration.
+        return [
+            new vscode.McpHttpServerDefinition(MCP_SERVER_NAME, vscode.Uri.parse(connection.url)),
+        ];
+    }
 
-	/**
-	 * The server, while this window has one. Called eagerly, including before
-	 * the supervisor is up, so an empty list here means "not yet" as often as
-	 * it means "turned off"; either way the change event brings the editor back.
-	 *
-	 * @returns The server definition, without its token.
-	 */
-	public provideMcpServerDefinitions(): vscode.McpHttpServerDefinition[] {
-		const connection = this._source.connection;
-		if (!connection) {
-			return [];
-		}
-		// No headers: what is returned here is cached by the editor, and the
-		// token does not belong anywhere it can outlive the registration.
-		return [new vscode.McpHttpServerDefinition(
-			MCP_SERVER_NAME, vscode.Uri.parse(connection.url))];
-	}
+    /**
+     * Fill in the endpoint and token as the editor starts the server.
+     *
+     * The registration is read again rather than trusting the definition we are
+     * handed, which may have been cached from a window whose endpoint is gone.
+     *
+     * @param server The definition to resolve.
+     * @returns The resolved definition, or undefined when the feature has been
+     *  turned off since it was provided.
+     */
+    public resolveMcpServerDefinition(
+        server: vscode.McpHttpServerDefinition,
+    ): vscode.McpHttpServerDefinition | undefined {
+        const connection = this._source.connection;
+        if (!connection) {
+            return undefined;
+        }
+        server.uri = vscode.Uri.parse(connection.url);
+        server.headers = { Authorization: `Bearer ${connection.token}` };
+        return server;
+    }
 
-	/**
-	 * Fill in the endpoint and token as the editor starts the server.
-	 *
-	 * The registration is read again rather than trusting the definition we are
-	 * handed, which may have been cached from a window whose endpoint is gone.
-	 *
-	 * @param server The definition to resolve.
-	 * @returns The resolved definition, or undefined when the feature has been
-	 *  turned off since it was provided.
-	 */
-	public resolveMcpServerDefinition(
-		server: vscode.McpHttpServerDefinition,
-	): vscode.McpHttpServerDefinition | undefined {
-		const connection = this._source.connection;
-		if (!connection) {
-			return undefined;
-		}
-		server.uri = vscode.Uri.parse(connection.url);
-		server.headers = { Authorization: `Bearer ${connection.token}` };
-		return server;
-	}
-
-	public dispose() {
-		this._onDidChangeMcpServerDefinitions.dispose();
-		this._disposables.forEach(disposable => disposable.dispose());
-		this._disposables.length = 0;
-	}
+    public dispose() {
+        this._onDidChangeMcpServerDefinitions.dispose();
+        this._disposables.forEach((disposable) => disposable.dispose());
+        this._disposables.length = 0;
+    }
 }

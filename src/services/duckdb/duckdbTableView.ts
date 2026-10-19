@@ -13,12 +13,7 @@ import * as path from 'path';
 import { readImportFile, throwIfImportCancelled } from './fileImport';
 import { DuckDBInstance } from './duckdbInstance';
 import { readXlsxWorksheetMetadata, type XlsxWorksheetMetadata } from './xlsxWorkbook';
-import {
-    escapeIdentifier,
-    escapeValue,
-    buildWhereClause,
-    buildCountQuery,
-} from './sqlBuilder';
+import { escapeIdentifier, escapeValue, buildWhereClause, buildCountQuery } from './sqlBuilder';
 import {
     ColumnSchema,
     ColumnDisplayType,
@@ -106,7 +101,7 @@ function escapeHtmlCell(value: string): string {
                 return '&gt;';
             case '"':
                 return '&quot;';
-            case '\'':
+            case "'":
                 return '&#39;';
             default:
                 return char;
@@ -188,13 +183,27 @@ export class DuckDBTableView {
         this._detectFileType();
     }
 
-    get uri(): vscode.Uri { return this._uri; }
-    get tableName(): string { return this._tableName; }
-    get displayName(): string { return this._displayName; }
-    get schema(): ColumnSchema[] { return this._fullSchema; }
-    get hasHeaderRow(): boolean { return this._hasHeaderRow; }
-    get whereClause(): string { return this._whereClause; }
-    get filteredRowCount(): number { return this._filteredRowCount; }
+    get uri(): vscode.Uri {
+        return this._uri;
+    }
+    get tableName(): string {
+        return this._tableName;
+    }
+    get displayName(): string {
+        return this._displayName;
+    }
+    get schema(): ColumnSchema[] {
+        return this._fullSchema;
+    }
+    get hasHeaderRow(): boolean {
+        return this._hasHeaderRow;
+    }
+    get whereClause(): string {
+        return this._whereClause;
+    }
+    get filteredRowCount(): number {
+        return this._filteredRowCount;
+    }
 
     // =========================================================================
     // File import (aligned with positron: TABLE-based, gzip, retry)
@@ -210,75 +219,96 @@ export class DuckDBTableView {
                 throw new vscode.CancellationError();
             }
             throwIfImportCancelled(token);
-            await vscode.window.withProgress({
-                location: vscode.ProgressLocation.Notification,
-                title: `Importing ${this._displayName}`,
-                cancellable: true,
-            }, async (progress, progressToken) => {
-                const cancellation = new vscode.CancellationTokenSource();
-                const subscriptions = [
-                    this._importLifetime.token.onCancellationRequested(() => cancellation.cancel()),
-                    progressToken.onCancellationRequested(() => cancellation.cancel()),
-                    token?.onCancellationRequested(() => cancellation.cancel()),
-                ];
-                if (this._disposed || token?.isCancellationRequested || progressToken.isCancellationRequested) {
-                    cancellation.cancel();
-                }
-                const staged = new DuckDBTableView(this._uri);
-                const optionsChanged = options?.sheet_name !== this.importOptions?.sheet_name ||
-                    (options?.has_header_row ?? true) !== this._hasHeaderRow;
-                let committed = false;
-                try {
-                    staged._rowFilters = optionsChanged ? [] : this._rowFilters;
-                    staged._rebuildWhereClause();
-                    await staged._importFile(options, cancellation.token, progress);
-                    throwIfImportCancelled(cancellation.token);
-                    const notifyTextImport = staged._xlsxImportedAsText && (!this._xlsxImportedAsText || optionsChanged);
-                    const notifySkippedRecovery = staged._xlsxRecoverySkipped && !this._xlsxRecoverySkipped;
-                    const previousTable = this._tableName;
-                    this._tableName = staged._tableName;
-                    this._fullSchema = staged._fullSchema;
-                    this._availableSheets = staged._availableSheets;
-                    this._hasHeaderRow = staged._hasHeaderRow;
-                    this._xlsxImportedAsText = staged._xlsxImportedAsText;
-                    this._xlsxRecoverySkipped = staged._xlsxRecoverySkipped;
-                    this.importOptions = staged.importOptions;
-                    this._unfilteredRowCount = staged._unfilteredRowCount;
-                    this._filteredRowCount = staged._filteredRowCount;
-                    this._rowFilters = staged._rowFilters;
-                    if (optionsChanged) {
-                        this._sortKeys = [];
-                        this._columnFilters = [];
+            await vscode.window.withProgress(
+                {
+                    location: vscode.ProgressLocation.Notification,
+                    title: `Importing ${this._displayName}`,
+                    cancellable: true,
+                },
+                async (progress, progressToken) => {
+                    const cancellation = new vscode.CancellationTokenSource();
+                    const subscriptions = [
+                        this._importLifetime.token.onCancellationRequested(() =>
+                            cancellation.cancel(),
+                        ),
+                        progressToken.onCancellationRequested(() => cancellation.cancel()),
+                        token?.onCancellationRequested(() => cancellation.cancel()),
+                    ];
+                    if (
+                        this._disposed ||
+                        token?.isCancellationRequested ||
+                        progressToken.isCancellationRequested
+                    ) {
+                        cancellation.cancel();
                     }
-                    this._rebuildWhereClause();
-                    this._rebuildSortClause();
-                    committed = true;
-                    if (notifyTextImport) {
-                        void vscode.window.showWarningMessage(vscode.l10n.t(
-                            'The worksheet in {0} contains mixed cell types and was imported as text to preserve its values. Numbers and dates will use text sorting and filtering.',
-                            this._displayName,
-                        ));
+                    const staged = new DuckDBTableView(this._uri);
+                    const optionsChanged =
+                        options?.sheet_name !== this.importOptions?.sheet_name ||
+                        (options?.has_header_row ?? true) !== this._hasHeaderRow;
+                    let committed = false;
+                    try {
+                        staged._rowFilters = optionsChanged ? [] : this._rowFilters;
+                        staged._rebuildWhereClause();
+                        await staged._importFile(options, cancellation.token, progress);
+                        throwIfImportCancelled(cancellation.token);
+                        const notifyTextImport =
+                            staged._xlsxImportedAsText &&
+                            (!this._xlsxImportedAsText || optionsChanged);
+                        const notifySkippedRecovery =
+                            staged._xlsxRecoverySkipped && !this._xlsxRecoverySkipped;
+                        const previousTable = this._tableName;
+                        this._tableName = staged._tableName;
+                        this._fullSchema = staged._fullSchema;
+                        this._availableSheets = staged._availableSheets;
+                        this._hasHeaderRow = staged._hasHeaderRow;
+                        this._xlsxImportedAsText = staged._xlsxImportedAsText;
+                        this._xlsxRecoverySkipped = staged._xlsxRecoverySkipped;
+                        this.importOptions = staged.importOptions;
+                        this._unfilteredRowCount = staged._unfilteredRowCount;
+                        this._filteredRowCount = staged._filteredRowCount;
+                        this._rowFilters = staged._rowFilters;
+                        if (optionsChanged) {
+                            this._sortKeys = [];
+                            this._columnFilters = [];
+                        }
+                        this._rebuildWhereClause();
+                        this._rebuildSortClause();
+                        committed = true;
+                        if (notifyTextImport) {
+                            void vscode.window.showWarningMessage(
+                                vscode.l10n.t(
+                                    'The worksheet in {0} contains mixed cell types and was imported as text to preserve its values. Numbers and dates will use text sorting and filtering.',
+                                    this._displayName,
+                                ),
+                            );
+                        }
+                        if (notifySkippedRecovery) {
+                            void vscode.window.showWarningMessage(
+                                vscode.l10n.t(
+                                    'The declared worksheet range in {0} is too large for automatic recovery. The displayed table may be incomplete.',
+                                    this._displayName,
+                                ),
+                            );
+                        }
+                        await this._duckdb
+                            .query(`DROP TABLE IF EXISTS ${escapeIdentifier(previousTable)}`)
+                            .catch(() => undefined);
+                    } finally {
+                        subscriptions.forEach((subscription) => subscription?.dispose());
+                        cancellation.dispose();
+                        if (!committed) {
+                            await staged.dispose();
+                        } else {
+                            staged._importLifetime.dispose();
+                        }
                     }
-                    if (notifySkippedRecovery) {
-                        void vscode.window.showWarningMessage(vscode.l10n.t(
-                            'The declared worksheet range in {0} is too large for automatic recovery. The displayed table may be incomplete.',
-                            this._displayName,
-                        ));
-                    }
-                    await this._duckdb.query(`DROP TABLE IF EXISTS ${escapeIdentifier(previousTable)}`)
-                        .catch(() => undefined);
-                } finally {
-                    subscriptions.forEach(subscription => subscription?.dispose());
-                    cancellation.dispose();
-                    if (!committed) {
-                        await staged.dispose();
-                    } else {
-                        staged._importLifetime.dispose();
-                    }
-                }
-            });
+                },
+            );
         });
-        this._importQueue = operation.then(() => undefined, () => undefined);
+        this._importQueue = operation.then(
+            () => undefined,
+            () => undefined,
+        );
         return operation;
     }
 
@@ -297,12 +327,20 @@ export class DuckDBTableView {
         throwIfImportCancelled(token);
 
         if (this._fileType === 'xlsx') {
-            this._xlsxMetadata = await readXlsxWorksheetMetadata(fileData, options?.sheet_name, token);
+            this._xlsxMetadata = await readXlsxWorksheetMetadata(
+                fileData,
+                options?.sheet_name,
+                token,
+            );
             this._availableSheets = this._xlsxMetadata.sheets ?? [];
-            if (options?.sheet_name && this._xlsxMetadata.sheets && !this._availableSheets.includes(options.sheet_name)) {
+            if (
+                options?.sheet_name &&
+                this._xlsxMetadata.sheets &&
+                !this._availableSheets.includes(options.sheet_name)
+            ) {
                 throw new Error(
                     `Worksheet '${options.sheet_name}' was not found. Available worksheets: ` +
-                    `${this._availableSheets.join(', ') || '(unknown)'}.`,
+                        `${this._availableSheets.join(', ') || '(unknown)'}.`,
                 );
             }
         }
@@ -310,17 +348,19 @@ export class DuckDBTableView {
         // Register the file buffer in DuckDB VFS.
         // For gzipped files, use the base name without .gz so DuckDB sees the correct extension.
         const originalName = this._uri.path.split('/').pop() || 'data';
-        const virtualPath = this._isGzipped
-            ? originalName.replace(/\.gz$/i, '')
-            : originalName;
+        const virtualPath = this._isGzipped ? originalName.replace(/\.gz$/i, '') : originalName;
         const vfsName = `${this._tableName}_${virtualPath}`;
 
         // Use a tightly packed Uint8Array to avoid transfer issues
-        const buffer = fileData.byteOffset === 0 && fileData.byteLength === fileData.buffer.byteLength
-            ? fileData
-            : new Uint8Array(fileData.buffer.slice(
-                fileData.byteOffset, fileData.byteOffset + fileData.byteLength,
-            ));
+        const buffer =
+            fileData.byteOffset === 0 && fileData.byteLength === fileData.buffer.byteLength
+                ? fileData
+                : new Uint8Array(
+                      fileData.buffer.slice(
+                          fileData.byteOffset,
+                          fileData.byteOffset + fileData.byteLength,
+                      ),
+                  );
         throwIfImportCancelled(token);
         progress.report({ message: 'Importing table…' });
         await this._duckdb.registerFileBuffer(vfsName, buffer);
@@ -359,8 +399,12 @@ export class DuckDBTableView {
         try {
             await this.importFile(options);
         } catch (error) {
-            if (error instanceof vscode.CancellationError || this._fileType !== 'xlsx' ||
-                !options?.sheet_name || !/(?:work)?sheet\b.*\bnot found/i.test(getErrorMessage(error))) {
+            if (
+                error instanceof vscode.CancellationError ||
+                this._fileType !== 'xlsx' ||
+                !options?.sheet_name ||
+                !/(?:work)?sheet\b.*\bnot found/i.test(getErrorMessage(error))
+            ) {
                 throw error;
             }
             if (this.importOptions !== options) {
@@ -368,10 +412,13 @@ export class DuckDBTableView {
             }
             const previousSheet = options.sheet_name;
             await this.importFile({ ...options, sheet_name: undefined });
-            void vscode.window.showInformationMessage(vscode.l10n.t(
-                'Worksheet {0} is no longer available in {1}. The first worksheet has been opened instead.',
-                previousSheet, this._displayName,
-            ));
+            void vscode.window.showInformationMessage(
+                vscode.l10n.t(
+                    'Worksheet {0} is no longer available in {1}. The first worksheet has been opened instead.',
+                    previousSheet,
+                    this._displayName,
+                ),
+            );
         }
     }
 
@@ -406,7 +453,8 @@ export class DuckDBTableView {
     private async _createTable(vfsName: string, token?: vscode.CancellationToken): Promise<void> {
         if (this._fileType === 'parquet') {
             await this._duckdb.query(
-                `CREATE OR REPLACE TABLE ${escapeIdentifier(this._tableName)} AS SELECT * FROM parquet_scan(${escapeValue(vfsName)})`, token
+                `CREATE OR REPLACE TABLE ${escapeIdentifier(this._tableName)} AS SELECT * FROM parquet_scan(${escapeValue(vfsName)})`,
+                token,
             );
             return;
         }
@@ -446,7 +494,9 @@ export class DuckDBTableView {
                 await this._duckdb.query('LOAD excel', token);
             } catch (error) {
                 throwIfImportCancelled(token);
-                throw new Error(`DuckDB Excel support could not be loaded: ${getErrorMessage(error)}`);
+                throw new Error(
+                    `DuckDB Excel support could not be loaded: ${getErrorMessage(error)}`,
+                );
             }
         }
     }
@@ -464,17 +514,28 @@ export class DuckDBTableView {
             if (this.importOptions?.sheet_name) {
                 options.push(`sheet=${escapeValue(this.importOptions.sheet_name)}`);
             }
-            if (range) { options.push(`range=${escapeValue(range)}`); }
-            if (text) { options.push('all_varchar=true'); }
-            return `CREATE OR REPLACE TABLE ${escapeIdentifier(tableName)} AS ` +
-                `SELECT * FROM read_xlsx(${escapeValue(vfsName)}, ${options.join(', ')})`;
+            if (range) {
+                options.push(`range=${escapeValue(range)}`);
+            }
+            if (text) {
+                options.push('all_varchar=true');
+            }
+            return (
+                `CREATE OR REPLACE TABLE ${escapeIdentifier(tableName)} AS ` +
+                `SELECT * FROM read_xlsx(${escapeValue(vfsName)}, ${options.join(', ')})`
+            );
         };
         try {
             await this._duckdb.query(query(asText), token);
             return asText;
         } catch (error) {
             throwIfImportCancelled(token);
-            if (asText || !/(?:could not|cannot|can't|failed to) (?:convert|cast)|conversion error|failed to parse cell/i.test(getErrorMessage(error))) {
+            if (
+                asText ||
+                !/(?:could not|cannot|can't|failed to) (?:convert|cast)|conversion error|failed to parse cell/i.test(
+                    getErrorMessage(error),
+                )
+            ) {
                 throw error;
             }
             await this._duckdb.query(query(true), token);
@@ -482,29 +543,45 @@ export class DuckDBTableView {
         }
     }
 
-    private async _createXlsxTable(vfsName: string, token?: vscode.CancellationToken): Promise<void> {
+    private async _createXlsxTable(
+        vfsName: string,
+        token?: vscode.CancellationToken,
+    ): Promise<void> {
         await this._ensureExcelExtension(token);
         let firstError: unknown;
         let firstReadFailed = false;
         try {
-            this._xlsxImportedAsText = await this._readXlsxTable(vfsName, this._tableName, undefined, false, token);
+            this._xlsxImportedAsText = await this._readXlsxTable(
+                vfsName,
+                this._tableName,
+                undefined,
+                false,
+                token,
+            );
         } catch (error) {
             throwIfImportCancelled(token);
             firstError = error;
             firstReadFailed = true;
         }
-        const shape = firstReadFailed ? undefined : await this._xlsxTableShape(this._tableName, token);
+        const shape = firstReadFailed
+            ? undefined
+            : await this._xlsxTableShape(this._tableName, token);
         const range = this._xlsxMetadata.range;
-        const needsRecovery = range && (firstReadFailed || (shape &&
-            (shape.columns <= 1 || shape.rows === 0) &&
-            (shape.columns < range.width || shape.rows === 0)));
+        const needsRecovery =
+            range &&
+            (firstReadFailed ||
+                (shape &&
+                    (shape.columns <= 1 || shape.rows === 0) &&
+                    (shape.columns < range.width || shape.rows === 0)));
         if (range && needsRecovery) {
             // Some producers mark an entire worksheet as used. Never materialize
             // such an advisory range without a bound, even for a tiny ZIP file.
             const maxRecoveryCells = 5_000_000;
             if (range.width * range.height > maxRecoveryCells) {
                 if (firstReadFailed) {
-                    throw new Error(`${getErrorMessage(firstError)}. The declared worksheet range is too large for automatic recovery.`);
+                    throw new Error(
+                        `${getErrorMessage(firstError)}. The declared worksheet range is too large for automatic recovery.`,
+                    );
                 }
                 this._xlsxRecoverySkipped = true;
                 return;
@@ -512,43 +589,71 @@ export class DuckDBTableView {
             const recoveryTable = `__dex_${_tableCounter++}`;
             let recovered = false;
             try {
-                const asText = await this._readXlsxTable(vfsName, recoveryTable, range.ref, this._xlsxImportedAsText, token);
+                const asText = await this._readXlsxTable(
+                    vfsName,
+                    recoveryTable,
+                    range.ref,
+                    this._xlsxImportedAsText,
+                    token,
+                );
                 const recoveredShape = await this._xlsxTableShape(recoveryTable, token);
                 throwIfImportCancelled(token);
-                if (!shape || (recoveredShape.columns >= shape.columns && recoveredShape.rows >= shape.rows)) {
+                if (
+                    !shape ||
+                    (recoveredShape.columns >= shape.columns && recoveredShape.rows >= shape.rows)
+                ) {
                     const previousTable = this._tableName;
                     this._tableName = recoveryTable;
                     this._xlsxImportedAsText = asText;
                     recovered = true;
-                    await this._duckdb.query(`DROP TABLE IF EXISTS ${escapeIdentifier(previousTable)}`).catch(() => undefined);
+                    await this._duckdb
+                        .query(`DROP TABLE IF EXISTS ${escapeIdentifier(previousTable)}`)
+                        .catch(() => undefined);
                     return;
                 }
             } catch (error) {
                 throwIfImportCancelled(token);
-                if (firstReadFailed) { throw firstError; }
+                if (firstReadFailed) {
+                    throw firstError;
+                }
                 // Keep the successfully imported table when advisory metadata is stale.
             } finally {
                 if (!recovered) {
-                    await this._duckdb.query(`DROP TABLE IF EXISTS ${escapeIdentifier(recoveryTable)}`).catch(() => undefined);
+                    await this._duckdb
+                        .query(`DROP TABLE IF EXISTS ${escapeIdentifier(recoveryTable)}`)
+                        .catch(() => undefined);
                 }
             }
         }
-        if (firstReadFailed) { throw firstError; }
+        if (firstReadFailed) {
+            throw firstError;
+        }
     }
 
-    private async _xlsxTableShape(table: string, token?: vscode.CancellationToken): Promise<{ columns: number; rows: number }> {
+    private async _xlsxTableShape(
+        table: string,
+        token?: vscode.CancellationToken,
+    ): Promise<{ columns: number; rows: number }> {
         const schema = await this._duckdb.query(`DESCRIBE ${escapeIdentifier(table)}`, token);
-        const count = await this._duckdb.query(`SELECT COUNT(*) AS cnt FROM ${escapeIdentifier(table)}`, token);
+        const count = await this._duckdb.query(
+            `SELECT COUNT(*) AS cnt FROM ${escapeIdentifier(table)}`,
+            token,
+        );
         return { columns: schema.numRows, rows: Number(getFirstRowValue(count, ['cnt']) ?? 0) };
     }
 
     private async _loadSchema(token?: vscode.CancellationToken): Promise<void> {
-        const result = await this._duckdb.query(`DESCRIBE ${escapeIdentifier(this._tableName)}`, token);
+        const result = await this._duckdb.query(
+            `DESCRIBE ${escapeIdentifier(this._tableName)}`,
+            token,
+        );
         this._fullSchema = [];
 
         for (let i = 0; i < result.numRows; i++) {
             const row = result.get(i);
-            if (!row) { continue; }
+            if (!row) {
+                continue;
+            }
 
             const columnName = String(row['column_name'] ?? row[0] ?? `column_${i}`);
             const typeName = String(row['column_type'] ?? row[1] ?? 'VARCHAR');
@@ -567,7 +672,13 @@ export class DuckDBTableView {
         if (t.includes('INT') || t === 'HUGEINT' || t === 'UHUGEINT') {
             return ColumnDisplayType.Integer;
         }
-        if (t.includes('FLOAT') || t.includes('DOUBLE') || t.includes('REAL') || t === 'DECIMAL' || t.startsWith('DECIMAL(')) {
+        if (
+            t.includes('FLOAT') ||
+            t.includes('DOUBLE') ||
+            t.includes('REAL') ||
+            t === 'DECIMAL' ||
+            t.startsWith('DECIMAL(')
+        ) {
             return ColumnDisplayType.Floating;
         }
         if (t === 'BOOLEAN' || t === 'BOOL') {
@@ -600,7 +711,8 @@ export class DuckDBTableView {
     private async _updateRowCounts(token?: vscode.CancellationToken): Promise<void> {
         // Unfiltered count
         const unfilteredResult = await this._duckdb.query(
-            buildCountQuery(this._tableName, []), token
+            buildCountQuery(this._tableName, []),
+            token,
         );
         this._unfilteredRowCount = Number(getFirstRowValue(unfilteredResult, ['cnt']) ?? 0);
 
@@ -648,7 +760,7 @@ export class DuckDBTableView {
     }
 
     getSchema(columnIndices: number[]): TableSchema {
-        const columns = columnIndices.map(i => this._fullSchema[i]).filter(Boolean);
+        const columns = columnIndices.map((i) => this._fullSchema[i]).filter(Boolean);
         return { columns };
     }
 
@@ -660,9 +772,8 @@ export class DuckDBTableView {
      */
     async getDataValues(
         columns: ColumnSelection[],
-        formatOptions: FormatOptions
+        formatOptions: FormatOptions,
     ): Promise<TableData> {
-
         // Early return if table has 0 rows
         if (this._filteredRowCount === 0) {
             return { columns: Array.from({ length: columns.length }, () => []) };
@@ -703,7 +814,9 @@ export class DuckDBTableView {
             }
 
             const columnSchema = this._fullSchema[column.column_index];
-            if (!columnSchema) { continue; }
+            if (!columnSchema) {
+                continue;
+            }
             const quotedName = quoteIdentifier(columnSchema.column_name);
             const typeName = columnSchema.type_name.toUpperCase();
 
@@ -712,10 +825,14 @@ export class DuckDBTableView {
 
             let columnSelector: string;
             switch (true) {
-                case typeName === 'TINYINT' || typeName === 'SMALLINT' ||
-                     typeName === 'INTEGER' || typeName === 'BIGINT' ||
-                     typeName === 'UTINYINT' || typeName === 'USMALLINT' ||
-                     typeName === 'UINTEGER' || typeName === 'UBIGINT':
+                case typeName === 'TINYINT' ||
+                    typeName === 'SMALLINT' ||
+                    typeName === 'INTEGER' ||
+                    typeName === 'BIGINT' ||
+                    typeName === 'UTINYINT' ||
+                    typeName === 'USMALLINT' ||
+                    typeName === 'UINTEGER' ||
+                    typeName === 'UBIGINT':
                     if (thousandsSep) {
                         columnSelector = `FORMAT('{:,}', ${quotedName})`;
                         if (thousandsSep !== ',') {
@@ -753,7 +870,7 @@ END`;
                     break;
 
                 case typeName === 'TIMESTAMP WITH TIME ZONE' ||
-                     typeName === 'TIMESTAMP_NS WITH TIME ZONE':
+                    typeName === 'TIMESTAMP_NS WITH TIME ZONE':
                     columnSelector = `strftime(${quotedName}, '%Y-%m-%d %H:%M:%S%z')`;
                     break;
 
@@ -794,11 +911,16 @@ FROM (
         const floatAdapter = (field: any, i: number): ColumnValue => {
             const value: string = field.get(i - lowerLimit);
             switch (value) {
-                case 'NaN': return SENTINEL_NAN;
-                case 'NULL': return SENTINEL_NULL;
-                case 'Inf': return SENTINEL_INF;
-                case '-Inf': return SENTINEL_NEGINF;
-                default: return value;
+                case 'NaN':
+                    return SENTINEL_NAN;
+                case 'NULL':
+                    return SENTINEL_NULL;
+                case 'Inf':
+                    return SENTINEL_INF;
+                case '-Inf':
+                    return SENTINEL_NEGINF;
+                default:
+                    return value;
             }
         };
 
@@ -812,19 +934,23 @@ FROM (
             const column = columns[i];
             const spec = column.spec;
             const field = queryResult.getChildAt(i);
-            if (!field) { result.columns.push([]); continue; }
+            if (!field) {
+                result.columns.push([]);
+                continue;
+            }
 
             const columnSchema = this._fullSchema[column.column_index];
-            const isFloat = columnSchema &&
+            const isFloat =
+                columnSchema &&
                 (columnSchema.type_name.toUpperCase() === 'FLOAT' ||
-                 columnSchema.type_name.toUpperCase() === 'DOUBLE');
+                    columnSchema.type_name.toUpperCase() === 'DOUBLE');
             const adapter = isFloat ? floatAdapter : defaultAdapter;
 
             const fetchValues = (): Array<string | number> => {
                 if (isSelectionRange(spec)) {
                     const lastIndex = Math.min(
                         spec.last_index,
-                        spec.first_index + queryResult.numRows - 1
+                        spec.first_index + queryResult.numRows - 1,
                     );
                     const columnValues: Array<string | number> = [];
                     for (let j = spec.first_index; j <= lastIndex; ++j) {
@@ -833,7 +959,7 @@ FROM (
                     return columnValues;
                 } else {
                     // DataSelectionIndices
-                    return (spec as DataSelectionIndices).indices.map(j => adapter(field, j));
+                    return (spec as DataSelectionIndices).indices.map((j) => adapter(field, j));
                 }
             };
 
@@ -845,7 +971,7 @@ FROM (
 
     async getRowLabels(
         selection: ArraySelection,
-        _formatOptions: FormatOptions
+        _formatOptions: FormatOptions,
     ): Promise<TableRowLabels> {
         // DuckDB doesn't have row labels like R data frames
         // Return sequential row numbers based on the selection
@@ -864,7 +990,7 @@ FROM (
         this._rebuildWhereClause();
         await this._updateFilteredCount();
 
-        const hasErrors = filters.some(f => f.is_valid === false);
+        const hasErrors = filters.some((f) => f.is_valid === false);
         return {
             selected_num_rows: this._filteredRowCount,
             had_errors: hasErrors,
@@ -900,7 +1026,9 @@ FROM (
         const sortExprs: string[] = [];
         for (const key of this._sortKeys) {
             const col = this._fullSchema[key.column_index];
-            if (!col) { continue; }
+            if (!col) {
+                continue;
+            }
             const modifier = key.ascending ? '' : ' DESC';
             sortExprs.push(`${quoteIdentifier(col.column_name)}${modifier}`);
         }
@@ -915,10 +1043,7 @@ FROM (
         this._columnFilters = filters;
     }
 
-    searchSchema(
-        filters: ColumnFilter[],
-        sortOrder: SearchSchemaSortOrder
-    ): SearchSchemaResult {
+    searchSchema(filters: ColumnFilter[], sortOrder: SearchSchemaSortOrder): SearchSchemaResult {
         let indices = this._fullSchema.map((_, i) => i);
 
         // Apply column filters (enhanced with case sensitivity and regex support)
@@ -927,14 +1052,12 @@ FROM (
                 const params = filter.params as FilterTextSearch;
                 const caseSensitive = params.case_sensitive ?? false;
 
-                indices = indices.filter(i => {
+                indices = indices.filter((i) => {
                     const col = this._fullSchema[i];
                     const columnName = caseSensitive
                         ? col.column_name
                         : col.column_name.toLowerCase();
-                    const searchTerm = caseSensitive
-                        ? params.term
-                        : params.term.toLowerCase();
+                    const searchTerm = caseSensitive ? params.term : params.term.toLowerCase();
 
                     switch (params.search_type) {
                         case TextSearchType.Contains:
@@ -947,10 +1070,7 @@ FROM (
                             return columnName.endsWith(searchTerm);
                         case TextSearchType.RegexMatch:
                             try {
-                                const regex = new RegExp(
-                                    params.term,
-                                    caseSensitive ? '' : 'i'
-                                );
+                                const regex = new RegExp(params.term, caseSensitive ? '' : 'i');
                                 return regex.test(col.column_name);
                             } catch {
                                 return false;
@@ -962,7 +1082,7 @@ FROM (
             } else if (filter.filter_type === ColumnFilterType.MatchDataTypes) {
                 const params = filter.params as FilterMatchDataTypes;
                 const types = new Set(params.display_types);
-                indices = indices.filter(i => {
+                indices = indices.filter((i) => {
                     const col = this._fullSchema[i];
                     return types.has(col.type_display);
                 });
@@ -973,30 +1093,30 @@ FROM (
         switch (sortOrder) {
             case SearchSchemaSortOrder.AscendingName:
                 indices.sort((a, b) =>
-                    this._fullSchema[a].column_name.toLowerCase().localeCompare(
-                        this._fullSchema[b].column_name.toLowerCase()
-                    )
+                    this._fullSchema[a].column_name
+                        .toLowerCase()
+                        .localeCompare(this._fullSchema[b].column_name.toLowerCase()),
                 );
                 break;
             case SearchSchemaSortOrder.DescendingName:
                 indices.sort((a, b) =>
-                    this._fullSchema[b].column_name.toLowerCase().localeCompare(
-                        this._fullSchema[a].column_name.toLowerCase()
-                    )
+                    this._fullSchema[b].column_name
+                        .toLowerCase()
+                        .localeCompare(this._fullSchema[a].column_name.toLowerCase()),
                 );
                 break;
             case SearchSchemaSortOrder.AscendingType:
                 indices.sort((a, b) =>
-                    this._fullSchema[a].type_name.toLowerCase().localeCompare(
-                        this._fullSchema[b].type_name.toLowerCase()
-                    )
+                    this._fullSchema[a].type_name
+                        .toLowerCase()
+                        .localeCompare(this._fullSchema[b].type_name.toLowerCase()),
                 );
                 break;
             case SearchSchemaSortOrder.DescendingType:
                 indices.sort((a, b) =>
-                    this._fullSchema[b].type_name.toLowerCase().localeCompare(
-                        this._fullSchema[a].type_name.toLowerCase()
-                    )
+                    this._fullSchema[b].type_name
+                        .toLowerCase()
+                        .localeCompare(this._fullSchema[a].type_name.toLowerCase()),
                 );
                 break;
             // SearchSchemaSortOrder.Original — keep original order
@@ -1012,7 +1132,7 @@ FROM (
      */
     async exportDataSelection(
         selection: TableSelection,
-        format: ExportFormat
+        format: ExportFormat,
     ): Promise<ExportedData> {
         const kind = selection.kind;
 
@@ -1049,37 +1169,49 @@ END`;
         };
 
         // Helper to export query result
-        const exportQueryOutput = async (query: string, columns: ColumnSchema[]): Promise<ExportedData> => {
+        const exportQueryOutput = async (
+            query: string,
+            columns: ColumnSchema[],
+        ): Promise<ExportedData> => {
             const queryResult = await this._duckdb.query(query);
             const names = queryResult.schema.fields.map((f: any) => f.name);
             const unboxed: string[][] = [
-                columns.map(s => s.column_name),
+                columns.map((s) => s.column_name),
                 ...Array.from({ length: queryResult.numRows }, (_, r) => {
                     const row = queryResult.get(r);
                     return row ? names.map((name: string) => String(row[name] ?? '')) : [];
-                })
+                }),
             ];
 
             let data: string;
             switch (format) {
                 case ExportFormat.Csv:
                     data = unboxed
-                        .map((row) => row.map((value) => escapeDelimitedValue(value, ',')).join(','))
+                        .map((row) =>
+                            row.map((value) => escapeDelimitedValue(value, ',')).join(','),
+                        )
                         .join('\n');
                     break;
                 case ExportFormat.Tsv:
                     data = unboxed
-                        .map((row) => row.map((value) => escapeDelimitedValue(value, '\t')).join('\t'))
+                        .map((row) =>
+                            row.map((value) => escapeDelimitedValue(value, '\t')).join('\t'),
+                        )
                         .join('\n');
                     break;
                 case ExportFormat.Html:
                     data = unboxed
-                        .map((row) => `<tr>${row.map((value) => `<td>${escapeHtmlCell(value)}</td>`).join('')}</tr>`)
+                        .map(
+                            (row) =>
+                                `<tr>${row.map((value) => `<td>${escapeHtmlCell(value)}</td>`).join('')}</tr>`,
+                        )
                         .join('\n');
                     break;
                 default:
                     data = unboxed
-                        .map((row) => row.map((value) => escapeDelimitedValue(value, ',')).join(','))
+                        .map((row) =>
+                            row.map((value) => escapeDelimitedValue(value, ',')).join(','),
+                        )
                         .join('\n');
                     break;
             }
@@ -1093,19 +1225,24 @@ END`;
             case TableSelectionKind.SingleCell: {
                 const sel = selection.selection as DataSelectionSingleCell;
                 const col = this._fullSchema[sel.column_index];
-                if (!col) { return { data: '', format }; }
+                if (!col) {
+                    return { data: '', format };
+                }
                 const selectors = getColumnSelectors([col]);
                 const query = `SELECT ${selectors[0]} FROM ${tableName}${this._whereClause}${this._sortClause} LIMIT 1 OFFSET ${sel.row_index};`;
                 const result = await this._duckdb.query(query);
                 const row = result.get(0);
                 return {
                     data: row ? String(row[result.schema.fields[0].name] ?? '') : '',
-                    format
+                    format,
                 };
             }
             case TableSelectionKind.CellRange: {
                 const sel = selection.selection as DataSelectionCellRange;
-                const columns = this._fullSchema.slice(sel.first_column_index, sel.last_column_index + 1);
+                const columns = this._fullSchema.slice(
+                    sel.first_column_index,
+                    sel.last_column_index + 1,
+                );
                 const selectors = getColumnSelectors(columns);
                 const query = `SELECT ${selectors.join(',')} FROM ${tableName}${this._whereClause}${this._sortClause} LIMIT ${sel.last_row_index - sel.first_row_index + 1} OFFSET ${sel.first_row_index};`;
                 return await exportQueryOutput(query, columns);
@@ -1126,24 +1263,27 @@ END`;
             case TableSelectionKind.RowIndices: {
                 const sel = selection.selection as DataSelectionIndices;
                 // Row indexes refer to the displayed table, just like cell indexes.
-                return this.exportDataSelection({
-                    kind: TableSelectionKind.CellIndices,
-                    selection: {
-                        column_indices: this._fullSchema.map((_, index) => index),
-                        row_indices: sel.indices,
+                return this.exportDataSelection(
+                    {
+                        kind: TableSelectionKind.CellIndices,
+                        selection: {
+                            column_indices: this._fullSchema.map((_, index) => index),
+                            row_indices: sel.indices,
+                        },
                     },
-                }, format);
+                    format,
+                );
             }
             case TableSelectionKind.ColumnIndices: {
                 const sel = selection.selection as DataSelectionIndices;
-                const columns = sel.indices.map(i => this._fullSchema[i]).filter(Boolean);
+                const columns = sel.indices.map((i) => this._fullSchema[i]).filter(Boolean);
                 const selectors = getColumnSelectors(columns);
                 const query = `SELECT ${selectors.join(',')} FROM ${tableName}${this._whereClause}${this._sortClause}`;
                 return await exportQueryOutput(query, columns);
             }
             case TableSelectionKind.CellIndices: {
                 const sel = selection.selection as DataSelectionCellIndices;
-                const columns = sel.column_indices.map(i => this._fullSchema[i]).filter(Boolean);
+                const columns = sel.column_indices.map((i) => this._fullSchema[i]).filter(Boolean);
                 if (sel.row_indices.length === 0 || columns.length === 0) {
                     return { data: '', format };
                 }
@@ -1153,14 +1293,18 @@ END`;
                     // Aligned with positron: use ROW_NUMBER() for sort-aware cell selection
                     const sortedTableQuery = `SELECT *, ROW_NUMBER() OVER(${this._sortClause || 'ORDER BY rowid'}) - 1 AS sorted_row_index
 FROM ${tableName}${this._whereClause}${this._sortClause}`;
-                    const orderValues = sel.row_indices.map((rowIdx, idx) => `(${rowIdx}, ${idx})`).join(', ');
+                    const orderValues = sel.row_indices
+                        .map((rowIdx, idx) => `(${rowIdx}, ${idx})`)
+                        .join(', ');
                     const query = `SELECT ${selectors.join(',')}
 FROM (${sortedTableQuery}) sorted_table
 JOIN (VALUES ${orderValues}) AS row_order(sorted_row_index, selection_order) ON sorted_table.sorted_row_index = row_order.sorted_row_index
 ORDER BY row_order.selection_order`;
                     return await exportQueryOutput(query, columns);
                 } else {
-                    const orderValues = sel.row_indices.map((rowId, idx) => `(${rowId}, ${idx})`).join(', ');
+                    const orderValues = sel.row_indices
+                        .map((rowId, idx) => `(${rowId}, ${idx})`)
+                        .join(', ');
                     const query = `SELECT ${selectors.join(',')}
 FROM ${tableName}
 JOIN (VALUES ${orderValues}) AS row_order(rowid, sort_order) ON ${tableName}.rowid = row_order.rowid
@@ -1185,7 +1329,7 @@ ORDER BY row_order.sort_order`;
         _columnFilters: ColumnFilter[],
         rowFilters: RowFilter[],
         sortKeys: ColumnSortKey[],
-        _codeSyntaxName: CodeSyntaxName
+        _codeSyntaxName: CodeSyntaxName,
     ): ConvertedCode {
         // Use filename without extension as the display table name
         const ext = path.extname(this._uri.path);
@@ -1205,7 +1349,9 @@ ORDER BY row_order.sort_order`;
             const sortExprs: string[] = [];
             for (const key of this._sortKeys) {
                 const col = this._fullSchema[key.column_index];
-                if (!col) { continue; }
+                if (!col) {
+                    continue;
+                }
                 const modifier = key.ascending ? '' : ' DESC';
                 sortExprs.push(`${quoteIdentifier(col.column_name)}${modifier}`);
             }
@@ -1220,7 +1366,7 @@ ORDER BY row_order.sort_order`;
     }
 
     async setDatasetImportOptions(
-        options: DatasetImportOptions
+        options: DatasetImportOptions,
     ): Promise<SetDatasetImportOptionsResult> {
         try {
             await this.reimport(options);
@@ -1258,43 +1404,106 @@ ORDER BY row_order.sort_order`;
             search_schema: {
                 support_status: SupportStatus.Supported,
                 supported_types: [
-                    { column_filter_type: ColumnFilterType.TextSearch, support_status: SupportStatus.Supported },
-                    { column_filter_type: ColumnFilterType.MatchDataTypes, support_status: SupportStatus.Supported },
+                    {
+                        column_filter_type: ColumnFilterType.TextSearch,
+                        support_status: SupportStatus.Supported,
+                    },
+                    {
+                        column_filter_type: ColumnFilterType.MatchDataTypes,
+                        support_status: SupportStatus.Supported,
+                    },
                 ],
             },
             set_column_filters: {
                 support_status: SupportStatus.Supported,
                 supported_types: [
-                    { column_filter_type: ColumnFilterType.TextSearch, support_status: SupportStatus.Supported },
-                    { column_filter_type: ColumnFilterType.MatchDataTypes, support_status: SupportStatus.Supported },
+                    {
+                        column_filter_type: ColumnFilterType.TextSearch,
+                        support_status: SupportStatus.Supported,
+                    },
+                    {
+                        column_filter_type: ColumnFilterType.MatchDataTypes,
+                        support_status: SupportStatus.Supported,
+                    },
                 ],
             },
             set_row_filters: {
                 support_status: SupportStatus.Supported,
                 supports_conditions: SupportStatus.Supported,
                 supported_types: [
-                    { row_filter_type: RowFilterType.Between, support_status: SupportStatus.Supported },
-                    { row_filter_type: RowFilterType.Compare, support_status: SupportStatus.Supported },
-                    { row_filter_type: RowFilterType.IsEmpty, support_status: SupportStatus.Supported },
-                    { row_filter_type: RowFilterType.IsFalse, support_status: SupportStatus.Supported },
-                    { row_filter_type: RowFilterType.IsNull, support_status: SupportStatus.Supported },
-                    { row_filter_type: RowFilterType.IsTrue, support_status: SupportStatus.Supported },
-                    { row_filter_type: RowFilterType.NotBetween, support_status: SupportStatus.Supported },
-                    { row_filter_type: RowFilterType.NotEmpty, support_status: SupportStatus.Supported },
-                    { row_filter_type: RowFilterType.NotNull, support_status: SupportStatus.Supported },
-                    { row_filter_type: RowFilterType.Search, support_status: SupportStatus.Supported },
-                    { row_filter_type: RowFilterType.SetMembership, support_status: SupportStatus.Supported },
+                    {
+                        row_filter_type: RowFilterType.Between,
+                        support_status: SupportStatus.Supported,
+                    },
+                    {
+                        row_filter_type: RowFilterType.Compare,
+                        support_status: SupportStatus.Supported,
+                    },
+                    {
+                        row_filter_type: RowFilterType.IsEmpty,
+                        support_status: SupportStatus.Supported,
+                    },
+                    {
+                        row_filter_type: RowFilterType.IsFalse,
+                        support_status: SupportStatus.Supported,
+                    },
+                    {
+                        row_filter_type: RowFilterType.IsNull,
+                        support_status: SupportStatus.Supported,
+                    },
+                    {
+                        row_filter_type: RowFilterType.IsTrue,
+                        support_status: SupportStatus.Supported,
+                    },
+                    {
+                        row_filter_type: RowFilterType.NotBetween,
+                        support_status: SupportStatus.Supported,
+                    },
+                    {
+                        row_filter_type: RowFilterType.NotEmpty,
+                        support_status: SupportStatus.Supported,
+                    },
+                    {
+                        row_filter_type: RowFilterType.NotNull,
+                        support_status: SupportStatus.Supported,
+                    },
+                    {
+                        row_filter_type: RowFilterType.Search,
+                        support_status: SupportStatus.Supported,
+                    },
+                    {
+                        row_filter_type: RowFilterType.SetMembership,
+                        support_status: SupportStatus.Supported,
+                    },
                 ],
             },
             get_column_profiles: {
                 support_status: SupportStatus.Supported,
                 supported_types: [
-                    { profile_type: ColumnProfileType.NullCount, support_status: SupportStatus.Supported },
-                    { profile_type: ColumnProfileType.SummaryStats, support_status: SupportStatus.Supported },
-                    { profile_type: ColumnProfileType.SmallHistogram, support_status: SupportStatus.Supported },
-                    { profile_type: ColumnProfileType.LargeHistogram, support_status: SupportStatus.Supported },
-                    { profile_type: ColumnProfileType.SmallFrequencyTable, support_status: SupportStatus.Supported },
-                    { profile_type: ColumnProfileType.LargeFrequencyTable, support_status: SupportStatus.Supported },
+                    {
+                        profile_type: ColumnProfileType.NullCount,
+                        support_status: SupportStatus.Supported,
+                    },
+                    {
+                        profile_type: ColumnProfileType.SummaryStats,
+                        support_status: SupportStatus.Supported,
+                    },
+                    {
+                        profile_type: ColumnProfileType.SmallHistogram,
+                        support_status: SupportStatus.Supported,
+                    },
+                    {
+                        profile_type: ColumnProfileType.LargeHistogram,
+                        support_status: SupportStatus.Supported,
+                    },
+                    {
+                        profile_type: ColumnProfileType.SmallFrequencyTable,
+                        support_status: SupportStatus.Supported,
+                    },
+                    {
+                        profile_type: ColumnProfileType.LargeFrequencyTable,
+                        support_status: SupportStatus.Supported,
+                    },
                 ],
             },
             set_sort_columns: {

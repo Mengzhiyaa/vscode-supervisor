@@ -145,7 +145,7 @@ export class ConsoleResourceUsageCoordinator {
             sessionId,
             replace,
             samples: [...samples],
-        })).filter(snapshot => snapshot.samples.length > 0);
+        })).filter((snapshot) => snapshot.samples.length > 0);
         if (sessions.length === 0) {
             return;
         }

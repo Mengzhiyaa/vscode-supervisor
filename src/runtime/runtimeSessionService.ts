@@ -16,13 +16,19 @@ import type { UiClientInstance } from './UiClientInstance';
 import type { ILanguageRuntimeGlobalEvent } from './runtimeEvents';
 import type { ActiveRuntimeSession } from './activeRuntimeSession';
 
-export interface IRuntimeSessionWillStartEvent extends Omit<PublicRuntimeSessionWillStartEvent, 'session'> {
+export interface IRuntimeSessionWillStartEvent extends Omit<
+    PublicRuntimeSessionWillStartEvent,
+    'session'
+> {
     session: RuntimeSession;
 }
 
 export type ILanguageRuntimeSessionStateEvent = PublicLanguageRuntimeSessionStateEvent;
 
-export interface IRuntimeUiClientStartedEvent extends Omit<PublicRuntimeUiClientStartedEvent, 'uiClient'> {
+export interface IRuntimeUiClientStartedEvent extends Omit<
+    PublicRuntimeUiClientStartedEvent,
+    'uiClient'
+> {
     uiClient: UiClientInstance;
 }
 
@@ -75,7 +81,7 @@ export interface IRuntimeSessionService extends PublicRuntimeSessionService, vsc
     updateActiveLanguages(): void;
     validateRuntimeSession(
         runtimeMetadata: LanguageRuntimeMetadata,
-        sessionId: string
+        sessionId: string,
     ): Promise<boolean>;
     restoreRuntimeSession(
         runtimeMetadata: LanguageRuntimeMetadata,
@@ -83,11 +89,11 @@ export interface IRuntimeSessionService extends PublicRuntimeSessionService, vsc
         sessionName: string,
         createConsole: boolean,
         activate: boolean,
-        workingDirectory?: string
+        workingDirectory?: string,
     ): Promise<RuntimeSession>;
     watchUiClient(
         sessionId: string,
-        handler: (uiClient: IUiClientInstance) => vscode.Disposable | void
+        handler: (uiClient: IUiClientInstance) => vscode.Disposable | void,
     ): vscode.Disposable;
     hasEncounteredLanguage(languageId: string): boolean;
     readonly encounteredLanguages: readonly string[];

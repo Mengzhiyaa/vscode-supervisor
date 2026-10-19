@@ -13,15 +13,12 @@
      * the plot size changes.
      */
 
-    import { onMount, onDestroy } from "svelte";
-    import type { MessageConnection } from "vscode-jsonrpc/browser";
-    import type { GetCachedRenderRequest } from "../../../src/rpc/webview/plots";
-    import PanZoomImage from "./PanZoomImage.svelte";
-    import PlotProgressBar from "./PlotProgressBar.svelte";
-    import {
-        ZoomLevel,
-        PlotClientState,
-    } from "./types";
+    import { onMount, onDestroy } from 'svelte';
+    import type { MessageConnection } from 'vscode-jsonrpc/browser';
+    import type { GetCachedRenderRequest } from '../../../src/rpc/webview/plots';
+    import PanZoomImage from './PanZoomImage.svelte';
+    import PlotProgressBar from './PlotProgressBar.svelte';
+    import { ZoomLevel, PlotClientState } from './types';
 
     interface Props {
         width: number;
@@ -31,17 +28,13 @@
         connection: MessageConnection | undefined;
         sizingPolicyId?: string;
         customSize?: { width: number; height: number };
-        darkFilterMode?: "off" | "auto" | "on";
+        darkFilterMode?: 'off' | 'auto' | 'on';
         latestUri?: string;
         renderVersion?: number;
         hostState?: PlotClientState;
         hostRenderEstimateMs?: number;
         initialData?: string;
-        onrendered?: (payload: {
-            plotId: string;
-            uri: string;
-            renderVersion: number;
-        }) => void;
+        onrendered?: (payload: { plotId: string; uri: string; renderVersion: number }) => void;
     }
 
     let {
@@ -52,7 +45,7 @@
         connection,
         sizingPolicyId,
         customSize,
-        darkFilterMode = "auto",
+        darkFilterMode = 'auto',
         latestUri,
         renderVersion = 0,
         hostState,
@@ -61,8 +54,8 @@
         onrendered,
     }: Props = $props();
 
-    let uri = $state("");
-    let error = $state("");
+    let uri = $state('');
+    let error = $state('');
     let plotState = $state<PlotClientState>(PlotClientState.Unrendered);
     let renderEstimateMs = $state(0);
     let progressBarDone = $state(false);
@@ -78,17 +71,17 @@
 
     const plotName = $derived(`Plot ${plotId}`);
     const renderWidth = $derived(
-        sizingPolicyId === "custom" && customSize ? customSize.width : width,
+        sizingPolicyId === 'custom' && customSize ? customSize.width : width,
     );
     const renderHeight = $derived(
-        sizingPolicyId === "custom" && customSize ? customSize.height : height,
+        sizingPolicyId === 'custom' && customSize ? customSize.height : height,
     );
 
     function getRenderRequestKey(): string {
         const targetWidth = Math.floor(renderWidth);
         const targetHeight = Math.floor(renderHeight);
         const ratio = window.devicePixelRatio || 1;
-        return `${plotId}:${targetWidth}x${targetHeight}@${ratio}:${sizingPolicyId ?? ""}`;
+        return `${plotId}:${targetWidth}x${targetHeight}@${ratio}:${sizingPolicyId ?? ''}`;
     }
 
     async function render(requestedKey: string, requestSerial: number, fetchSnapshot = false) {
@@ -104,7 +97,13 @@
             requestedKey === getRenderRequestKey();
 
         try {
-            if (!isCurrent() || !requestedConnection || !requestedPlotId || height <= 0 || width <= 0) {
+            if (
+                !isCurrent() ||
+                !requestedConnection ||
+                !requestedPlotId ||
+                height <= 0 ||
+                width <= 0
+            ) {
                 return;
             }
 
@@ -113,7 +112,7 @@
                 plotId: requestedPlotId,
                 width: requestedWidth,
                 height: requestedHeight,
-                format: "png" as const,
+                format: 'png' as const,
                 pixelRatio: ratio,
             };
 
@@ -122,16 +121,21 @@
                 // Never infer a cache hit from the raw viewport dimensions here.
                 let snapshot: GetCachedRenderRequest.Result | undefined;
                 try {
-                    snapshot = await requestedConnection.sendRequest<GetCachedRenderRequest.Result>("plots/getCachedRender", params);
+                    snapshot = await requestedConnection.sendRequest<GetCachedRenderRequest.Result>(
+                        'plots/getCachedRender',
+                        params,
+                    );
                 } catch {
                     // A missing snapshot can always fall back to a normal render request.
                 }
-                if (!isCurrent()) { return; }
+                if (!isCurrent()) {
+                    return;
+                }
                 const cached = snapshot?.render;
                 if (cached && cached.renderVersion >= latestAppliedRenderVersion) {
                     latestAppliedRenderVersion = cached.renderVersion;
                     uri = cached.uri;
-                    error = "";
+                    error = '';
                     onrendered?.({
                         plotId: requestedPlotId,
                         uri: cached.uri,
@@ -147,14 +151,18 @@
                 }
             }
 
-            if (!hostState) { plotState = PlotClientState.RenderPending; }
+            if (!hostState) {
+                plotState = PlotClientState.RenderPending;
+            }
             progressBarDone = false;
             const startTime = Date.now();
 
             // The host resolves intrinsic fallback for this plot ID. An old
             // component must not mutate the newly selected plot's policy.
-            const result = (await requestedConnection.sendRequest("plots/render", params)) as {
-                data: string; mimeType: string; renderVersion: number;
+            const result = (await requestedConnection.sendRequest('plots/render', params)) as {
+                data: string;
+                mimeType: string;
+                renderVersion: number;
             };
 
             if (!isCurrent()) {
@@ -164,7 +172,7 @@
             renderEstimateMs = Date.now() - startTime;
 
             if (result.data) {
-                const renderedUri = result.data.startsWith("data:")
+                const renderedUri = result.data.startsWith('data:')
                     ? result.data
                     : `data:${result.mimeType};base64,${result.data}`;
                 if (result.renderVersion >= latestAppliedRenderVersion) {
@@ -180,14 +188,14 @@
                         renderVersion: result.renderVersion,
                     });
                 }
-                error = "";
+                error = '';
             }
         } catch (e) {
             if (!isCurrent()) {
                 return;
             }
             const err = e as Error;
-            if (err.name === "Canceled" || err.message === "Canceled") {
+            if (err.name === 'Canceled' || err.message === 'Canceled') {
                 return;
             }
 
@@ -199,7 +207,9 @@
                 pendingRenderKey = undefined;
                 pendingRenderConnection = undefined;
                 if (!destroyed) {
-                    if (!hostState) { plotState = PlotClientState.Rendered; }
+                    if (!hostState) {
+                        plotState = PlotClientState.Rendered;
+                    }
                     progressBarDone = true;
                 }
             }
@@ -310,7 +320,7 @@
         }
 
         uri = latestUri;
-        error = "";
+        error = '';
 
         if (plotState !== PlotClientState.Rendering) {
             plotState = hostState ?? PlotClientState.Rendered;
@@ -320,8 +330,8 @@
 
     onMount(() => {
         if (latestUri || initialData) {
-            uri = latestUri || initialData || "";
-            error = "";
+            uri = latestUri || initialData || '';
+            error = '';
             plotState = hostState ?? PlotClientState.Rendered;
             progressBarDone = !hostState || hostState === PlotClientState.Rendered;
             latestAppliedRenderVersion = renderVersion;
@@ -341,9 +351,9 @@
     });
 
     function getDarkFilterClass(): string {
-        if (darkFilterMode === "on") return "dark-filter-on";
-        if (darkFilterMode === "auto") return "dark-filter-auto";
-        return "";
+        if (darkFilterMode === 'on') return 'dark-filter-on';
+        if (darkFilterMode === 'auto') return 'dark-filter-auto';
+        return '';
     }
 </script>
 
@@ -357,13 +367,7 @@
     {/if}
 
     {#if uri}
-        <PanZoomImage
-            description={plotName}
-            {height}
-            imageUri={uri}
-            {width}
-            {zoom}
-        />
+        <PanZoomImage description={plotName} {height} imageUri={uri} {width} {zoom} />
     {:else if error}
         <div class="image-placeholder">
             <div class="image-placeholder-text">{error}</div>
@@ -383,7 +387,10 @@
         display: flex;
         justify-content: center;
         align-items: center;
-        background: var(--vscode-positronPlots-background, var(--vscode-panel-background, var(--vscode-editor-background)));
+        background: var(
+            --vscode-positronPlots-background,
+            var(--vscode-panel-background, var(--vscode-editor-background))
+        );
     }
 
     .dynamic-plot-instance {

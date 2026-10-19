@@ -9,6 +9,6 @@
  * @link https://jupyter-client.readthedocs.io/en/latest/messaging.html#clear-output
  */
 export interface JupyterClearOutput {
-	/** Wait to clear the output until new output is available. */
-	wait: boolean;
+    /** Wait to clear the output until new output is available. */
+    wait: boolean;
 }

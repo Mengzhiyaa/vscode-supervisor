@@ -15,7 +15,9 @@ function createKernel(connected = true) {
     const sent: string[] = [];
     const exit = new vscode.EventEmitter<any>();
     let markSent!: () => void;
-    const sentRequest = new Promise<void>((resolve) => { markSent = resolve; });
+    const sentRequest = new Promise<void>((resolve) => {
+        markSent = resolve;
+    });
     Object.assign(kernel, {
         metadata: { sessionId: 'session-1' },
         runtimeMetadata: { runtimeName: 'Test runtime' },
@@ -69,7 +71,10 @@ suite('[Unit] session shutdown', () => {
             },
         };
 
-        const deletion = RuntimeSessionService.prototype.deleteSession.call(manager as any, session.sessionId);
+        const deletion = RuntimeSessionService.prototype.deleteSession.call(
+            manager as any,
+            session.sessionId,
+        );
         await sentRequest;
         assert.strictEqual(sent.length, 1);
         assert.strictEqual(kernel._pendingRequests.size, 1);
@@ -127,7 +132,9 @@ suite('[Unit] session shutdown', () => {
     test('a shutdown acknowledgement does not complete deletion before the kernel exits', async () => {
         const { kernel, sentRequest } = createKernel();
         let completed = false;
-        const shutdown = kernel.shutdown(RuntimeExitReason.Shutdown).then(() => { completed = true; });
+        const shutdown = kernel.shutdown(RuntimeExitReason.Shutdown).then(() => {
+            completed = true;
+        });
         await sentRequest;
         const request = [...kernel._pendingRequests.values()][0] as ShutdownRequest;
         request.resolve({ status: 'ok', restart: false });
@@ -143,7 +150,9 @@ suite('[Unit] session shutdown', () => {
         let removed = false;
         const session = {
             state: RuntimeState.Idle,
-            shutdown: async () => { throw new Error('Supervisor unavailable'); },
+            shutdown: async () => {
+                throw new Error('Supervisor unavailable');
+            },
         };
         const manager = {
             _sessions: new Map([['session-1', session]]),
@@ -166,21 +175,39 @@ suite('[Unit] session shutdown', () => {
 
     test('concurrent delete requests share one shutdown and one removal', async () => {
         let finishShutdown!: () => void;
-        const pendingShutdown = new Promise<void>((resolve) => { finishShutdown = resolve; });
+        const pendingShutdown = new Promise<void>((resolve) => {
+            finishShutdown = resolve;
+        });
         let shutdowns = 0;
         let removals = 0;
         const manager = {
-            _sessions: new Map([['session-1', {
-                state: RuntimeState.Idle,
-                shutdown: async () => { shutdowns += 1; await pendingShutdown; },
-            }]]),
+            _sessions: new Map([
+                [
+                    'session-1',
+                    {
+                        state: RuntimeState.Idle,
+                        shutdown: async () => {
+                            shutdowns += 1;
+                            await pendingShutdown;
+                        },
+                    },
+                ],
+            ]),
             _deletingSessionPromises: new Map(),
             _deleteSession: (RuntimeSessionService.prototype as any)._deleteSession,
             _outputChannel: { debug: () => undefined, warn: () => undefined },
-            _removeSession: async () => { removals += 1; },
+            _removeSession: async () => {
+                removals += 1;
+            },
         };
-        const first = RuntimeSessionService.prototype.deleteSession.call(manager as any, 'session-1');
-        const second = RuntimeSessionService.prototype.deleteSession.call(manager as any, 'session-1');
+        const first = RuntimeSessionService.prototype.deleteSession.call(
+            manager as any,
+            'session-1',
+        );
+        const second = RuntimeSessionService.prototype.deleteSession.call(
+            manager as any,
+            'session-1',
+        );
         assert.strictEqual(shutdowns, 1);
         finishShutdown();
         assert.deepStrictEqual(await Promise.all([first, second]), [true, true]);

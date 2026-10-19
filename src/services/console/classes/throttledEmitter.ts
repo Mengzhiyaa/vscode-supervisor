@@ -16,7 +16,7 @@ export class ThrottledEmitter<T> implements vscode.Disposable {
         private readonly _throttleThreshold: number,
         private readonly _throttleInterval: number,
         private readonly _merge?: (pending: T | undefined, next: T) => T,
-    ) { }
+    ) {}
 
     fire(event: T): void {
         const now = Date.now();
@@ -25,9 +25,7 @@ export class ThrottledEmitter<T> implements vscode.Disposable {
         this._throttleHistory.push(now);
 
         if (this._throttleEventTimeout) {
-            this._lastEvent = this._merge
-                ? this._merge(this._lastEvent, event)
-                : event;
+            this._lastEvent = this._merge ? this._merge(this._lastEvent, event) : event;
             return;
         }
 
@@ -36,9 +34,7 @@ export class ThrottledEmitter<T> implements vscode.Disposable {
             return;
         }
 
-        this._lastEvent = this._merge
-            ? this._merge(undefined, event)
-            : event;
+        this._lastEvent = this._merge ? this._merge(undefined, event) : event;
         this._throttleEventTimeout = setTimeout(() => {
             this._throttleEventTimeout = undefined;
             if (this._lastEvent !== undefined) {

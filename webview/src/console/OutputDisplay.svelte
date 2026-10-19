@@ -1,6 +1,6 @@
 <script lang="ts">
-    import { ANSIOutput, type ANSIOutputLine } from "$lib/ansi/ansiOutput";
-    import OutputRun from "./OutputRun.svelte";
+    import { ANSIOutput, type ANSIOutputLine } from '$lib/ansi/ansiOutput';
+    import OutputRun from './OutputRun.svelte';
 
     interface Output {
         type: string;
@@ -14,7 +14,7 @@
         sessionName?: string;
     }
 
-    let { outputs, sessionName = "Session" }: Props = $props();
+    let { outputs, sessionName = 'Session' }: Props = $props();
 
     let outputContainer: HTMLDivElement;
 
@@ -45,15 +45,15 @@
      * Check if content contains ANSI escape sequences.
      */
     function hasAnsiCodes(content: string): boolean {
-        return content.includes("\x1b[") || content.includes("\x1b]");
+        return content.includes('\x1b[') || content.includes('\x1b]');
     }
 
     function isImageMimeType(mimeType?: string): boolean {
-        return mimeType?.startsWith("image/") ?? false;
+        return mimeType?.startsWith('image/') ?? false;
     }
 
     function isHtmlMimeType(mimeType?: string): boolean {
-        return mimeType === "text/html";
+        return mimeType === 'text/html';
     }
 
     function formatError(content: string): {
@@ -62,9 +62,9 @@
         traceback: string[];
     } {
         // Try to parse as structured error
-        const lines = content.split("\n");
-        const firstLine = lines[0] || "";
-        const colonIdx = firstLine.indexOf(":");
+        const lines = content.split('\n');
+        const firstLine = lines[0] || '';
+        const colonIdx = firstLine.indexOf(':');
 
         if (colonIdx > 0) {
             return {
@@ -75,7 +75,7 @@
         }
 
         return {
-            name: "Error",
+            name: 'Error',
             message: content,
             traceback: [],
         };
@@ -85,12 +85,12 @@
 <div class="output-container" bind:this={outputContainer}>
     {#each outputs as output, i (i)}
         <div class="output-item output-{output.type}">
-            {#if output.type === "input"}
+            {#if output.type === 'input'}
                 <div class="input-line">
                     <span class="prompt">&gt;</span>
                     <pre class="code">{output.content}</pre>
                 </div>
-            {:else if output.type === "stdout"}
+            {:else if output.type === 'stdout'}
                 {#if hasAnsiCodes(output.content)}
                     <div class="stdout ansi-output">
                         {#each getAnsiLines(output) as line (line.id)}
@@ -104,7 +104,7 @@
                 {:else}
                     <pre class="stdout">{output.content}</pre>
                 {/if}
-            {:else if output.type === "stderr"}
+            {:else if output.type === 'stderr'}
                 {#if hasAnsiCodes(output.content)}
                     <div class="stderr ansi-output">
                         {#each getAnsiLines(output) as line (line.id)}
@@ -118,7 +118,7 @@
                 {:else}
                     <pre class="stderr">{output.content}</pre>
                 {/if}
-            {:else if output.type === "error"}
+            {:else if output.type === 'error'}
                 {@const err = formatError(output.content)}
                 <div class="error-block">
                     <div class="error-header">
@@ -126,16 +126,14 @@
                         <span class="error-message">{err.message}</span>
                     </div>
                     {#if err.traceback.length > 0}
-                        <pre class="error-traceback">{err.traceback.join(
-                                "\n",
-                            )}</pre>
+                        <pre class="error-traceback">{err.traceback.join('\n')}</pre>
                     {/if}
                 </div>
-            {:else if output.type === "display"}
+            {:else if output.type === 'display'}
                 <div class="display-block">
                     {#if isImageMimeType(output.mimeType)}
                         <img
-                            src={output.content.startsWith("data:")
+                            src={output.content.startsWith('data:')
                                 ? output.content
                                 : `data:${output.mimeType};base64,${output.content}`}
                             alt="Plot output"

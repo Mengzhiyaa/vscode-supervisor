@@ -1,9 +1,9 @@
 /**
  * historyInfixMatchStrategy.ts
- * 
+ *
  * A history match strategy that matches the input anywhere in the string.
  * Mirrors: positron/.../common/historyInfixMatchStrategy.ts
- * 
+ *
  * This mimics the behavior of Bash's reverse-history-search mode (Ctrl+R).
  */
 
@@ -32,8 +32,10 @@ export class HistoryInfixMatchStrategy extends HistoryMatchStrategy {
         for (const entry of this._entries) {
             // Duplicate suppression: Ignore this entry if it's the same as the
             // previous one or the same as the previous match
-            if (entry.input === previousInput ||
-                entry.input === matches[matches.length - 1]?.input) {
+            if (
+                entry.input === previousInput ||
+                entry.input === matches[matches.length - 1]?.input
+            ) {
                 continue;
             }
 
@@ -45,7 +47,7 @@ export class HistoryInfixMatchStrategy extends HistoryMatchStrategy {
                     const match: HistoryMatch = {
                         input: entry.input,
                         highlightStart: matchIdx,
-                        highlightEnd: matchIdx + input.length
+                        highlightEnd: matchIdx + input.length,
                     };
                     matches.push(match);
                 }
@@ -55,7 +57,7 @@ export class HistoryInfixMatchStrategy extends HistoryMatchStrategy {
                 const match: HistoryMatch = {
                     input: entry.input,
                     highlightStart: 0,
-                    highlightEnd: 0
+                    highlightEnd: 0,
                 };
                 matches.push(match);
             }

@@ -3,7 +3,7 @@
   1:1 Positron replication - Wrapper component for plot thumbnails in gallery
 -->
 <script lang="ts">
-    import type { Snippet } from "svelte";
+    import type { Snippet } from 'svelte';
 
     // Props using Svelte 5 runes
     interface Props {
@@ -31,7 +31,7 @@
     let thumbnailButtonRef: HTMLButtonElement;
     let removeButtonRef: HTMLButtonElement;
 
-    const removePlotTitle = "Remove plot";
+    const removePlotTitle = 'Remove plot';
 
     function selectPlot() {
         onselect?.(plotId);
@@ -43,28 +43,28 @@
 
     function handleKeyDown(e: KeyboardEvent) {
         switch (e.key) {
-            case "ArrowLeft":
-            case "ArrowUp":
-            case "k":
-            case "h":
+            case 'ArrowLeft':
+            case 'ArrowUp':
+            case 'k':
+            case 'h':
                 e.preventDefault();
                 onfocusPrevious?.(plotId);
                 break;
-            case "ArrowRight":
-            case "ArrowDown":
-            case "j":
-            case "l":
+            case 'ArrowRight':
+            case 'ArrowDown':
+            case 'j':
+            case 'l':
                 e.preventDefault();
                 onfocusNext?.(plotId);
                 break;
-            case "Delete":
-            case "Backspace":
-            case "x":
+            case 'Delete':
+            case 'Backspace':
+            case 'x':
                 e.preventDefault();
                 removePlot();
                 break;
-            case "Enter":
-            case " ":
+            case 'Enter':
+            case ' ':
                 if (e.target === removeButtonRef) {
                     removePlot();
                 } else {
@@ -88,8 +88,8 @@
         data-plot-id={plotId}
         class="plot-thumbnail-button"
         tabindex={selected ? 0 : -1}
-        aria-label={plotName ? `Select plot: ${plotName}` : "Select plot"}
-        aria-current={selected ? "true" : undefined}
+        aria-label={plotName ? `Select plot: ${plotName}` : 'Select plot'}
+        aria-current={selected ? 'true' : undefined}
         onclick={selectPlot}
         onkeydown={handleKeyDown}
     >

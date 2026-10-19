@@ -1,6 +1,6 @@
 /**
  * Positron API Compatibility Layer
- * 
+ *
  * This module provides types and stubs for the Positron API that are used by
  * the supervisor code. In Positron IDE, these come from the 'positron' module.
  * For VS Code compatibility, we provide local definitions here.
@@ -22,10 +22,12 @@ export * from '../internal/runtimeTypes';
 const foregroundSessionChanged = new vscode.EventEmitter<void>();
 
 let foregroundSessionProvider:
-    (() => LanguageRuntimeSession | undefined | Promise<LanguageRuntimeSession | undefined>)
+    | (() => LanguageRuntimeSession | undefined | Promise<LanguageRuntimeSession | undefined>)
     | undefined;
 let sessionProvider:
-    ((sessionId: string) => LanguageRuntimeSession | undefined | Promise<LanguageRuntimeSession | undefined>)
+    | ((
+          sessionId: string,
+      ) => LanguageRuntimeSession | undefined | Promise<LanguageRuntimeSession | undefined>)
     | undefined;
 let clearConsoleProvider: ((sessionId?: string) => boolean | Promise<boolean>) | undefined;
 
@@ -38,16 +40,18 @@ const registeredEnvironmentContributions = new Map<string, EnvironmentVariableAc
 
 export function initializePositronCompatibility(context: vscode.ExtensionContext): void {
     compatibilityContext = context;
-    context.subscriptions.push(new vscode.Disposable(() => {
-        if (compatibilityContext === context) {
-            compatibilityContext = undefined;
-        }
-        consoleWidthSourceDisposable?.dispose();
-        consoleWidthSourceDisposable = undefined;
-        consoleWidthProvider = undefined;
-        consoleWidthSourceBound = false;
-        registeredEnvironmentContributions.clear();
-    }));
+    context.subscriptions.push(
+        new vscode.Disposable(() => {
+            if (compatibilityContext === context) {
+                compatibilityContext = undefined;
+            }
+            consoleWidthSourceDisposable?.dispose();
+            consoleWidthSourceDisposable = undefined;
+            consoleWidthProvider = undefined;
+            consoleWidthSourceBound = false;
+            registeredEnvironmentContributions.clear();
+        }),
+    );
 }
 
 /** Connects the compatibility API to the real Console width event. */
@@ -56,7 +60,7 @@ export function setConsoleWidthSource(
     getWidth?: () => number | Promise<number>,
 ): vscode.Disposable {
     consoleWidthSourceDisposable?.dispose();
-    const registration = event(width => consoleWidthEmitter.fire(width));
+    const registration = event((width) => consoleWidthEmitter.fire(width));
     consoleWidthSourceDisposable = registration;
     consoleWidthProvider = getWidth;
     consoleWidthSourceBound = true;
@@ -88,9 +92,7 @@ export function setForegroundSessionProvider<T = void>(
     });
 }
 
-export function setRuntimeSessionProvider(
-    provider: typeof sessionProvider,
-): vscode.Disposable {
+export function setRuntimeSessionProvider(provider: typeof sessionProvider): vscode.Disposable {
     sessionProvider = provider;
     return new vscode.Disposable(() => {
         if (sessionProvider === provider) {
@@ -99,9 +101,7 @@ export function setRuntimeSessionProvider(
     });
 }
 
-export function setClearConsoleProvider(
-    provider: typeof clearConsoleProvider,
-): vscode.Disposable {
+export function setClearConsoleProvider(provider: typeof clearConsoleProvider): vscode.Disposable {
     clearConsoleProvider = provider;
     return new vscode.Disposable(() => {
         if (clearConsoleProvider === provider) {
@@ -113,7 +113,7 @@ export function setClearConsoleProvider(
 class PositronCompatibilityError extends Error {
     constructor(
         message: string,
-        readonly code: RuntimeMethodErrorCode
+        readonly code: RuntimeMethodErrorCode,
     ) {
         super(message);
         this.name = 'PositronCompatibilityError';
@@ -137,10 +137,7 @@ function resultReply(result: unknown): PositronRpcResult {
     return { result };
 }
 
-function errorReply(
-    code: RuntimeMethodErrorCode,
-    message: string
-): PositronRpcError {
+function errorReply(code: RuntimeMethodErrorCode, message: string): PositronRpcError {
     return {
         error: {
             code,
@@ -150,13 +147,7 @@ function errorReply(
 }
 
 type WhenClauseTokenType =
-    | 'identifier'
-    | 'string'
-    | 'number'
-    | 'boolean'
-    | 'operator'
-    | 'lparen'
-    | 'rparen';
+    'identifier' | 'string' | 'number' | 'boolean' | 'operator' | 'lparen' | 'rparen';
 
 interface WhenClauseToken {
     type: WhenClauseTokenType;
@@ -197,7 +188,7 @@ function readWhenClauseIdentifier(identifier: string): unknown {
 
     throw new Error(
         `Context key '${identifier}' is unavailable through the VS Code extension API; ` +
-        'only config.* identifiers are supported'
+            'only config.* identifiers are supported',
     );
 }
 
@@ -263,7 +254,7 @@ function tokenizeWhenClause(whenClause: string): WhenClauseToken[] {
             continue;
         }
 
-        if (char === '\'') {
+        if (char === "'") {
             let value = '';
             index += 1;
 
@@ -274,14 +265,14 @@ function tokenizeWhenClause(whenClause: string): WhenClauseToken[] {
                     index += 2;
                     continue;
                 }
-                if (next === '\'') {
+                if (next === "'") {
                     break;
                 }
                 value += next;
                 index += 1;
             }
 
-            if (index >= whenClause.length || whenClause[index] !== '\'') {
+            if (index >= whenClause.length || whenClause[index] !== "'") {
                 throw new Error(`Unterminated string literal in when clause '${whenClause}'`);
             }
 
@@ -334,7 +325,7 @@ function tokenizeWhenClause(whenClause: string): WhenClauseToken[] {
 class WhenClauseParser {
     private _index = 0;
 
-    constructor(private readonly _tokens: WhenClauseToken[]) { }
+    constructor(private readonly _tokens: WhenClauseToken[]) {}
 
     parse(): boolean {
         const result = this._parseOr();
@@ -378,7 +369,10 @@ class WhenClauseParser {
 
         const left = this._parseValue(true);
         const operator = this._peek();
-        if (operator?.type === 'operator' && ['==', '!=', '>', '>=', '<', '<='].includes(String(operator.value))) {
+        if (
+            operator?.type === 'operator' &&
+            ['==', '!=', '>', '>=', '<', '<='].includes(String(operator.value))
+        ) {
             this._advance();
             const right = this._parseValue(false);
             return compareWhenClauseValues(left, String(operator.value), right);
@@ -449,7 +443,7 @@ function evaluateWhenClause(whenClause: string): boolean {
     } catch (error) {
         throw new PositronCompatibilityError(
             `Failed to evaluate when clause '${whenClause}': ${getErrorMessage(error)}`,
-            RuntimeMethodErrorCode.InvalidParams
+            RuntimeMethodErrorCode.InvalidParams,
         );
     }
 }
@@ -459,15 +453,11 @@ async function executeCompatCommand(commandId: string): Promise<unknown> {
     return result === undefined ? null : result;
 }
 
-function readStringParam(
-    methodName: string,
-    params: unknown,
-    key: string
-): string {
+function readStringParam(methodName: string, params: unknown, key: string): string {
     if (!params || typeof params !== 'object') {
         throw new PositronCompatibilityError(
             `Missing params for '${methodName}'`,
-            RuntimeMethodErrorCode.InvalidParams
+            RuntimeMethodErrorCode.InvalidParams,
         );
     }
 
@@ -475,7 +465,7 @@ function readStringParam(
     if (typeof value !== 'string') {
         throw new PositronCompatibilityError(
             `Expected string param '${key}' for '${methodName}'`,
-            RuntimeMethodErrorCode.InvalidParams
+            RuntimeMethodErrorCode.InvalidParams,
         );
     }
 
@@ -494,11 +484,16 @@ function readParams(methodName: string, params: unknown): Record<string, unknown
 
 function optionalString(params: Record<string, unknown>, key: string): string | undefined {
     const value = params[key];
-    return value === undefined || value === null ? undefined :
-        typeof value === 'string' ? value : undefined;
+    return value === undefined || value === null
+        ? undefined
+        : typeof value === 'string'
+          ? value
+          : undefined;
 }
 
-async function getSessionForCall(options?: PositronMethodsCallOptions): Promise<LanguageRuntimeSession | undefined> {
+async function getSessionForCall(
+    options?: PositronMethodsCallOptions,
+): Promise<LanguageRuntimeSession | undefined> {
     if (options?.sessionId && sessionProvider) {
         return sessionProvider(options.sessionId);
     }
@@ -545,10 +540,13 @@ export const methods = {
                     const title = optionalString(values, 'title');
                     const message = readStringParam(methodName, values, 'message');
                     const ok = optionalString(values, 'ok_button_title') ?? vscode.l10n.t('OK');
-                    const cancel = optionalString(values, 'cancel_button_title') ?? vscode.l10n.t('Cancel');
+                    const cancel =
+                        optionalString(values, 'cancel_button_title') ?? vscode.l10n.t('Cancel');
                     const selected = await vscode.window.showWarningMessage(
                         title ? `${title}: ${message}` : message,
-                        { modal: true }, ok, cancel,
+                        { modal: true },
+                        ok,
+                        cancel,
                     );
                     return resultReply(selected === ok);
                 }
@@ -565,7 +563,11 @@ export const methods = {
                 case 'show_prompt':
                 case 'ask_for_password': {
                     const values = readParams(methodName, params);
-                    const prompt = optionalString(values, methodName === 'show_prompt' ? 'message' : 'prompt') ?? '';
+                    const prompt =
+                        optionalString(
+                            values,
+                            methodName === 'show_prompt' ? 'message' : 'prompt',
+                        ) ?? '';
                     const value = await vscode.window.showInputBox({
                         title: optionalString(values, 'title'),
                         prompt,
@@ -578,7 +580,7 @@ export const methods = {
                 case 'debug_sleep': {
                     const values = readParams(methodName, params);
                     const ms = typeof values.ms === 'number' && values.ms >= 0 ? values.ms : 0;
-                    await new Promise(resolve => setTimeout(resolve, ms));
+                    await new Promise((resolve) => setTimeout(resolve, ms));
                     return resultReply(null);
                 }
 
@@ -605,7 +607,9 @@ export const methods = {
                     const values = readParams(methodName, params);
                     const folder = readStringParam(methodName, values, 'path');
                     await vscode.commands.executeCommand(
-                        'vscode.openFolder', vscode.Uri.file(folder), values.new_window === true,
+                        'vscode.openFolder',
+                        vscode.Uri.file(folder),
+                        values.new_window === true,
                     );
                     return resultReply(null);
                 }
@@ -624,9 +628,12 @@ export const methods = {
                     const values = readParams(methodName, params);
                     const file = readStringParam(methodName, values, 'file');
                     const document = await vscode.workspace.openTextDocument(vscode.Uri.file(file));
-                    const editor = await vscode.window.showTextDocument(document, { preview: values.pinned !== true });
+                    const editor = await vscode.window.showTextDocument(document, {
+                        preview: values.pinned !== true,
+                    });
                     const line = typeof values.line === 'number' ? Math.max(0, values.line - 1) : 0;
-                    const column = typeof values.column === 'number' ? Math.max(0, values.column - 1) : 0;
+                    const column =
+                        typeof values.column === 'number' ? Math.max(0, values.column - 1) : 0;
                     const position = new vscode.Position(line, column);
                     editor.selection = new vscode.Selection(position, position);
                     editor.revealRange(new vscode.Range(position, position));
@@ -661,7 +668,7 @@ export const methods = {
                             end: toPosition(selection.end),
                             text: editor.document.getText(selection),
                         },
-                        selections: editor.selections.map(current => ({
+                        selections: editor.selections.map((current) => ({
                             active: toPosition(current.active),
                             start: toPosition(current.start),
                             end: toPosition(current.end),
@@ -675,7 +682,10 @@ export const methods = {
                     const values = readParams(methodName, params);
                     if (editor && Array.isArray(values.selections)) {
                         editor.selections = values.selections.map((entry: any) => {
-                            const start = new vscode.Position(entry.start.line, entry.start.character);
+                            const start = new vscode.Position(
+                                entry.start.line,
+                                entry.start.character,
+                            );
                             const end = new vscode.Position(entry.end.line, entry.end.character);
                             return new vscode.Selection(start, end);
                         });
@@ -686,10 +696,14 @@ export const methods = {
                 case 'modify_editor_selections': {
                     const editor = vscode.window.activeTextEditor;
                     const values = readParams(methodName, params);
-                    if (editor && Array.isArray(values.selections) && Array.isArray(values.values)) {
+                    if (
+                        editor &&
+                        Array.isArray(values.selections) &&
+                        Array.isArray(values.values)
+                    ) {
                         const ranges = values.selections as any[];
                         const replacements = values.values as unknown[];
-                        await editor.edit(editBuilder => {
+                        await editor.edit((editBuilder) => {
                             ranges.forEach((entry, index) => {
                                 if (typeof replacements[index] !== 'string') {
                                     return;
@@ -719,7 +733,10 @@ export const methods = {
                     const code = readStringParam(methodName, values, 'code');
                     const session = await getSessionForCall(options);
                     if (!session) {
-                        throw new PositronCompatibilityError('No active runtime session', RuntimeMethodErrorCode.InternalError);
+                        throw new PositronCompatibilityError(
+                            'No active runtime session',
+                            RuntimeMethodErrorCode.InternalError,
+                        );
                     }
                     session.execute(
                         code,
@@ -743,17 +760,14 @@ export const methods = {
                 default:
                     return errorReply(
                         RuntimeMethodErrorCode.MethodNotFound,
-                        `Unsupported method '${methodName}'`
+                        `Unsupported method '${methodName}'`,
                     );
             }
         } catch (error) {
             if (error instanceof PositronCompatibilityError) {
                 return errorReply(error.code, error.message);
             }
-            return errorReply(
-                RuntimeMethodErrorCode.InternalError,
-                getErrorMessage(error)
-            );
+            return errorReply(RuntimeMethodErrorCode.InternalError, getErrorMessage(error));
         }
     },
 };
@@ -784,7 +798,7 @@ export const window = {
     async showSimpleModalDialogMessage(
         title: string,
         message: string,
-        okButtonTitle?: string
+        okButtonTitle?: string,
     ): Promise<null> {
         await vscode.window.showInformationMessage(
             title,
@@ -798,7 +812,7 @@ export const window = {
         title: string,
         message: string,
         okButtonTitle?: string,
-        cancelButtonTitle?: string
+        cancelButtonTitle?: string,
     ): Promise<boolean> {
         const ok = okButtonTitle ?? vscode.l10n.t('OK');
         const cancel = cancelButtonTitle ?? vscode.l10n.t('Cancel');
@@ -866,7 +880,7 @@ export function registerEnvironmentContributions(
     extensionId: string,
     actions: readonly EnvironmentVariableAction[],
 ): vscode.Disposable {
-    const registration = actions.map(action => ({ ...action }));
+    const registration = actions.map((action) => ({ ...action }));
     registeredEnvironmentContributions.set(extensionId, registration);
     return new vscode.Disposable(() => {
         const current = registeredEnvironmentContributions.get(extensionId);
@@ -883,9 +897,12 @@ export const environment = {
         const result: Record<string, EnvironmentVariableAction[]> = Object.create(null);
         for (const [extensionId, actions] of registeredEnvironmentContributions) {
             result[extensionId] = actions
-                .filter(action => filter !== EnvironmentContributionFilter.ProcessCreation ||
-                    action.applyAtProcessCreation !== false)
-                .map(action => ({ ...action }));
+                .filter(
+                    (action) =>
+                        filter !== EnvironmentContributionFilter.ProcessCreation ||
+                        action.applyAtProcessCreation !== false,
+                )
+                .map((action) => ({ ...action }));
         }
 
         const context = compatibilityContext;

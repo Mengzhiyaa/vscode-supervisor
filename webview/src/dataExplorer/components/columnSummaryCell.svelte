@@ -3,10 +3,10 @@
   Port from Positron's columnSummaryCell.tsx for 1:1 UI replication
 -->
 <script lang="ts">
-    import { getDataExplorerContext } from "../positronDataExplorerContext";
-    import type { SchemaColumn } from "../../dataGrid/types";
-    import ColumnSummaryRow from "./columnSummaryRow.svelte";
-    import type { TableSummaryDataGridInstance } from "../tableSummaryDataGridInstance";
+    import { getDataExplorerContext } from '../positronDataExplorerContext';
+    import type { SchemaColumn } from '../../dataGrid/types';
+    import ColumnSummaryRow from './columnSummaryRow.svelte';
+    import type { TableSummaryDataGridInstance } from '../tableSummaryDataGridInstance';
 
     interface Props {
         columnIndex: number;
@@ -73,7 +73,7 @@
 </script>
 
 <ColumnSummaryRow
-    columnIndex={columnIndex}
+    {columnIndex}
     columnName={columnSchema.column_name}
     columnType={columnSchema.type_name}
     typeDisplay={columnSchema.type_display || columnSchema.type_name}
@@ -82,7 +82,7 @@
     {profile}
     {nullPercent}
     {summaryStatsSupported}
-    expanded={expanded}
+    {expanded}
     {isCursor}
     {isFocused}
     onToggle={handleToggle}

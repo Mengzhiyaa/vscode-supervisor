@@ -11,8 +11,14 @@ async function rasterizePng(blob: Blob): Promise<Blob> {
         const image = new Image();
         await new Promise<void>((resolve, reject) => {
             const timer = setTimeout(() => reject(new Error('Image conversion timed out')), 10000);
-            image.onload = () => { clearTimeout(timer); resolve(); };
-            image.onerror = () => { clearTimeout(timer); reject(new Error('Image conversion failed')); };
+            image.onload = () => {
+                clearTimeout(timer);
+                resolve();
+            };
+            image.onerror = () => {
+                clearTimeout(timer);
+                reject(new Error('Image conversion failed'));
+            };
             image.src = url;
         });
         const canvas = document.createElement('canvas');
@@ -24,7 +30,11 @@ async function rasterizePng(blob: Blob): Promise<Blob> {
         }
         context.drawImage(image, 0, 0);
         return await new Promise<Blob>((resolve, reject) => {
-            canvas.toBlob(result => result ? resolve(result) : reject(new Error('Image conversion failed')), 'image/png');
+            canvas.toBlob(
+                (result) =>
+                    result ? resolve(result) : reject(new Error('Image conversion failed')),
+                'image/png',
+            );
         });
     } finally {
         URL.revokeObjectURL(url);

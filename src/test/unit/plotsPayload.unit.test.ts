@@ -78,6 +78,9 @@ suite('[Unit] plots payload helpers', () => {
             { id: 'html', created: 3 },
             { id: 'static', created: 1 },
         ]);
-        assert.deepStrictEqual(ordered.map(plot => plot.id), ['static', 'dynamic', 'html']);
+        assert.deepStrictEqual(
+            ordered.map((plot) => plot.id),
+            ['static', 'dynamic', 'html'],
+        );
     });
 });

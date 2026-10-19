@@ -19,11 +19,11 @@ export class PositronDataExplorerEditorContribution implements vscode.Disposable
     ) {
         this._disposables = [
             vscode.commands.registerCommand(CoreCommandIds.dataExplorerViewDataFrameAtCursor, () =>
-                this._viewDataFrameAtCursor()),
+                this._viewDataFrameAtCursor(),
+            ),
             vscode.commands.registerCommand(
                 CoreCommandIds.dataExplorerViewDataFrameByVariable,
-                (args: ViewDataFrameByVariableArgs) =>
-                    this._viewDataFrameByVariable(args),
+                (args: ViewDataFrameByVariableArgs) => this._viewDataFrameByVariable(args),
             ),
             vscode.languages.registerCodeActionsProvider(
                 DataExplorerLanguages,
@@ -43,11 +43,15 @@ export class PositronDataExplorerEditorContribution implements vscode.Disposable
         ];
     }
 
-    dispose(): void { this._disposables.forEach(disposable => disposable.dispose()); }
+    dispose(): void {
+        this._disposables.forEach((disposable) => disposable.dispose());
+    }
 
     private async _viewDataFrameAtCursor(): Promise<string | undefined> {
         const editor = vscode.window.activeTextEditor;
-        if (!editor) { return undefined; }
+        if (!editor) {
+            return undefined;
+        }
         const resolved = resolveDataFrameAtPosition(
             editor.document,
             editor.selection.active,
@@ -60,12 +64,14 @@ export class PositronDataExplorerEditorContribution implements vscode.Disposable
     private _viewDataFrameByVariable(
         args: ViewDataFrameByVariableArgs,
     ): Promise<string | undefined> | undefined {
-        const instance = this._variablesService.getVariablesInstance(args.sessionId) ??
+        const instance =
+            this._variablesService.getVariablesInstance(args.sessionId) ??
             this._variablesService.positronVariablesInstances.find(
-                candidate => candidate.session.sessionId === args.sessionId,
+                (candidate) => candidate.session.sessionId === args.sessionId,
             );
-        const variable = instance?.variableItems.find(item =>
-            item.hasViewer && item.id === args.variableId);
+        const variable = instance?.variableItems.find(
+            (item) => item.hasViewer && item.id === args.variableId,
+        );
         return variable && instance ? instance.view(variable.path) : undefined;
     }
 }
@@ -83,7 +89,9 @@ export class PositronDataExplorerCodeActionProvider implements vscode.CodeAction
             this._variablesService,
             this._runtimeSessionService,
         );
-        if (!resolved) { return []; }
+        if (!resolved) {
+            return [];
+        }
         const action = new vscode.CodeAction(
             vscode.l10n.t("Open '{0}' in Data Explorer", resolved.variable.displayName),
             vscode.CodeActionKind.Refactor,
@@ -91,10 +99,12 @@ export class PositronDataExplorerCodeActionProvider implements vscode.CodeAction
         action.command = {
             command: CoreCommandIds.dataExplorerViewDataFrameByVariable,
             title: action.title,
-            arguments: [{
-                sessionId: resolved.sessionId,
-                variableId: resolved.variable.id,
-            } satisfies ViewDataFrameByVariableArgs],
+            arguments: [
+                {
+                    sessionId: resolved.sessionId,
+                    variableId: resolved.variable.id,
+                } satisfies ViewDataFrameByVariableArgs,
+            ],
         };
         return [action];
     }
@@ -107,8 +117,12 @@ export class PositronDataExplorerClickToViewProvider implements vscode.DocumentL
     ) {}
 
     provideDocumentLinks(document: vscode.TextDocument): vscode.DocumentLink[] {
-        if (!vscode.workspace.getConfiguration('dataExplorer').get('enableClickToView', true)) { return []; }
-        if (document.getText().length > 1_000_000) { return []; }
+        if (!vscode.workspace.getConfiguration('dataExplorer').get('enableClickToView', true)) {
+            return [];
+        }
+        if (document.getText().length > 1_000_000) {
+            return [];
+        }
         const links: vscode.DocumentLink[] = [];
         for (const range of findDataExplorerIdentifierRanges(document)) {
             const resolved = resolveDataFrameAtPosition(
@@ -128,7 +142,7 @@ export class PositronDataExplorerClickToViewProvider implements vscode.DocumentL
                 range,
                 vscode.Uri.parse(
                     `command:${CoreCommandIds.dataExplorerViewDataFrameByVariable}?` +
-                    encodeURIComponent(JSON.stringify([args])),
+                        encodeURIComponent(JSON.stringify([args])),
                 ),
             );
             link.tooltip = vscode.l10n.t(

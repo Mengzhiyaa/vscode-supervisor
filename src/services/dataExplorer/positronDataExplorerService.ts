@@ -6,7 +6,10 @@
 
 import { getErrorMessage } from '../../shared/errors';
 import * as vscode from 'vscode';
-import { DataExplorerClientInstance, DataExplorerClientStatus } from './languageRuntimeDataExplorerClient';
+import {
+    DataExplorerClientInstance,
+    DataExplorerClientStatus,
+} from './languageRuntimeDataExplorerClient';
 import { RuntimeSessionService } from '../../runtime/runtimeSession';
 import { RuntimeSession } from '../../runtime/session';
 import { DataExplorerRuntime } from './dataExplorerRuntime';
@@ -56,7 +59,7 @@ export interface IPositronDataExplorerService extends vscode.Disposable {
     createInstance(
         clientInstance: DataExplorerClientInstance,
         languageName: string,
-        options?: PositronDataExplorerCreateOptions
+        options?: PositronDataExplorerCreateOptions,
     ): Promise<IPositronDataExplorerInstance>;
 
     /**
@@ -68,7 +71,10 @@ export interface IPositronDataExplorerService extends vscode.Disposable {
      * Gets an instance by its identifier, waiting for registration if not yet available.
      * Resolves the editor-first vs instance-first race condition.
      */
-    getInstanceAsync(identifier: string, timeoutMs?: number): Promise<IPositronDataExplorerInstance | undefined>;
+    getInstanceAsync(
+        identifier: string,
+        timeoutMs?: number,
+    ): Promise<IPositronDataExplorerInstance | undefined>;
 
     /**
      * Gets an instance by variable ID
@@ -78,7 +84,10 @@ export interface IPositronDataExplorerService extends vscode.Disposable {
     /**
      * Gets an instance by variable path (for notebook inline reuse)
      */
-    getInstanceForVariablePath(sessionId: string, variablePath: string[]): IPositronDataExplorerInstance | undefined;
+    getInstanceForVariablePath(
+        sessionId: string,
+        variablePath: string[],
+    ): IPositronDataExplorerInstance | undefined;
 
     /**
      * Associates a variable with an instance
@@ -119,13 +128,15 @@ export class PositronDataExplorerService implements IPositronDataExplorerService
     private readonly _variableToInstanceMap = new Map<string, string>();
     private readonly _variablePathToInstanceMap = new Map<string, string>();
     private readonly _sessionInstances = new Map<string, DataExplorerRuntime>();
-    private readonly _onDidCreateInstance = new vscode.EventEmitter<IPositronDataExplorerInstance>();
+    private readonly _onDidCreateInstance =
+        new vscode.EventEmitter<IPositronDataExplorerInstance>();
     private readonly _onDidCloseInstance = new vscode.EventEmitter<string>();
-    private readonly _onDidRegisterInstance = new vscode.EventEmitter<IPositronDataExplorerInstance>();
+    private readonly _onDidRegisterInstance =
+        new vscode.EventEmitter<IPositronDataExplorerInstance>();
 
     constructor(
         private readonly _sessionManager: RuntimeSessionService,
-        private readonly _logChannel: vscode.LogOutputChannel
+        private readonly _logChannel: vscode.LogOutputChannel,
     ) {
         this._disposables.push(this._onDidCreateInstance);
         this._disposables.push(this._onDidCloseInstance);
@@ -150,17 +161,21 @@ export class PositronDataExplorerService implements IPositronDataExplorerService
         // Listen for session starts
         this._disposables.push(
             this._sessionManager.onWillStartSession((e) => {
-                this._logChannel.debug(`[PositronDataExplorerService] Session will start: ${e.session.sessionId}`);
+                this._logChannel.debug(
+                    `[PositronDataExplorerService] Session will start: ${e.session.sessionId}`,
+                );
                 this._createSessionInstance(e.session);
-            })
+            }),
         );
 
         // Listen for session deletions
         this._disposables.push(
             this._sessionManager.onDidDeleteRuntimeSession((sessionId: string) => {
-                this._logChannel.debug(`[PositronDataExplorerService] Session deleted: ${sessionId}`);
+                this._logChannel.debug(
+                    `[PositronDataExplorerService] Session deleted: ${sessionId}`,
+                );
                 this._cleanupSession(sessionId);
-            })
+            }),
         );
 
         // Create instances for existing sessions
@@ -180,11 +195,7 @@ export class PositronDataExplorerService implements IPositronDataExplorerService
 
         existingInstance?.dispose();
 
-        const sessionInstance = new DataExplorerRuntime(
-            session,
-            this,
-            this._logChannel
-        );
+        const sessionInstance = new DataExplorerRuntime(session, this, this._logChannel);
 
         this._sessionInstances.set(session.sessionId, sessionInstance);
     }
@@ -200,9 +211,11 @@ export class PositronDataExplorerService implements IPositronDataExplorerService
     async createInstance(
         clientInstance: DataExplorerClientInstance,
         languageName: string,
-        options?: PositronDataExplorerCreateOptions
+        options?: PositronDataExplorerCreateOptions,
     ): Promise<IPositronDataExplorerInstance> {
-        this._logChannel.info(`PositronDataExplorerService: Creating instance for ${clientInstance.clientId}`);
+        this._logChannel.info(
+            `PositronDataExplorerService: Creating instance for ${clientInstance.clientId}`,
+        );
 
         const existingInstance = this._instances.get(clientInstance.clientId);
         if (existingInstance) {
@@ -233,8 +246,12 @@ export class PositronDataExplorerService implements IPositronDataExplorerService
             if (this._instances.get(instance.identifier) !== instance) {
                 return;
             }
-            if (instance.inlineOnly || (options?.sessionId &&
-                this._sessionManager.getSession(options.sessionId)?.sessionMetadata.sessionMode === 'notebook')) {
+            if (
+                instance.inlineOnly ||
+                (options?.sessionId &&
+                    this._sessionManager.getSession(options.sessionId)?.sessionMetadata
+                        .sessionMode === 'notebook')
+            ) {
                 return;
             }
             for (const [key, identifier] of this._variableToInstanceMap) {
@@ -269,7 +286,11 @@ export class PositronDataExplorerService implements IPositronDataExplorerService
         });
 
         if (options?.sessionId && options.variablePath && options.variablePath.length > 0) {
-            this.setInstanceForVariablePath(instance.identifier, options.sessionId, options.variablePath);
+            this.setInstanceForVariablePath(
+                instance.identifier,
+                options.sessionId,
+                options.variablePath,
+            );
         }
 
         // Fire creation event
@@ -289,7 +310,10 @@ export class PositronDataExplorerService implements IPositronDataExplorerService
      * Gets an instance by identifier, waiting for registration if not yet available.
      * Resolves the editor-first vs instance-first race (upstream Positron pattern).
      */
-    async getInstanceAsync(identifier: string, timeoutMs: number = 5000): Promise<IPositronDataExplorerInstance | undefined> {
+    async getInstanceAsync(
+        identifier: string,
+        timeoutMs: number = 5000,
+    ): Promise<IPositronDataExplorerInstance | undefined> {
         const existing = this._instances.get(identifier);
         if (existing) {
             return existing;
@@ -319,9 +343,12 @@ export class PositronDataExplorerService implements IPositronDataExplorerService
         return undefined;
     }
 
-    getInstanceForVariablePath(sessionId: string, variablePath: string[]): IPositronDataExplorerInstance | undefined {
+    getInstanceForVariablePath(
+        sessionId: string,
+        variablePath: string[],
+    ): IPositronDataExplorerInstance | undefined {
         const instanceId = this._variablePathToInstanceMap.get(
-            this._variablePathKey(sessionId, variablePath)
+            this._variablePathKey(sessionId, variablePath),
         );
         if (instanceId) {
             return this._instances.get(instanceId);
@@ -333,10 +360,14 @@ export class PositronDataExplorerService implements IPositronDataExplorerService
         this._variableToInstanceMap.set(variableId, instanceId);
     }
 
-    setInstanceForVariablePath(instanceId: string, sessionId: string, variablePath: string[]): void {
+    setInstanceForVariablePath(
+        instanceId: string,
+        sessionId: string,
+        variablePath: string[],
+    ): void {
         this._variablePathToInstanceMap.set(
             this._variablePathKey(sessionId, variablePath),
-            instanceId
+            instanceId,
         );
     }
 
@@ -373,13 +404,23 @@ export class PositronDataExplorerService implements IPositronDataExplorerService
     private async _openDuckDBFile(uri: vscode.Uri): Promise<IPositronDataExplorerInstance> {
         // Resolve extension ownership before using the embedded fallback. Keep the file identity
         // stable across hosts and backends so editor state and import options belong to the file.
-        const providerId = await this._backendRegistry.findProvider(uri, 'positron-duckdb') ??
-            await this._backendRegistry.findProvider(uri);
+        const providerId =
+            (await this._backendRegistry.findProvider(uri, 'positron-duckdb')) ??
+            (await this._backendRegistry.findProvider(uri));
         if (providerId) {
-            const backend = await this._backendRegistry.open(uri, providerId, `duckdb:${uri.toString()}`);
-            return this.createInstance(new DataExplorerClientInstance(backend, this._logChannel), 'sql');
+            const backend = await this._backendRegistry.open(
+                uri,
+                providerId,
+                `duckdb:${uri.toString()}`,
+            );
+            return this.createInstance(
+                new DataExplorerClientInstance(backend, this._logChannel),
+                'sql',
+            );
         }
-        this._logChannel.info(`[PositronDataExplorerService] Opening file with DuckDB: ${uri.toString()}`);
+        this._logChannel.info(
+            `[PositronDataExplorerService] Opening file with DuckDB: ${uri.toString()}`,
+        );
 
         const tableView = new DuckDBTableView(uri);
         this._importingTables.add(tableView);
@@ -406,15 +447,17 @@ export class PositronDataExplorerService implements IPositronDataExplorerService
                 throw error;
             }
             const errorMsg = getErrorMessage(error);
-            this._logChannel.error(`[PositronDataExplorerService] Failed to open file with DuckDB: ${errorMsg}`);
+            this._logChannel.error(
+                `[PositronDataExplorerService] Failed to open file with DuckDB: ${errorMsg}`,
+            );
 
             // FR-013: Distinguish WASM initialization failures from file I/O errors
             const isWasmError = /wasm|instantiate|worker|webassembly|compile/i.test(errorMsg);
             if (isWasmError) {
                 throw new Error(
                     `DuckDB-WASM engine failed to initialize. ` +
-                    `Your environment may not support WebAssembly. ` +
-                    `Original error: ${errorMsg}`
+                        `Your environment may not support WebAssembly. ` +
+                        `Original error: ${errorMsg}`,
                 );
             }
 
@@ -428,12 +471,18 @@ export class PositronDataExplorerService implements IPositronDataExplorerService
         return this._backendRegistry.registerProvider(provider);
     }
 
-    async openWithBackend(uri: vscode.Uri, providerId?: string): Promise<IPositronDataExplorerInstance> {
+    async openWithBackend(
+        uri: vscode.Uri,
+        providerId?: string,
+    ): Promise<IPositronDataExplorerInstance> {
         const backend = await this._backendRegistry.open(uri, providerId);
         const existing = this._instances.get(backend.clientId);
         if (existing) {
             if (existing.clientInstance.status === DataExplorerClientStatus.Disconnected) {
-                await this.createInstance(new DataExplorerClientInstance(backend, this._logChannel), 'extension');
+                await this.createInstance(
+                    new DataExplorerClientInstance(backend, this._logChannel),
+                    'extension',
+                );
             } else {
                 backend.dispose();
             }
@@ -462,8 +511,10 @@ export class PositronDataExplorerService implements IPositronDataExplorerService
         this._sessionInstances.clear();
         this._variableToInstanceMap.clear();
         this._variablePathToInstanceMap.clear();
-        this._disposables.forEach(d => d.dispose());
+        this._disposables.forEach((d) => d.dispose());
         this._backendRegistry.dispose();
-        DuckDBInstance.getInstance().dispose().catch(() => { });
+        DuckDBInstance.getInstance()
+            .dispose()
+            .catch(() => {});
     }
 }

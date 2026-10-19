@@ -3,41 +3,38 @@
      * ConsoleCore.svelte - Console Core (Positron pattern)
      * Main container managing multi-session console with sidebar
      */
-    import { onMount, setContext, tick } from "svelte";
-    import { SvelteMap } from "svelte/reactivity";
-    import { getRpcConnection } from "$lib/rpc/client";
-    import { LspClientManager, lspClientManagerContext } from "$lib/lsp/lspClientManager";
-    import ActionBar from "./ActionBar.svelte";
-    import ConsoleTabList from "./ConsoleTabList.svelte";
-    import ConsoleInstance from "./ConsoleInstance.svelte";
-    import SharedConsoleInputHost from "./SharedConsoleInputHost.svelte";
-    import VerticalSplitter from "./VerticalSplitter.svelte";
-    import StartupStatus from "./StartupStatus.svelte";
-    import EmptyConsole from "./EmptyConsole.svelte";
-    import { deserializePromptState } from "@shared/console";
+    import { onMount, setContext, tick } from 'svelte';
+    import { SvelteMap } from 'svelte/reactivity';
+    import { getRpcConnection } from '$lib/rpc/client';
+    import { LspClientManager, lspClientManagerContext } from '$lib/lsp/lspClientManager';
+    import ActionBar from './ActionBar.svelte';
+    import ConsoleTabList from './ConsoleTabList.svelte';
+    import ConsoleInstance from './ConsoleInstance.svelte';
+    import SharedConsoleInputHost from './SharedConsoleInputHost.svelte';
+    import VerticalSplitter from './VerticalSplitter.svelte';
+    import StartupStatus from './StartupStatus.svelte';
+    import EmptyConsole from './EmptyConsole.svelte';
+    import { deserializePromptState } from '@shared/console';
     import type {
         SerializedActivityItem,
         SerializedConsoleState,
         SerializedRuntimeItem,
-    } from "@shared/consoleState";
-    import type { RuntimeResourceUsage as ResourceUsage } from "@shared/runtime";
-    import type {
-        ConsoleSettings,
-        RuntimeStartupPhase,
-    } from "../types/console";
+    } from '@shared/consoleState';
+    import type { RuntimeResourceUsage as ResourceUsage } from '@shared/runtime';
+    import type { ConsoleSettings, RuntimeStartupPhase } from '../types/console';
     import {
         createConsoleInstanceModel,
         type ConsoleInstanceModel,
         type ConsoleSessionInfo as SessionInfo,
-    } from "./models/consoleInstance";
-    import type { ConsoleInputCommand } from "./services/sessionModelManager";
-    import type { ConsoleInputEdit } from "@shared/consoleInputState";
+    } from './models/consoleInstance';
+    import type { ConsoleInputCommand } from './services/sessionModelManager';
+    import type { ConsoleInputEdit } from '@shared/consoleInputState';
     import {
         promptInputControllersContext,
         type PromptInputController,
         type PromptInputControllers,
-    } from "./services/promptInputController";
-    import type { MessageConnection } from "vscode-jsonrpc/browser";
+    } from './services/promptInputController';
+    import type { MessageConnection } from 'vscode-jsonrpc/browser';
     import {
         RuntimeItem,
         RuntimeItemActivity,
@@ -61,9 +58,9 @@
         ActivityItemOutputPlot,
         ActivityItemPrompt,
         type ILanguageRuntimeMessageOutputData,
-    } from "./classes";
-    import type { ConsoleThemeData } from "$lib/monaco/languageSupport";
-    import { localize } from "$lib/localization";
+    } from './classes';
+    import type { ConsoleThemeData } from '$lib/monaco/languageSupport';
+    import { localize } from '$lib/localization';
 
     const promptInputs: PromptInputControllers = new Map();
     setContext(promptInputControllersContext, promptInputs);
@@ -91,12 +88,12 @@
 
     interface RuntimeChange {
         kind:
-            | "appendRuntimeItem"
-            | "replaceRuntimeItem"
-            | "appendActivityItem"
-            | "replaceActivityOutput"
-            | "clearActivityOutput"
-            | "updateActivityInputState";
+            | 'appendRuntimeItem'
+            | 'replaceRuntimeItem'
+            | 'appendActivityItem'
+            | 'replaceActivityOutput'
+            | 'clearActivityOutput'
+            | 'updateActivityInputState';
         parentId?: string;
         targetId?: string;
         outputId?: string;
@@ -129,29 +126,34 @@
     const DEFAULT_SCROLLBACK_SIZE = 10000;
     const DEFAULT_CONSOLE_FONT_SIZE = 14;
     const DEFAULT_CONSOLE_LINE_HEIGHT = 1.4;
-    const DEFAULT_CONSOLE_FONT_FAMILY = "var(--vscode-editor-font-family)";
+    const DEFAULT_CONSOLE_FONT_FAMILY = 'var(--vscode-editor-font-family)';
     // State
     let connection = $state<MessageConnection | undefined>();
     let sessions = $state<SessionInfo[]>([]);
     $effect(() => {
-        lspClientManager.updateSessions(sessions.map(session => ({
-            id: session.id, runtimeState: session.runtimeState, runtimeAttached: session.runtimeAttached,
-        })));
+        lspClientManager.updateSessions(
+            sessions.map((session) => ({
+                id: session.id,
+                runtimeState: session.runtimeState,
+                runtimeAttached: session.runtimeAttached,
+            })),
+        );
     });
     let activeConsoleSessionId = $state<string | undefined>();
     let pendingForegroundSessionId = $state<string | undefined>();
     const sessionDataMap = new SvelteMap<string, SessionData>();
     const sessionSyncSeqMap = new Map<string, number>();
-    const pendingConsoleStateChunks = new Map<string, {
-        sessionId: string;
-        syncSeq: number;
-        total: number;
-        chunks: Array<string | undefined>;
-    }>();
+    const pendingConsoleStateChunks = new Map<
+        string,
+        {
+            sessionId: string;
+            syncSeq: number;
+            total: number;
+            chunks: Array<string | undefined>;
+        }
+    >();
     const pendingFullStateRequests = new Set<string>();
-    let inputCommand = $state<ConsoleInputCommandEnvelope | undefined>(
-        undefined,
-    );
+    let inputCommand = $state<ConsoleInputCommandEnvelope | undefined>(undefined);
     let inputCommandCounter = 0;
     const inputAnchorBySession = new SvelteMap<string, HTMLDivElement>();
     let inputAnchorVersion = $state(0);
@@ -162,13 +164,20 @@
 
     function updateHostSubmission(sessionId: string, submitting: boolean, version?: number): void {
         const previous = hostSubmissionVersions.get(sessionId);
-        if (previous !== undefined && (version === undefined || version < previous)) { return; }
-        if (version !== undefined) { hostSubmissionVersions.set(sessionId, version); }
+        if (previous !== undefined && (version === undefined || version < previous)) {
+            return;
+        }
+        if (version !== undefined) {
+            hostSubmissionVersions.set(sessionId, version);
+        }
         hostSubmittingBySession.set(sessionId, submitting);
     }
 
     function isSubmitting(sessionId: string): boolean {
-        return hostSubmittingBySession.get(sessionId) === true || submittingBySession.get(sessionId) === true;
+        return (
+            hostSubmittingBySession.get(sessionId) === true ||
+            submittingBySession.get(sessionId) === true
+        );
     }
     let sessionSwitchNonce = 0;
     let revealRequest = $state<
@@ -185,9 +194,7 @@
     // ActionBar state
     const workingDirectoryBySession = new SvelteMap<string, string>();
     const currentWorkingDirectory = $derived(
-        activeConsoleSessionId
-            ? (workingDirectoryBySession.get(activeConsoleSessionId) ?? "")
-            : "",
+        activeConsoleSessionId ? (workingDirectoryBySession.get(activeConsoleSessionId) ?? '') : '',
     );
     const promptBySession = new SvelteMap<
         string,
@@ -195,8 +202,7 @@
     >();
     const wordWrapBySession = new SvelteMap<string, boolean>();
     const traceBySession = new SvelteMap<string, boolean>();
-    const resourceUsageBySession =
-        new SvelteMap<string, ResourceUsage[]>();
+    const resourceUsageBySession = new SvelteMap<string, ResourceUsage[]>();
     let lastResourceUsageGeneration = 0;
     let languageAssetsVersion = $state(0);
 
@@ -210,9 +216,9 @@
         fontFamily: DEFAULT_CONSOLE_FONT_FAMILY,
         fontSize: DEFAULT_CONSOLE_FONT_SIZE,
         lineHeight: DEFAULT_CONSOLE_LINE_HEIGHT,
-        fontLigatures: "off",
-        fontVariations: "off",
-        fontWeight: "normal",
+        fontLigatures: 'off',
+        fontVariations: 'off',
+        fontWeight: 'normal',
         letterSpacing: 0,
         showResourceMonitor: true,
         promptWhenIncomplete: true,
@@ -221,23 +227,20 @@
     let consoleThemeData = $state<ConsoleThemeData | undefined>(undefined);
     // When true (default), permanently delete data beyond scrollback limit to free memory
     let clearScrollbackData = $state(true);
-    let runtimeStartupPhase = $state<RuntimeStartupPhase>("initializing");
+    let runtimeStartupPhase = $state<RuntimeStartupPhase>('initializing');
     let discoveredRuntimeCount = $state(0);
     let expectedRuntimeCount = $state(0);
     let latestRuntimePath = $state<string | undefined>(undefined);
-    let runtimeStartupEvent = $state<RuntimeStartupEvent | undefined>(
-        undefined,
-    );
-    let openSearchRequest = $state<
-        { sessionId: string; nonce: number } | undefined
-    >(undefined);
+    let runtimeStartupEvent = $state<RuntimeStartupEvent | undefined>(undefined);
+    let openSearchRequest = $state<{ sessionId: string; nonce: number } | undefined>(undefined);
     let openSearchCounter = 0;
     let findCommandRequest = $state<
-        {
-            sessionId: string;
-            command: "focus" | "next" | "previous" | "close";
-            nonce: number;
-        } | undefined
+        | {
+              sessionId: string;
+              command: 'focus' | 'next' | 'previous' | 'close';
+              nonce: number;
+          }
+        | undefined
     >(undefined);
     let findCommandCounter = 0;
     let findVisible = false;
@@ -266,10 +269,7 @@
      * Handle width in characters change from ConsoleInstance (Positron pattern)
      * Width is derived from the visible console viewport, not the input widget.
      */
-    function handleWidthInCharsChanged(
-        sessionId: string,
-        newWidthInChars: number,
-    ) {
+    function handleWidthInCharsChanged(sessionId: string, newWidthInChars: number) {
         if (newWidthInChars !== consoleWidthInChars) {
             consoleWidthInChars = newWidthInChars;
             debouncedSendWidthChange(sessionId, newWidthInChars);
@@ -284,7 +284,7 @@
             clearTimeout(widthChangeTimer);
         }
         widthChangeTimer = setTimeout(() => {
-            connection?.sendNotification("console/setWidthInChars", {
+            connection?.sendNotification('console/setWidthInChars', {
                 widthInChars: newWidth,
                 sessionId: sessionId,
             });
@@ -295,10 +295,7 @@
         params:
             | {
                   modules?: Record<string, string>;
-                  grammars?: Record<
-                      string,
-                      { scopeName: string; grammarUrl: string }
-                  >;
+                  grammars?: Record<string, { scopeName: string; grammarUrl: string }>;
               }
             | undefined,
     ) {
@@ -327,9 +324,7 @@
 
         if (
             requestedForegroundSessionId &&
-            nextSessions.some(
-                (session) => session.id === requestedForegroundSessionId,
-            )
+            nextSessions.some((session) => session.id === requestedForegroundSessionId)
         ) {
             return requestedForegroundSessionId;
         }
@@ -338,9 +333,7 @@
         // valid active session.
         if (
             previousForegroundSessionId &&
-            nextSessions.some(
-                (session) => session.id === previousForegroundSessionId,
-            )
+            nextSessions.some((session) => session.id === previousForegroundSessionId)
         ) {
             return previousForegroundSessionId;
         }
@@ -349,9 +342,7 @@
     }
 
     function pruneRemovedSessions(nextSessions: SessionInfo[]): void {
-        const remainingSessionIds = new Set(
-            nextSessions.map((session) => session.id),
-        );
+        const remainingSessionIds = new Set(nextSessions.map((session) => session.id));
 
         for (const sessionId of [...sessionDataMap.keys()]) {
             if (!remainingSessionIds.has(sessionId)) {
@@ -408,10 +399,7 @@
                 hostSubmissionVersions.delete(sessionId);
             }
         }
-        if (
-            pendingForegroundSessionId &&
-            !remainingSessionIds.has(pendingForegroundSessionId)
-        ) {
+        if (pendingForegroundSessionId && !remainingSessionIds.has(pendingForegroundSessionId)) {
             pendingForegroundSessionId = undefined;
         }
     }
@@ -423,7 +411,7 @@
 
         pendingFullStateRequests.add(sessionId);
         void connection
-            .sendRequest("console/requestFullState", { sessionId, reason })
+            .sendRequest('console/requestFullState', { sessionId, reason })
             .catch((error) => {
                 pendingFullStateRequests.delete(sessionId);
                 console.error(
@@ -436,15 +424,13 @@
     function sendConsoleContextKeys(): void {
         const activeElement = document.activeElement;
         const consoleFocused = Boolean(
-            mainContainer &&
-                activeElement instanceof Node &&
-                mainContainer.contains(activeElement),
+            mainContainer && activeElement instanceof Node && mainContainer.contains(activeElement),
         );
         const findInputFocused =
             activeElement instanceof HTMLElement &&
-            activeElement.classList.contains("search-input");
+            activeElement.classList.contains('search-input');
 
-        connection?.sendNotification("console/contextKeysChanged", {
+        connection?.sendNotification('console/contextKeysChanged', {
             consoleFocused,
             findVisible,
             findInputFocused,
@@ -473,9 +459,7 @@
     }
 
     function mergeSessionSnapshot(nextSessions: SessionInfo[]): SessionInfo[] {
-        const existingById = new Map(
-            sessions.map((session) => [session.id, session]),
-        );
+        const existingById = new Map(sessions.map((session) => [session.id, session]));
         return nextSessions.map((session) =>
             mergeIncomingSession(session, existingById.get(session.id)),
         );
@@ -500,18 +484,14 @@
         const previousForegroundSessionId = activeConsoleSessionId;
         const hasPendingForegroundSession =
             pendingForegroundSessionId &&
-            nextSessions.some(
-                (session) => session.id === pendingForegroundSessionId,
-            );
+            nextSessions.some((session) => session.id === pendingForegroundSessionId);
 
         if (pendingForegroundSessionId && hasPendingForegroundSession) {
             // Keep an optimistic tab selection only until the Host confirms
             // it. Subsequent active-session changes must follow the Host.
             activeConsoleSessionId = pendingForegroundSessionId;
 
-            if (
-                requestedForegroundSessionId === pendingForegroundSessionId
-            ) {
+            if (requestedForegroundSessionId === pendingForegroundSessionId) {
                 pendingForegroundSessionId = undefined;
             }
             return;
@@ -529,9 +509,7 @@
     }
 
     function upsertSession(nextSession: SessionInfo): SessionInfo[] {
-        const existingIndex = sessions.findIndex(
-            (session) => session.id === nextSession.id,
-        );
+        const existingIndex = sessions.findIndex((session) => session.id === nextSession.id);
         const mergedSession = mergeIncomingSession(
             nextSession,
             existingIndex >= 0 ? sessions[existingIndex] : undefined,
@@ -551,22 +529,22 @@
 
     function stateLabelForSession(session: SessionInfo | undefined): string {
         if (!session) {
-            return "";
+            return '';
         }
 
         switch (session.state) {
-            case "starting":
-                return localize("console.state.starting", "Starting");
-            case "restarting":
-                return localize("console.state.restarting", "Restarting");
-            case "interrupting":
-                return localize("console.state.interrupting", "Interrupting");
-            case "exiting":
-                return localize("console.state.exiting", "Shutting Down");
-            case "offline":
-                return localize("console.reconnecting", "Reconnecting");
+            case 'starting':
+                return localize('console.state.starting', 'Starting');
+            case 'restarting':
+                return localize('console.state.restarting', 'Restarting');
+            case 'interrupting':
+                return localize('console.state.interrupting', 'Interrupting');
+            case 'exiting':
+                return localize('console.state.exiting', 'Shutting Down');
+            case 'offline':
+                return localize('console.reconnecting', 'Reconnecting');
             default:
-                return "";
+                return '';
         }
     }
 
@@ -576,9 +554,9 @@
         }
 
         return (
-            session.state === "ready" ||
-            session.state === "busy" ||
-            session.state === "interrupting"
+            session.state === 'ready' ||
+            session.state === 'busy' ||
+            session.state === 'interrupting'
         );
     }
 
@@ -587,9 +565,7 @@
             return false;
         }
 
-        return (
-            session.state === "exited" || session.state === "uninitialized"
-        );
+        return session.state === 'exited' || session.state === 'uninitialized';
     }
 
     // Get session data (returns empty data if not exists - DO NOT MUTATE during render)
@@ -623,8 +599,8 @@
         // Seed per-session state maps
         if (!promptBySession.has(sessionId)) {
             promptBySession.set(sessionId, {
-                inputPrompt: ">",
-                continuationPrompt: "+",
+                inputPrompt: '>',
+                continuationPrompt: '+',
             });
         }
         if (!wordWrapBySession.has(sessionId)) {
@@ -639,7 +615,7 @@
     }
 
     function normalizeScrollbackSize(value?: number): number {
-        if (typeof value !== "number" || !Number.isFinite(value)) {
+        if (typeof value !== 'number' || !Number.isFinite(value)) {
             return DEFAULT_SCROLLBACK_SIZE;
         }
         return Math.max(1000, Math.min(20000, Math.trunc(value)));
@@ -660,22 +636,20 @@
     }
 
     function normalizeConsoleFontSize(value?: number): number {
-        if (typeof value !== "number" || !Number.isFinite(value)) {
+        if (typeof value !== 'number' || !Number.isFinite(value)) {
             return DEFAULT_CONSOLE_FONT_SIZE;
         }
         return Math.min(100, Math.max(6, value));
     }
 
     function normalizeConsoleLineHeight(value?: number): number {
-        if (typeof value !== "number" || !Number.isFinite(value)) {
+        if (typeof value !== 'number' || !Number.isFinite(value)) {
             return DEFAULT_CONSOLE_LINE_HEIGHT;
         }
         return Math.min(3, Math.max(1, value));
     }
 
-    function applyConsoleSettings(
-        nextSettings: Partial<ConsoleSettings> | undefined,
-    ): void {
+    function applyConsoleSettings(nextSettings: Partial<ConsoleSettings> | undefined): void {
         const normalizedScrollbackSize = normalizeScrollbackSize(
             nextSettings?.scrollbackSize ?? consoleSettings.scrollbackSize,
         );
@@ -698,8 +672,7 @@
         const showResourceMonitor =
             nextSettings?.showResourceMonitor ?? consoleSettings.showResourceMonitor;
         const promptWhenIncomplete =
-            nextSettings?.promptWhenIncomplete ??
-            consoleSettings.promptWhenIncomplete;
+            nextSettings?.promptWhenIncomplete ?? consoleSettings.promptWhenIncomplete;
         const sashSize = Math.max(
             1,
             Math.min(20, nextSettings?.sashSize ?? consoleSettings.sashSize),
@@ -746,10 +719,7 @@
         const data = getSessionData(sessionId);
         let remaining = scrollbackSize;
         for (let i = data.runtimeItems.length - 1; i >= 0; i--) {
-            remaining = data.runtimeItems[i].optimizeScrollback(
-                remaining,
-                clearScrollbackData,
-            );
+            remaining = data.runtimeItems[i].optimizeScrollback(remaining, clearScrollbackData);
         }
     }
 
@@ -788,8 +758,8 @@
     } {
         return (
             promptBySession.get(sessionId) || {
-                inputPrompt: ">",
-                continuationPrompt: "+",
+                inputPrompt: '>',
+                continuationPrompt: '+',
             }
         );
     }
@@ -798,10 +768,7 @@
         return scrollLockedBySession.get(sessionId) ?? false;
     }
 
-    function handleScrollLockChanged(
-        sessionId: string,
-        nextScrollLocked: boolean,
-    ): void {
+    function handleScrollLockChanged(sessionId: string, nextScrollLocked: boolean): void {
         const previous = scrollLockedBySession.get(sessionId);
         if (previous === nextScrollLocked) {
             return;
@@ -852,10 +819,7 @@
         for (const snapshot of params.sessions) {
             const samples = snapshot.replace
                 ? snapshot.samples
-                : [
-                      ...(resourceUsageBySession.get(snapshot.sessionId) ?? []),
-                      ...snapshot.samples,
-                  ];
+                : [...(resourceUsageBySession.get(snapshot.sessionId) ?? []), ...snapshot.samples];
             resourceUsageBySession.set(
                 snapshot.sessionId,
                 samples.slice(-MAX_RESOURCE_USAGE_HISTORY),
@@ -863,10 +827,7 @@
         }
     }
 
-    function emitInputCommand(
-        sessionId: string,
-        command: ConsoleInputCommand,
-    ): void {
+    function emitInputCommand(sessionId: string, command: ConsoleInputCommand): void {
         inputCommand = {
             sessionId,
             command,
@@ -889,12 +850,14 @@
 
         // Let pending transcript updates mount the prompt before dispatching.
         // An active prompt must never fall back to the hidden code editor.
-        void tick().then(async () => {
-            const input = promptInputs.get(sessionId);
-            if (input) {
-                await command(input);
-            }
-        }).catch((error) => console.error("Failed to handle prompt input:", error));
+        void tick()
+            .then(async () => {
+                const input = promptInputs.get(sessionId);
+                if (input) {
+                    await command(input);
+                }
+            })
+            .catch((error) => console.error('Failed to handle prompt input:', error));
         return true;
     }
 
@@ -911,7 +874,7 @@
             if (focusPromptInput(sessionId)) {
                 return;
             }
-            emitInputCommand(sessionId, { kind: "focus" });
+            emitInputCommand(sessionId, { kind: 'focus' });
         };
 
         if (sessionId !== activeConsoleSessionId) {
@@ -936,7 +899,7 @@
         if (insertPromptText(sessionId, text)) {
             return;
         }
-        emitInputCommand(sessionId, { kind: "insertText", text });
+        emitInputCommand(sessionId, { kind: 'insertText', text });
     }
 
     function queuePastedInput(sessionId: string, text: string): void {
@@ -951,13 +914,10 @@
         if (insertPromptText(sessionId, text)) {
             return;
         }
-        emitInputCommand(sessionId, { kind: "paste", text });
+        emitInputCommand(sessionId, { kind: 'paste', text });
     }
 
-    function handleInputAnchorReady(
-        sessionId: string,
-        anchor: HTMLDivElement | null,
-    ): void {
+    function handleInputAnchorReady(sessionId: string, anchor: HTMLDivElement | null): void {
         if (anchor) {
             inputAnchorBySession.set(sessionId, anchor);
         } else {
@@ -975,7 +935,7 @@
         if (!outputId || !connection) {
             return;
         }
-        void connection.sendRequest("plots/select", {
+        void connection.sendRequest('plots/select', {
             plotId: outputId,
         });
     }
@@ -992,36 +952,33 @@
     ): void {
         ensureSessionData(sessionId);
 
-        if (typeof metadata.trace === "boolean") {
+        if (typeof metadata.trace === 'boolean') {
             setTraceEnabled(sessionId, metadata.trace);
         }
-        if (typeof metadata.wordWrap === "boolean") {
+        if (typeof metadata.wordWrap === 'boolean') {
             setWordWrap(sessionId, metadata.wordWrap);
         }
         if (
-            typeof metadata.inputPrompt === "string" ||
-            typeof metadata.continuationPrompt === "string"
+            typeof metadata.inputPrompt === 'string' ||
+            typeof metadata.continuationPrompt === 'string'
         ) {
             const previousPrompt = getPrompt(sessionId);
             promptBySession.set(sessionId, {
                 inputPrompt:
-                    typeof metadata.inputPrompt === "string" &&
+                    typeof metadata.inputPrompt === 'string' &&
                     metadata.inputPrompt.trimEnd().length > 0
                         ? metadata.inputPrompt
                         : previousPrompt.inputPrompt,
                 continuationPrompt:
-                    typeof metadata.continuationPrompt === "string" &&
+                    typeof metadata.continuationPrompt === 'string' &&
                     metadata.continuationPrompt.trimEnd().length > 0
                         ? metadata.continuationPrompt
                         : previousPrompt.continuationPrompt,
             });
         }
-        if ("workingDirectory" in metadata) {
-            if (typeof metadata.workingDirectory === "string") {
-                workingDirectoryBySession.set(
-                    sessionId,
-                    metadata.workingDirectory,
-                );
+        if ('workingDirectory' in metadata) {
+            if (typeof metadata.workingDirectory === 'string') {
+                workingDirectoryBySession.set(sessionId, metadata.workingDirectory);
             } else {
                 workingDirectoryBySession.delete(sessionId);
             }
@@ -1050,7 +1007,7 @@
         | ActivityItemPrompt
         | undefined {
         switch (item.type) {
-            case "input":
+            case 'input':
                 return new ActivityItemInput(
                     item.id,
                     item.parentId,
@@ -1061,7 +1018,7 @@
                     item.code,
                     item.attribution,
                 );
-            case "stream":
+            case 'stream':
                 return new ActivityItemStream(
                     item.id,
                     item.parentId,
@@ -1069,7 +1026,7 @@
                     item.streamType as ActivityItemStreamType,
                     item.text,
                 );
-            case "error":
+            case 'error':
                 return new ActivityItemErrorMessage(
                     item.id,
                     item.parentId,
@@ -1078,7 +1035,7 @@
                     item.message,
                     item.traceback ?? [],
                 );
-            case "errorSuggestion":
+            case 'errorSuggestion':
                 return new ActivityItemErrorSuggestion(
                     item.id,
                     item.parentId,
@@ -1086,7 +1043,7 @@
                     item.suggestions,
                     item.available,
                 );
-            case "outputHtml":
+            case 'outputHtml':
                 return new ActivityItemOutputHtml(
                     item.id,
                     item.parentId,
@@ -1095,7 +1052,7 @@
                     item.resource,
                     item.outputId as string | undefined,
                 );
-            case "output":
+            case 'output':
                 return new ActivityItemOutputMessage(
                     item.id,
                     item.parentId,
@@ -1103,7 +1060,7 @@
                     item.data as ILanguageRuntimeMessageOutputData,
                     item.outputId as string | undefined,
                 );
-            case "outputPlot":
+            case 'outputPlot':
                 return new ActivityItemOutputPlot(
                     item.id,
                     item.parentId,
@@ -1112,27 +1069,24 @@
                     () => selectPlot(item.outputId as string | undefined),
                     item.outputId as string | undefined,
                 );
-            case "prompt":
-                {
-                    const promptItem = new ActivityItemPrompt(
-                        item.id,
-                        item.parentId,
-                        new Date(item.when),
-                        item.prompt,
-                        item.password,
-                        sessionId,
-                    );
-                    const promptState = deserializePromptState(
-                        item.state as string | undefined,
-                    );
-                    if (promptState) {
-                        promptItem.state = promptState;
-                    }
-                    if (typeof item.answer === "string") {
-                        promptItem.answer = item.answer;
-                    }
-                    return promptItem;
+            case 'prompt': {
+                const promptItem = new ActivityItemPrompt(
+                    item.id,
+                    item.parentId,
+                    new Date(item.when),
+                    item.prompt,
+                    item.password,
+                    sessionId,
+                );
+                const promptState = deserializePromptState(item.state as string | undefined);
+                if (promptState) {
+                    promptItem.state = promptState;
                 }
+                if (typeof item.answer === 'string') {
+                    promptItem.answer = item.answer;
+                }
+                return promptItem;
+            }
         }
 
         return undefined;
@@ -1143,7 +1097,7 @@
         sessionId: string,
     ): { runtimeItem: RuntimeItem; activity?: RuntimeItemActivity } | undefined {
         switch (item.type) {
-            case "activity": {
+            case 'activity': {
                 const activityItems = (item.items ?? [])
                     .map((entry: SerializedActivityItem) =>
                         deserializeActivityItem(entry, sessionId),
@@ -1158,10 +1112,7 @@
                     return undefined;
                 }
 
-                const activity = new RuntimeItemActivity(
-                    item.parentId,
-                    activityItems[0],
-                );
+                const activity = new RuntimeItemActivity(item.parentId, activityItems[0]);
                 for (let i = 1; i < activityItems.length; i++) {
                     activity.addActivityItem(activityItems[i]);
                 }
@@ -1171,101 +1122,80 @@
                     activity,
                 };
             }
-            case "started":
+            case 'started':
                 return {
                     runtimeItem: new RuntimeItemStarted(
                         item.id,
-                        localize(
-                            "console.sessionStarted",
-                            "{0} started.",
-                            item.sessionName,
-                        ),
+                        localize('console.sessionStarted', '{0} started.', item.sessionName),
                     ),
                 };
-            case "restarted":
+            case 'restarted':
                 return {
                     runtimeItem: new RuntimeItemStarted(
                         item.id,
-                        localize(
-                            "console.sessionRestarted",
-                            "{0} restarted.",
-                            item.sessionName,
-                        ),
+                        localize('console.sessionRestarted', '{0} restarted.', item.sessionName),
                     ),
                 };
-            case "startup":
+            case 'startup':
                 return {
                     runtimeItem: new RuntimeItemStartup(item.id, item.banner),
                 };
-            case "startupFailure":
+            case 'startupFailure':
                 return {
                     runtimeItem: new RuntimeItemStartupFailure(
                         item.id,
                         (item.message as string | undefined) ??
-                            localize(
-                                "console.runtimeFailedToStart",
-                                "Runtime failed to start.",
-                            ),
-                        (item.details as string | undefined) ?? "",
+                            localize('console.runtimeFailedToStart', 'Runtime failed to start.'),
+                        (item.details as string | undefined) ?? '',
                     ),
                 };
-            case "exited": {
+            case 'exited': {
                 const fallbackSessionName =
-                    sessions.find((session) => session.id === sessionId)
-                        ?.runtimeName ??
+                    sessions.find((session) => session.id === sessionId)?.runtimeName ??
                     sessions.find((session) => session.id === sessionId)?.name ??
-                    "R";
+                    'R';
                 return {
                     runtimeItem: new RuntimeItemExited(
                         item.id,
-                        (item.sessionName as string | undefined) ??
-                            fallbackSessionName,
+                        (item.sessionName as string | undefined) ?? fallbackSessionName,
                         (item.exitCode as number | undefined) ?? 0,
-                        (item.reason as string | undefined) ?? "",
+                        (item.reason as string | undefined) ?? '',
                     ),
                 };
             }
-            case "offline":
+            case 'offline':
                 return {
-                    runtimeItem: new RuntimeItemOffline(
-                        item.id,
-                        item.sessionName,
-                        item.reason,
-                    ),
+                    runtimeItem: new RuntimeItemOffline(item.id, item.sessionName, item.reason),
                 };
-            case "pendingInput":
+            case 'pendingInput':
                 return {
                     runtimeItem: new RuntimeItemPendingInput(
                         item.id,
-                        item.inputPrompt ?? item.prompt ?? ">",
-                        item.code ?? "",
+                        item.inputPrompt ?? item.prompt ?? '>',
+                        item.code ?? '',
                         item.submitting === true,
                     ),
                 };
-            case "trace":
+            case 'trace':
                 return {
-                    runtimeItem: new RuntimeItemTrace(
-                        item.id,
-                        item.trace,
-                        new Date(item.when),
-                    ),
+                    runtimeItem: new RuntimeItemTrace(item.id, item.trace, new Date(item.when)),
                 };
-            case "starting":
+            case 'starting':
                 return {
                     runtimeItem: new RuntimeItemStarting(
                         item.id,
                         (item.message as string | undefined) ??
-                            `${sessions.find((session) => session.id === sessionId)?.runtimeName ?? "R"} starting.`,
+                            `${sessions.find((session) => session.id === sessionId)?.runtimeName ?? 'R'} starting.`,
                         (item.attachMode as
-                            | "starting"
-                            | "restarting"
-                            | "switching"
-                            | "reconnecting"
-                            | "connected"
-                            | undefined) ?? "starting",
+                            | 'starting'
+                            | 'restarting'
+                            | 'switching'
+                            | 'reconnecting'
+                            | 'connected'
+                            | undefined) ?? 'starting',
                     ),
                 };
-            case "reconnected":
+            case 'reconnected':
                 return {
                     runtimeItem: new RuntimeItemReconnected(
                         item.id,
@@ -1290,10 +1220,7 @@
         }
 
         if (deserialized.activity) {
-            data.runtimeItemActivities.set(
-                deserialized.runtimeItem.id,
-                deserialized.activity,
-            );
+            data.runtimeItemActivities.set(deserialized.runtimeItem.id, deserialized.activity);
         }
         data.runtimeItems.push(deserialized.runtimeItem);
         if (sync) {
@@ -1324,10 +1251,7 @@
         }
         data.runtimeItems.splice(targetIndex, 1, deserialized.runtimeItem);
         if (deserialized.activity) {
-            data.runtimeItemActivities.set(
-                deserialized.runtimeItem.id,
-                deserialized.activity,
-            );
+            data.runtimeItemActivities.set(deserialized.runtimeItem.id, deserialized.activity);
         }
         if (sync) {
             syncSessionRuntimeItems(sessionId);
@@ -1338,13 +1262,12 @@
     function updatePendingRuntimeItem(
         sessionId: string,
         code?: string,
-        inputPrompt: string = ">",
+        inputPrompt: string = '>',
     ): void {
         ensureSessionData(sessionId);
         const data = getSessionData(sessionId);
         const existingPendingItems = data.runtimeItems.filter(
-            (item): item is RuntimeItemPendingInput =>
-                item instanceof RuntimeItemPendingInput,
+            (item): item is RuntimeItemPendingInput => item instanceof RuntimeItemPendingInput,
         );
         if (!code && existingPendingItems.length === 0) {
             return;
@@ -1356,9 +1279,7 @@
         );
 
         if (code) {
-            data.runtimeItems.push(
-                new RuntimeItemPendingInput(pendingId, inputPrompt, code),
-            );
+            data.runtimeItems.push(new RuntimeItemPendingInput(pendingId, inputPrompt, code));
         }
 
         syncSessionRuntimeItems(sessionId);
@@ -1415,12 +1336,16 @@
             return appendActivityItem(sessionId, parentId, item, sync);
         }
 
-        if (!activity.replaceOutputItemByOutputId(outputId, (existingId) => {
-            const replacement = deserializeActivityItem({ ...item, id: existingId }, sessionId);
-            return replacement instanceof ActivityItemOutputHtml ||
-                replacement instanceof ActivityItemOutputMessage ||
-                replacement instanceof ActivityItemOutputPlot ? replacement : undefined;
-        })) {
+        if (
+            !activity.replaceOutputItemByOutputId(outputId, (existingId) => {
+                const replacement = deserializeActivityItem({ ...item, id: existingId }, sessionId);
+                return replacement instanceof ActivityItemOutputHtml ||
+                    replacement instanceof ActivityItemOutputMessage ||
+                    replacement instanceof ActivityItemOutputPlot
+                    ? replacement
+                    : undefined;
+            })
+        ) {
             activity.addActivityItem(activityItem);
         }
 
@@ -1436,9 +1361,7 @@
         sync: boolean = true,
     ): boolean {
         ensureSessionData(sessionId);
-        const activity = getSessionData(sessionId).runtimeItemActivities.get(
-            parentId,
-        );
+        const activity = getSessionData(sessionId).runtimeItemActivities.get(parentId);
         if (!activity) {
             return false;
         }
@@ -1457,9 +1380,7 @@
         sync: boolean = true,
     ): boolean {
         ensureSessionData(sessionId);
-        const activity = getSessionData(sessionId).runtimeItemActivities.get(
-            parentId,
-        );
+        const activity = getSessionData(sessionId).runtimeItemActivities.get(parentId);
         if (!activity) {
             return false;
         }
@@ -1477,10 +1398,7 @@
         return true;
     }
 
-    function applyRuntimeChanges(
-        sessionId: string,
-        changes: RuntimeChange[],
-    ): void {
+    function applyRuntimeChanges(sessionId: string, changes: RuntimeChange[]): void {
         if (!changes.length) {
             return;
         }
@@ -1491,7 +1409,7 @@
         let changed = false;
         for (const change of changes) {
             switch (change.kind) {
-                case "appendRuntimeItem":
+                case 'appendRuntimeItem':
                     changed =
                         appendRuntimeItem(
                             sessionId,
@@ -1499,7 +1417,7 @@
                             false,
                         ) || changed;
                     break;
-                case "replaceRuntimeItem":
+                case 'replaceRuntimeItem':
                     changed =
                         replaceRuntimeItem(
                             sessionId,
@@ -1508,7 +1426,7 @@
                             false,
                         ) || changed;
                     break;
-                case "appendActivityItem":
+                case 'appendActivityItem':
                     changed =
                         appendActivityItem(
                             sessionId,
@@ -1517,7 +1435,7 @@
                             false,
                         ) || changed;
                     break;
-                case "replaceActivityOutput":
+                case 'replaceActivityOutput':
                     changed =
                         replaceActivityOutput(
                             sessionId,
@@ -1527,15 +1445,11 @@
                             false,
                         ) || changed;
                     break;
-                case "clearActivityOutput":
+                case 'clearActivityOutput':
                     changed =
-                        clearActivityOutput(
-                            sessionId,
-                            change.parentId as string,
-                            false,
-                        ) || changed;
+                        clearActivityOutput(sessionId, change.parentId as string, false) || changed;
                     break;
-                case "updateActivityInputState":
+                case 'updateActivityInputState':
                     changed =
                         updateActivityInputState(
                             sessionId,
@@ -1554,14 +1468,21 @@
 
     function restoreConsoleState(
         sessionId: string,
-        state: SerializedConsoleState & { codeSubmissionInProgress?: boolean; submissionStateVersion?: number },
+        state: SerializedConsoleState & {
+            codeSubmissionInProgress?: boolean;
+            submissionStateVersion?: number;
+        },
     ): void {
         if (!state || (state.version !== 1 && state.version !== 2 && state.version !== 3)) {
             return;
         }
 
         ensureSessionData(sessionId);
-        updateHostSubmission(sessionId, state.codeSubmissionInProgress === true, state.submissionStateVersion);
+        updateHostSubmission(
+            sessionId,
+            state.codeSubmissionInProgress === true,
+            state.submissionStateVersion,
+        );
         const data = getSessionData(sessionId);
 
         const runtimeItems: RuntimeItem[] = [];
@@ -1574,10 +1495,7 @@
             }
 
             if (deserialized.activity) {
-                runtimeItemActivities.set(
-                    deserialized.runtimeItem.id,
-                    deserialized.activity,
-                );
+                runtimeItemActivities.set(deserialized.runtimeItem.id, deserialized.activity);
             }
             runtimeItems.push(deserialized.runtimeItem);
         }
@@ -1594,7 +1512,7 @@
         const entries = historyEntries.map((input) => ({ input }));
         setTimeout(() => {
             emitInputCommand(sessionId, {
-                kind: "historySet",
+                kind: 'historySet',
                 entries,
             });
         }, 0);
@@ -1620,13 +1538,11 @@
 
         // Listen for reveal execution requests
         connection.onNotification(
-            "console/revealExecution",
+            'console/revealExecution',
             (params: { executionId: string; sessionId?: string }) => {
                 const sessionId = params.sessionId;
                 if (!sessionId) {
-                    console.warn(
-                        "[Console] Dropping revealExecution without sessionId",
-                    );
+                    console.warn('[Console] Dropping revealExecution without sessionId');
                     return;
                 }
 
@@ -1640,15 +1556,15 @@
 
         // Listen for clear command
         connection.onNotification(
-            "console/clear",
-            (params?: { sessionId?: string; reason?: "user" | "runtime" }) => {
+            'console/clear',
+            (params?: { sessionId?: string; reason?: 'user' | 'runtime' }) => {
                 const sessionId = params?.sessionId;
                 if (!sessionId) {
-                    console.warn("[Console] Dropping clear without sessionId");
+                    console.warn('[Console] Dropping clear without sessionId');
                     return;
                 }
 
-                if (params?.reason === "user") {
+                if (params?.reason === 'user') {
                     requestInputFocus(sessionId);
                 }
             },
@@ -1656,19 +1572,16 @@
 
         // Listen for session info updates (backward compatibility)
         connection.onNotification(
-            "session/info",
+            'session/info',
             (params: { sessions: SessionInfo[]; activeSessionId?: string }) => {
                 const mergedSessions = applySessionSnapshot(params.sessions);
                 pruneRemovedSessions(mergedSessions);
-                syncForegroundConsoleSession(
-                    mergedSessions,
-                    params.activeSessionId,
-                );
+                syncForegroundConsoleSession(mergedSessions, params.activeSessionId);
             },
         );
 
         connection.onNotification(
-            "console/stateChunk",
+            'console/stateChunk',
             (params: {
                 sessionId: string;
                 syncSeq: number;
@@ -1696,7 +1609,7 @@
                     batch.syncSeq !== params.syncSeq ||
                     batch.total !== params.total ||
                     !Number.isSafeInteger(params.index) ||
-                    typeof params.data !== "string" ||
+                    typeof params.data !== 'string' ||
                     params.index < 0 ||
                     params.index >= batch.total
                 ) {
@@ -1704,15 +1617,15 @@
                     return;
                 }
                 batch.chunks[params.index] = params.data;
-                connection?.sendNotification("console/stateChunkAck", {
+                connection?.sendNotification('console/stateChunkAck', {
                     chunkId: params.chunkId,
                 });
-                if (batch.chunks.some(chunk => chunk === undefined)) {
+                if (batch.chunks.some((chunk) => chunk === undefined)) {
                     return;
                 }
                 pendingConsoleStateChunks.delete(params.batchId);
                 try {
-                    const state = JSON.parse(batch.chunks.join("")) as SerializedConsoleState;
+                    const state = JSON.parse(batch.chunks.join('')) as SerializedConsoleState;
                     const localSyncSeq = sessionSyncSeqMap.get(batch.sessionId) ?? 0;
                     if (batch.syncSeq < localSyncSeq) {
                         return;
@@ -1728,17 +1641,12 @@
 
         // Restore console state after reload (Positron-style)
         connection.onNotification(
-            "console/restoreState",
-            (params: {
-                sessionId: string;
-                syncSeq: number;
-                state: SerializedConsoleState;
-            }) => {
+            'console/restoreState',
+            (params: { sessionId: string; syncSeq: number; state: SerializedConsoleState }) => {
                 if (!params.sessionId || !params.state) {
                     return;
                 }
-                const localSyncSeq =
-                    sessionSyncSeqMap.get(params.sessionId) ?? 0;
+                const localSyncSeq = sessionSyncSeqMap.get(params.sessionId) ?? 0;
                 if (params.syncSeq < localSyncSeq) {
                     return;
                 }
@@ -1761,7 +1669,7 @@
         );
 
         connection.onNotification(
-            "console/sessionMetadataChanged",
+            'console/sessionMetadataChanged',
             (params: {
                 sessionId: string;
                 syncSeq: number;
@@ -1774,8 +1682,7 @@
                 if (!params.sessionId) {
                     return;
                 }
-                const localSyncSeq =
-                    sessionSyncSeqMap.get(params.sessionId) ?? 0;
+                const localSyncSeq = sessionSyncSeqMap.get(params.sessionId) ?? 0;
                 if (params.syncSeq <= localSyncSeq) {
                     return;
                 }
@@ -1792,17 +1699,12 @@
         );
 
         connection.onNotification(
-            "console/runtimeChanges",
-            (params: {
-                sessionId: string;
-                syncSeq: number;
-                changes: RuntimeChange[];
-            }) => {
+            'console/runtimeChanges',
+            (params: { sessionId: string; syncSeq: number; changes: RuntimeChange[] }) => {
                 if (!params.sessionId || !params.changes?.length) {
                     return;
                 }
-                const localSyncSeq =
-                    sessionSyncSeqMap.get(params.sessionId) ?? 0;
+                const localSyncSeq = sessionSyncSeqMap.get(params.sessionId) ?? 0;
                 if (params.syncSeq <= localSyncSeq) {
                     return;
                 }
@@ -1819,107 +1721,94 @@
         );
 
         // Console input control events (Positron pattern)
-        connection.onNotification(
-            "console/focusInput",
-            (params: { sessionId: string }) => {
-                requestInputFocus(params.sessionId);
-            },
-        );
+        connection.onNotification('console/focusInput', (params: { sessionId: string }) => {
+            requestInputFocus(params.sessionId);
+        });
 
         connection.onNotification(
-            "console/pasteText",
+            'console/pasteText',
             (params: { sessionId: string; text: string }) => {
                 queuePastedInput(params.sessionId, params.text);
             },
         );
 
-        connection.onNotification(
-            "console/selectAll",
-            (params: { sessionId: string }) => {
-                selectAllRuntimeItems(params.sessionId);
-            },
-        );
+        connection.onNotification('console/selectAll', (params: { sessionId: string }) => {
+            selectAllRuntimeItems(params.sessionId);
+        });
 
         connection.onNotification(
-            "console/historyNavigateUp",
+            'console/historyNavigateUp',
             (params: { sessionId: string; usingPrefixMatch: boolean }) => {
                 emitInputCommand(params.sessionId, {
-                    kind: "historyUp",
+                    kind: 'historyUp',
                     usingPrefixMatch: params.usingPrefixMatch,
                 });
             },
         );
 
         connection.onNotification(
-            "console/historyNavigateDown",
+            'console/historyNavigateDown',
             (params: { sessionId: string }) => {
-                emitInputCommand(params.sessionId, { kind: "historyDown" });
+                emitInputCommand(params.sessionId, { kind: 'historyDown' });
             },
         );
 
-        connection.onNotification(
-            "console/historyClear",
-            (params: { sessionId: string }) => {
-                emitInputCommand(params.sessionId, { kind: "historyClear" });
-            },
-        );
+        connection.onNotification('console/historyClear', (params: { sessionId: string }) => {
+            emitInputCommand(params.sessionId, { kind: 'historyClear' });
+        });
 
         connection.onNotification(
-            "console/setPendingCode",
+            'console/setPendingCode',
             (params: { sessionId: string } & ConsoleInputEdit) => {
                 emitInputCommand(params.sessionId, {
-                    kind: "setPendingCode",
+                    kind: 'setPendingCode',
                     code: params.code,
                     expectedDraft: params.expectedDraft,
                 });
             },
         );
 
-        connection.onNotification('console/submissionStateChanged', (params: { sessionId: string; submitting: boolean; version?: number }) => {
-            updateHostSubmission(params.sessionId, params.submitting, params.version);
-        });
-
         connection.onNotification(
-            "console/pendingInputChanged",
-            (params: { sessionId: string; code?: string; inputPrompt: string }) => {
-                if (!params.sessionId) {
-                    return;
-                }
-                updatePendingRuntimeItem(
-                    params.sessionId,
-                    params.code,
-                    params.inputPrompt,
-                );
+            'console/submissionStateChanged',
+            (params: { sessionId: string; submitting: boolean; version?: number }) => {
+                updateHostSubmission(params.sessionId, params.submitting, params.version);
             },
         );
 
         connection.onNotification(
-            "console/historyAdd",
+            'console/pendingInputChanged',
+            (params: { sessionId: string; code?: string; inputPrompt: string }) => {
+                if (!params.sessionId) {
+                    return;
+                }
+                updatePendingRuntimeItem(params.sessionId, params.code, params.inputPrompt);
+            },
+        );
+
+        connection.onNotification(
+            'console/historyAdd',
             (params: { sessionId: string; input: string; when?: number }) => {
                 emitInputCommand(params.sessionId, {
-                    kind: "historyAdd",
+                    kind: 'historyAdd',
                     input: params.input,
                     when: params.when,
                 });
             },
         );
 
-        connection.onNotification(
-            "console/settingsChanged",
-            (params: ConsoleSettings) => {
-                applyConsoleSettings(params);
-            },
-        );
+        connection.onNotification('console/settingsChanged', (params: ConsoleSettings) => {
+            applyConsoleSettings(params);
+        });
 
         connection.onNotification(
-            "console/resourceUsage",
+            'console/resourceUsage',
             (params: { sessionId: string; usage: ResourceUsage }) => {
                 pushResourceUsage(params.sessionId, params.usage);
             },
         );
 
         connection.onNotification(
-            "console/resourceUsageSnapshot",
+            'console/resourceUsageSnapshot',
             (params: {
                 generation: number;
                 sessions: Array<{
@@ -1931,36 +1820,29 @@
                 try {
                     applyResourceUsageSnapshot(params);
                 } finally {
-                    void connection?.sendNotification(
-                        "console/resourceUsageSnapshotAck",
-                        { generation: params.generation },
-                    );
+                    void connection?.sendNotification('console/resourceUsageSnapshotAck', {
+                        generation: params.generation,
+                    });
                 }
             },
         );
 
-        connection.onNotification(
-            "console/themeChanged",
-            (params: { theme: ConsoleThemeData }) => {
-                consoleThemeData = params.theme;
-            },
-        );
+        connection.onNotification('console/themeChanged', (params: { theme: ConsoleThemeData }) => {
+            consoleThemeData = params.theme;
+        });
 
         connection.onNotification(
-            "console/languageSupportAssetsChanged",
+            'console/languageSupportAssetsChanged',
             (params: {
                 modules: Record<string, string>;
-                grammars: Record<
-                    string,
-                    { scopeName: string; grammarUrl: string }
-                >;
+                grammars: Record<string, { scopeName: string; grammarUrl: string }>;
             }) => {
                 replaceLanguageSupportAssets(params);
             },
         );
 
         connection.onNotification(
-            "console/runtimeStartupPhase",
+            'console/runtimeStartupPhase',
             (params: {
                 phase: RuntimeStartupPhase;
                 discoveredCount?: number;
@@ -1977,10 +1859,8 @@
         );
 
         connection.onNotification(
-            "console/findCommand",
-            (params: {
-                command: "focus" | "next" | "previous" | "close";
-            }) => {
+            'console/findCommand',
+            (params: { command: 'focus' | 'next' | 'previous' | 'close' }) => {
                 if (!activeConsoleSessionId) {
                     return;
                 }
@@ -1994,7 +1874,7 @@
 
         // Load initial settings before sessions so Monaco starts with the
         // effective console font instead of a transient fallback.
-        connection.sendNotification("console/ready");
+        connection.sendNotification('console/ready');
         sendConsoleContextKeys();
         void (async () => {
             await loadConsoleSettings();
@@ -2011,10 +1891,7 @@
         const sashWidth = Math.max(1, Math.min(20, consoleSettings.sashSize));
         const maximumTabWidth = Math.max(
             0,
-            Math.min(
-                Math.trunc(width / 5),
-                width - sashWidth - MINIMUM_CONSOLE_PANE_WIDTH,
-            ),
+            Math.min(Math.trunc(width / 5), width - sashWidth - MINIMUM_CONSOLE_PANE_WIDTH),
         );
         if (maximumTabWidth === 0) {
             return { minimumWidth: width, maximumWidth: width, availableWidth: width };
@@ -2045,8 +1922,7 @@
         }
 
         // Only show tab list when there are multiple sessions
-        const shouldShowTabList =
-            !consoleSessionListCollapsed && sessions.length > 1;
+        const shouldShowTabList = !consoleSessionListCollapsed && sessions.length > 1;
 
         if (!shouldShowTabList) {
             // Single session or collapsed: use full width
@@ -2054,9 +1930,8 @@
             consoleTabListWidth = 0;
         } else {
             const bounds = getConsolePaneBounds(newWidth);
-            const requestedTabWidth = consoleTabListWidth > 0
-                ? consoleTabListWidth
-                : DEFAULT_CONSOLE_TAB_LIST_WIDTH;
+            const requestedTabWidth =
+                consoleTabListWidth > 0 ? consoleTabListWidth : DEFAULT_CONSOLE_TAB_LIST_WIDTH;
             consolePaneWidth = Math.max(
                 bounds.minimumWidth,
                 Math.min(bounds.maximumWidth, bounds.availableWidth - requestedTabWidth),
@@ -2093,30 +1968,27 @@
         if (!connection) return;
         try {
             const result = (await connection.sendRequest(
-                "console/getSettings",
+                'console/getSettings',
                 {},
             )) as Partial<ConsoleSettings>;
             applyConsoleSettings(result);
         } catch (e) {
-            console.error("Failed to load console settings:", e);
+            console.error('Failed to load console settings:', e);
         }
     }
 
     async function loadSessions() {
         if (!connection) return;
         try {
-            const result = await connection.sendRequest("session/list", {});
+            const result = await connection.sendRequest('session/list', {});
             const loadedSessions = Array.isArray((result as any).sessions)
                 ? ((result as any).sessions as SessionInfo[])
                 : [];
             const mergedSessions = applySessionSnapshot(loadedSessions);
             pruneRemovedSessions(mergedSessions);
-            syncForegroundConsoleSession(
-                mergedSessions,
-                (result as any).activeSessionId,
-            );
+            syncForegroundConsoleSession(mergedSessions, (result as any).activeSessionId);
         } catch (e) {
-            console.error("Failed to load sessions:", e);
+            console.error('Failed to load sessions:', e);
         }
     }
 
@@ -2126,7 +1998,7 @@
         }
 
         try {
-            const result = (await connection.sendRequest("session/create", {
+            const result = (await connection.sendRequest('session/create', {
                 showRuntimePicker: true,
             })) as { session?: SessionInfo };
 
@@ -2136,22 +2008,22 @@
                 syncForegroundConsoleSession(mergedSessions, result.session.id);
             }
         } catch (error) {
-            console.error("Failed to create session:", error);
+            console.error('Failed to create session:', error);
         }
     }
 
     async function handleExecute(sessionId: string, code: string) {
         if (!connection) {
-            throw new Error("Console connection is not available");
+            throw new Error('Console connection is not available');
         }
 
         const targetSessionId = sessionId || activeConsoleSessionId;
         if (!targetSessionId) {
-            throw new Error("No console session is available");
+            throw new Error('No console session is available');
         }
 
         const executionId = generateId();
-        await connection.sendRequest("console/execute", {
+        await connection.sendRequest('console/execute', {
             code,
             executionId,
             sessionId: targetSessionId,
@@ -2167,18 +2039,15 @@
         }
         if (!connection) return;
         try {
-            await connection.sendRequest("console/interrupt", {
+            await connection.sendRequest('console/interrupt', {
                 sessionId: targetSessionId,
             });
         } catch (e) {
-            console.error("Interrupt failed:", e);
+            console.error('Interrupt failed:', e);
         }
     }
 
-    function handleSubmittingChanged(
-        sessionId: string,
-        submitting: boolean,
-    ): void {
+    function handleSubmittingChanged(sessionId: string, submitting: boolean): void {
         if (submitting) {
             submittingBySession.set(sessionId, true);
         } else {
@@ -2187,9 +2056,9 @@
     }
 
     function cancelSubmission(sessionId: string): void {
-        void connection?.sendRequest("console/cancelSubmission", { sessionId });
+        void connection?.sendRequest('console/cancelSubmission', { sessionId });
         emitInputCommand(sessionId, {
-            kind: "cancelSubmission",
+            kind: 'cancelSubmission',
             skipHostRequest: true,
         });
     }
@@ -2201,19 +2070,16 @@
         if (!targetSessionId) return;
 
         try {
-            await connection.sendRequest("console/openInEditor", {
+            await connection.sendRequest('console/openInEditor', {
                 sessionId: targetSessionId,
                 code,
             });
         } catch (error) {
-            console.error("Open in editor failed:", error);
+            console.error('Open in editor failed:', error);
         }
     }
 
-    async function handleChangeForegroundSession(
-        sessionId: string,
-        optimistic: boolean = false,
-    ) {
+    async function handleChangeForegroundSession(sessionId: string, optimistic: boolean = false) {
         if (!connection) return;
 
         const previousForegroundSessionId = activeConsoleSessionId;
@@ -2225,13 +2091,10 @@
         }
 
         try {
-            await connection.sendRequest("session/switch", { sessionId });
+            await connection.sendRequest('session/switch', { sessionId });
             // A completed request also ends the optimistic override when no
             // matching session/info notification was needed or published.
-            if (
-                sessionSwitchNonce === switchNonce &&
-                pendingForegroundSessionId === sessionId
-            ) {
+            if (sessionSwitchNonce === switchNonce && pendingForegroundSessionId === sessionId) {
                 pendingForegroundSessionId = undefined;
             }
         } catch (e) {
@@ -2248,7 +2111,7 @@
                     previousForegroundSessionId,
                 );
             }
-            console.error("Switch session failed:", e);
+            console.error('Switch session failed:', e);
         }
     }
 
@@ -2260,32 +2123,32 @@
     async function handleDeleteSession(sessionId: string) {
         if (!connection) return;
         try {
-            await connection.sendRequest("session/stop", { sessionId });
+            await connection.sendRequest('session/stop', { sessionId });
         } catch (e) {
-            console.error("Delete session failed:", e);
+            console.error('Delete session failed:', e);
         }
     }
 
     async function handleRenameSession(sessionId: string, newName: string) {
         if (!connection) return;
         try {
-            await connection.sendRequest("session/rename", {
+            await connection.sendRequest('session/rename', {
                 sessionId,
                 newName,
             });
         } catch (e) {
-            console.error("Rename session failed:", e);
+            console.error('Rename session failed:', e);
         }
     }
 
     async function restartSession(sessionId: string) {
         if (!connection) return;
         try {
-            await connection.sendRequest("session/restart", {
+            await connection.sendRequest('session/restart', {
                 sessionId,
             });
         } catch (e) {
-            console.error("Restart session failed:", e);
+            console.error('Restart session failed:', e);
         }
     }
 
@@ -2297,7 +2160,7 @@
     function clearOutput() {
         if (!activeConsoleSessionId) return;
         if (connection) {
-            void connection.sendRequest("console/clearConsole", {
+            void connection.sendRequest('console/clearConsole', {
                 sessionId: activeConsoleSessionId,
             });
         }
@@ -2309,7 +2172,7 @@
      */
     function handleClearConsole(sessionId: string) {
         if (connection) {
-            void connection.sendRequest("console/clearConsole", {
+            void connection.sendRequest('console/clearConsole', {
                 sessionId,
             });
         }
@@ -2358,8 +2221,7 @@
     );
     const activeConsoleInstance = $derived(
         consoleInstances.find(
-            (consoleInstance) =>
-                consoleInstance.sessionId === activeConsoleSessionId,
+            (consoleInstance) => consoleInstance.sessionId === activeConsoleSessionId,
         ),
     );
     const knownSessions = $derived(
@@ -2371,9 +2233,7 @@
     const showSessionTabs = $derived(
         !consoleSessionListCollapsed && sessions.length > 1 && consoleTabListWidth > 0,
     );
-    const visibleConsolePaneWidth = $derived(
-        showSessionTabs ? consolePaneWidth : containerWidth,
-    );
+    const visibleConsolePaneWidth = $derived(showSessionTabs ? consolePaneWidth : containerWidth);
 </script>
 
 <div
@@ -2390,7 +2250,7 @@
     style:--console-letter-spacing={`${consoleSettings.letterSpacing}px`}
 >
     {#if sessions.length === 0}
-        {#if runtimeStartupPhase !== "complete"}
+        {#if runtimeStartupPhase !== 'complete'}
             <StartupStatus
                 startupPhase={runtimeStartupPhase}
                 discoveredCount={discoveredRuntimeCount}
@@ -2398,7 +2258,7 @@
                 {latestRuntimePath}
                 {runtimeStartupEvent}
                 onTrustWorkspace={() => {
-                    void connection?.sendRequest("console/requestWorkspaceTrust");
+                    void connection?.sendRequest('console/requestWorkspaceTrust');
                 }}
             />
         {:else}
@@ -2406,22 +2266,15 @@
         {/if}
     {:else}
         <!-- Left: Console pane -->
-        <div
-            class="console-pane"
-            style="width: {visibleConsolePaneWidth}px;"
-        >
+        <div class="console-pane" style="width: {visibleConsolePaneWidth}px;">
             <ActionBar
                 {currentWorkingDirectory}
                 stateLabel={stateLabelForSession(activeSession)}
-                interruptible={activeSession?.state === "busy"}
-                submitting={activeConsoleSessionId
-                    ? isSubmitting(activeConsoleSessionId)
-                    : false}
-                interrupting={activeSession?.state === "interrupting"}
-                restarting={
-                    activeSession?.state === "starting" ||
-                    activeSession?.state === "restarting"
-                }
+                interruptible={activeSession?.state === 'busy'}
+                submitting={activeConsoleSessionId ? isSubmitting(activeConsoleSessionId) : false}
+                interrupting={activeSession?.state === 'interrupting'}
+                restarting={activeSession?.state === 'starting' ||
+                    activeSession?.state === 'restarting'}
                 showDeleteButton={Boolean(activeSession) && !showSessionTabs}
                 canShutdown={canShutdownSession(activeSession)}
                 canStart={canStartSession(activeSession)}
@@ -2439,7 +2292,7 @@
                         return;
                     }
                     if (connection) {
-                        void connection.sendRequest("console/toggleWordWrap", {
+                        void connection.sendRequest('console/toggleWordWrap', {
                             sessionId: activeConsoleSessionId,
                         });
                     }
@@ -2449,7 +2302,7 @@
                         return;
                     }
                     if (connection) {
-                        void connection.sendRequest("console/toggleTrace", {
+                        void connection.sendRequest('console/toggleTrace', {
                             sessionId: activeConsoleSessionId,
                         });
                     }
@@ -2466,7 +2319,7 @@
                 }}
                 onToggleResourceMonitor={() => {
                     if (connection) {
-                        void connection.sendRequest("console/setShowResourceMonitor", {
+                        void connection.sendRequest('console/setShowResourceMonitor', {
                             visible: !consoleSettings.showResourceMonitor,
                         });
                     }
@@ -2474,9 +2327,7 @@
             />
 
             {#if visibleConsolePaneWidth > 0}
-                <div
-                    class="console-instances-container"
-                >
+                <div class="console-instances-container">
                     {#each consoleInstances as consoleInstance (consoleInstance.sessionId)}
                         <ConsoleInstance
                             {consoleInstance}
@@ -2488,10 +2339,8 @@
                             {revealRequest}
                             {openSearchRequest}
                             {findCommandRequest}
-                            onSelectAll={() =>
-                                selectAllRuntimeItems(consoleInstance.sessionId)}
-                            onFocusInput={() =>
-                                requestInputFocus(consoleInstance.sessionId)}
+                            onSelectAll={() => selectAllRuntimeItems(consoleInstance.sessionId)}
+                            onFocusInput={() => requestInputFocus(consoleInstance.sessionId)}
                             onInsertText={(text) =>
                                 queueInsertText(consoleInstance.sessionId, text)}
                             onPasteText={(text) =>
@@ -2506,8 +2355,10 @@
                     {/each}
 
                     <SharedConsoleInputHost
-                        activeConsoleInstance={activeConsoleInstance}
-                        hostSubmitting={activeConsoleSessionId ? hostSubmittingBySession.get(activeConsoleSessionId) === true : false}
+                        {activeConsoleInstance}
+                        hostSubmitting={activeConsoleSessionId
+                            ? hostSubmittingBySession.get(activeConsoleSessionId) === true
+                            : false}
                         width={visibleConsolePaneWidth}
                         {languageAssetsVersion}
                         {connection}
@@ -2517,8 +2368,7 @@
                         onExecute={handleExecute}
                         onInterrupt={handleInterrupt}
                         onActivate={handleSetForegroundSession}
-                        onSelectAll={() =>
-                            selectAllRuntimeItems(activeConsoleSessionId)}
+                        onSelectAll={() => selectAllRuntimeItems(activeConsoleSessionId)}
                         onCodeExecuted={(sessionId) => {
                             signalCodeExecuted(sessionId);
                         }}
@@ -2559,7 +2409,7 @@
                 onRenameSession={handleRenameSession}
                 onToggleResourceMonitor={() => {
                     if (connection) {
-                        void connection.sendRequest("console/setShowResourceMonitor", {
+                        void connection.sendRequest('console/setShowResourceMonitor', {
                             visible: !consoleSettings.showResourceMonitor,
                         });
                     }

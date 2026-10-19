@@ -51,7 +51,7 @@ export class ActivityItemErrorMessage extends ActivityItem {
         when: Date,
         readonly name: string,
         readonly message: string,
-        readonly traceback: string[]
+        readonly traceback: string[],
     ) {
         // Call the base class's constructor.
         super(id, parentId, when);
@@ -82,7 +82,10 @@ export class ActivityItemErrorMessage extends ActivityItem {
         }
 
         // Calculate the scrollback size for the message output lines.
-        const scrollbackSize = Math.max(0, this._scrollbackSize - this._tracebackOutputLines.length);
+        const scrollbackSize = Math.max(
+            0,
+            this._scrollbackSize - this._tracebackOutputLines.length,
+        );
 
         // If no message output lines will be displayed, return an empty array.
         if (!scrollbackSize) {
@@ -113,7 +116,9 @@ export class ActivityItemErrorMessage extends ActivityItem {
         }
 
         // Return the truncated traceback output lines.
-        return this._scrollbackSize === 0 ? [] : this._tracebackOutputLines.slice(-this._scrollbackSize);
+        return this._scrollbackSize === 0
+            ? []
+            : this._tracebackOutputLines.slice(-this._scrollbackSize);
     }
 
     get messageOutputLinesStore(): Readable<readonly ANSIOutputLine[]> {
@@ -135,11 +140,11 @@ export class ActivityItemErrorMessage extends ActivityItem {
      */
     public override getClipboardRepresentation(commentPrefix: string): string[] {
         const formatLines = (lines: ANSIOutputLine[]) =>
-            lines.map(line => commentPrefix + line.outputRuns.map(run => run.text).join(''));
+            lines.map((line) => commentPrefix + line.outputRuns.map((run) => run.text).join(''));
 
         return [
             ...formatLines(this._messageOutputLines),
-            ...formatLines(this._tracebackOutputLines)
+            ...formatLines(this._tracebackOutputLines),
         ];
     }
 
@@ -153,9 +158,7 @@ export class ActivityItemErrorMessage extends ActivityItem {
         // Calculate the total number of output lines.
         const outputLines = this._messageOutputLines.length + this._tracebackOutputLines.length;
 
-        const nextScrollbackSize = outputLines <= scrollbackSize
-            ? undefined
-            : scrollbackSize;
+        const nextScrollbackSize = outputLines <= scrollbackSize ? undefined : scrollbackSize;
         if (nextScrollbackSize !== this._scrollbackSize) {
             this._scrollbackSize = nextScrollbackSize;
             this.syncOutputLinesStores();

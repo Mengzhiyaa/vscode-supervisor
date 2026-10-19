@@ -1,14 +1,11 @@
 <script lang="ts">
-    import { getAllContexts, mount, unmount } from "svelte";
-    import type { ConsoleState, ConsoleSettings } from "../types/console";
-    import ConsoleInput from "./ConsoleInput.svelte";
-    import type { MessageConnection } from "vscode-jsonrpc/browser";
-    import type { ConsoleThemeData } from "$lib/monaco/languageSupport";
-    import type { ConsoleInstanceModel } from "./models/consoleInstance";
-    import type {
-        ConsoleInputCommand,
-        KnownSessionInfo,
-    } from "./services/sessionModelManager";
+    import { getAllContexts, mount, unmount } from 'svelte';
+    import type { ConsoleState, ConsoleSettings } from '../types/console';
+    import ConsoleInput from './ConsoleInput.svelte';
+    import type { MessageConnection } from 'vscode-jsonrpc/browser';
+    import type { ConsoleThemeData } from '$lib/monaco/languageSupport';
+    import type { ConsoleInstanceModel } from './models/consoleInstance';
+    import type { ConsoleInputCommand, KnownSessionInfo } from './services/sessionModelManager';
 
     interface ConsoleInputCommandEnvelope {
         sessionId: string;
@@ -32,10 +29,7 @@
         onActivate: (sessionId: string) => void;
         onSelectAll: () => void;
         onCodeExecuted: (sessionId: string) => void;
-        onSubmittingChanged?: (
-            sessionId: string,
-            submitting: boolean,
-        ) => void;
+        onSubmittingChanged?: (sessionId: string, submitting: boolean) => void;
         onOpenSearch?: (sessionId: string) => void;
         onOpenInEditor?: (sessionId: string, code: string) => void;
         onClearConsole?: (sessionId: string) => void;
@@ -85,10 +79,7 @@
         onActivate: (sessionId: string) => void;
         onSelectAll: () => void;
         onCodeExecuted: (sessionId: string) => void;
-        onSubmittingChanged?: (
-            sessionId: string,
-            submitting: boolean,
-        ) => void;
+        onSubmittingChanged?: (sessionId: string, submitting: boolean) => void;
         onOpenSearch?: (sessionId: string) => void;
         onOpenInEditor?: (sessionId: string, code: string) => void;
         onClearConsole?: (sessionId: string) => void;
@@ -109,16 +100,14 @@
     const inputContexts = getAllContexts();
     let mountedProps = $state<ConsoleInputMountProps | undefined>(undefined);
 
-    function createMountProps(
-        activeConsoleInstance: ConsoleInstanceModel,
-    ): ConsoleInputMountProps {
+    function createMountProps(activeConsoleInstance: ConsoleInstanceModel): ConsoleInputMountProps {
         return {
             hostSubmitting,
             width,
             hidden:
                 activeConsoleInstance.promptActive ||
                 !activeConsoleInstance.runtimeAttached ||
-                activeConsoleInstance.state === "exiting",
+                activeConsoleInstance.state === 'exiting',
             active: true,
             scrollLocked: activeConsoleInstance.scrollLocked,
             sessionId: activeConsoleInstance.sessionId,
@@ -145,9 +134,7 @@
         };
     }
 
-    function syncMountedProps(
-        activeConsoleInstance: ConsoleInstanceModel,
-    ): void {
+    function syncMountedProps(activeConsoleInstance: ConsoleInstanceModel): void {
         if (!mountedProps) {
             return;
         }
@@ -157,15 +144,14 @@
         mountedProps.hidden =
             activeConsoleInstance.promptActive ||
             !activeConsoleInstance.runtimeAttached ||
-            activeConsoleInstance.state === "exiting";
+            activeConsoleInstance.state === 'exiting';
         mountedProps.active = true;
         mountedProps.scrollLocked = activeConsoleInstance.scrollLocked;
         mountedProps.sessionId = activeConsoleInstance.sessionId;
         mountedProps.languageId = activeConsoleInstance.languageId;
         mountedProps.state = activeConsoleInstance.state;
         mountedProps.inputPrompt = activeConsoleInstance.inputPrompt;
-        mountedProps.continuationPrompt =
-            activeConsoleInstance.continuationPrompt;
+        mountedProps.continuationPrompt = activeConsoleInstance.continuationPrompt;
         mountedProps.languageAssetsVersion = languageAssetsVersion;
         mountedProps.knownSessions = knownSessions;
         mountedProps.connection = connection;
@@ -190,8 +176,8 @@
 
         mountedProps = createMountProps(activeConsoleInstance);
 
-        const hostContainer = document.createElement("div");
-        hostContainer.style.overflowAnchor = "none";
+        const hostContainer = document.createElement('div');
+        hostContainer.style.overflowAnchor = 'none';
         const component = mount(ConsoleInput, {
             target: hostContainer,
             props: mountedProps,
@@ -210,10 +196,7 @@
             return;
         }
 
-        if (
-            mountedInput.anchor === anchor &&
-            mountedInput.hostContainer.parentElement === anchor
-        ) {
+        if (mountedInput.anchor === anchor && mountedInput.hostContainer.parentElement === anchor) {
             return;
         }
 

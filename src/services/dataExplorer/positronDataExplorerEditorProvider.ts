@@ -66,14 +66,20 @@ import { DataExplorerPreviewEnabled } from './positronDataExplorerSummary';
 const DATA_EXPLORER_EDITOR_NAME_MAX_LENGTH = 30;
 
 export function escapeDataExplorerHtml(value: string): string {
-    return value.replace(/[&<>"']/g, character => {
+    return value.replace(/[&<>"']/g, (character) => {
         switch (character) {
-            case '&': return '&amp;';
-            case '<': return '&lt;';
-            case '>': return '&gt;';
-            case '"': return '&quot;';
-            case '\'': return '&#39;';
-            default: return character;
+            case '&':
+                return '&amp;';
+            case '<':
+                return '&lt;';
+            case '>':
+                return '&gt;';
+            case '"':
+                return '&quot;';
+            case "'":
+                return '&#39;';
+            default:
+                return character;
         }
     });
 }
@@ -83,9 +89,10 @@ export function formatDataExplorerEditorTitle(displayName: string | undefined): 
     if (!displayName) {
         return fallbackName;
     }
-    const truncatedName = displayName.length > DATA_EXPLORER_EDITOR_NAME_MAX_LENGTH
-        ? `${displayName.slice(0, DATA_EXPLORER_EDITOR_NAME_MAX_LENGTH - 3)}...`
-        : displayName;
+    const truncatedName =
+        displayName.length > DATA_EXPLORER_EDITOR_NAME_MAX_LENGTH
+            ? `${displayName.slice(0, DATA_EXPLORER_EDITOR_NAME_MAX_LENGTH - 3)}...`
+            : displayName;
     return vscode.l10n.t('Data: {0}', truncatedName);
 }
 
@@ -106,13 +113,14 @@ export class PositronDataExplorerEditorProvider implements vscode.Disposable {
     private readonly _openingInstances = new Set<string>();
     private _isDisposing = false;
 
-
     constructor(
         private readonly _extensionUri: vscode.Uri,
         private readonly _dataExplorerService: IPositronDataExplorerService,
         private readonly _logChannel: vscode.LogOutputChannel,
         private readonly _getAdditionalLocalResourceRoots: () => readonly vscode.Uri[] = () => [],
-        private readonly _getLanguageMonacoSupportModuleUris: (webview: vscode.Webview) => Readonly<Record<string, string>> = () => ({}),
+        private readonly _getLanguageMonacoSupportModuleUris: (
+            webview: vscode.Webview,
+        ) => Readonly<Record<string, string>> = () => ({}),
         private readonly _getLanguageTextMateGrammarDefinitions: (
             webview: vscode.Webview,
         ) => Readonly<Record<string, { scopeName: string; grammarUrl: string }>> = () => ({}),
@@ -122,16 +130,16 @@ export class PositronDataExplorerEditorProvider implements vscode.Disposable {
 
         // Listen for new instances and open them in editor
         this._disposables.push(
-            this._dataExplorerService.onDidCreateInstance(instance => {
+            this._dataExplorerService.onDidCreateInstance((instance) => {
                 this._instanceFocusDisposables.get(instance.identifier)?.dispose();
                 this._instanceFocusDisposables.set(
                     instance.identifier,
                     instance.onDidRequestFocus(() => {
                         this.openInstance(instance, true);
                         setTimeout(() => {
-                            this._connections.get(instance.identifier)?.sendNotification(
-                                DataExplorerFocusNotification.type,
-                            );
+                            this._connections
+                                .get(instance.identifier)
+                                ?.sendNotification(DataExplorerFocusNotification.type);
                         }, 0);
                     }),
                 );
@@ -142,12 +150,12 @@ export class PositronDataExplorerEditorProvider implements vscode.Disposable {
                 if (!instance.inlineOnly) {
                     this.openInstance(instance);
                 }
-            })
+            }),
         );
 
         // Listen for instance close
         this._disposables.push(
-            this._dataExplorerService.onDidCloseInstance(instanceId => {
+            this._dataExplorerService.onDidCloseInstance((instanceId) => {
                 this._instanceFocusDisposables.get(instanceId)?.dispose();
                 this._instanceFocusDisposables.delete(instanceId);
                 this._instancesInNewWindow.delete(instanceId);
@@ -156,7 +164,7 @@ export class PositronDataExplorerEditorProvider implements vscode.Disposable {
                     panel.dispose();
                     this._panels.delete(instanceId);
                 }
-            })
+            }),
         );
 
         this._registerCommands();
@@ -164,106 +172,168 @@ export class PositronDataExplorerEditorProvider implements vscode.Disposable {
 
     private _registerCommands(): void {
         this._disposables.push(
-            vscode.commands.registerCommand(CoreCommandIds.dataExplorerImportFromView, () => this._importActiveFile()),
-            vscode.commands.registerCommand(CoreCommandIds.dataExplorerOpenInline, (identifier?: string) => {
-                if (!identifier) {
-                    return;
-                }
-                const instance = this._dataExplorerService.getInstance(identifier);
-                if (instance) {
-                    this.openInstance(instance, true);
-                }
-            }),
+            vscode.commands.registerCommand(CoreCommandIds.dataExplorerImportFromView, () =>
+                this._importActiveFile(),
+            ),
+            vscode.commands.registerCommand(
+                CoreCommandIds.dataExplorerOpenInline,
+                (identifier?: string) => {
+                    if (!identifier) {
+                        return;
+                    }
+                    const instance = this._dataExplorerService.getInstance(identifier);
+                    if (instance) {
+                        this.openInstance(instance, true);
+                    }
+                },
+            ),
             vscode.commands.registerCommand(PositronDataExplorerCommandId.Copy, async () => {
                 await this._sendToActiveWebview(DataExplorerCopyNotification.type.method);
-            })
+            }),
         );
         this._disposables.push(
-            vscode.commands.registerCommand(PositronDataExplorerCommandId.CopyTableData, async () => {
-                await this._sendToActiveWebview(DataExplorerCopyTableDataNotification.type.method);
-            })
+            vscode.commands.registerCommand(
+                PositronDataExplorerCommandId.CopyTableData,
+                async () => {
+                    await this._sendToActiveWebview(
+                        DataExplorerCopyTableDataNotification.type.method,
+                    );
+                },
+            ),
         );
         this._disposables.push(
-            vscode.commands.registerCommand(PositronDataExplorerCommandId.CollapseSummary, async () => {
-                await this._setSummaryCollapsedForActive(true);
-            })
+            vscode.commands.registerCommand(
+                PositronDataExplorerCommandId.CollapseSummary,
+                async () => {
+                    await this._setSummaryCollapsedForActive(true);
+                },
+            ),
         );
         this._disposables.push(
-            vscode.commands.registerCommand(PositronDataExplorerCommandId.ExpandSummary, async () => {
-                await this._setSummaryCollapsedForActive(false);
-            })
+            vscode.commands.registerCommand(
+                PositronDataExplorerCommandId.ExpandSummary,
+                async () => {
+                    await this._setSummaryCollapsedForActive(false);
+                },
+            ),
         );
         this._disposables.push(
-            vscode.commands.registerCommand(PositronDataExplorerCommandId.SummaryOnLeft, async () => {
-                await this._setLayoutForActive('SummaryOnLeft');
-            })
+            vscode.commands.registerCommand(
+                PositronDataExplorerCommandId.SummaryOnLeft,
+                async () => {
+                    await this._setLayoutForActive('SummaryOnLeft');
+                },
+            ),
         );
         this._disposables.push(
-            vscode.commands.registerCommand(PositronDataExplorerCommandId.SummaryOnRight, async () => {
-                await this._setLayoutForActive('SummaryOnRight');
-            })
+            vscode.commands.registerCommand(
+                PositronDataExplorerCommandId.SummaryOnRight,
+                async () => {
+                    await this._setLayoutForActive('SummaryOnRight');
+                },
+            ),
         );
         this._disposables.push(
-            vscode.commands.registerCommand(PositronDataExplorerCommandId.ClearColumnSorting, async () => {
-                await this._sendToActiveWebview(DataExplorerClearSortNotification.type.method);
-            })
+            vscode.commands.registerCommand(
+                PositronDataExplorerCommandId.ClearColumnSorting,
+                async () => {
+                    await this._sendToActiveWebview(DataExplorerClearSortNotification.type.method);
+                },
+            ),
         );
         this._disposables.push(
-            vscode.commands.registerCommand(PositronDataExplorerCommandId.ConvertToCode, async () => {
-                await this._showConvertToCodeForActive();
-            })
+            vscode.commands.registerCommand(
+                PositronDataExplorerCommandId.ConvertToCode,
+                async () => {
+                    await this._showConvertToCodeForActive();
+                },
+            ),
         );
         this._disposables.push(
-            vscode.commands.registerCommand(PositronDataExplorerCommandId.OpenAsPlaintext, async () => {
-                await this._sendToActiveWebview(DataExplorerOpenAsPlaintextNotification.type.method);
-            })
+            vscode.commands.registerCommand(
+                PositronDataExplorerCommandId.OpenAsPlaintext,
+                async () => {
+                    await this._sendToActiveWebview(
+                        DataExplorerOpenAsPlaintextNotification.type.method,
+                    );
+                },
+            ),
         );
         this._disposables.push(
-            vscode.commands.registerCommand(PositronDataExplorerCommandId.OpenAsSpreadsheet, async () => {
-                const active = this._getActiveDataExplorer();
-                const instance = active
-                    ? this._dataExplorerService.getInstance(active.identifier)
-                    : undefined;
-                if (!instance) {
-                    vscode.window.showWarningMessage('No active Data Explorer editor.');
-                    return;
-                }
-                try {
-                    await this._openAsSpreadsheet(instance);
-                } catch (error) {
-                    vscode.window.showErrorMessage(getErrorMessage(error));
-                }
-            })
+            vscode.commands.registerCommand(
+                PositronDataExplorerCommandId.OpenAsSpreadsheet,
+                async () => {
+                    const active = this._getActiveDataExplorer();
+                    const instance = active
+                        ? this._dataExplorerService.getInstance(active.identifier)
+                        : undefined;
+                    if (!instance) {
+                        vscode.window.showWarningMessage('No active Data Explorer editor.');
+                        return;
+                    }
+                    try {
+                        await this._openAsSpreadsheet(instance);
+                    } catch (error) {
+                        vscode.window.showErrorMessage(getErrorMessage(error));
+                    }
+                },
+            ),
         );
         this._disposables.push(
-            vscode.commands.registerCommand(PositronDataExplorerCommandId.ToggleFileOptions, async () => {
-                await this._showFileOptionsForActive();
-            })
+            vscode.commands.registerCommand(
+                PositronDataExplorerCommandId.ToggleFileOptions,
+                async () => {
+                    await this._showFileOptionsForActive();
+                },
+            ),
         );
         this._disposables.push(
-            vscode.commands.registerCommand(PositronDataExplorerCommandId.SelectWorksheet, async () => {
-                await this._selectWorksheetForActive();
-            })
+            vscode.commands.registerCommand(
+                PositronDataExplorerCommandId.SelectWorksheet,
+                async () => {
+                    await this._selectWorksheetForActive();
+                },
+            ),
         );
         this._disposables.push(
-            vscode.commands.registerCommand(PositronDataExplorerCommandId.MoveToNewWindow, async () => {
-                await this._sendToActiveWebview(DataExplorerMoveToNewWindowNotification.type.method);
-            })
+            vscode.commands.registerCommand(
+                PositronDataExplorerCommandId.MoveToNewWindow,
+                async () => {
+                    await this._sendToActiveWebview(
+                        DataExplorerMoveToNewWindowNotification.type.method,
+                    );
+                },
+            ),
         );
         this._disposables.push(
-            vscode.commands.registerCommand(PositronDataExplorerCommandId.ShowColumnContextMenu, async () => {
-                await this._sendToActiveWebview(DataExplorerShowColumnContextMenuNotification.type.method);
-            })
+            vscode.commands.registerCommand(
+                PositronDataExplorerCommandId.ShowColumnContextMenu,
+                async () => {
+                    await this._sendToActiveWebview(
+                        DataExplorerShowColumnContextMenuNotification.type.method,
+                    );
+                },
+            ),
         );
         this._disposables.push(
-            vscode.commands.registerCommand(PositronDataExplorerCommandId.ShowRowContextMenu, async () => {
-                await this._sendToActiveWebview(DataExplorerShowRowContextMenuNotification.type.method);
-            })
+            vscode.commands.registerCommand(
+                PositronDataExplorerCommandId.ShowRowContextMenu,
+                async () => {
+                    await this._sendToActiveWebview(
+                        DataExplorerShowRowContextMenuNotification.type.method,
+                    );
+                },
+            ),
         );
         this._disposables.push(
-            vscode.commands.registerCommand(PositronDataExplorerCommandId.ShowCellContextMenu, async () => {
-                await this._sendToActiveWebview(DataExplorerShowCellContextMenuNotification.type.method);
-            })
+            vscode.commands.registerCommand(
+                PositronDataExplorerCommandId.ShowCellContextMenu,
+                async () => {
+                    await this._sendToActiveWebview(
+                        DataExplorerShowCellContextMenuNotification.type.method,
+                    );
+                },
+            ),
         );
     }
 
@@ -281,7 +351,8 @@ export class PositronDataExplorerEditorProvider implements vscode.Disposable {
         connection.sendNotification(method, params as object | undefined);
     }
 
-    private _getActiveDataExplorer(): { identifier: string; panel: vscode.WebviewPanel } | undefined {
+    private _getActiveDataExplorer():
+        { identifier: string; panel: vscode.WebviewPanel } | undefined {
         for (const [identifier, panel] of this._panels) {
             if (panel.active) {
                 return { identifier, panel };
@@ -292,23 +363,36 @@ export class PositronDataExplorerEditorProvider implements vscode.Disposable {
 
     private async _importActiveFile(): Promise<void> {
         const active = this._getActiveExplorerContext();
-        if (!active) { return; }
+        if (!active) {
+            return;
+        }
         const uri = getDataExplorerBackingUri(active.identifier);
-        if (!uri) { return; }
+        if (!uri) {
+            return;
+        }
         const state = active.instance.clientInstance.cachedBackendState;
-        const view = state ? await buildDataImportView(state, indexes => active.instance.getSchema(indexes)) : undefined;
-        await vscode.commands.executeCommand(CoreCommandIds.dataExplorerImport, uri, {
-            hasHeaderRow: active.instance.fileHasHeaderRow,
-            sheetName: active.instance.fileSelectedSheet,
-        }, view);
+        const view = state
+            ? await buildDataImportView(state, (indexes) => active.instance.getSchema(indexes))
+            : undefined;
+        await vscode.commands.executeCommand(
+            CoreCommandIds.dataExplorerImport,
+            uri,
+            {
+                hasHeaderRow: active.instance.fileHasHeaderRow,
+                sheetName: active.instance.fileSelectedSheet,
+            },
+            view,
+        );
     }
 
-    private _getActiveExplorerContext(): {
-        identifier: string;
-        panel: vscode.WebviewPanel;
-        instance: IPositronDataExplorerInstance;
-        connection: MessageConnection;
-    } | undefined {
+    private _getActiveExplorerContext():
+        | {
+              identifier: string;
+              panel: vscode.WebviewPanel;
+              instance: IPositronDataExplorerInstance;
+              connection: MessageConnection;
+          }
+        | undefined {
         const active = this._getActiveDataExplorer();
         if (!active) {
             return undefined;
@@ -346,11 +430,12 @@ export class PositronDataExplorerEditorProvider implements vscode.Disposable {
             const backendState = await active.instance.clientInstance.getBackendState(true);
             const availableSyntaxes =
                 backendState.supported_features.convert_to_code.code_syntaxes?.map(
-                    syntax => syntax.code_syntax_name
+                    (syntax) => syntax.code_syntax_name,
                 ) ?? [];
 
             if (
-                backendState.supported_features.convert_to_code.support_status !== SupportStatus.Supported ||
+                backendState.supported_features.convert_to_code.support_status !==
+                    SupportStatus.Supported ||
                 availableSyntaxes.length === 0
             ) {
                 throw new Error('Convert to code is not supported by this dataset.');
@@ -359,7 +444,9 @@ export class PositronDataExplorerEditorProvider implements vscode.Disposable {
             const hasSorting = (backendState.sort_keys?.length ?? 0) > 0;
             const hasFiltering = (backendState.row_filters?.length ?? 0) > 0;
             if (!hasSorting && !hasFiltering) {
-                throw new Error('Convert to code is available after applying sorting or row filters.');
+                throw new Error(
+                    'Convert to code is available after applying sorting or row filters.',
+                );
             }
 
             const suggestedSyntax = await active.instance.clientInstance.suggestCodeSyntax();
@@ -411,7 +498,7 @@ export class PositronDataExplorerEditorProvider implements vscode.Disposable {
         }
 
         const selected = await vscode.window.showQuickPick(
-            worksheets.map(label => ({
+            worksheets.map((label) => ({
                 label,
                 picked: label === active.instance.fileSelectedSheet,
             })),
@@ -474,44 +561,97 @@ export class PositronDataExplorerEditorProvider implements vscode.Disposable {
         if (!backingUri || !isSpreadsheetDataExplorerIdentifier(instance.identifier)) {
             throw new Error('This Data Explorer is not backed by an Excel workbook.');
         }
-        if (!await vscode.env.openExternal(backingUri)) {
+        if (!(await vscode.env.openExternal(backingUri))) {
             throw new Error(`The operating system could not open ${backingUri.fsPath}.`);
         }
     }
 
     private _resetContexts(): void {
         void vscode.commands.executeCommand('setContext', DATA_EXPLORER_EDITOR_CONTEXT, false);
-        void vscode.commands.executeCommand('setContext', DATA_EXPLORER_LAYOUT_CONTEXT, 'SummaryOnLeft');
-        void vscode.commands.executeCommand('setContext', DATA_EXPLORER_COLUMN_SORTING_CONTEXT, false);
-        void vscode.commands.executeCommand('setContext', DATA_EXPLORER_CONVERT_TO_CODE_ENABLED_CONTEXT, false);
-        void vscode.commands.executeCommand('setContext', DATA_EXPLORER_CODE_SYNTAXES_AVAILABLE_CONTEXT, false);
-        void vscode.commands.executeCommand('setContext', DATA_EXPLORER_ROW_FILTERING_CONTEXT, false);
-        void vscode.commands.executeCommand('setContext', DATA_EXPLORER_IS_PLAINTEXT_CONTEXT, false);
+        void vscode.commands.executeCommand(
+            'setContext',
+            DATA_EXPLORER_LAYOUT_CONTEXT,
+            'SummaryOnLeft',
+        );
+        void vscode.commands.executeCommand(
+            'setContext',
+            DATA_EXPLORER_COLUMN_SORTING_CONTEXT,
+            false,
+        );
+        void vscode.commands.executeCommand(
+            'setContext',
+            DATA_EXPLORER_CONVERT_TO_CODE_ENABLED_CONTEXT,
+            false,
+        );
+        void vscode.commands.executeCommand(
+            'setContext',
+            DATA_EXPLORER_CODE_SYNTAXES_AVAILABLE_CONTEXT,
+            false,
+        );
+        void vscode.commands.executeCommand(
+            'setContext',
+            DATA_EXPLORER_ROW_FILTERING_CONTEXT,
+            false,
+        );
+        void vscode.commands.executeCommand(
+            'setContext',
+            DATA_EXPLORER_IS_PLAINTEXT_CONTEXT,
+            false,
+        );
         void vscode.commands.executeCommand('setContext', DATA_EXPLORER_IS_XLSX_CONTEXT, false);
-        void vscode.commands.executeCommand('setContext', DATA_EXPLORER_HAS_BACKING_FILE_CONTEXT, false);
-        void vscode.commands.executeCommand('setContext', DATA_EXPLORER_SUMMARY_COLLAPSED_CONTEXT, false);
+        void vscode.commands.executeCommand(
+            'setContext',
+            DATA_EXPLORER_HAS_BACKING_FILE_CONTEXT,
+            false,
+        );
+        void vscode.commands.executeCommand(
+            'setContext',
+            DATA_EXPLORER_SUMMARY_COLLAPSED_CONTEXT,
+            false,
+        );
         void vscode.commands.executeCommand('setContext', DATA_EXPLORER_FOCUSED_CONTEXT, false);
-        void vscode.commands.executeCommand('setContext', DATA_EXPLORER_IN_NEW_WINDOW_CONTEXT, false);
+        void vscode.commands.executeCommand(
+            'setContext',
+            DATA_EXPLORER_IN_NEW_WINDOW_CONTEXT,
+            false,
+        );
     }
 
     private _updateContextsForInstance(instance: IPositronDataExplorerInstance): void {
         const backendState = instance.backendState;
         const uiState = instance.uiState;
         const supportsConvertToCode =
-            backendState?.supported_features?.convert_to_code?.support_status === SupportStatus.Supported;
-        const hasCodeSyntaxes = (backendState?.supported_features?.convert_to_code?.code_syntaxes?.length ?? 0) > 0;
+            backendState?.supported_features?.convert_to_code?.support_status ===
+            SupportStatus.Supported;
+        const hasCodeSyntaxes =
+            (backendState?.supported_features?.convert_to_code?.code_syntaxes?.length ?? 0) > 0;
 
         void vscode.commands.executeCommand('setContext', DATA_EXPLORER_EDITOR_CONTEXT, true);
-        void vscode.commands.executeCommand('setContext', DATA_EXPLORER_HAS_BACKING_FILE_CONTEXT,
-            !!getDataExplorerBackingUri(instance.identifier));
-        void vscode.commands.executeCommand('setContext', DATA_EXPLORER_LAYOUT_CONTEXT, uiState.layout);
+        void vscode.commands.executeCommand(
+            'setContext',
+            DATA_EXPLORER_HAS_BACKING_FILE_CONTEXT,
+            !!getDataExplorerBackingUri(instance.identifier),
+        );
+        void vscode.commands.executeCommand(
+            'setContext',
+            DATA_EXPLORER_LAYOUT_CONTEXT,
+            uiState.layout,
+        );
         void vscode.commands.executeCommand(
             'setContext',
             DATA_EXPLORER_COLUMN_SORTING_CONTEXT,
             (backendState?.sort_keys?.length ?? 0) > 0,
         );
-        void vscode.commands.executeCommand('setContext', DATA_EXPLORER_CONVERT_TO_CODE_ENABLED_CONTEXT, supportsConvertToCode);
-        void vscode.commands.executeCommand('setContext', DATA_EXPLORER_CODE_SYNTAXES_AVAILABLE_CONTEXT, hasCodeSyntaxes);
+        void vscode.commands.executeCommand(
+            'setContext',
+            DATA_EXPLORER_CONVERT_TO_CODE_ENABLED_CONTEXT,
+            supportsConvertToCode,
+        );
+        void vscode.commands.executeCommand(
+            'setContext',
+            DATA_EXPLORER_CODE_SYNTAXES_AVAILABLE_CONTEXT,
+            hasCodeSyntaxes,
+        );
         void vscode.commands.executeCommand(
             'setContext',
             DATA_EXPLORER_ROW_FILTERING_CONTEXT,
@@ -527,7 +667,11 @@ export class PositronDataExplorerEditorProvider implements vscode.Disposable {
             DATA_EXPLORER_IS_XLSX_CONTEXT,
             isSpreadsheetDataExplorerIdentifier(instance.identifier),
         );
-        void vscode.commands.executeCommand('setContext', DATA_EXPLORER_SUMMARY_COLLAPSED_CONTEXT, uiState.summaryCollapsed);
+        void vscode.commands.executeCommand(
+            'setContext',
+            DATA_EXPLORER_SUMMARY_COLLAPSED_CONTEXT,
+            uiState.summaryCollapsed,
+        );
         void vscode.commands.executeCommand(
             'setContext',
             DATA_EXPLORER_FOCUSED_CONTEXT,
@@ -581,7 +725,10 @@ export class PositronDataExplorerEditorProvider implements vscode.Disposable {
     /**
      * Opens a Data Explorer instance in the editor area
      */
-    public openInstance(instance: IPositronDataExplorerInstance, allowInline: boolean = false): void {
+    public openInstance(
+        instance: IPositronDataExplorerInstance,
+        allowInline: boolean = false,
+    ): void {
         if (instance.inlineOnly && !allowInline) {
             return;
         }
@@ -601,18 +748,22 @@ export class PositronDataExplorerEditorProvider implements vscode.Disposable {
         const preview = DataExplorerPreviewEnabled();
         const resource = createDataExplorerEditorUri(instance.identifier);
         this._openingInstances.add(instance.identifier);
-        void vscode.commands.executeCommand(
-            'vscode.openWith',
-            resource,
-            PositronDataExplorerEditorProvider.viewType,
-            { preview, preserveFocus: false, viewColumn: vscode.ViewColumn.Active },
-        ).then(
-            () => this._openingInstances.delete(instance.identifier),
-            error => {
-                this._openingInstances.delete(instance.identifier);
-                this._logChannel.error(`[DataExplorerEditor] Failed to open ${instance.identifier}: ${getErrorMessage(error)}`);
-            },
-        );
+        void vscode.commands
+            .executeCommand(
+                'vscode.openWith',
+                resource,
+                PositronDataExplorerEditorProvider.viewType,
+                { preview, preserveFocus: false, viewColumn: vscode.ViewColumn.Active },
+            )
+            .then(
+                () => this._openingInstances.delete(instance.identifier),
+                (error) => {
+                    this._openingInstances.delete(instance.identifier);
+                    this._logChannel.error(
+                        `[DataExplorerEditor] Failed to open ${instance.identifier}: ${getErrorMessage(error)}`,
+                    );
+                },
+            );
     }
 
     /**
@@ -657,7 +808,10 @@ export class PositronDataExplorerEditorProvider implements vscode.Disposable {
      * Used by both openInstance() (self-created panels) and
      * PositronDataExplorerCustomEditorProvider (VS Code-created panels from "Reopen With").
      */
-    public attachToPanel(instance: IPositronDataExplorerInstance, panel: vscode.WebviewPanel): void {
+    public attachToPanel(
+        instance: IPositronDataExplorerInstance,
+        panel: vscode.WebviewPanel,
+    ): void {
         this._openingInstances.delete(instance.identifier);
         const panelDisposables: vscode.Disposable[] = [];
         const disposePanelListeners = () => {
@@ -704,12 +858,14 @@ export class PositronDataExplorerEditorProvider implements vscode.Disposable {
             // lifecycle coordinator is initialized. Wait for the matching
             // model so the first panel cannot miss its attachment lease.
             let modelRegistrationListener: vscode.Disposable | undefined;
-            modelRegistrationListener = this._surfaceLifecycle.onDidChange(event => {
+            modelRegistrationListener = this._surfaceLifecycle.onDidChange((event) => {
                 if (event.model.id === modelId && attachSurfaceModel()) {
                     modelRegistrationListener?.dispose();
                 }
             });
-            panelDisposables.push(new vscode.Disposable(() => modelRegistrationListener?.dispose()));
+            panelDisposables.push(
+                new vscode.Disposable(() => modelRegistrationListener?.dispose()),
+            );
         }
 
         // Custom editor panels provided by VS Code do not inherit the webview
@@ -734,8 +890,7 @@ export class PositronDataExplorerEditorProvider implements vscode.Disposable {
             instance,
             logChannel: this._logChannel,
             isInstanceActive: () => this._isInstanceActive(instance.identifier),
-            isInstanceInNewWindow: () =>
-                this._isInstanceInNewWindow(instance.identifier),
+            isInstanceInNewWindow: () => this._isInstanceInNewWindow(instance.identifier),
             onSyncActiveContexts: () => {
                 this._syncActiveContexts();
             },
@@ -774,9 +929,9 @@ export class PositronDataExplorerEditorProvider implements vscode.Disposable {
                     : '';
                 const stack = event.stack ? `\n${event.stack}` : '';
                 this._logChannel.error(
-                    `[DataExplorerWebview] ${event.message ?? 'Unknown error'}${location}${stack}`
+                    `[DataExplorerWebview] ${event.message ?? 'Unknown error'}${location}${stack}`,
                 );
-            })
+            }),
         );
 
         // Register notification handlers
@@ -808,7 +963,7 @@ export class PositronDataExplorerEditorProvider implements vscode.Disposable {
                 } else if (model) {
                     this._logChannel.debug(
                         `[DataExplorer] Kept backend ${instance.identifier}; ` +
-                        `${model.attachments.length} other surface attachment(s) remain.`,
+                            `${model.attachments.length} other surface attachment(s) remain.`,
                     );
                 } else {
                     // Preserve legacy behavior when no lifecycle registry is supplied.
@@ -819,7 +974,7 @@ export class PositronDataExplorerEditorProvider implements vscode.Disposable {
             this._syncActiveContexts();
         });
 
-        panel.onDidChangeViewState(event => {
+        panel.onDidChangeViewState((event) => {
             updateVisibility(event.webviewPanel.visible);
             bridge.setSurfaceVisible(event.webviewPanel.visible);
             if (event.webviewPanel.active) {
@@ -830,13 +985,15 @@ export class PositronDataExplorerEditorProvider implements vscode.Disposable {
         });
 
         // Update title when backend state changes
-        panelDisposables.push(instance.onDidUpdateBackendState(state => {
-            panel.title = formatDataExplorerEditorTitle(state.display_name);
-            bridge.sendBackendStateUpdate();
-            if (panel.active) {
-                this._updateContextsForInstance(instance);
-            }
-        }));
+        panelDisposables.push(
+            instance.onDidUpdateBackendState((state) => {
+                panel.title = formatDataExplorerEditorTitle(state.display_name);
+                bridge.sendBackendStateUpdate();
+                if (panel.active) {
+                    this._updateContextsForInstance(instance);
+                }
+            }),
+        );
 
         this._logChannel.info(`[DataExplorerEditor] Opened panel for ${instance.identifier}`);
         this._syncActiveContexts();
@@ -848,17 +1005,13 @@ export class PositronDataExplorerEditorProvider implements vscode.Disposable {
     ): Promise<void> {
         this._skipInstanceCloseOnNextPanelDispose.add(instance.identifier);
         try {
-            await vscode.commands.executeCommand(
-                'workbench.action.moveEditorToNewWindow',
-            );
+            await vscode.commands.executeCommand('workbench.action.moveEditorToNewWindow');
             this._instancesInNewWindow.add(instance.identifier);
             bridge.sendBackendStateUpdate();
             this._syncActiveContexts();
             setTimeout(() => {
                 if (this._panels.has(instance.identifier)) {
-                    this._skipInstanceCloseOnNextPanelDispose.delete(
-                        instance.identifier,
-                    );
+                    this._skipInstanceCloseOnNextPanelDispose.delete(instance.identifier);
                 }
             }, 1000);
         } catch (error) {
@@ -869,24 +1022,25 @@ export class PositronDataExplorerEditorProvider implements vscode.Disposable {
 
     private _getHtmlForWebview(webview: vscode.Webview): string {
         // Get URIs for Svelte-built assets
-        const webviewDistPath = vscode.Uri.joinPath(this._extensionUri, 'webview', 'dist', 'dataExplorer');
-        const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(webviewDistPath, 'index.js'));
-        const commonStyleUri = webview.asWebviewUri(vscode.Uri.joinPath(
-            this._extensionUri, 'webview', 'dist', 'common', 'index.css',
-        ));
-        const styleUri = webview.asWebviewUri(vscode.Uri.joinPath(webviewDistPath, 'index.css'));
-        const monacoStyleUri = webview.asWebviewUri(vscode.Uri.joinPath(
+        const webviewDistPath = vscode.Uri.joinPath(
             this._extensionUri,
             'webview',
             'dist',
-            'setup',
-            'index.css',
-        ));
+            'dataExplorer',
+        );
+        const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(webviewDistPath, 'index.js'));
+        const commonStyleUri = webview.asWebviewUri(
+            vscode.Uri.joinPath(this._extensionUri, 'webview', 'dist', 'common', 'index.css'),
+        );
+        const styleUri = webview.asWebviewUri(vscode.Uri.joinPath(webviewDistPath, 'index.css'));
+        const monacoStyleUri = webview.asWebviewUri(
+            vscode.Uri.joinPath(this._extensionUri, 'webview', 'dist', 'setup', 'index.css'),
+        );
         const languageMonacoSupportModules = this._serializeInlineScriptData(
-            this._getLanguageMonacoSupportModuleUris(webview)
+            this._getLanguageMonacoSupportModuleUris(webview),
         );
         const languageTextMateGrammars = this._serializeInlineScriptData(
-            this._getLanguageTextMateGrammarDefinitions(webview)
+            this._getLanguageTextMateGrammarDefinitions(webview),
         );
 
         // Use nonce for security
@@ -1025,10 +1179,10 @@ export class PositronDataExplorerEditorProvider implements vscode.Disposable {
         }
         this._panels.clear();
         this._instancesInNewWindow.clear();
-        this._instanceFocusDisposables.forEach(disposable => disposable.dispose());
+        this._instanceFocusDisposables.forEach((disposable) => disposable.dispose());
         this._instanceFocusDisposables.clear();
         this._skipInstanceCloseOnNextPanelDispose.clear();
         this._resetContexts();
-        this._disposables.forEach(d => d.dispose());
+        this._disposables.forEach((d) => d.dispose());
     }
 }

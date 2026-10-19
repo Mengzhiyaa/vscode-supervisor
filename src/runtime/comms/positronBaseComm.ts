@@ -20,7 +20,7 @@ export enum JsonRpcErrorCode {
     InvalidParams = -32602,
     InternalError = -32603,
     ServerErrorStart = -32000,
-    ServerErrorEnd = -32099
+    ServerErrorEnd = -32099,
 }
 
 /**
@@ -75,7 +75,7 @@ class PositronCommEmitter<T> extends vscode.EventEmitter<T> {
      */
     constructor(
         readonly name: string,
-        readonly properties: string[]
+        readonly properties: string[],
     ) {
         super();
     }
@@ -123,7 +123,7 @@ export class PositronBaseComm implements vscode.Disposable {
      */
     constructor(
         clientInstance: RuntimeClientInstance,
-        private readonly options?: PositronCommOptions<any>
+        private readonly options?: PositronCommOptions<any>,
     ) {
         this.clientInstance = clientInstance;
         this.onDidClose = this._closeEmitter.event;
@@ -132,7 +132,7 @@ export class PositronBaseComm implements vscode.Disposable {
         this._disposables.push(
             clientInstance.onDidSendEvent((event: RuntimeClientOutput) => {
                 this._handleEvent(event.data);
-            })
+            }),
         );
 
         // Listen for client state changes
@@ -141,7 +141,7 @@ export class PositronBaseComm implements vscode.Disposable {
                 if (state === RuntimeClientState.Closed) {
                     this._closeEmitter.fire();
                 }
-            })
+            }),
         );
     }
 
@@ -185,12 +185,13 @@ export class PositronBaseComm implements vscode.Disposable {
                 emitter.fire({});
             } else {
                 // If the payload is some other kind of object, log a warning
-                logFrameworkDiagnostic('PositronBaseComm',
+                logFrameworkDiagnostic(
+                    'PositronBaseComm',
                     `Invalid payload type ${typeof payload} ` +
-                    `for event '${method}' ` +
-                    `on comm ${this.clientInstance.getClientId()}: ` +
-                    `${JSON.stringify(payload)} ` +
-                    `(Expected an object or an array)`
+                        `for event '${method}' ` +
+                        `on comm ${this.clientInstance.getClientId()}: ` +
+                        `${JSON.stringify(payload)} ` +
+                        `(Expected an object or an array)`,
                 );
             }
         } else if (method) {
@@ -198,11 +199,12 @@ export class PositronBaseComm implements vscode.Disposable {
             // this event will get dropped. This is normal for RPC responses.
             // Only log if it's not a response pattern (no result/error)
             if (!('result' in data) && !('error' in data)) {
-                logFrameworkDiagnostic('PositronBaseComm',
+                logFrameworkDiagnostic(
+                    'PositronBaseComm',
                     `Dropping event '${method}' ` +
-                    `on comm ${this.clientInstance.getClientId()}: ` +
-                    `${JSON.stringify(data.params)} ` +
-                    `(No listeners for event '${method}')`
+                        `on comm ${this.clientInstance.getClientId()}: ` +
+                        `${JSON.stringify(data.params)} ` +
+                        `(No listeners for event '${method}')`,
                 );
             }
         }
@@ -235,7 +237,7 @@ export class PositronBaseComm implements vscode.Disposable {
     protected async performRpc<T>(
         rpcName: string,
         paramNames: string[],
-        paramValues: any[]
+        paramValues: any[],
     ): Promise<T> {
         // Create the RPC arguments from the parameter names and values
         const rpcArgs: any = {};
@@ -250,7 +252,7 @@ export class PositronBaseComm implements vscode.Disposable {
         const request: any = {
             jsonrpc: '2.0',
             method: rpcName,
-            id
+            id,
         };
 
         // Amend params if we have any
@@ -260,22 +262,32 @@ export class PositronBaseComm implements vscode.Disposable {
 
         // Check for explicitly set timeout in options, otherwise use the default
         const defaultTimeout = 5000; // 5 seconds
-        const timeout = (this.options?.[rpcName] && 'timeout' in this.options[rpcName])
-            ? this.options[rpcName].timeout
-            : defaultTimeout;
+        const timeout =
+            this.options?.[rpcName] && 'timeout' in this.options[rpcName]
+                ? this.options[rpcName].timeout
+                : defaultTimeout;
 
         let response: any = {};
         try {
             // Wait for a response that includes either a result or an error.
-            response = await this.clientInstance.performRpc<any>(request, timeout, ['result', 'error']);
+            response = await this.clientInstance.performRpc<any>(request, timeout, [
+                'result',
+                'error',
+            ]);
         } catch (err: unknown) {
             // Convert the error to a comm error
             const error: PositronCommError = {
                 code: JsonRpcErrorCode.InternalError,
                 message: getErrorMessage(err),
-                name: typeof err === 'object' && err !== null &&
-                    'name' in err && typeof err.name === 'string' && err.name.length > 0 ? err.name : 'Error',
-                data: err
+                name:
+                    typeof err === 'object' &&
+                    err !== null &&
+                    'name' in err &&
+                    typeof err.name === 'string' &&
+                    err.name.length > 0
+                        ? err.name
+                        : 'Error',
+                data: err,
             };
             throw error;
         }
@@ -291,7 +303,8 @@ export class PositronBaseComm implements vscode.Disposable {
         if (!Object.prototype.hasOwnProperty.call(response, 'result')) {
             const error: PositronCommError = {
                 code: JsonRpcErrorCode.InternalError,
-                message: `Invalid response from ${this.clientInstance.getClientId()}: ` +
+                message:
+                    `Invalid response from ${this.clientInstance.getClientId()}: ` +
                     `no 'result' field. (response = ${JSON.stringify(response)})`,
                 name: 'InvalidResponseError',
                 data: {},
@@ -306,7 +319,7 @@ export class PositronBaseComm implements vscode.Disposable {
      * Disposes the comm and all associated resources.
      */
     dispose(): void {
-        this._disposables.forEach(d => d.dispose());
+        this._disposables.forEach((d) => d.dispose());
         this._emitters.clear();
         this._closeEmitter.dispose();
     }

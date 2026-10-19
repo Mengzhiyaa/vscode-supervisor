@@ -14,11 +14,11 @@ import type { ANSIOutputLine } from '$lib/ansi/ansiOutput';
  */
 export function formatOutputLinesForClipboard(
     outputLines: readonly ANSIOutputLine[],
-    commentPrefix: string
+    commentPrefix: string,
 ): string[] {
-    return outputLines.map(outputLine => {
+    return outputLines.map((outputLine) => {
         // Extract the text from the output runs
-        const text = outputLine.outputRuns.map(run => run.text).join('');
+        const text = outputLine.outputRuns.map((run) => run.text).join('');
         return commentPrefix + text;
     });
 }

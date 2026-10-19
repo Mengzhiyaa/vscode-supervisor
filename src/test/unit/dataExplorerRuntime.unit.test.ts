@@ -30,8 +30,12 @@ function createClientManager() {
     } as unknown as RuntimeClientManager;
     return {
         manager,
-        get registrations() { return registrations; },
-        get disposals() { return disposals; },
+        get registrations() {
+            return registrations;
+        },
+        get disposals() {
+            return disposals;
+        },
     };
 }
 

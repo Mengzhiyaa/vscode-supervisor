@@ -135,7 +135,10 @@ export class LayoutManager {
         }
 
         for (const [entrySizeIndex, entrySize] of this._entrySizes) {
-            if (!this.isPinnedIndex(entrySizeIndex) && !this._customEntrySizes.has(entrySizeIndex)) {
+            if (
+                !this.isPinnedIndex(entrySizeIndex) &&
+                !this._customEntrySizes.has(entrySizeIndex)
+            ) {
                 size -= this._defaultSize;
                 size += entrySize;
             }
@@ -149,7 +152,11 @@ export class LayoutManager {
 
     //#region Public Methods
 
-    setEntries(entryCount: number, entrySizes: number[] | undefined = undefined, entryMap: number[] | undefined = undefined) {
+    setEntries(
+        entryCount: number,
+        entrySizes: number[] | undefined = undefined,
+        entryMap: number[] | undefined = undefined,
+    ) {
         this.invalidateCachedCalculations();
 
         this._entryCount = entryCount;
@@ -210,9 +217,13 @@ export class LayoutManager {
             return layoutIndexes;
         }
 
-        const startOffset = layoutOffset - (layoutSize * overscanFactor);
+        const startOffset = layoutOffset - layoutSize * overscanFactor;
         let end = firstUnpinnedLayoutEntry.start;
-        for (let position = firstLayoutEntryPosition - 1; position >= 0 && end > startOffset; position--) {
+        for (
+            let position = firstLayoutEntryPosition - 1;
+            position >= 0 && end > startOffset;
+            position--
+        ) {
             const index = this.mapPositionToIndex(position);
             if (index === undefined) {
                 return [];
@@ -226,9 +237,13 @@ export class LayoutManager {
             end -= this.entrySize(index);
         }
 
-        const endOffset = layoutOffset + layoutSize + (layoutSize * overscanFactor);
+        const endOffset = layoutOffset + layoutSize + layoutSize * overscanFactor;
         let start = firstUnpinnedLayoutEntry.end;
-        for (let position = firstLayoutEntryPosition + 1; position < this._entryCount && start < endOffset; position++) {
+        for (
+            let position = firstLayoutEntryPosition + 1;
+            position < this._entryCount && start < endOffset;
+            position++
+        ) {
             const index = this.mapPositionToIndex(position);
             if (index === undefined) {
                 return [];
@@ -272,12 +287,13 @@ export class LayoutManager {
         let candidatePosition = -1;
         while (leftPosition <= rightPosition) {
             const middlePosition = (leftPosition + rightPosition) >>> 1;
-            const pinnedPositionsAtOrBeforeMiddlePosition = this.pinnedPositionsAtOrBefore(middlePosition);
+            const pinnedPositionsAtOrBeforeMiddlePosition =
+                this.pinnedPositionsAtOrBefore(middlePosition);
             if (pinnedPositionsAtOrBeforeMiddlePosition === undefined) {
                 return undefined;
             }
 
-            if ((middlePosition + 1) - pinnedPositionsAtOrBeforeMiddlePosition >= target) {
+            if (middlePosition + 1 - pinnedPositionsAtOrBeforeMiddlePosition >= target) {
                 candidatePosition = middlePosition;
                 rightPosition = middlePosition - 1;
             } else {
@@ -285,7 +301,11 @@ export class LayoutManager {
             }
         }
 
-        return candidatePosition === -1 ? undefined : this._entryMap.length !== 0 ? this._entryMap[candidatePosition] : candidatePosition;
+        return candidatePosition === -1
+            ? undefined
+            : this._entryMap.length !== 0
+              ? this._entryMap[candidatePosition]
+              : candidatePosition;
     }
 
     /**
@@ -296,7 +316,11 @@ export class LayoutManager {
      */
     mapPositionsToIndexes(startingPosition: number, endingPosition: number): number[] | undefined {
         // Validate the starting position and ending position.
-        if (startingPosition < 0 || endingPosition < startingPosition || endingPosition >= this._entryCount) {
+        if (
+            startingPosition < 0 ||
+            endingPosition < startingPosition ||
+            endingPosition >= this._entryCount
+        ) {
             return undefined;
         }
 
@@ -365,13 +389,14 @@ export class LayoutManager {
                 const middlePosition = (leftPosition + rightPosition) >>> 1;
 
                 // Calculate the number of pinned positions at or before middle position.
-                const pinnedPositionsAtOrBeforeMiddlePosition = this.pinnedPositionsAtOrBefore(middlePosition);
+                const pinnedPositionsAtOrBeforeMiddlePosition =
+                    this.pinnedPositionsAtOrBefore(middlePosition);
                 if (pinnedPositionsAtOrBeforeMiddlePosition === undefined) {
                     return undefined;
                 }
 
                 // Determine whether to search left or right.
-                if ((middlePosition + 1) - pinnedPositionsAtOrBeforeMiddlePosition >= target) {
+                if (middlePosition + 1 - pinnedPositionsAtOrBeforeMiddlePosition >= target) {
                     candidatePosition = middlePosition;
                     rightPosition = middlePosition - 1;
                 } else {
@@ -397,7 +422,10 @@ export class LayoutManager {
                 }
 
                 // Get the index of the candidate position.
-                const index = this._entryMap.length === 0 ? candidatePosition : this._entryMap[candidatePosition];
+                const index =
+                    this._entryMap.length === 0
+                        ? candidatePosition
+                        : this._entryMap[candidatePosition];
                 if (index === undefined) {
                     return undefined;
                 }
@@ -409,7 +437,10 @@ export class LayoutManager {
                 startingPosition++;
                 do {
                     candidatePosition++;
-                } while (candidatePosition < this._entryCount && isPinnedPosition(candidatePosition));
+                } while (
+                    candidatePosition < this._entryCount &&
+                    isPinnedPosition(candidatePosition)
+                );
             }
         }
 
@@ -441,7 +472,8 @@ export class LayoutManager {
             return undefined;
         }
 
-        const pinnedPositionsBefore = position > 0 ? this.pinnedPositionsAtOrBefore(position - 1) : 0;
+        const pinnedPositionsBefore =
+            position > 0 ? this.pinnedPositionsAtOrBefore(position - 1) : 0;
         if (pinnedPositionsBefore === undefined) {
             return undefined;
         }
@@ -520,7 +552,7 @@ export class LayoutManager {
                 index,
                 start,
                 size,
-                end: start + size
+                end: start + size,
             });
 
             start += size;
@@ -545,7 +577,11 @@ export class LayoutManager {
         const layoutEntries: ILayoutEntry[] = [firstLayoutEntry];
         const layoutEnd = layoutOffset + layoutSize;
 
-        for (let index = this.nextIndex(firstLayoutEntry.index), start = firstLayoutEntry.end; index !== undefined && start < layoutEnd; index = this.nextIndex(index)) {
+        for (
+            let index = this.nextIndex(firstLayoutEntry.index), start = firstLayoutEntry.end;
+            index !== undefined && start < layoutEnd;
+            index = this.nextIndex(index)
+        ) {
             if (this.isPinnedIndex(index)) {
                 continue;
             }
@@ -555,7 +591,7 @@ export class LayoutManager {
                 index,
                 start,
                 size,
-                end: start + size
+                end: start + size,
             });
 
             start += size;
@@ -754,8 +790,13 @@ export class LayoutManager {
         }
 
         const pinnedIndexes = Array.from(this._pinnedIndexes);
-        const customEntrySizes = [...this._customEntrySizes.entries()].filter(([customEntrySizeIndex]) => !this.isPinnedIndex(customEntrySizeIndex));
-        const entrySizes = [...this._entrySizes.entries()].filter(([entrySizeIndex]) => !this.isPinnedIndex(entrySizeIndex) && !this._customEntrySizes.has(entrySizeIndex));
+        const customEntrySizes = [...this._customEntrySizes.entries()].filter(
+            ([customEntrySizeIndex]) => !this.isPinnedIndex(customEntrySizeIndex),
+        );
+        const entrySizes = [...this._entrySizes.entries()].filter(
+            ([entrySizeIndex]) =>
+                !this.isPinnedIndex(entrySizeIndex) && !this._customEntrySizes.has(entrySizeIndex),
+        );
 
         let leftPosition = 0;
         let rightPosition = this._entryCount - 1;
@@ -865,7 +906,9 @@ export class LayoutManager {
             return false;
         }
 
-        return this._entryMap.length !== 0 ? this._inverseEntryMap.has(index) : index < this._entryCount;
+        return this._entryMap.length !== 0
+            ? this._inverseEntryMap.has(index)
+            : index < this._entryCount;
     }
 
     private invalidateCachedCalculations() {

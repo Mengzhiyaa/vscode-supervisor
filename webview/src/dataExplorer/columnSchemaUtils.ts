@@ -3,10 +3,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { SchemaColumn } from '../dataGrid/types';
-import {
-    getEffectiveColumnDisplayType,
-    getSummaryDataTypeIcon,
-} from './columnDisplayTypeUtils';
+import { getEffectiveColumnDisplayType, getSummaryDataTypeIcon } from './columnDisplayTypeUtils';
 
 function normalizeSearchValue(value: string | undefined): string {
     return value?.trim().toLowerCase() ?? '';
@@ -18,10 +15,7 @@ export function getColumnSchemaTypeIcon(columnSchema?: SchemaColumn): string {
     }
 
     return getSummaryDataTypeIcon(
-        getEffectiveColumnDisplayType(
-            columnSchema.type_display,
-            columnSchema.type_name,
-        ),
+        getEffectiveColumnDisplayType(columnSchema.type_display, columnSchema.type_name),
     );
 }
 
@@ -47,7 +41,5 @@ export function matchesColumnSchemaSearch(
         columnSchema.description,
     ];
 
-    return haystacks.some((value) =>
-        normalizeSearchValue(value).includes(normalizedSearchText),
-    );
+    return haystacks.some((value) => normalizeSearchValue(value).includes(normalizedSearchText));
 }

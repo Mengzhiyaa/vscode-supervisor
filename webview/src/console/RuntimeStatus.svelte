@@ -3,22 +3,19 @@
   1:1 Positron replication - Runtime status icon with color coding
 -->
 <script lang="ts">
-    import type { RuntimeStatusType } from "../types/console";
-    import {
-        runtimeStatusToIcon,
-        runtimeStatusToColor,
-    } from "../types/console";
+    import type { RuntimeStatusType } from '../types/console';
+    import { runtimeStatusToIcon, runtimeStatusToColor } from '../types/console';
 
     // Props using Svelte 5 runes
     interface Props {
         status?: RuntimeStatusType;
     }
 
-    let { status = "Idle" }: Props = $props();
+    let { status = 'Idle' }: Props = $props();
 
     let iconClass = $derived(runtimeStatusToIcon[status]);
     let iconColor = $derived(runtimeStatusToColor[status]);
-    let shouldAnimate = $derived(status === "Active");
+    let shouldAnimate = $derived(status === 'Active');
 </script>
 
 <span

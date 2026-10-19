@@ -1,11 +1,7 @@
 export type VariablesGrouping = 'none' | 'kind' | 'size';
 export type VariablesSorting = 'name' | 'size' | 'recent';
 export type VariablesInstanceState =
-    | 'uninitialized'
-    | 'opening'
-    | 'connected'
-    | 'closing'
-    | 'closed';
+    'uninitialized' | 'opening' | 'connected' | 'closing' | 'closed';
 export type VariablesInstanceStatus = 'idle' | 'busy' | 'disconnected';
 
 export interface VariablesInstanceInfo {

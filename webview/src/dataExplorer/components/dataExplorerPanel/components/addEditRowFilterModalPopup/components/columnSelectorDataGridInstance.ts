@@ -8,11 +8,11 @@ import {
     type DataGridCellContent,
     type DataGridOptions,
     type IDataColumn,
-} from "../../../../../../dataGrid/classes/dataGridInstance";
-import type { SchemaColumn } from "../../../../../../dataGrid/types";
-import { ColumnSchemaCache } from "../../../../../common/columnSchemaCache";
-import type { DataExplorerSchemaClient } from "../../../../../common/dataExplorerSchemaClient";
-import ColumnSelectorCell from "./columnSelectorCell.svelte";
+} from '../../../../../../dataGrid/classes/dataGridInstance';
+import type { SchemaColumn } from '../../../../../../dataGrid/types';
+import { ColumnSchemaCache } from '../../../../../common/columnSchemaCache';
+import type { DataExplorerSchemaClient } from '../../../../../common/dataExplorerSchemaClient';
+import ColumnSelectorCell from './columnSelectorCell.svelte';
 
 const DEFAULT_ROW_HEIGHT = 26;
 const OVERSCAN_FACTOR = 3;
@@ -44,7 +44,7 @@ export class ColumnSelectorDataGridInstance extends DataGridInstance {
     private readonly _columnSchemaCache: ColumnSchemaCache;
     private readonly _schemaCacheDisposable: { dispose(): void };
     private _rows: number;
-    private _searchText = "";
+    private _searchText = '';
     private _searchRequestId = 0;
 
     constructor(
@@ -57,10 +57,9 @@ export class ColumnSelectorDataGridInstance extends DataGridInstance {
         this._rows = _totalColumns;
         this._columnSchemaCache = new ColumnSchemaCache(_schemaClient);
         this._columnSchemaCache.setColumnSchema(initialSchema);
-        this._schemaCacheDisposable =
-            this._columnSchemaCache.onDidUpdateCache(() =>
-                this.fireOnDidUpdateEvent(),
-            );
+        this._schemaCacheDisposable = this._columnSchemaCache.onDidUpdateCache(() =>
+            this.fireOnDidUpdateEvent(),
+        );
         this._columnLayoutManager.setEntries(1);
         this._rowLayoutManager.setEntries(_totalColumns);
     }
@@ -90,7 +89,7 @@ export class ColumnSelectorDataGridInstance extends DataGridInstance {
     }
 
     getCellData(_rowIndex: number, _columnIndex: number): string | undefined {
-        return "";
+        return '';
     }
 
     column(_columnIndex: number): IDataColumn | undefined {
@@ -108,7 +107,7 @@ export class ColumnSelectorDataGridInstance extends DataGridInstance {
         }
 
         return {
-            kind: "component",
+            kind: 'component',
             component: ColumnSelectorCell,
             props: {
                 columnSchema,
@@ -207,16 +206,9 @@ export class ColumnSelectorDataGridInstance extends DataGridInstance {
         super.dispose();
     }
 
-    private _applyFilter(
-        columnIndices: number[] | undefined,
-        forceFirstVisibleRow = false,
-    ): void {
+    private _applyFilter(columnIndices: number[] | undefined, forceFirstVisibleRow = false): void {
         this._rows = columnIndices?.length ?? this._totalColumns;
-        this._rowLayoutManager.setEntries(
-            this._rows,
-            undefined,
-            columnIndices,
-        );
+        this._rowLayoutManager.setEntries(this._rows, undefined, columnIndices);
         this._resetScrollOffset(forceFirstVisibleRow);
         this._ensureCursorIsVisible(forceFirstVisibleRow);
         this.fireOnDidUpdateEvent();
@@ -241,15 +233,11 @@ export class ColumnSelectorDataGridInstance extends DataGridInstance {
 
         if (
             !forceFirstVisibleRow &&
-            this._rowLayoutManager.mapIndexToPosition(this.cursorRowIndex) !==
-                undefined
+            this._rowLayoutManager.mapIndexToPosition(this.cursorRowIndex) !== undefined
         ) {
             return;
         }
 
-        this.setCursorPosition(
-            0,
-            this._rowLayoutManager.mapPositionToIndex(0) ?? -1,
-        );
+        this.setCursorPosition(0, this._rowLayoutManager.mapPositionToIndex(0) ?? -1);
     }
 }

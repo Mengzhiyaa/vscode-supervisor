@@ -8,14 +8,14 @@ import { JupyterMessageType } from './JupyterMessageType';
 import { JupyterRequest } from './JupyterRequest';
 
 export class CommInfoRequest extends JupyterRequest<JupyterCommInfoRequest, JupyterCommInfoReply> {
-	constructor(target: string) {
-		super(
-			JupyterMessageType.CommInfoRequest,
-			{ target_name: target },
-			JupyterMessageType.CommInfoReply,
-			JupyterChannel.Shell,
-		);
-	}
+    constructor(target: string) {
+        super(
+            JupyterMessageType.CommInfoRequest,
+            { target_name: target },
+            JupyterMessageType.CommInfoReply,
+            JupyterChannel.Shell,
+        );
+    }
 }
 
 /**
@@ -24,18 +24,18 @@ export class CommInfoRequest extends JupyterRequest<JupyterCommInfoRequest, Jupy
  * @link https://jupyter-client.readthedocs.io/en/stable/messaging.html#comm-info
  */
 export interface JupyterCommInfoRequest {
-	/**
-	 * Optional target name; if specified, only comms with the given target
-	 * name will be returned.
-	 */
-	target_name: string;
+    /**
+     * Optional target name; if specified, only comms with the given target
+     * name will be returned.
+     */
+    target_name: string;
 }
 
 /**
  * Represents a single comm, as returned by a comm_info request.
  */
 export interface JupyterComm {
-	target_name: string;
+    target_name: string;
 }
 
 /**
@@ -45,9 +45,9 @@ export interface JupyterComm {
  * @link https://jupyter-client.readthedocs.io/en/stable/messaging.html#comm-info
  */
 export interface JupyterCommInfoReply {
-	/** The status of the request */
-	status: 'ok' | 'error';
+    /** The status of the request */
+    status: 'ok' | 'error';
 
-	/** A map of comms, keyed by comm ID */
-	comms: Record<string, JupyterComm>;
+    /** A map of comms, keyed by comm ID */
+    comms: Record<string, JupyterComm>;
 }

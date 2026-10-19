@@ -3,7 +3,7 @@
   Port from Positron's statsValue.tsx
 -->
 <script lang="ts">
-    import { localize } from "../nls";
+    import { localize } from '../nls';
 
     interface Props {
         stats?: unknown;
@@ -12,7 +12,7 @@
 
     let { stats, value }: Props = $props();
 
-    const naLabel = localize("positronNA", "N/A");
+    const naLabel = localize('positronNA', 'N/A');
 </script>
 
 {#if stats === undefined}

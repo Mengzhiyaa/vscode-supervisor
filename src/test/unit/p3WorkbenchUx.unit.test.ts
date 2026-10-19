@@ -1,17 +1,12 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
 import { decodeImageDataUri, imageExtension } from '../../shared/imageDataUri';
-import {
-    addHtmlBaseUri,
-} from '../../editor/PlotEditorProvider';
+import { addHtmlBaseUri } from '../../editor/PlotEditorProvider';
 import {
     ExecutionEntryType,
     ExecutionHistoryService,
 } from '../../services/console/executionHistoryService';
-import {
-    injectViewerBridge,
-    VIEWER_BRIDGE_PATH,
-} from '../../services/preview/htmlProxyUtils';
+import { injectViewerBridge, VIEWER_BRIDGE_PATH } from '../../services/preview/htmlProxyUtils';
 
 function createLog(): vscode.LogOutputChannel {
     const noop = () => undefined;
@@ -42,7 +37,7 @@ class MemoryMemento implements vscode.Memento {
     get<T>(key: string): T | undefined;
     get<T>(key: string, defaultValue: T): T;
     get<T>(key: string, defaultValue?: T): T | undefined {
-        return this.values.has(key) ? this.values.get(key) as T : defaultValue;
+        return this.values.has(key) ? (this.values.get(key) as T) : defaultValue;
     }
     async update(key: string, value: unknown): Promise<void> {
         if (value === undefined) {
@@ -51,7 +46,7 @@ class MemoryMemento implements vscode.Memento {
             this.values.set(key, value);
         }
     }
-    setKeysForSync(): void { }
+    setKeysForSync(): void {}
 }
 
 suite('[Unit] P3 Workbench and UX equivalence', () => {
@@ -64,11 +59,11 @@ suite('[Unit] P3 Workbench and UX equivalence', () => {
         await history.flush();
 
         assert.deepStrictEqual(
-            history.getSessionInputEntries('session-a').map(entry => entry.input),
+            history.getSessionInputEntries('session-a').map((entry) => entry.input),
             ['x <- 1'],
         );
         assert.deepStrictEqual(
-            history.getInputEntries('r').map(entry => entry.input),
+            history.getInputEntries('r').map((entry) => entry.input),
             ['x <- 1', 'y <- 2'],
         );
 
@@ -85,12 +80,14 @@ suite('[Unit] P3 Workbench and UX equivalence', () => {
     test('imports legacy session history after an initial empty read', async () => {
         const history = new ExecutionHistoryService(new MemoryMemento(), createLog());
         assert.deepStrictEqual(history.getSessionInputEntries('legacy-session'), []);
-        const restored = history.restoreLegacySessionEntries(
-            'legacy-session',
-            'python',
+        const restored = history.restoreLegacySessionEntries('legacy-session', 'python', [
+            'print(1)',
+            'print(2)',
+        ]);
+        assert.deepStrictEqual(
+            restored.map((entry) => entry.input),
             ['print(1)', 'print(2)'],
         );
-        assert.deepStrictEqual(restored.map(entry => entry.input), ['print(1)', 'print(2)']);
         history.dispose();
     });
 

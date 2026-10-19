@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import process from 'process';
 import { fileURLToPath } from 'url';
+import { collectHostLocalizationKeys } from './webview-localization.mjs';
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = path.resolve(scriptDirectory, '..');
@@ -22,12 +23,7 @@ const sourceRoots = [
 ];
 
 const hostSource = fs.readFileSync(hostLocalizationPath, 'utf8');
-const hostKeys = new Set(
-    Array.from(
-        hostSource.matchAll(/^\s*['"]([^'"]+)['"]:\s*vscode\.l10n\.t\(/gm),
-        match => match[1],
-    ),
-);
+const hostKeys = collectHostLocalizationKeys(hostSource);
 const usages = new Map();
 const dynamicCalls = [];
 

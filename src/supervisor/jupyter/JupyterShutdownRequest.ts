@@ -9,6 +9,6 @@
  * @link https://jupyter-client.readthedocs.io/en/stable/messaging.html#kernel-shutdown
  */
 export interface JupyterShutdownRequest {
-	/** Whether the shutdown precedes a restart */
-	restart: boolean;
+    /** Whether the shutdown precedes a restart */
+    restart: boolean;
 }

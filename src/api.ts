@@ -239,7 +239,7 @@ export interface ILanguageStatementRangeProvider {
     provideStatementRange(
         document: vscode.TextDocument,
         position: vscode.Position,
-        token: vscode.CancellationToken
+        token: vscode.CancellationToken,
     ): vscode.ProviderResult<{ range: vscode.Range; code?: string } | null | undefined>;
 }
 
@@ -261,7 +261,7 @@ export interface ILanguageHelpTopicProvider {
     provideHelpTopic(
         document: vscode.TextDocument,
         position: vscode.Position,
-        token: vscode.CancellationToken
+        token: vscode.CancellationToken,
     ): vscode.ProviderResult<string | null | undefined>;
 }
 
@@ -337,7 +337,7 @@ export interface ILanguageLspFactory {
         runtimeMetadata: LanguageRuntimeMetadata,
         sessionMetadata: IRuntimeSessionMetadata,
         dynState: LanguageRuntimeDynState,
-        logChannel: vscode.LogOutputChannel
+        logChannel: vscode.LogOutputChannel,
     ): ILanguageLsp;
 }
 
@@ -350,15 +350,13 @@ export interface ILanguageRuntimeProvider<TInstallation = unknown> {
     readonly languageName: string;
     readonly alwaysRediscover?: boolean;
     readonly lspFactory?: ILanguageLspFactory;
-    discoverInstallations(
-        logChannel: vscode.LogOutputChannel
-    ): AsyncGenerator<TInstallation>;
+    discoverInstallations(logChannel: vscode.LogOutputChannel): AsyncGenerator<TInstallation>;
     resolveInitialInstallation(
-        logChannel: vscode.LogOutputChannel
+        logChannel: vscode.LogOutputChannel,
     ): Promise<TInstallation | undefined>;
     promptForInstallation(
         logChannel: vscode.LogOutputChannel,
-        options?: ILanguageInstallationPickerOptions
+        options?: ILanguageInstallationPickerOptions,
     ): Promise<TInstallation | undefined>;
     formatRuntimeName(installation: TInstallation): string;
     getRuntimeIconPath?(installation: TInstallation): vscode.IconPath | undefined;
@@ -367,13 +365,13 @@ export interface ILanguageRuntimeProvider<TInstallation = unknown> {
     createRuntimeMetadata(
         context: vscode.ExtensionContext,
         installation: TInstallation,
-        logChannel: vscode.LogOutputChannel
+        logChannel: vscode.LogOutputChannel,
     ): LanguageRuntimeMetadata;
     createKernelSpec(
         context: vscode.ExtensionContext,
         installation: TInstallation,
         sessionMode: LanguageSessionMode,
-        logChannel: vscode.LogOutputChannel
+        logChannel: vscode.LogOutputChannel,
     ): Promise<JupyterKernelSpec>;
     validateMetadata?(metadata: LanguageRuntimeMetadata): Promise<LanguageRuntimeMetadata>;
     validateSession?(sessionId: string): Promise<boolean>;
@@ -382,10 +380,7 @@ export interface ILanguageRuntimeProvider<TInstallation = unknown> {
      * Changes a live session's working directory using language-owned logic.
      * The common supervisor deliberately does not assume an R-style `setwd()`.
      */
-    setWorkingDirectory?(
-        session: ILanguageRuntimeSession,
-        workingDirectory: string
-    ): Promise<void>;
+    setWorkingDirectory?(session: ILanguageRuntimeSession, workingDirectory: string): Promise<void>;
     shouldRecommendForWorkspace?(): Promise<boolean>;
     getDiscoveryRootSignature?(): Promise<RuntimeRootSignature>;
     getSessionIdPrefix?(sessionMode: LanguageSessionMode): string;
@@ -573,7 +568,7 @@ export interface IRuntimeOutputRenderer {
     readonly outputKinds?: readonly string[];
     render(
         output: RuntimeOutputMessage,
-        context: RuntimeOutputRendererContext
+        context: RuntimeOutputRendererContext,
     ): Promise<RuntimeRenderedOutput | undefined>;
     /** Releases renderer state associated with a cleared or disposed output. */
     disposeOutput?(context: RuntimeOutputRendererContext): void | Promise<void>;
@@ -655,12 +650,12 @@ export interface ILanguageRuntimeSession {
     executeAndWait(
         code: string,
         options?: RuntimeCodeExecutionOptions,
-        token?: vscode.CancellationToken
+        token?: vscode.CancellationToken,
     ): Promise<void>;
     callMethod(method: string, ...args: unknown[]): Promise<unknown>;
     watchRuntimeClient(
         clientType: LanguageRuntimeClientType,
-        handler: (client: ILanguageRuntimeClientInstance) => void
+        handler: (client: ILanguageRuntimeClientInstance) => void,
     ): vscode.Disposable;
     waitLsp(): Promise<ILanguageLsp | undefined>;
     getRuntimeState(): RuntimeState;
@@ -668,7 +663,7 @@ export interface ILanguageRuntimeSession {
         id: string,
         type: LanguageRuntimeClientType,
         params: Record<string, unknown>,
-        metadata?: Record<string, unknown>
+        metadata?: Record<string, unknown>,
     ): Promise<void>;
     listClients(type?: LanguageRuntimeClientType): Promise<Record<string, string>>;
     replyToPrompt(id: string, reply: string): Promise<void>;
@@ -755,8 +750,10 @@ export interface PackageRepositoryResponse {
     readonly body: string;
 }
 
-export type PackagesMetadataStatus = 'fresh' | 'cached' | 'unsupported' | 'timed-out' | 'fetch-failed';
-export type PackagesVulnerabilityStatus = 'fresh' | 'cached' | 'disabled' | 'unavailable' | 'timed-out';
+export type PackagesMetadataStatus =
+    'fresh' | 'cached' | 'unsupported' | 'timed-out' | 'fetch-failed';
+export type PackagesVulnerabilityStatus =
+    'fresh' | 'cached' | 'disabled' | 'unavailable' | 'timed-out';
 
 export interface PackagesSnapshot {
     packages: LanguageRuntimePackage[];
@@ -780,32 +777,52 @@ export interface PackageSpec {
 export interface ILanguageRuntimePackageManager {
     dispose?(): void;
     packageRepositoryUrl?(token?: vscode.CancellationToken): Promise<string | undefined>;
-    repositoryRequest?(request: PackageRepositoryRequest, token?: vscode.CancellationToken): Promise<PackageRepositoryResponse>;
-    getPackageDetail?(name: string, token?: vscode.CancellationToken): Promise<Partial<LanguageRuntimePackage> | undefined>;
+    repositoryRequest?(
+        request: PackageRepositoryRequest,
+        token?: vscode.CancellationToken,
+    ): Promise<PackageRepositoryResponse>;
+    getPackageDetail?(
+        name: string,
+        token?: vscode.CancellationToken,
+    ): Promise<Partial<LanguageRuntimePackage> | undefined>;
     getPackages(token?: vscode.CancellationToken): Promise<LanguageRuntimePackage[]>;
     installPackages(packages: PackageSpec[], token?: vscode.CancellationToken): Promise<void>;
     uninstallPackages(packageNames: string[], token?: vscode.CancellationToken): Promise<void>;
     updatePackages(packages: PackageSpec[], token?: vscode.CancellationToken): Promise<void>;
     updateAllPackages(token?: vscode.CancellationToken): Promise<void>;
-    searchPackages(query: string, token?: vscode.CancellationToken): Promise<LanguageRuntimePackage[]>;
+    searchPackages(
+        query: string,
+        token?: vscode.CancellationToken,
+    ): Promise<LanguageRuntimePackage[]>;
     searchPackageVersions(name: string, token?: vscode.CancellationToken): Promise<string[]>;
     getPackageMetadata?(
         packageNames: string[],
-        token?: vscode.CancellationToken
+        token?: vscode.CancellationToken,
     ): Promise<Map<string, Partial<LanguageRuntimePackage>> | undefined>;
 }
 
 export interface ILanguageRuntimePackageManagerProvider {
     readonly languageId: string;
-    createPackageManager(session: ILanguageRuntimeSession): ILanguageRuntimePackageManager | undefined;
+    createPackageManager(
+        session: ILanguageRuntimeSession,
+    ): ILanguageRuntimePackageManager | undefined;
 }
 
 export type PackagesItemSize = 'card' | 'row';
 
 export interface IPositronPackagesInstance {
-    resolveLatestVersion(name: string, token?: vscode.CancellationToken): Promise<string | undefined>;
-    getPackageDetail(name: string, token?: vscode.CancellationToken): Promise<Partial<LanguageRuntimePackage> | undefined>;
-    getPackagesSnapshot(token?: vscode.CancellationToken, options?: PackagesSnapshotOptions): Promise<PackagesSnapshot>;
+    resolveLatestVersion(
+        name: string,
+        token?: vscode.CancellationToken,
+    ): Promise<string | undefined>;
+    getPackageDetail(
+        name: string,
+        token?: vscode.CancellationToken,
+    ): Promise<Partial<LanguageRuntimePackage> | undefined>;
+    getPackagesSnapshot(
+        token?: vscode.CancellationToken,
+        options?: PackagesSnapshotOptions,
+    ): Promise<PackagesSnapshot>;
     readonly packages: LanguageRuntimePackage[];
     readonly session: ILanguageRuntimeSession;
     readonly onDidRefreshPackagesInstance: vscode.Event<LanguageRuntimePackage[]>;
@@ -820,14 +837,26 @@ export interface IPositronPackagesInstance {
     uninstallPackages(packageNames: string[], token?: vscode.CancellationToken): Promise<void>;
     updatePackages(packages: PackageSpec[], token?: vscode.CancellationToken): Promise<void>;
     updateAllPackages(token?: vscode.CancellationToken): Promise<void>;
-    searchPackages(query: string, token?: vscode.CancellationToken): Promise<LanguageRuntimePackage[]>;
+    searchPackages(
+        query: string,
+        token?: vscode.CancellationToken,
+    ): Promise<LanguageRuntimePackage[]>;
     searchPackageVersions(name: string, token?: vscode.CancellationToken): Promise<string[]>;
 }
 
 export interface IPositronPackagesService extends vscode.Disposable {
-    resolveLatestVersion(name: string, token?: vscode.CancellationToken): Promise<string | undefined>;
-    getPackageDetail(name: string, token?: vscode.CancellationToken): Promise<Partial<LanguageRuntimePackage> | undefined>;
-    getPackagesSnapshot(token?: vscode.CancellationToken, options?: PackagesSnapshotOptions): Promise<PackagesSnapshot>;
+    resolveLatestVersion(
+        name: string,
+        token?: vscode.CancellationToken,
+    ): Promise<string | undefined>;
+    getPackageDetail(
+        name: string,
+        token?: vscode.CancellationToken,
+    ): Promise<Partial<LanguageRuntimePackage> | undefined>;
+    getPackagesSnapshot(
+        token?: vscode.CancellationToken,
+        options?: PackagesSnapshotOptions,
+    ): Promise<PackagesSnapshot>;
     readonly activeSession: ILanguageRuntimeSession | undefined;
     readonly activePackagesInstance: IPositronPackagesInstance | undefined;
     readonly selectedPackage: string | undefined;
@@ -835,7 +864,9 @@ export interface IPositronPackagesService extends vscode.Disposable {
     readonly onDidChangeActivePackagesInstance: vscode.Event<IPositronPackagesInstance | undefined>;
     readonly onDidStopPackagesInstance: vscode.Event<IPositronPackagesInstance>;
     readonly onDidChangeItemSize: vscode.Event<PackagesItemSize>;
-    registerPackageManagerProvider(provider: ILanguageRuntimePackageManagerProvider): vscode.Disposable;
+    registerPackageManagerProvider(
+        provider: ILanguageRuntimePackageManagerProvider,
+    ): vscode.Disposable;
     setActivePositronPackagesSession(session: ILanguageRuntimeSession): void;
     setSelectedPackage(packageName: string | undefined): void;
     setItemSize(itemSize: PackagesItemSize): void;
@@ -846,7 +877,10 @@ export interface IPositronPackagesService extends vscode.Disposable {
     uninstallPackages(packageNames: string[], token?: vscode.CancellationToken): Promise<void>;
     updatePackages(packages: PackageSpec[], token?: vscode.CancellationToken): Promise<void>;
     updateAllPackages(token?: vscode.CancellationToken): Promise<void>;
-    searchPackages(query: string, token?: vscode.CancellationToken): Promise<LanguageRuntimePackage[]>;
+    searchPackages(
+        query: string,
+        token?: vscode.CancellationToken,
+    ): Promise<LanguageRuntimePackage[]>;
     searchPackageVersions(name: string, token?: vscode.CancellationToken): Promise<string[]>;
 }
 
@@ -912,13 +946,16 @@ export interface IRuntimeSessionService {
      */
     registerNotebookController(
         controller: vscode.NotebookController,
-        languageIds: readonly string[]
+        languageIds: readonly string[],
     ): vscode.Disposable;
     registerSessionManager(manager: ILanguageRuntimeSessionManager): vscode.Disposable;
     getSession(sessionId: string): ILanguageRuntimeSession | undefined;
     getActiveSession(sessionId: string): ActiveRuntimeSession | undefined;
     getActiveSessions(): ActiveRuntimeSession[];
-    getConsoleSessionForRuntime(runtimeId: string, includeExited?: boolean): ILanguageRuntimeSession | undefined;
+    getConsoleSessionForRuntime(
+        runtimeId: string,
+        includeExited?: boolean,
+    ): ILanguageRuntimeSession | undefined;
     getConsoleSessionForLanguage(languageId: string): ILanguageRuntimeSession | undefined;
     getNotebookSessionForNotebookUri(notebookUri: vscode.Uri): ILanguageRuntimeSession | undefined;
     startNewRuntimeSession(
@@ -928,12 +965,12 @@ export interface IRuntimeSessionService {
         notebookUri: vscode.Uri | undefined,
         source: string,
         startMode: RuntimeStartMode,
-        activate: boolean
+        activate: boolean,
     ): Promise<string>;
     autoStartRuntime(
         metadata: LanguageRuntimeMetadata,
         source: string,
-        activate: boolean
+        activate: boolean,
     ): Promise<string>;
     selectRuntime(runtimeId: string, source: string, notebookUri?: vscode.Uri): Promise<void>;
     focusSession(sessionId: string): Promise<void>;
@@ -944,7 +981,7 @@ export interface IRuntimeSessionService {
     shutdownNotebookSession(
         notebookUri: vscode.Uri,
         exitReason: RuntimeExitReason,
-        source: string
+        source: string,
     ): Promise<void>;
     updateNotebookSessionUri(oldUri: vscode.Uri, newUri: vscode.Uri): Promise<string | undefined>;
     updateSessionName(sessionId: string, name: string): void;
@@ -955,7 +992,7 @@ export interface IRuntimeSessionService {
     ): vscode.Disposable;
     selectInstallation<TInstallation = unknown>(
         languageId: string,
-        options?: ILanguageInstallationPickerOptions
+        options?: ILanguageInstallationPickerOptions,
     ): Promise<TInstallation | undefined>;
 }
 
@@ -1053,8 +1090,10 @@ export interface ILanguageContributionServices {
     readonly frameworkLogChannel?: vscode.LogOutputChannel;
     /** Diagnostics owned by the registered language extension. */
     readonly languageLogChannel?: vscode.LogOutputChannel;
-    readonly runtimeSessionService: Omit<IRuntimeSessionService,
-        'registerNotebookController' | 'registerSessionManager'>;
+    readonly runtimeSessionService: Omit<
+        IRuntimeSessionService,
+        'registerNotebookController' | 'registerSessionManager'
+    >;
     readonly runtimeStartupService: Omit<IRuntimeStartupService, 'registerRuntimeManager'>;
     readonly positronNewFolderService: IPositronNewFolderService;
     readonly positronConsoleService: IPositronConsoleService;
@@ -1181,14 +1220,18 @@ export interface ILanguageCapabilityActivationContext {
 export interface ILanguageOptionalCapabilityDescriptor {
     readonly id: string;
     readonly revision: number;
-    readonly kind: Exclude<LanguageCapabilityKind,
-        'runtimeProvider' | 'sessionManager' | 'lspFactory' | 'binaryProvider'>;
+    readonly kind: Exclude<
+        LanguageCapabilityKind,
+        'runtimeProvider' | 'sessionManager' | 'lspFactory' | 'binaryProvider'
+    >;
     readonly dependencies?: readonly string[];
     readonly activate: (
         context: ILanguageCapabilityActivationContext,
         signal: AbortSignal,
-    ) => vscode.Disposable | readonly vscode.Disposable[] |
-        Promise<vscode.Disposable | readonly vscode.Disposable[]>;
+    ) =>
+        | vscode.Disposable
+        | readonly vscode.Disposable[]
+        | Promise<vscode.Disposable | readonly vscode.Disposable[]>;
 }
 
 export interface ILanguageNotebookControllerCapability {
@@ -1292,21 +1335,21 @@ export interface IDataExplorerBackendTransport extends vscode.Disposable {
  */
 export interface IDataImporterMetadata {
     readonly id: string;
-	/** The language the generated code is written in, e.g. 'python'. */
-	readonly languageId: string;
+    /** The language the generated code is written in, e.g. 'python'. */
+    readonly languageId: string;
 
-	/** A human-readable name for the importer, e.g. 'Python (pandas)'. */
-	readonly displayName: string;
+    /** A human-readable name for the importer, e.g. 'Python (pandas)'. */
+    readonly displayName: string;
 
-	/** File extensions this importer can read, without a leading dot, e.g. ['csv', 'tsv']. */
-	readonly fileExtensions: readonly string[];
+    /** File extensions this importer can read, without a leading dot, e.g. ['csv', 'tsv']. */
+    readonly fileExtensions: readonly string[];
 
-	/**
-	 * Words this importer's language will not let you assign to, e.g. 'class' for Python or 'if'
-	 * for R. Positron suffixes a derived default that collides with one, so an importer that omits
-	 * the list gets 'class = ...' offered for a file named class.csv.
-	 */
-	readonly reservedNames?: readonly string[];
+    /**
+     * Words this importer's language will not let you assign to, e.g. 'class' for Python or 'if'
+     * for R. Positron suffixes a derived default that collides with one, so an importer that omits
+     * the list gets 'class = ...' offered for a file named class.csv.
+     */
+    readonly reservedNames?: readonly string[];
 }
 
 /**
@@ -1314,11 +1357,11 @@ export interface IDataImporterMetadata {
  * (delimiter, skip rows, NA strings, column types, encoding); today only the two below exist.
  */
 export interface IDataImportOptions {
-	/** Whether the first row holds column names. Defaults to true when absent. */
-	readonly hasHeaderRow?: boolean;
+    /** Whether the first row holds column names. Defaults to true when absent. */
+    readonly hasHeaderRow?: boolean;
 
-	/** The worksheet to read, for formats that have sheets. */
-	readonly sheetName?: string;
+    /** The worksheet to read, for formats that have sheets. */
+    readonly sheetName?: string;
 }
 
 /**
@@ -1326,61 +1369,61 @@ export interface IDataImportOptions {
  * generated code operates on the loaded dataframe, where names are the only stable handle.
  */
 export interface IDataImportSortKey {
-	/** The name of the column to sort by. */
-	readonly columnName: string;
+    /** The name of the column to sort by. */
+    readonly columnName: string;
 
-	/** Sort order: ascending (true) or descending (false). */
-	readonly ascending: boolean;
+    /** Sort order: ascending (true) or descending (false). */
+    readonly ascending: boolean;
 }
 
 /** The fields every row filter carries, whatever its type. */
 export interface IDataImportRowFilterBase {
-	/** The name of the column the filter applies to. */
-	readonly columnName: string;
+    /** The name of the column the filter applies to. */
+    readonly columnName: string;
 
-	/** The column's canonical Positron display type, e.g. 'integer', 'string', 'boolean'. */
-	readonly columnType: string;
+    /** The column's canonical Positron display type, e.g. 'integer', 'string', 'boolean'. */
+    readonly columnType: string;
 
-	/** How this filter combines with the one before it. Ignored on the first filter. */
-	readonly condition: 'and' | 'or';
+    /** How this filter combines with the one before it. Ignored on the first filter. */
+    readonly condition: 'and' | 'or';
 }
 
 /** Keeps rows where the column's value falls inside (or, for not_between, outside) a range. */
 export interface IDataImportBetweenFilter extends IDataImportRowFilterBase {
-	readonly filterType: 'between' | 'not_between';
-	/** The lower limit, as a stringified column value. */
-	readonly leftValue: string;
-	/** The upper limit, as a stringified column value. */
-	readonly rightValue: string;
+    readonly filterType: 'between' | 'not_between';
+    /** The lower limit, as a stringified column value. */
+    readonly leftValue: string;
+    /** The upper limit, as a stringified column value. */
+    readonly rightValue: string;
 }
 
 /** Keeps rows satisfying a binary comparison against one value. */
 export interface IDataImportCompareFilter extends IDataImportRowFilterBase {
-	readonly filterType: 'compare';
-	readonly op: '=' | '!=' | '<' | '<=' | '>' | '>=';
-	/** The comparison value, as a stringified column value. */
-	readonly value: string;
+    readonly filterType: 'compare';
+    readonly op: '=' | '!=' | '<' | '<=' | '>' | '>=';
+    /** The comparison value, as a stringified column value. */
+    readonly value: string;
 }
 
 /** Keeps rows whose text matches a search term. */
 export interface IDataImportSearchFilter extends IDataImportRowFilterBase {
-	readonly filterType: 'search';
-	readonly searchType: 'contains' | 'not_contains' | 'starts_with' | 'ends_with' | 'regex_match';
-	readonly term: string;
-	readonly caseSensitive: boolean;
+    readonly filterType: 'search';
+    readonly searchType: 'contains' | 'not_contains' | 'starts_with' | 'ends_with' | 'regex_match';
+    readonly term: string;
+    readonly caseSensitive: boolean;
 }
 
 /** Keeps rows whose value is in (or, when not inclusive, not in) a set. */
 export interface IDataImportSetMembershipFilter extends IDataImportRowFilterBase {
-	readonly filterType: 'set_membership';
-	/** The set members, as stringified column values. */
-	readonly values: string[];
-	readonly inclusive: boolean;
+    readonly filterType: 'set_membership';
+    /** The set members, as stringified column values. */
+    readonly values: string[];
+    readonly inclusive: boolean;
 }
 
 /** A row filter that needs no parameters beyond its type. */
 export interface IDataImportUnaryFilter extends IDataImportRowFilterBase {
-	readonly filterType: 'is_null' | 'not_null' | 'is_empty' | 'not_empty' | 'is_true' | 'is_false';
+    readonly filterType: 'is_null' | 'not_null' | 'is_empty' | 'not_empty' | 'is_true' | 'is_false';
 }
 
 /**
@@ -1388,11 +1431,11 @@ export interface IDataImportUnaryFilter extends IDataImportRowFilterBase {
  * switch over it exhaustively and route any type it cannot translate to `unsupported`.
  */
 export type IDataImportRowFilter =
-	| IDataImportBetweenFilter
-	| IDataImportCompareFilter
-	| IDataImportSearchFilter
-	| IDataImportSetMembershipFilter
-	| IDataImportUnaryFilter;
+    | IDataImportBetweenFilter
+    | IDataImportCompareFilter
+    | IDataImportSearchFilter
+    | IDataImportSetMembershipFilter
+    | IDataImportUnaryFilter;
 
 /**
  * The Data Explorer view at the moment the dialog opened: what the user is looking at beyond the
@@ -1400,33 +1443,33 @@ export type IDataImportRowFilter =
  * to the on-screen data either.
  */
 export interface IDataImportView {
-	readonly rowFilters: IDataImportRowFilter[];
-	readonly sortKeys: IDataImportSortKey[];
+    readonly rowFilters: IDataImportRowFilter[];
+    readonly sortKeys: IDataImportSortKey[];
 }
 
 /**
  * A request to generate the code that loads one file into one variable.
  */
 export interface IDataImportRequest {
-	/** The original file, not the positron-data-explorer URI. */
-	readonly fileUri: vscode.Uri;
+    /** The original file, not the positron-data-explorer URI. */
+    readonly fileUri: vscode.Uri;
 
-	/**
-	 * The target variable name. Positron's derived default is always assignable, but the user is
-	 * free to replace it with anything, so an importer should embed this as given rather than
-	 * assume it parses.
-	 */
-	readonly variableName: string;
+    /**
+     * The target variable name. Positron's derived default is always assignable, but the user is
+     * free to replace it with anything, so an importer should embed this as given rather than
+     * assume it parses.
+     */
+    readonly variableName: string;
 
-	/** Format and parsing options. */
-	readonly options: IDataImportOptions;
+    /** Format and parsing options. */
+    readonly options: IDataImportOptions;
 
-	/**
-	 * The Data Explorer view to reproduce, present only when the user asked to include the
-	 * current filters and sorts. A generator that cannot translate part of it reports that part
-	 * in `unsupported` rather than dropping it silently.
-	 */
-	readonly view?: IDataImportView;
+    /**
+     * The Data Explorer view to reproduce, present only when the user asked to include the
+     * current filters and sorts. A generator that cannot translate part of it reports that part
+     * in `unsupported` rather than dropping it silently.
+     */
+    readonly view?: IDataImportView;
 }
 
 /**
@@ -1434,23 +1477,23 @@ export interface IDataImportRequest {
  * hand someone a different dataframe than the one on screen, so the omissions travel with the code.
  */
 export interface IDataImportResult {
-	/** The generated code, ready to run in a console. */
-	readonly code: string;
+    /** The generated code, ready to run in a console. */
+    readonly code: string;
 
-	/** Human-readable descriptions of anything in the request the importer could not translate. */
-	readonly unsupported?: string[];
+    /** Human-readable descriptions of anything in the request the importer could not translate. */
+    readonly unsupported?: string[];
 }
 
 /**
  * A registered importer: its metadata plus its code generator.
  */
 export interface IDataImporter extends IDataImporterMetadata {
-	/**
-	 * Generates the code that loads the requested file.
-	 * @param request The file, target variable name, and options.
-	 * @returns The generated code, or undefined if the importer declined to generate any.
-	 */
-	generateCode(request: IDataImportRequest): Promise<IDataImportResult | undefined>;
+    /**
+     * Generates the code that loads the requested file.
+     * @param request The file, target variable name, and options.
+     * @returns The generated code, or undefined if the importer declined to generate any.
+     */
+    generateCode(request: IDataImportRequest): Promise<IDataImportResult | undefined>;
 }
 
 export interface IDataExplorerBackendProvider {
@@ -1478,46 +1521,47 @@ export interface DataConnectionParameterBase {
     readonly required?: boolean;
 }
 
-export type DataConnectionParameter = DataConnectionParameterBase & (
-    | {
-        readonly type: DataConnectionParameterType.Boolean;
-        readonly defaultValue?: boolean;
-    }
-    | {
-        readonly type: DataConnectionParameterType.File;
-        readonly defaultValue?: string;
-        readonly placeholder?: string;
-        readonly filters?: { readonly [name: string]: readonly string[] };
-    }
-    | {
-        readonly type: DataConnectionParameterType.Number;
-        readonly defaultValue?: number;
-        readonly placeholder?: string;
-    }
-    | {
-        readonly type: DataConnectionParameterType.Option;
-        readonly options: readonly string[];
-        readonly defaultValue?: string;
-        readonly placeholder?: string;
-    }
-    | {
-        readonly type: DataConnectionParameterType.Password;
-        readonly secret: true;
-        readonly placeholder?: string;
-    }
-    | {
-        readonly type: DataConnectionParameterType.String;
-        readonly secret?: false;
-        readonly defaultValue?: string;
-        readonly placeholder?: string;
-    }
-    | {
-        readonly type: DataConnectionParameterType.String;
-        readonly secret: true;
-        readonly placeholder?: string;
-        readonly masked?: boolean;
-    }
-);
+export type DataConnectionParameter = DataConnectionParameterBase &
+    (
+        | {
+              readonly type: DataConnectionParameterType.Boolean;
+              readonly defaultValue?: boolean;
+          }
+        | {
+              readonly type: DataConnectionParameterType.File;
+              readonly defaultValue?: string;
+              readonly placeholder?: string;
+              readonly filters?: { readonly [name: string]: readonly string[] };
+          }
+        | {
+              readonly type: DataConnectionParameterType.Number;
+              readonly defaultValue?: number;
+              readonly placeholder?: string;
+          }
+        | {
+              readonly type: DataConnectionParameterType.Option;
+              readonly options: readonly string[];
+              readonly defaultValue?: string;
+              readonly placeholder?: string;
+          }
+        | {
+              readonly type: DataConnectionParameterType.Password;
+              readonly secret: true;
+              readonly placeholder?: string;
+          }
+        | {
+              readonly type: DataConnectionParameterType.String;
+              readonly secret?: false;
+              readonly defaultValue?: string;
+              readonly placeholder?: string;
+          }
+        | {
+              readonly type: DataConnectionParameterType.String;
+              readonly secret: true;
+              readonly placeholder?: string;
+              readonly masked?: boolean;
+          }
+    );
 
 export interface DataConnectionMechanism {
     readonly id: string;
@@ -1572,17 +1616,17 @@ export interface DataConnectionDriver {
     readonly supportedLanguageIds: readonly string[];
     connect(
         mechanismId: string,
-        parameters: DataConnectionParameterValues
+        parameters: DataConnectionParameterValues,
     ): Promise<DataConnection>;
     generateConnectionCode?(
         mechanismId: string,
         languageId: string,
-        parameters: DataConnectionParameterValues
+        parameters: DataConnectionParameterValues,
     ): Promise<readonly ConnectionCodeVariant[]>;
     redactParameterValue?(
         mechanismId: string,
         parameterId: string,
-        value: string
+        value: string,
     ): vscode.ProviderResult<string>;
 }
 
@@ -1638,7 +1682,10 @@ export interface IDataConnectionDriver {
         }[];
         readonly supportedLanguageIds?: readonly string[];
     };
-    connect(mechanismId: string, params: DataConnectionParameterValues): Promise<IDataConnectionHandle>;
+    connect(
+        mechanismId: string,
+        params: DataConnectionParameterValues,
+    ): Promise<IDataConnectionHandle>;
 }
 
 export interface IDataConnectionProfile {
@@ -1655,7 +1702,10 @@ export interface IDataConnectionProfile {
 export interface ISupervisorFrameworkApi {
     registerDataImporter(importer: IDataImporter): vscode.Disposable;
     getDataImporters(fileExtension: string): Promise<readonly IDataImporterMetadata[]>;
-    generateDataImportCode(importerId: string, request: IDataImportRequest): Promise<IDataImportResult | undefined>;
+    generateDataImportCode(
+        importerId: string,
+        request: IDataImportRequest,
+    ): Promise<IDataImportResult | undefined>;
     readonly apiVersion: 2;
     readonly protocolVersion: {
         readonly major: 2;
@@ -1668,33 +1718,36 @@ export interface ISupervisorFrameworkApi {
     startRuntime(
         metadata: LanguageRuntimeMetadata,
         source: string,
-        activate: boolean
+        activate: boolean,
     ): Promise<string>;
     createSession(
         runtimeMetadata: LanguageRuntimeMetadata,
         sessionMetadata: IRuntimeSessionMetadata,
         kernelSpec: JupyterKernelSpec,
-        dynState: LanguageRuntimeDynState
+        dynState: LanguageRuntimeDynState,
     ): Promise<ILanguageRuntimeSession>;
     restoreSession(
         runtimeMetadata: LanguageRuntimeMetadata,
         sessionMetadata: IRuntimeSessionMetadata,
-        dynState: LanguageRuntimeDynState
+        dynState: LanguageRuntimeDynState,
     ): Promise<ILanguageRuntimeSession>;
     validateSession(sessionId: string): Promise<boolean>;
     registerDataExplorerBackendProvider(provider: IDataExplorerBackendProvider): vscode.Disposable;
     openDataExplorer(uri: vscode.Uri, providerId?: string): Promise<void>;
     registerRuntimeOutputRenderer(renderer: IRuntimeOutputRenderer): vscode.Disposable;
     registerDataConnectionDriver(
-        driver: DataConnectionDriver | IDataConnectionDriver
+        driver: DataConnectionDriver | IDataConnectionDriver,
     ): vscode.Disposable;
     getDataConnectionDrivers(): Promise<readonly DataConnectionDriverSummary[]>;
     connectDataConnection(
         driverId: string,
         mechanismId: string,
-        parameters: DataConnectionParameterValues
+        parameters: DataConnectionParameterValues,
     ): Promise<DataConnection>;
-    addUpdateDataConnectionProfile(profile: IDataConnectionProfile, connect?: boolean): Promise<void>;
+    addUpdateDataConnectionProfile(
+        profile: IDataConnectionProfile,
+        connect?: boolean,
+    ): Promise<void>;
     connectDataConnectionProfile(profileId: string): Promise<void>;
     registerEnvironmentContributions(
         extensionId: string,

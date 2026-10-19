@@ -42,7 +42,10 @@ function makeMemoryUsageServiceStub() {
 class FakeConnection {
     readonly requests = new Map<string, (params: any) => Promise<any> | any>();
 
-    onRequest(type: { method: string } | string, handler: (params: any) => Promise<any> | any): vscode.Disposable {
+    onRequest(
+        type: { method: string } | string,
+        handler: (params: any) => Promise<any> | any,
+    ): vscode.Disposable {
         this.requests.set(typeof type === 'string' ? type : type.method, handler);
         return { dispose: () => undefined };
     }
@@ -71,7 +74,8 @@ suite('[Unit] variables provider active-session sync', () => {
                 onDidUpdateSessionName: createEventStub(),
                 onDidDeleteRuntimeSession: createEventStub(),
                 onDidChangeSessionState: createEventStub(),
-                getSession: (sessionId: string) => sessionId === 'session-1' ? session : undefined,
+                getSession: (sessionId: string) =>
+                    sessionId === 'session-1' ? session : undefined,
                 focusSession: (sessionId: string) => {
                     calls.push(`manager:${sessionId}`);
                 },
@@ -94,15 +98,14 @@ suite('[Unit] variables provider active-session sync', () => {
         const connection = new FakeConnection();
         (provider as any)._registerRpcHandlers(connection as any);
 
-        const handler = connection.requests.get(VariablesProtocol.SetActiveVariablesSessionRequest.type.method);
+        const handler = connection.requests.get(
+            VariablesProtocol.SetActiveVariablesSessionRequest.type.method,
+        );
         assert.ok(handler, 'expected variables/setActiveSession handler to be registered');
 
         await handler?.({ sessionId: 'session-1' });
 
-        assert.deepStrictEqual(calls, [
-            'manager:session-1',
-            'variables:session-1',
-        ]);
+        assert.deepStrictEqual(calls, ['manager:session-1', 'variables:session-1']);
     });
 
     test('still aligns variables service when session manager does not know the session', async () => {
@@ -141,14 +144,14 @@ suite('[Unit] variables provider active-session sync', () => {
         const connection = new FakeConnection();
         (provider as any)._registerRpcHandlers(connection as any);
 
-        const handler = connection.requests.get(VariablesProtocol.SetActiveVariablesSessionRequest.type.method);
+        const handler = connection.requests.get(
+            VariablesProtocol.SetActiveVariablesSessionRequest.type.method,
+        );
         assert.ok(handler, 'expected variables/setActiveSession handler to be registered');
 
         await handler?.({ sessionId: 'detached-session' });
 
-        assert.deepStrictEqual(calls, [
-            'variables:detached-session',
-        ]);
+        assert.deepStrictEqual(calls, ['variables:detached-session']);
     });
 
     test('focuses an existing data explorer for the same variable path', async () => {
@@ -176,7 +179,9 @@ suite('[Unit] variables provider active-session sync', () => {
             {
                 getInstanceForVariablePath: () => ({
                     identifier: 'existing-viewer',
-                    requestFocus: () => { focused += 1; },
+                    requestFocus: () => {
+                        focused += 1;
+                    },
                 }),
             } as any,
         );

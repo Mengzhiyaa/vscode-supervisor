@@ -159,10 +159,11 @@ suite('[Unit] runtime prompt normalization', () => {
     test('startup preserves default prompts when runtime info contains empty strings', async () => {
         const session = createRuntimeSession();
         (session as any)._kernel = {
-            start: async () => makeRuntimeInfo({
-                input_prompt: '',
-                continuation_prompt: '',
-            }),
+            start: async () =>
+                makeRuntimeInfo({
+                    input_prompt: '',
+                    continuation_prompt: '',
+                }),
         };
 
         await session.start();

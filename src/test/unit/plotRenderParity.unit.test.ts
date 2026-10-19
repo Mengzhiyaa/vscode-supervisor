@@ -4,11 +4,19 @@ import { PlotClientInstance, PlotClientState } from '../../runtime/PlotClientIns
 import { PositronPlotsService } from '../../runtime/positronPlotsService';
 import { DeferredRender, type IRenderedPlot } from '../../runtime/positronPlotRenderQueue';
 import { PositronPlotCommProxy, type UpdateEvent } from '../../runtime/comms/positronPlotCommProxy';
-import { PlotRenderFormat, PlotUnit, type IntrinsicSize, type ShowEvent } from '../../runtime/comms/positronPlotComm';
+import {
+    PlotRenderFormat,
+    PlotUnit,
+    type IntrinsicSize,
+    type ShowEvent,
+} from '../../runtime/comms/positronPlotComm';
 import { LanguageRuntimeMessageType, RuntimeClientType } from '../../internal/runtimeTypes';
 import { HtmlPlotClient } from '../../runtime/htmlPlotClient';
 import { RuntimeClientInstance } from '../../runtime/RuntimeClientInstance';
-import { PositronPlotRenderQueue, RuntimeState as QueueRuntimeState } from '../../runtime/positronPlotRenderQueue';
+import {
+    PositronPlotRenderQueue,
+    RuntimeState as QueueRuntimeState,
+} from '../../runtime/positronPlotRenderQueue';
 import { PlotEditorProvider } from '../../editor/PlotEditorProvider';
 import { PlotsViewProvider } from '../../webview/plotsProvider';
 import { PlotSizingPolicyCustom } from '../../runtime/sizingPolicyCustom';
@@ -25,18 +33,35 @@ function fixture() {
     const requests: DeferredRender[] = [];
     const dispatched = new vscode.EventEmitter<DeferredRender>();
     const proxy = {
-        onDidClose: close.event, onDidRenderUpdate: update.event,
-        onDidShowPlot: show.event, onDidSetIntrinsicSize: intrinsic.event,
+        onDidClose: close.event,
+        onDidRenderUpdate: update.event,
+        onDidShowPlot: show.event,
+        onDidSetIntrinsicSize: intrinsic.event,
         getIntrinsicSize: async () => undefined,
-        render: (request: DeferredRender) => { requests.push(request); dispatched.fire(request); },
+        render: (request: DeferredRender) => {
+            requests.push(request);
+            dispatched.fire(request);
+        },
     } as unknown as PositronPlotCommProxy;
     const clients: PlotClientInstance[] = [];
     const create = (id = 'plot') => {
-        const client = new PlotClientInstance({
-            id, comm_id: id, target_name: RuntimeClientType.Plot,
-            type: LanguageRuntimeMessageType.CommOpen, data: {},
-            event_clock: 0, parent_id: '', when: new Date().toISOString(),
-        }, () => undefined, () => undefined, 'session', undefined, proxy);
+        const client = new PlotClientInstance(
+            {
+                id,
+                comm_id: id,
+                target_name: RuntimeClientType.Plot,
+                type: LanguageRuntimeMessageType.CommOpen,
+                data: {},
+                event_clock: 0,
+                parent_id: '',
+                when: new Date().toISOString(),
+            },
+            () => undefined,
+            () => undefined,
+            'session',
+            undefined,
+            proxy,
+        );
         clients.push(client);
         return client;
     };
@@ -45,24 +70,48 @@ function fixture() {
     }
     async function startRender<T>(operation: () => Promise<T>) {
         let subscription: vscode.Disposable;
-        const nextRequest = new Promise<DeferredRender>(resolve => {
+        const nextRequest = new Promise<DeferredRender>((resolve) => {
             subscription = dispatched.event(resolve);
         });
         try {
             const pending = operation();
-            const request = await Promise.race([nextRequest, pending.then(() => {
-                throw new Error('Rendering completed without dispatching a render request');
-            })]);
+            const request = await Promise.race([
+                nextRequest,
+                pending.then(() => {
+                    throw new Error('Rendering completed without dispatching a render request');
+                }),
+            ]);
             return { request, pending };
-        } finally { subscription!.dispose(); }
+        } finally {
+            subscription!.dispose();
+        }
     }
-    return { create, requests, close, update, show, intrinsic, proxy, finish, startRender,
-        dispose: () => { clients.forEach(client => client.dispose()); close.dispose(); update.dispose(); show.dispose(); intrinsic.dispose(); dispatched.dispose(); } };
+    return {
+        create,
+        requests,
+        close,
+        update,
+        show,
+        intrinsic,
+        proxy,
+        finish,
+        startRender,
+        dispose: () => {
+            clients.forEach((client) => client.dispose());
+            close.dispose();
+            update.dispose();
+            show.dispose();
+            intrinsic.dispose();
+            dispatched.dispose();
+        },
+    };
 }
 
 suite('[Unit] Plot render parity', () => {
     let f: ReturnType<typeof fixture>;
-    setup(() => { f = fixture(); });
+    setup(() => {
+        f = fixture();
+    });
     teardown(() => f.dispose());
 
     test('replacing the custom size updates the selected plot and its next render', async () => {
@@ -71,26 +120,45 @@ suite('[Unit] Plot render parity', () => {
         service.addPlotClient(plot);
         service.selectPlot(plot.id);
         try {
-            for (const size of [{ width: 1400, height: 400 }, { width: 1000, height: 500 }]) {
+            for (const size of [
+                { width: 1400, height: 400 },
+                { width: 1000, height: 500 },
+            ]) {
                 service.setCustomPlotSize(size);
                 assert.deepStrictEqual(plot.metadata.sizing_policy, { id: 'custom', size });
-                assert.strictEqual(service.sizingPolicies.filter(policy => policy.id === 'custom').length, 1);
-                assert.strictEqual(service.selectedSizingPolicy.getName(plot), `${size.width}×${size.height} (custom)`);
-                const { pending, request } = await f.startRender(() => plot.renderWithSizingPolicy({ width: 800, height: 600 }, 1));
+                assert.strictEqual(
+                    service.sizingPolicies.filter((policy) => policy.id === 'custom').length,
+                    1,
+                );
+                assert.strictEqual(
+                    service.selectedSizingPolicy.getName(plot),
+                    `${size.width}×${size.height} (custom)`,
+                );
+                const { pending, request } = await f.startRender(() =>
+                    plot.renderWithSizingPolicy({ width: 800, height: 600 }, 1),
+                );
                 assert.deepStrictEqual(request.renderRequest.size, size);
                 f.finish(request);
                 await pending;
             }
-        } finally { service.dispose(); }
+        } finally {
+            service.dispose();
+        }
     });
 
     test('auxiliary plots render at their connection custom size without applying the primary policy again', async () => {
         const plot = f.create();
         plot.sizingPolicy = new PlotSizingPolicyCustom({ width: 640, height: 480 });
-        const requests = new Map<string, (params: PlotsRpc.RenderPlotRequest.Params) => Promise<unknown>>();
+        const requests = new Map<
+            string,
+            (params: PlotsRpc.RenderPlotRequest.Params) => Promise<unknown>
+        >();
         const connection = {
             onNotification: () => undefined,
-            onRequest: (type: { method: string }, handler: (params: PlotsRpc.RenderPlotRequest.Params) => Promise<unknown>) => requests.set(type.method, handler),
+            onRequest: (
+                type: { method: string },
+                handler: (params: PlotsRpc.RenderPlotRequest.Params) => Promise<unknown>,
+            ) => requests.set(type.method, handler),
         } as unknown as MessageConnection;
         const state = {
             selectedPlotId: plot.id,
@@ -105,9 +173,20 @@ suite('[Unit] Plot render parity', () => {
             log: () => undefined,
         }) as { _registerRenderingHandlers(connection: MessageConnection): void };
         provider._registerRenderingHandlers(connection);
-        for (const size of [{ width: 900, height: 600 }, { width: 1400, height: 400 }]) {
+        for (const size of [
+            { width: 900, height: 600 },
+            { width: 1400, height: 400 },
+        ]) {
             state.customSize = size;
-            const { pending, request } = await f.startRender(() => requests.get('plots/render')!({ plotId: 'plot', width: 800, height: 600, pixelRatio: 2, format: 'png' }));
+            const { pending, request } = await f.startRender(() =>
+                requests.get('plots/render')!({
+                    plotId: 'plot',
+                    width: 800,
+                    height: 600,
+                    pixelRatio: 2,
+                    format: 'png',
+                }),
+            );
             assert.deepStrictEqual(request.renderRequest.size, size);
             assert.strictEqual(request.renderRequest.pixel_ratio, 2);
             f.finish(request);
@@ -133,16 +212,22 @@ suite('[Unit] Plot render parity', () => {
                     ? { width: 6, height: 4, unit: PlotUnit.Inches, source: 'Matplotlib' }
                     : undefined;
             };
-            const nextRender = new Promise<DeferredRender>(resolve => {
-                f.proxy.render = request => {
+            const nextRender = new Promise<DeferredRender>((resolve) => {
+                f.proxy.render = (request) => {
                     f.requests.push(request);
                     resolve(request);
                 };
             });
-            const handlers = new Map<string, (params: PlotsRpc.RenderPlotRequest.Params) => Promise<unknown>>();
+            const handlers = new Map<
+                string,
+                (params: PlotsRpc.RenderPlotRequest.Params) => Promise<unknown>
+            >();
             const connection = {
                 onNotification: () => undefined,
-                onRequest: (type: { method: string }, handler: (params: PlotsRpc.RenderPlotRequest.Params) => Promise<unknown>) => handlers.set(type.method, handler),
+                onRequest: (
+                    type: { method: string },
+                    handler: (params: PlotsRpc.RenderPlotRequest.Params) => Promise<unknown>,
+                ) => handlers.set(type.method, handler),
             } as unknown as MessageConnection;
             const state = { selectedPlotId: plot.id, selectedSizingPolicyId: 'intrinsic' };
             const notifiedPolicies: string[] = [];
@@ -153,22 +238,29 @@ suite('[Unit] Plot render parity', () => {
                 _plots: new Map(),
                 _renderRequestConnection: renderConnections,
                 _connectionStates: new Map([[connection, state]]),
-                _notifySelectedSizingChanged: () => notifiedPolicies.push(state.selectedSizingPolicyId),
+                _notifySelectedSizingChanged: () =>
+                    notifiedPolicies.push(state.selectedSizingPolicyId),
                 _sendPlotsRenderSettings: () => undefined,
                 log: () => undefined,
             }) as { _registerRenderingHandlers(connection: MessageConnection): void };
             provider._registerRenderingHandlers(connection);
             try {
                 const pending = handlers.get('plots/render')!({
-                    plotId: plot.id, width: 800, height: 600, pixelRatio: 2, format: 'png',
+                    plotId: plot.id,
+                    width: 800,
+                    height: 600,
+                    pixelRatio: 2,
+                    format: 'png',
                 });
                 if (outcome === 'failed') {
                     await assert.rejects(pending, /intrinsic size failed/);
                     assert.strictEqual(f.requests.length, 0);
                 } else {
                     const request = await nextRender;
-                    assert.deepStrictEqual(request.renderRequest.size,
-                        outcome === 'available' ? undefined : { width: 800, height: 600 });
+                    assert.deepStrictEqual(
+                        request.renderRequest.size,
+                        outcome === 'available' ? undefined : { width: 800, height: 600 },
+                    );
                     assert.strictEqual(request.renderRequest.pixel_ratio, 2);
                     f.finish(request);
                     await pending;
@@ -180,7 +272,9 @@ suite('[Unit] Plot render parity', () => {
                 assert.deepStrictEqual(notifiedPolicies, outcome === 'unavailable' ? ['auto'] : []);
                 assert.strictEqual(intrinsicRequests, 1);
                 assert.strictEqual(renderConnections.size, 0);
-            } finally { service.dispose(); }
+            } finally {
+                service.dispose();
+            }
         });
     }
 
@@ -193,18 +287,35 @@ suite('[Unit] Plot render parity', () => {
         const log = vscode.window.createOutputChannel('Plot editor sizing tests', { log: true });
         const provider = new PlotEditorProvider(vscode.Uri.file('/extension'), log, service);
         const requests = new Map<string, (params: { policyId: string }) => { policyId: string }>();
-        const sent: { method: string; params: PlotEditorRpc.PlotEditorSetContentNotification.Params }[] = [];
+        const sent: {
+            method: string;
+            params: PlotEditorRpc.PlotEditorSetContentNotification.Params;
+        }[] = [];
         const connection = {
             onNotification: () => undefined,
-            onRequest: (type: { method: string }, handler: (params: { policyId: string }) => { policyId: string }) => requests.set(type.method, handler),
-            sendNotification: (type: { method: string }, params: PlotEditorRpc.PlotEditorSetContentNotification.Params) => sent.push({ method: type.method, params }),
+            onRequest: (
+                type: { method: string },
+                handler: (params: { policyId: string }) => { policyId: string },
+            ) => requests.set(type.method, handler),
+            sendNotification: (
+                type: { method: string },
+                params: PlotEditorRpc.PlotEditorSetContentNotification.Params,
+            ) => sent.push({ method: type.method, params }),
             dispose: () => undefined,
         } as unknown as MessageConnection;
         const access = provider as unknown as {
             _connections: Map<string, MessageConnection>;
-            _registerRpcHandlers(id: string, panel: vscode.WebviewPanel, connection: MessageConnection): void;
+            _registerRpcHandlers(
+                id: string,
+                panel: vscode.WebviewPanel,
+                connection: MessageConnection,
+            ): void;
             _sendContent(id: string, content: { kind: 'image'; data: string }): void;
-            _handleRenderRequest(connection: MessageConnection, id: string, params: PlotEditorRpc.PlotEditorRenderNotification.Params): Promise<void>;
+            _handleRenderRequest(
+                connection: MessageConnection,
+                id: string,
+                params: PlotEditorRpc.PlotEditorRenderNotification.Params,
+            ): Promise<void>;
         };
         access._connections.set('plot', connection);
         access._registerRpcHandlers('plot', {} as vscode.WebviewPanel, connection);
@@ -212,7 +323,10 @@ suite('[Unit] Plot render parity', () => {
         try {
             access._sendContent('plot', { kind: 'image', data: 'initial' });
             assert.strictEqual(sent[0].params.selectedSizingPolicyId, 'auto');
-            assert.deepStrictEqual(sent[0].params.sizingPolicies?.map(policy => policy.id), ['auto', 'landscape', 'portrait', 'square', 'fill']);
+            assert.deepStrictEqual(
+                sent[0].params.sizingPolicies?.map((policy) => policy.id),
+                ['auto', 'landscape', 'portrait', 'square', 'fill'],
+            );
             assert.throws(() => select({ policyId: 'invalid' }));
             assert.throws(() => select({ policyId: 'intrinsic' }));
 
@@ -222,9 +336,14 @@ suite('[Unit] Plot render parity', () => {
                 ['auto', { width: 970, height: 600 }],
             ] as const) {
                 assert.deepStrictEqual(select({ policyId }), { policyId });
-                const { pending, request } = await f.startRender(() => access._handleRenderRequest(connection, 'plot', {
-                    width: 1200, height: 600, pixelRatio: 2, format: 'png',
-                }));
+                const { pending, request } = await f.startRender(() =>
+                    access._handleRenderRequest(connection, 'plot', {
+                        width: 1200,
+                        height: 600,
+                        pixelRatio: 2,
+                        format: 'png',
+                    }),
+                );
                 assert.deepStrictEqual(request.renderRequest.size, expectedSize);
                 assert.strictEqual(request.renderRequest.pixel_ratio, 2);
                 f.finish(request);
@@ -236,9 +355,14 @@ suite('[Unit] Plot render parity', () => {
             }
 
             // Closing the editor while rendering must not resurrect its content.
-            const { pending, request } = await f.startRender(() => access._handleRenderRequest(connection, 'plot', {
-                width: 600, height: 600, pixelRatio: 1, format: 'png',
-            }));
+            const { pending, request } = await f.startRender(() =>
+                access._handleRenderRequest(connection, 'plot', {
+                    width: 600,
+                    height: 600,
+                    pixelRatio: 1,
+                    format: 'png',
+                }),
+            );
             const count = sent.length;
             access._connections.delete('plot');
             f.finish(request);
@@ -250,7 +374,11 @@ suite('[Unit] Plot render parity', () => {
             access._connections.set('plot', connection);
             access._sendContent('plot', { kind: 'image', data: 'snapshot' });
             assert.strictEqual(sent.at(-1)?.params.sizingPolicies, undefined);
-        } finally { provider.dispose(); service.dispose(); log.dispose(); }
+        } finally {
+            provider.dispose();
+            service.dispose();
+            log.dispose();
+        }
     });
 
     test('cache keys include output format and pixel ratio, including intrinsic sizing', async () => {
@@ -292,14 +420,23 @@ suite('[Unit] Plot render parity', () => {
         f.finish(f.requests[0]);
         await first;
         const completed: IRenderedPlot[] = [];
-        plot.onDidCompleteRender(render => completed.push(render));
-        f.update.fire({ pre_render: {
-            data: 'eA', mime_type: 'image/png',
-            settings: { size: { width: 100, height: 100 }, pixel_ratio: 1, format: PlotRenderFormat.Png },
-        } });
+        plot.onDidCompleteRender((render) => completed.push(render));
+        f.update.fire({
+            pre_render: {
+                data: 'eA',
+                mime_type: 'image/png',
+                settings: {
+                    size: { width: 100, height: 100 },
+                    pixel_ratio: 1,
+                    format: PlotRenderFormat.Png,
+                },
+            },
+        });
         assert.strictEqual(completed[0].uri, 'data:image/png;base64,eA==');
         assert.deepStrictEqual(f.requests[1].renderRequest, {
-            size: { width: 800, height: 600 }, pixel_ratio: 2, format: PlotRenderFormat.Svg,
+            size: { width: 800, height: 600 },
+            pixel_ratio: 2,
+            format: PlotRenderFormat.Svg,
         });
         f.finish(f.requests[1], 'correct-size');
         await f.requests[1].promise;
@@ -311,7 +448,17 @@ suite('[Unit] Plot render parity', () => {
         const initial = plot.renderPlot({ width: 100, height: 100 }, 1);
         f.finish(f.requests[0]);
         await initial;
-        f.update.fire({ pre_render: { data: 'bmV3', mime_type: 'image/png', settings: { size: { width: 100, height: 100 }, pixel_ratio: 1, format: PlotRenderFormat.Png } } });
+        f.update.fire({
+            pre_render: {
+                data: 'bmV3',
+                mime_type: 'image/png',
+                settings: {
+                    size: { width: 100, height: 100 },
+                    pixel_ratio: 1,
+                    format: PlotRenderFormat.Png,
+                },
+            },
+        });
         assert.strictEqual(f.requests.length, 1);
         assert.strictEqual(plot.lastRender?.uri, 'data:image/png;base64,bmV3');
     });
@@ -319,7 +466,17 @@ suite('[Unit] Plot render parity', () => {
     test('a matching kernel pre-render fulfills a pending caller instead of reporting cancellation', async () => {
         const plot = f.create();
         const pending = plot.renderPlot({ width: 100, height: 100 }, 1);
-        f.update.fire({ pre_render: { data: 'bmV3', mime_type: 'image/png', settings: { size: { width: 100, height: 100 }, pixel_ratio: 1, format: PlotRenderFormat.Png } } });
+        f.update.fire({
+            pre_render: {
+                data: 'bmV3',
+                mime_type: 'image/png',
+                settings: {
+                    size: { width: 100, height: 100 },
+                    pixel_ratio: 1,
+                    format: PlotRenderFormat.Png,
+                },
+            },
+        });
         assert.strictEqual((await pending).uri, 'data:image/png;base64,bmV3');
         f.finish(f.requests[0], 'stale-response');
         assert.strictEqual(plot.lastRender?.uri, 'data:image/png;base64,bmV3');
@@ -367,7 +524,9 @@ suite('[Unit] Plot render parity', () => {
             service.removeEditorPlot('plot');
             assert.strictEqual(closed, 1);
             assert.strictEqual(editor.state, PlotClientState.Closed);
-        } finally { service.dispose(); }
+        } finally {
+            service.dispose();
+        }
     });
 
     test('closing an editor does not delete the view with the same ID', () => {
@@ -384,7 +543,9 @@ suite('[Unit] Plot render parity', () => {
             assert.deepStrictEqual(service.positronPlotInstances, [view]);
             assert.strictEqual(service.getPlotClient('plot'), view);
             assert.notStrictEqual(view.state, PlotClientState.Closed);
-        } finally { service.dispose(); }
+        } finally {
+            service.dispose();
+        }
     });
 
     test('replacing a plot releases the old view and retains its position and shared editor', () => {
@@ -404,7 +565,7 @@ suite('[Unit] Plot render parity', () => {
             _plotCommProxies: new Map([['plot', { dispose: () => commCloses++ }]]),
         });
         const removed: unknown[] = [];
-        service.onDidRemovePlot(plot => removed.push(plot));
+        service.onDidRemovePlot((plot) => removed.push(plot));
         try {
             (service as any).replacePlot('plot', replacement);
             assert.strictEqual(old.state, PlotClientState.Closed);
@@ -418,26 +579,50 @@ suite('[Unit] Plot render parity', () => {
             assert.strictEqual(commCloses, 0);
             service.removeEditorPlot('plot');
             assert.strictEqual(commCloses, 1);
-        } finally { service.dispose(); }
+        } finally {
+            service.dispose();
+        }
     });
 
     test('the shared proxy closes the real kernel client once after both surface clients release it', () => {
         const state = new vscode.EventEmitter<QueueRuntimeState>();
-        const queue = new PositronPlotRenderQueue({ sessionId: 'session', getRuntimeState: () => QueueRuntimeState.Idle, onDidChangeRuntimeState: state.event });
+        const queue = new PositronPlotRenderQueue({
+            sessionId: 'session',
+            getRuntimeState: () => QueueRuntimeState.Idle,
+            onDidChangeRuntimeState: state.event,
+        });
         let closed = 0;
-        const raw = new RuntimeClientInstance({
-            id: 'plot', comm_id: 'plot', target_name: RuntimeClientType.Plot,
-            type: LanguageRuntimeMessageType.CommOpen, data: {}, event_clock: 0,
-            parent_id: '', when: new Date().toISOString(),
-        }, () => undefined, () => closed++);
+        const raw = new RuntimeClientInstance(
+            {
+                id: 'plot',
+                comm_id: 'plot',
+                target_name: RuntimeClientType.Plot,
+                type: LanguageRuntimeMessageType.CommOpen,
+                data: {},
+                event_clock: 0,
+                parent_id: '',
+                when: new Date().toISOString(),
+            },
+            () => undefined,
+            () => closed++,
+        );
         const proxy = new PositronPlotCommProxy(raw, queue);
         const service = new PositronPlotsService();
         const metadata = { id: 'plot', session_id: 'session', created: Date.now() };
-        const access = service as unknown as { createRuntimePlotClient(proxy: PositronPlotCommProxy, value: typeof metadata, raw: RuntimeClientInstance): PlotClientInstance };
+        const access = service as unknown as {
+            createRuntimePlotClient(
+                proxy: PositronPlotCommProxy,
+                value: typeof metadata,
+                raw: RuntimeClientInstance,
+            ): PlotClientInstance;
+        };
         const view = access.createRuntimePlotClient(proxy, metadata, raw);
         const editor = access.createRuntimePlotClient(proxy, metadata, view);
         service.addPlotClient(view);
-        Object.assign(service, { _editorPlotClients: new Map([['plot', editor]]), _plotCommProxies: new Map([['plot', proxy]]) });
+        Object.assign(service, {
+            _editorPlotClients: new Map([['plot', editor]]),
+            _plotCommProxies: new Map([['plot', proxy]]),
+        });
         try {
             service.removePlot('plot');
             assert.strictEqual(closed, 0);
@@ -445,7 +630,12 @@ suite('[Unit] Plot render parity', () => {
             assert.strictEqual(closed, 1);
             proxy.dispose();
             assert.strictEqual(closed, 1);
-        } finally { service.dispose(); proxy.dispose(); queue.dispose(); state.dispose(); }
+        } finally {
+            service.dispose();
+            proxy.dispose();
+            queue.dispose();
+            state.dispose();
+        }
     });
 
     test('clearing plots tolerates synchronous close events and preserves a shared HTML editor', () => {
@@ -453,7 +643,7 @@ suite('[Unit] Plot render parity', () => {
         service.addPlotClient(f.create('a'));
         service.addPlotClient(f.create('b'));
         service.addHtmlPlot('session', { uri: vscode.Uri.parse('https://localhost/plot') });
-        const html = service.positronPlotInstances.find(plot => plot instanceof HtmlPlotClient)!;
+        const html = service.positronPlotInstances.find((plot) => plot instanceof HtmlPlotClient)!;
         Object.assign(service, { _editorPlotClients: new Map([[html.id, html]]) });
         try {
             service.removeAllPlots();
@@ -461,6 +651,8 @@ suite('[Unit] Plot render parity', () => {
             assert.strictEqual(service.getEditorInstance(html.id), html);
             service.removeEditorPlot(html.id);
             assert.strictEqual(service.getEditorInstance(html.id), undefined);
-        } finally { service.dispose(); }
+        } finally {
+            service.dispose();
+        }
     });
 });

@@ -69,7 +69,11 @@ function positionTooltip(
     tooltip.style.left = `${left}px`;
 }
 
-function showTooltip(el: HTMLElement, content: string, placement: 'top' | 'bottom' | 'left' | 'right') {
+function showTooltip(
+    el: HTMLElement,
+    content: string,
+    placement: 'top' | 'bottom' | 'left' | 'right',
+) {
     if (hideTimeout) {
         clearTimeout(hideTimeout);
         hideTimeout = null;

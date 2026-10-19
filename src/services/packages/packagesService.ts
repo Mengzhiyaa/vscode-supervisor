@@ -21,7 +21,12 @@ import { PackageVulnerabilityLookup } from './packageVulnerabilityLookup';
 const ITEM_SIZE_STORAGE_KEY = 'positron.packages.itemSize';
 const TIMEOUT_REFRESH_MS = 5_000;
 
-function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string, onTimeout: () => void): Promise<T> {
+function withTimeout<T>(
+    promise: Promise<T>,
+    timeoutMs: number,
+    label: string,
+    onTimeout: () => void,
+): Promise<T> {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timeoutPromise = new Promise<T>((_resolve, reject) => {
         timer = setTimeout(() => {
@@ -38,7 +43,10 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string, o
 }
 
 export class PositronPackagesService implements IPositronPackagesService {
-    private readonly _providersByLanguageId = new Map<string, ILanguageRuntimePackageManagerProvider>();
+    private readonly _providersByLanguageId = new Map<
+        string,
+        ILanguageRuntimePackageManagerProvider
+    >();
     private readonly _instancesBySessionId = new Map<string, PositronPackagesInstance>();
     private readonly _disposables: vscode.Disposable[] = [];
     private readonly _activeInstanceDisposables: vscode.Disposable[] = [];
@@ -51,8 +59,11 @@ export class PositronPackagesService implements IPositronPackagesService {
     private _initialized = false;
     private _activeBusy = false;
 
-    private readonly _onDidChangeActivePackagesInstance = new vscode.EventEmitter<IPositronPackagesInstance | undefined>();
-    private readonly _onDidStopPackagesInstance = new vscode.EventEmitter<IPositronPackagesInstance>();
+    private readonly _onDidChangeActivePackagesInstance = new vscode.EventEmitter<
+        IPositronPackagesInstance | undefined
+    >();
+    private readonly _onDidStopPackagesInstance =
+        new vscode.EventEmitter<IPositronPackagesInstance>();
     private readonly _onDidChangeItemSize = new vscode.EventEmitter<PackagesItemSize>();
 
     constructor(
@@ -60,18 +71,29 @@ export class PositronPackagesService implements IPositronPackagesService {
         private readonly _sessionManager: RuntimeSessionService,
         private readonly _outputChannel: vscode.LogOutputChannel,
     ) {
-        this._vulnerabilityLookup = new PackageVulnerabilityLookup({
-            getValue: <T>(key: string) => vscode.workspace.getConfiguration().get<T>(key),
-        }, this._outputChannel);
-        this._disposables.push(this._vulnerabilityLookup, vscode.workspace.onDidChangeConfiguration(event => {
-            if (event.affectsConfiguration('packages.vulnerabilities')) {
-                for (const instance of this._instancesBySessionId.values()) {
-                    if (instance.session.metadata.sessionMode === LanguageRuntimeSessionMode.Console) {
-                        void instance.refreshVulnerabilities().catch(error => this._outputChannel.warn(getErrorMessage(error)));
+        this._vulnerabilityLookup = new PackageVulnerabilityLookup(
+            {
+                getValue: <T>(key: string) => vscode.workspace.getConfiguration().get<T>(key),
+            },
+            this._outputChannel,
+        );
+        this._disposables.push(
+            this._vulnerabilityLookup,
+            vscode.workspace.onDidChangeConfiguration((event) => {
+                if (event.affectsConfiguration('packages.vulnerabilities')) {
+                    for (const instance of this._instancesBySessionId.values()) {
+                        if (
+                            instance.session.metadata.sessionMode ===
+                            LanguageRuntimeSessionMode.Console
+                        ) {
+                            void instance
+                                .refreshVulnerabilities()
+                                .catch((error) => this._outputChannel.warn(getErrorMessage(error)));
+                        }
                     }
                 }
-            }
-        }));
+            }),
+        );
         this._metadataCache = new PackageMetadataCache(
             this._context.workspaceState,
             this._outputChannel,
@@ -118,10 +140,10 @@ export class PositronPackagesService implements IPositronPackagesService {
         await this._metadataCache.initialize();
 
         this._disposables.push(
-            this._sessionManager.onWillStartSession(event => {
+            this._sessionManager.onWillStartSession((event) => {
                 this._createOrAssignInstance(event.session, event.activate);
             }),
-            this._sessionManager.onDidChangeForegroundSession(session => {
+            this._sessionManager.onDidChangeForegroundSession((session) => {
                 if (!session) {
                     this._setActiveInstance(undefined);
                     return;
@@ -132,7 +154,7 @@ export class PositronPackagesService implements IPositronPackagesService {
                     this._setActiveInstance(undefined);
                 }
             }),
-            this._sessionManager.onDidDeleteRuntimeSession(sessionId => {
+            this._sessionManager.onDidDeleteRuntimeSession((sessionId) => {
                 this._cleanupSession(sessionId);
             }),
         );
@@ -153,10 +175,14 @@ export class PositronPackagesService implements IPositronPackagesService {
         }
     }
 
-    registerPackageManagerProvider(provider: ILanguageRuntimePackageManagerProvider): vscode.Disposable {
+    registerPackageManagerProvider(
+        provider: ILanguageRuntimePackageManagerProvider,
+    ): vscode.Disposable {
         const existing = this._providersByLanguageId.get(provider.languageId);
         if (existing && existing !== provider) {
-            throw new Error(`Package manager provider for '${provider.languageId}' is already registered`);
+            throw new Error(
+                `Package manager provider for '${provider.languageId}' is already registered`,
+            );
         }
 
         this._providersByLanguageId.set(provider.languageId, provider);
@@ -173,7 +199,8 @@ export class PositronPackagesService implements IPositronPackagesService {
     }
 
     setActivePositronPackagesSession(session: ILanguageRuntimeSession): void {
-        const instance = this._instancesBySessionId.get(session.sessionId) ??
+        const instance =
+            this._instancesBySessionId.get(session.sessionId) ??
             this._createOrAssignInstance(session, false);
         if (instance) {
             this._setActiveInstance(instance);
@@ -212,7 +239,10 @@ export class PositronPackagesService implements IPositronPackagesService {
         return this._instancesBySessionId.get(sessionId);
     }
 
-    async refreshPackages(token?: vscode.CancellationToken, forceMetadata = false): Promise<LanguageRuntimePackage[]> {
+    async refreshPackages(
+        token?: vscode.CancellationToken,
+        forceMetadata = false,
+    ): Promise<LanguageRuntimePackage[]> {
         const tokenSource = new vscode.CancellationTokenSource();
         const subscription = token?.onCancellationRequested(() => tokenSource.cancel());
         if (token?.isCancellationRequested) {
@@ -236,11 +266,17 @@ export class PositronPackagesService implements IPositronPackagesService {
         await this._getActiveInstanceOrThrow().refreshMetadata(token);
     }
 
-    async installPackages(packages: PackageSpec[], token?: vscode.CancellationToken): Promise<void> {
+    async installPackages(
+        packages: PackageSpec[],
+        token?: vscode.CancellationToken,
+    ): Promise<void> {
         await this._getActiveInstanceOrThrow().installPackages(packages, token);
     }
 
-    async uninstallPackages(packageNames: string[], token?: vscode.CancellationToken): Promise<void> {
+    async uninstallPackages(
+        packageNames: string[],
+        token?: vscode.CancellationToken,
+    ): Promise<void> {
         await this._getActiveInstanceOrThrow().uninstallPackages(packageNames, token);
     }
 
@@ -252,7 +288,10 @@ export class PositronPackagesService implements IPositronPackagesService {
         await this._getActiveInstanceOrThrow().updateAllPackages(token);
     }
 
-    async searchPackages(query: string, token?: vscode.CancellationToken): Promise<LanguageRuntimePackage[]> {
+    async searchPackages(
+        query: string,
+        token?: vscode.CancellationToken,
+    ): Promise<LanguageRuntimePackage[]> {
         return this._getActiveInstanceOrThrow().searchPackages(query, token);
     }
 
@@ -260,19 +299,31 @@ export class PositronPackagesService implements IPositronPackagesService {
         return this._getActiveInstanceOrThrow().searchPackageVersions(name, token);
     }
 
-    async resolveLatestVersion(name: string, token?: vscode.CancellationToken): Promise<string | undefined> {
+    async resolveLatestVersion(
+        name: string,
+        token?: vscode.CancellationToken,
+    ): Promise<string | undefined> {
         return this._activeInstance?.resolveLatestVersion(name, token);
     }
 
-    async getPackageDetail(name: string, token?: vscode.CancellationToken): Promise<Partial<LanguageRuntimePackage> | undefined> {
+    async getPackageDetail(
+        name: string,
+        token?: vscode.CancellationToken,
+    ): Promise<Partial<LanguageRuntimePackage> | undefined> {
         return this._activeInstance?.getPackageDetail(name, token);
     }
 
-    async getPackagesSnapshot(token?: vscode.CancellationToken, options?: PackagesSnapshotOptions): Promise<PackagesSnapshot> {
-        return this._activeInstance?.getPackagesSnapshot(token, options) ?? {
-            packages: [], metadataStatus: 'unsupported',
-            vulnerabilityStatus: this._vulnerabilityLookup.enabled ? 'unavailable' : 'disabled',
-        };
+    async getPackagesSnapshot(
+        token?: vscode.CancellationToken,
+        options?: PackagesSnapshotOptions,
+    ): Promise<PackagesSnapshot> {
+        return (
+            this._activeInstance?.getPackagesSnapshot(token, options) ?? {
+                packages: [],
+                metadataStatus: 'unsupported',
+                vulnerabilityStatus: this._vulnerabilityLookup.enabled ? 'unavailable' : 'disabled',
+            }
+        );
     }
 
     dispose(): void {
@@ -361,8 +412,11 @@ export class PositronPackagesService implements IPositronPackagesService {
                 instance.onDidChangeUpdateState(updateBusy),
                 instance.onDidChangeUpdateAllState(updateBusy),
                 instance.onDidChangeUninstallState(updateBusy),
-                instance.onDidRefreshPackagesInstance(packages => {
-                    if (this._selectedPackage && !packages.some(pkg => pkg.name === this._selectedPackage)) {
+                instance.onDidRefreshPackagesInstance((packages) => {
+                    if (
+                        this._selectedPackage &&
+                        !packages.some((pkg) => pkg.name === this._selectedPackage)
+                    ) {
                         this.setSelectedPackage(undefined);
                     }
                 }),
@@ -438,6 +492,10 @@ export class PositronPackagesService implements IPositronPackagesService {
             ContextKeys.packagesSelectedPackage,
             this._selectedPackage ?? '',
         );
-        void vscode.commands.executeCommand('setContext', ContextKeys.packagesItemSize, this._itemSize);
+        void vscode.commands.executeCommand(
+            'setContext',
+            ContextKeys.packagesItemSize,
+            this._itemSize,
+        );
     }
 }

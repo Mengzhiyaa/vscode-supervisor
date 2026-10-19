@@ -75,8 +75,7 @@
         'positron-show-filters',
     ]);
 
-    const iconAliases: Record<string, string> = {
-    };
+    const iconAliases: Record<string, string> = {};
 
     function getIconClass(icon: string) {
         if (icon.startsWith('codicon-')) {
@@ -113,9 +112,7 @@
     }
 
     function focusInitialMenuItem() {
-        focusMenuItem(
-            initialFocus === 'last' ? Number.MAX_SAFE_INTEGER : 0,
-        );
+        focusMenuItem(initialFocus === 'last' ? Number.MAX_SAFE_INTEGER : 0);
     }
 
     function focusRelativeMenuItem(delta: number) {
@@ -126,9 +123,7 @@
         }
 
         const activeElement =
-            document.activeElement instanceof HTMLButtonElement
-                ? document.activeElement
-                : null;
+            document.activeElement instanceof HTMLButtonElement ? document.activeElement : null;
         const currentIndex = activeElement ? items.indexOf(activeElement) : -1;
         const nextIndex =
             currentIndex === -1
@@ -152,15 +147,15 @@
         const baseLeft = nested
             ? (anchorRect?.right ?? 0)
             : anchorPoint
-            ? anchorPoint.x
-            : align === 'right'
-              ? (anchorRect?.right ?? 0) - menuRect.width
-              : (anchorRect?.left ?? 0);
+              ? anchorPoint.x
+              : align === 'right'
+                ? (anchorRect?.right ?? 0) - menuRect.width
+                : (anchorRect?.left ?? 0);
         const baseTop = nested
             ? (anchorRect?.top ?? 0)
             : anchorPoint
-            ? anchorPoint.y
-            : (anchorRect?.bottom ?? 0) + 2;
+              ? anchorPoint.y
+              : (anchorRect?.bottom ?? 0) + 2;
 
         let left = baseLeft;
         let top = baseTop;
@@ -213,8 +208,11 @@
             case ' ':
             case 'ArrowRight': {
                 const button = document.activeElement as HTMLButtonElement | null;
-                if (button && getMenuItems().includes(button) &&
-                    (event.key !== 'ArrowRight' || button?.getAttribute('aria-haspopup') === 'menu')) {
+                if (
+                    button &&
+                    getMenuItems().includes(button) &&
+                    (event.key !== 'ArrowRight' || button?.getAttribute('aria-haspopup') === 'menu')
+                ) {
                     event.preventDefault();
                     button?.click();
                 }
@@ -249,11 +247,16 @@
                 if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
                     event.preventDefault();
                     typeahead += event.key.toLocaleLowerCase();
-                    if (typeaheadTimer) { clearTimeout(typeaheadTimer); }
-                    typeaheadTimer = setTimeout(() => { typeahead = ''; }, 500);
+                    if (typeaheadTimer) {
+                        clearTimeout(typeaheadTimer);
+                    }
+                    typeaheadTimer = setTimeout(() => {
+                        typeahead = '';
+                    }, 500);
                     const items = getMenuItems();
-                    const match = items.find(item =>
-                        (item.textContent ?? '').trim().toLocaleLowerCase().startsWith(typeahead));
+                    const match = items.find((item) =>
+                        (item.textContent ?? '').trim().toLocaleLowerCase().startsWith(typeahead),
+                    );
                     match?.focus();
                 }
                 break;
@@ -271,7 +274,9 @@
         });
 
         return () => {
-            if (typeaheadTimer) { clearTimeout(typeaheadTimer); }
+            if (typeaheadTimer) {
+                clearTimeout(typeaheadTimer);
+            }
             if (menuEl?.parentElement) {
                 menuEl.parentElement.removeChild(menuEl);
             }
@@ -289,10 +294,7 @@
     onmousedowncapture={handleOutsidePointer}
     oncontextmenucapture={handleOutsidePointer}
 />
-<svelte:window
-    onresize={updatePosition}
-    onscrollcapture={updatePosition}
-/>
+<svelte:window onresize={updatePosition} onscrollcapture={updatePosition} />
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
@@ -310,7 +312,7 @@
             {@const checkable = entry.checked !== undefined}
             <button
                 class="menu-item"
-                class:checkable={checkable}
+                class:checkable
                 disabled={entry.disabled}
                 type="button"
                 role={checkable ? 'menuitemcheckbox' : 'menuitem'}
@@ -342,9 +344,7 @@
                 {/if}
 
                 {#if entry.icon}
-                    <span
-                        class="menu-icon codicon {getIconClass(entry.icon)}"
-                        aria-hidden="true"
+                    <span class="menu-icon codicon {getIconClass(entry.icon)}" aria-hidden="true"
                     ></span>
                 {:else}
                     <span class="menu-icon icon-placeholder" aria-hidden="true"></span>
@@ -352,7 +352,8 @@
 
                 <span class="menu-title">{entry.label}</span>
                 {#if entry.submenu}
-                    <span class="submenu-arrow codicon codicon-chevron-right" aria-hidden="true"></span>
+                    <span class="submenu-arrow codicon codicon-chevron-right" aria-hidden="true"
+                    ></span>
                 {/if}
             </button>
         {/if}
@@ -363,7 +364,9 @@
                 entries={submenuItem.submenu}
                 anchorEl={submenuAnchor}
                 nested={true}
-                onclose={() => { submenuItem = null; }}
+                onclose={() => {
+                    submenuItem = null;
+                }}
                 onselect={() => {
                     if (onselect) onselect();
                     else requestClose();
@@ -384,8 +387,15 @@
     }
 
     @media (forced-colors: active) {
-        .action-bar-context-menu { border: 1px solid CanvasText; }
-        .menu-item:focus { outline: 1px solid Highlight; outline-offset: -1px; }
-        .menu-separator { border-color: GrayText; }
+        .action-bar-context-menu {
+            border: 1px solid CanvasText;
+        }
+        .menu-item:focus {
+            outline: 1px solid Highlight;
+            outline-offset: -1px;
+        }
+        .menu-separator {
+            border-color: GrayText;
+        }
     }
 </style>

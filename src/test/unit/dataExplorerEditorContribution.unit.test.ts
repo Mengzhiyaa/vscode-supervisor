@@ -28,12 +28,14 @@ function variablesInstance(sessionId: string, languageId: string, variableId: st
             sessionId,
             runtimeMetadata: { languageId },
         },
-        variableItems: [{
-            id: variableId,
-            displayName: 'iris',
-            path: ['iris'],
-            hasViewer: true,
-        }],
+        variableItems: [
+            {
+                id: variableId,
+                displayName: 'iris',
+                path: ['iris'],
+                hasViewer: true,
+            },
+        ],
     } as any;
 }
 
@@ -42,7 +44,7 @@ function variablesService(instances: any[], activeInstance = instances[0]) {
         positronVariablesInstances: instances,
         activePositronVariablesInstance: activeInstance,
         getVariablesInstance: (sessionId: string) =>
-            instances.find(instance => instance.session.sessionId === sessionId),
+            instances.find((instance) => instance.session.sessionId === sessionId),
     } as any;
 }
 
@@ -62,16 +64,20 @@ function textDocument(languageId: string, content: string): vscode.TextDocument 
             }
             return undefined;
         },
-        getText: (range?: vscode.Range) => range
-            ? lines[range.start.line].slice(range.start.character, range.end.character)
-            : content,
+        getText: (range?: vscode.Range) =>
+            range
+                ? lines[range.start.line].slice(range.start.character, range.end.character)
+                : content,
     } as unknown as vscode.TextDocument;
 }
 
 suite('[Unit] Data Explorer editor contribution', () => {
     test('round-trips model identifiers through editor resources', () => {
         const identifier = 'runtime:session-1:iris/a b';
-        assert.strictEqual(getDataExplorerIdentifier(createDataExplorerEditorUri(identifier)), identifier);
+        assert.strictEqual(
+            getDataExplorerIdentifier(createDataExplorerEditorUri(identifier)),
+            identifier,
+        );
         assert.strictEqual(getDataExplorerIdentifier(vscode.Uri.file('/tmp/a.csv')), undefined);
     });
 
@@ -116,14 +122,10 @@ suite('[Unit] Data Explorer editor contribution', () => {
     });
 
     test('resolves Quarto embedded languages and ignores prose, strings, and comments', async () => {
-        const document = textDocument('quarto', [
-            'iris in prose',
-            '```{r}',
-            'iris',
-            '"iris"',
-            '# iris',
-            '```',
-        ].join('\n'));
+        const document = textDocument(
+            'quarto',
+            ['iris in prose', '```{r}', 'iris', '"iris"', '# iris', '```'].join('\n'),
+        );
         const rInstance = variablesInstance('r-1', 'r', 'r-iris');
         const resolved = resolveDataFrameAtPosition(
             document,
@@ -132,29 +134,30 @@ suite('[Unit] Data Explorer editor contribution', () => {
             { getConsoleSessionForLanguage: () => rInstance.session } as any,
         );
 
-        assert.strictEqual(getDataExplorerLanguageIdAtPosition(document, new vscode.Position(0, 2)), undefined);
-        assert.strictEqual(getDataExplorerLanguageIdAtPosition(document, new vscode.Position(2, 2)), 'r');
+        assert.strictEqual(
+            getDataExplorerLanguageIdAtPosition(document, new vscode.Position(0, 2)),
+            undefined,
+        );
+        assert.strictEqual(
+            getDataExplorerLanguageIdAtPosition(document, new vscode.Position(2, 2)),
+            'r',
+        );
         assert.strictEqual(resolved?.sessionId, 'r-1');
         assert.deepStrictEqual(
             findDataExplorerIdentifierRanges(document)
-                .map(range => document.getText(range))
-                .filter(identifier => identifier === 'iris'),
+                .map((range) => document.getText(range))
+                .filter((identifier) => identifier === 'iris'),
             ['iris'],
         );
     });
 
     test('does not create identifier candidates inside multiline Python strings', () => {
-        const document = textDocument('python', [
-            '"""',
-            'iris',
-            '"""',
-            'iris',
-        ].join('\n'));
+        const document = textDocument('python', ['"""', 'iris', '"""', 'iris'].join('\n'));
 
         assert.deepStrictEqual(
             findDataExplorerIdentifierRanges(document)
-                .filter(range => document.getText(range) === 'iris')
-                .map(range => range.start.line),
+                .filter((range) => document.getText(range) === 'iris')
+                .map((range) => range.start.line),
             [3],
         );
     });
@@ -165,15 +168,16 @@ suite('[Unit] Data Explorer editor contribution', () => {
             content: 'iris\n',
         });
         const instance = variablesInstance('python-2', 'python', 'iris-stable-id');
-        const actions = new PositronDataExplorerCodeActionProvider(
-            variablesService([instance]),
-            { getConsoleSessionForLanguage: () => instance.session } as any,
-        ).provideCodeActions(document, new vscode.Range(0, 0, 0, 4));
+        const actions = new PositronDataExplorerCodeActionProvider(variablesService([instance]), {
+            getConsoleSessionForLanguage: () => instance.session,
+        } as any).provideCodeActions(document, new vscode.Range(0, 0, 0, 4));
 
-        assert.deepStrictEqual(actions[0]?.command?.arguments, [{
-            sessionId: 'python-2',
-            variableId: 'iris-stable-id',
-        }]);
+        assert.deepStrictEqual(actions[0]?.command?.arguments, [
+            {
+                sessionId: 'python-2',
+                variableId: 'iris-stable-id',
+            },
+        ]);
     });
 
     test('uses Positron-compatible configuration defaults and editor titles', () => {

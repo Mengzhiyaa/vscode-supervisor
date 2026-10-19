@@ -1,6 +1,6 @@
 <script lang="ts">
-    import type { RuntimeItemOffline } from "./classes";
-    import ConsoleOutputLines from "./ConsoleOutputLines.svelte";
+    import type { RuntimeItemOffline } from './classes';
+    import ConsoleOutputLines from './ConsoleOutputLines.svelte';
 
     /**
      * RuntimeOffline Component (1:1 Positron)
@@ -11,10 +11,7 @@
         readonly onReconnect?: () => void;
     }
 
-    let {
-        runtimeItemOffline,
-        onReconnect = undefined,
-    }: RuntimeOfflineProps = $props();
+    let { runtimeItemOffline, onReconnect = undefined }: RuntimeOfflineProps = $props();
 </script>
 
 <div class="runtime-offline">
@@ -24,9 +21,7 @@
         </div>
     </div>
     {#if onReconnect}
-        <button class="offline-reconnect" onclick={onReconnect}>
-            Reconnect
-        </button>
+        <button class="offline-reconnect" onclick={onReconnect}> Reconnect </button>
     {/if}
 </div>
 

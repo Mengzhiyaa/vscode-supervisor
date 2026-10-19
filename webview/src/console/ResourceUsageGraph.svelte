@@ -3,7 +3,7 @@
     Based on Positron's ResourceUsageGraph.tsx
 -->
 <script lang="ts">
-    import { localize } from "$lib/localization";
+    import { localize } from '$lib/localization';
     /**
      * Fixed spacing between data points in pixels.
      */
@@ -32,49 +32,45 @@
 
     // Calculate SVG paths
     let linePath = $derived.by(() => {
-        if (data.length === 0) return "";
+        if (data.length === 0) return '';
 
         const maxPointsForWidth = Math.floor(width / PIXELS_PER_POINT) + 1;
         const visibleData = data.slice(-maxPointsForWidth);
 
-        if (visibleData.length === 0) return "";
+        if (visibleData.length === 0) return '';
 
         const drawableHeight = height - 2 * VERTICAL_PADDING;
 
         const points = visibleData.map((d, i) => {
             const x = width - (visibleData.length - 1 - i) * PIXELS_PER_POINT;
             const cpuPercent = Math.max(0, Math.min(100, d.cpu_percent));
-            const y =
-                VERTICAL_PADDING + ((100 - cpuPercent) / 100) * drawableHeight;
+            const y = VERTICAL_PADDING + ((100 - cpuPercent) / 100) * drawableHeight;
             return { x, y };
         });
 
-        return points
-            .map((p, i) => (i === 0 ? `M ${p.x} ${p.y}` : `L ${p.x} ${p.y}`))
-            .join(" ");
+        return points.map((p, i) => (i === 0 ? `M ${p.x} ${p.y}` : `L ${p.x} ${p.y}`)).join(' ');
     });
 
     let fillPath = $derived.by(() => {
-        if (data.length === 0) return "";
+        if (data.length === 0) return '';
 
         const maxPointsForWidth = Math.floor(width / PIXELS_PER_POINT) + 1;
         const visibleData = data.slice(-maxPointsForWidth);
 
-        if (visibleData.length === 0) return "";
+        if (visibleData.length === 0) return '';
 
         const drawableHeight = height - 2 * VERTICAL_PADDING;
 
         const points = visibleData.map((d, i) => {
             const x = width - (visibleData.length - 1 - i) * PIXELS_PER_POINT;
             const cpuPercent = Math.max(0, Math.min(100, d.cpu_percent));
-            const y =
-                VERTICAL_PADDING + ((100 - cpuPercent) / 100) * drawableHeight;
+            const y = VERTICAL_PADDING + ((100 - cpuPercent) / 100) * drawableHeight;
             return { x, y };
         });
 
         const linePoints = points
             .map((p, i) => (i === 0 ? `M ${p.x} ${p.y}` : `L ${p.x} ${p.y}`))
-            .join(" ");
+            .join(' ');
         const firstPoint = points[0];
         const lastPoint = points[points.length - 1];
         const bottomY = height - VERTICAL_PADDING;
@@ -83,13 +79,8 @@
     });
 </script>
 
-<svg
-    class="resource-usage-graph"
-    {width}
-    {height}
-    viewBox="0 0 {width} {height}"
->
-    <title>{localize("console.resource.cpuUsage", "CPU usage")}</title>
+<svg class="resource-usage-graph" {width} {height} viewBox="0 0 {width} {height}">
+    <title>{localize('console.resource.cpuUsage', 'CPU usage')}</title>
     {#if fillPath}
         <path class="resource-usage-fill" d={fillPath} />
     {/if}

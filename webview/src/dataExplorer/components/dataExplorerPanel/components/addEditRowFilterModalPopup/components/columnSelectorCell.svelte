@@ -3,8 +3,8 @@
   Port from Positron's columnSelectorCell.tsx
 -->
 <script lang="ts">
-    import type { SchemaColumn } from "../../../../../../dataGrid/types";
-    import { getColumnTypeIcon } from "../../../utility/columnSchemaUtilities";
+    import type { SchemaColumn } from '../../../../../../dataGrid/types';
+    import { getColumnTypeIcon } from '../../../utility/columnSchemaUtilities';
 
     interface Props {
         columnSchema: SchemaColumn;
@@ -27,9 +27,7 @@
     {/if}
 
     <div class="info">
-        <div
-            class="data-type-icon codicon {getColumnTypeIcon(columnSchema)}"
-        ></div>
+        <div class="data-type-icon codicon {getColumnTypeIcon(columnSchema)}"></div>
         <div class="column-name">
             {columnSchema.column_name}
         </div>

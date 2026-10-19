@@ -6,12 +6,12 @@
  * Licensed under the Elastic License 2.0. See LICENSE.txt for license information.
  */
 
-import type { ConsoleState } from "@shared/runtime";
+import type { ConsoleState } from '@shared/runtime';
 export type {
     ConsoleSettings,
     ConsoleState,
     RuntimeStartupPhaseValue as RuntimeStartupPhase,
-} from "@shared/runtime";
+} from '@shared/runtime';
 
 /**
  * Runtime status type for displaying runtime state icons.
@@ -27,32 +27,32 @@ export type SessionMode = 'console' | 'notebook' | 'background';
  * Mapping from ConsoleState to RuntimeStatusType.
  */
 export const consoleStateToRuntimeStatus: Record<ConsoleState, RuntimeStatusType> = {
-    'uninitialized': 'Disconnected',
-    'disconnected': 'Disconnected',
-    'starting': 'Active',
-    'busy': 'Active',
-    'interrupting': 'Active',
-    'restarting': 'Active',
-    'ready': 'Idle',
-    'offline': 'Disconnected',
-    'exiting': 'Active',
-    'exited': 'Disconnected'
+    uninitialized: 'Disconnected',
+    disconnected: 'Disconnected',
+    starting: 'Active',
+    busy: 'Active',
+    interrupting: 'Active',
+    restarting: 'Active',
+    ready: 'Idle',
+    offline: 'Disconnected',
+    exiting: 'Active',
+    exited: 'Disconnected',
 };
 
 /**
  * Mapping from RuntimeStatusType to codicon class.
  */
 export const runtimeStatusToIcon: Record<RuntimeStatusType, string> = {
-    'Active': 'codicon-positron-status-active',
-    'Disconnected': 'codicon-positron-status-disconnected',
-    'Idle': 'codicon-positron-status-idle'
+    Active: 'codicon-positron-status-active',
+    Disconnected: 'codicon-positron-status-disconnected',
+    Idle: 'codicon-positron-status-idle',
 };
 
 /**
  * Mapping from RuntimeStatusType to CSS color variable.
  */
 export const runtimeStatusToColor: Record<RuntimeStatusType, string> = {
-    'Active': 'var(--supervisor-runtime-state-icon-active)',
-    'Disconnected': 'var(--supervisor-runtime-state-icon-disconnected)',
-    'Idle': 'var(--supervisor-runtime-state-icon-idle)'
+    Active: 'var(--supervisor-runtime-state-icon-active)',
+    Disconnected: 'var(--supervisor-runtime-state-icon-disconnected)',
+    Idle: 'var(--supervisor-runtime-state-icon-idle)',
 };

@@ -19,7 +19,9 @@ async function consumeFrameMessages(frame: Frame) {
     });
 }
 
-test('help sends theme styles and routes welcome-page navigation through the backend', async ({ page }) => {
+test('help sends theme styles and routes welcome-page navigation through the backend', async ({
+    page,
+}) => {
     const backend = await openWebviewPage(page, 'help');
 
     await expect.poll(() => backend.notificationCount(HelpMethods.styles)).toBeGreaterThan(0);
@@ -39,7 +41,9 @@ test('help sends theme styles and routes welcome-page navigation through the bac
     });
 });
 
-test('help re-sends styles on theme changes and resets find state for welcome pages', async ({ page }) => {
+test('help re-sends styles on theme changes and resets find state for welcome pages', async ({
+    page,
+}) => {
     const backend = await openWebviewPage(page, 'help');
     const iframeUrl = createHelpFixtureUrl();
 
@@ -79,10 +83,14 @@ test('help re-sends styles on theme changes and resets find state for welcome pa
     await expect(page.locator('#help-find-input')).toHaveCount(0);
 
     await backend.notify(HelpMethods.themeChanged);
-    await expect.poll(() => backend.notificationCount(HelpMethods.styles)).toBe(initialStylesCount + 1);
+    await expect
+        .poll(() => backend.notificationCount(HelpMethods.styles))
+        .toBe(initialStylesCount + 1);
 });
 
-test('help bridges iframe lifecycle, scroll, find, copy, and execute-command events', async ({ page }) => {
+test('help bridges iframe lifecycle, scroll, find, copy, and execute-command events', async ({
+    page,
+}) => {
     const backend = await openWebviewPage(page, 'help');
     const iframeUrl = createHelpFixtureUrl();
     const completeNotification = backend.waitForNextNotification(HelpMethods.complete);
@@ -121,7 +129,9 @@ test('help bridges iframe lifecycle, scroll, find, copy, and execute-command eve
 
     const copySelection = backend.waitForNextNotification(HelpMethods.copySelection);
     await frame.evaluate(() => {
-        (window as Window & { __helpFixture: { triggerCopyShortcut: () => void } }).__helpFixture.triggerCopyShortcut();
+        (
+            window as Window & { __helpFixture: { triggerCopyShortcut: () => void } }
+        ).__helpFixture.triggerCopyShortcut();
     });
     const copyNotification = await copySelection;
     expect(copyNotification.params).toEqual({ selection: 'fixture selection' });
@@ -194,32 +204,52 @@ test('help proxies iframe navigation events and drives iframe find commands', as
 
     await consumeFrameMessages(frame);
     await findInput.fill('topic');
-    await expect.poll(async () => {
-        const messages = await consumeFrameMessages(frame);
-        return messages.some((message) => message.id === 'positron-help-update-find' && message.findValue === 'topic');
-    }).toBe(true);
+    await expect
+        .poll(async () => {
+            const messages = await consumeFrameMessages(frame);
+            return messages.some(
+                (message) =>
+                    message.id === 'positron-help-update-find' && message.findValue === 'topic',
+            );
+        })
+        .toBe(true);
 
     await consumeFrameMessages(frame);
     await page.getByLabel('Previous Match').click();
-    await expect.poll(async () => {
-        const messages = await consumeFrameMessages(frame);
-        return messages.some((message) => message.id === 'positron-help-find-previous' && message.findValue === 'topic');
-    }).toBe(true);
+    await expect
+        .poll(async () => {
+            const messages = await consumeFrameMessages(frame);
+            return messages.some(
+                (message) =>
+                    message.id === 'positron-help-find-previous' && message.findValue === 'topic',
+            );
+        })
+        .toBe(true);
 
     await consumeFrameMessages(frame);
     await page.getByLabel('Next Match').click();
-    await expect.poll(async () => {
-        const messages = await consumeFrameMessages(frame);
-        return messages.some((message) => message.id === 'positron-help-find-next' && message.findValue === 'topic');
-    }).toBe(true);
+    await expect
+        .poll(async () => {
+            const messages = await consumeFrameMessages(frame);
+            return messages.some(
+                (message) =>
+                    message.id === 'positron-help-find-next' && message.findValue === 'topic',
+            );
+        })
+        .toBe(true);
 
     await consumeFrameMessages(frame);
     await findInput.press('Escape');
     await expect(page.locator('#help-find-input')).toHaveCount(0);
-    await expect.poll(async () => {
-        const messages = await consumeFrameMessages(frame);
-        return messages.some((message) => message.id === 'positron-help-update-find' && message.findValue === undefined);
-    }).toBe(true);
+    await expect
+        .poll(async () => {
+            const messages = await consumeFrameMessages(frame);
+            return messages.some(
+                (message) =>
+                    message.id === 'positron-help-update-find' && message.findValue === undefined,
+            );
+        })
+        .toBe(true);
 });
 
 test('help sends history and navigation actions back to the extension host', async ({ page }) => {

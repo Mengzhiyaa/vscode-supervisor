@@ -5,8 +5,8 @@
     Mirrors: positron/.../components/activityOutputStream.tsx
 -->
 <script lang="ts">
-    import { ActivityItemStream } from "./classes";
-    import ConsoleOutputLines from "./ConsoleOutputLines.svelte";
+    import { ActivityItemStream } from './classes';
+    import ConsoleOutputLines from './ConsoleOutputLines.svelte';
 
     interface Props {
         activityItemStream: ActivityItemStream;

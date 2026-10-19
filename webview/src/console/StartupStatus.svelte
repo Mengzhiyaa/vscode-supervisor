@@ -3,9 +3,9 @@
   1:1 Positron replication - Shows startup status in console before runtime starts
 -->
 <script lang="ts">
-    import RuntimeStartupProgress from "./RuntimeStartupProgress.svelte";
-    import type { RuntimeStartupPhase } from "../types/console";
-    import { localize } from "$lib/localization";
+    import RuntimeStartupProgress from './RuntimeStartupProgress.svelte';
+    import type { RuntimeStartupPhase } from '../types/console';
+    import { localize } from '$lib/localization';
 
     interface Props {
         startupPhase?: RuntimeStartupPhase;
@@ -22,7 +22,7 @@
     }
 
     let {
-        startupPhase = "initializing",
+        startupPhase = 'initializing',
         discoveredCount = 0,
         expectedCount = 0,
         latestRuntimePath,
@@ -31,34 +31,30 @@
     }: Props = $props();
 
     const messages = {
-        initializing: localize("console.initializing", "Waiting for extensions"),
+        initializing: localize('console.initializing', 'Waiting for extensions'),
         awaitingTrust: localize(
-            "console.awaitingTrust",
-            "Cannot start consoles in Restricted Mode.",
+            'console.awaitingTrust',
+            'Cannot start consoles in Restricted Mode.',
         ),
-        trustFolder: localize("console.trustFolder", "Trust this folder"),
-        newFolderTasks: localize("console.newFolderTasks", "Setting up workspace"),
-        reconnecting: localize("console.reconnecting", "Reconnecting"),
-        starting: localize("console.starting", "Starting"),
-        discovering: localize("console.discovering", "Discovering interpreters"),
+        trustFolder: localize('console.trustFolder', 'Trust this folder'),
+        newFolderTasks: localize('console.newFolderTasks', 'Setting up workspace'),
+        reconnecting: localize('console.reconnecting', 'Reconnecting'),
+        starting: localize('console.starting', 'Starting'),
+        discovering: localize('console.discovering', 'Discovering interpreters'),
     };
 
     const progressPercent = $derived(
-        expectedCount > 0
-            ? Math.min(100, (discoveredCount / expectedCount) * 100)
-            : undefined,
+        expectedCount > 0 ? Math.min(100, (discoveredCount / expectedCount) * 100) : undefined,
     );
 </script>
 
 <div class="startup-status">
-    {#if startupPhase !== "awaitingTrust"}
+    {#if startupPhase !== 'awaitingTrust'}
         <div class="progress" data-testid="startup-progress-bar">
             <div
                 class:infinite={progressPercent === undefined}
                 class="progress-bar"
-                style:width={progressPercent === undefined
-                    ? undefined
-                    : `${progressPercent}%`}
+                style:width={progressPercent === undefined ? undefined : `${progressPercent}%`}
             ></div>
         </div>
     {/if}
@@ -67,33 +63,33 @@
         <RuntimeStartupProgress {runtimeStartupEvent} />
     {/if}
 
-    {#if startupPhase === "initializing"}
+    {#if startupPhase === 'initializing'}
         <div class="initializing">{messages.initializing}...</div>
     {/if}
 
-    {#if startupPhase === "reconnecting" && !runtimeStartupEvent}
+    {#if startupPhase === 'reconnecting' && !runtimeStartupEvent}
         <div class="reconnecting">{messages.reconnecting}...</div>
     {/if}
 
-    {#if startupPhase === "awaitingTrust"}
+    {#if startupPhase === 'awaitingTrust'}
         <div class="awaiting">
             {messages.awaitingTrust}
             <button type="button" class="trust-link" onclick={onTrustWorkspace}>
                 {messages.trustFolder}
             </button>
-            {localize("console.enableConsoles", "to enable consoles.")}
+            {localize('console.enableConsoles', 'to enable consoles.')}
         </div>
     {/if}
 
-    {#if startupPhase === "newFolderTasks"}
+    {#if startupPhase === 'newFolderTasks'}
         <div class="new-folder-tasks">{messages.newFolderTasks}...</div>
     {/if}
 
-    {#if startupPhase === "starting" && !runtimeStartupEvent}
+    {#if startupPhase === 'starting' && !runtimeStartupEvent}
         <div class="starting">{messages.starting}...</div>
     {/if}
 
-    {#if startupPhase === "discovering" && !runtimeStartupEvent}
+    {#if startupPhase === 'discovering' && !runtimeStartupEvent}
         <div class="discovery">
             {messages.discovering}
             ...
@@ -123,11 +119,7 @@
         width: min(240px, calc(100% - 32px));
         height: 2px;
         margin-bottom: 10px;
-        background-color: color-mix(
-            in srgb,
-            var(--vscode-progressBar-background) 25%,
-            transparent
-        );
+        background-color: color-mix(in srgb, var(--vscode-progressBar-background) 25%, transparent);
         overflow: hidden;
     }
 

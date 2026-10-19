@@ -31,7 +31,10 @@ function makeNoopLogChannel(): vscode.LogOutputChannel {
 }
 
 suite('[Unit] runtime frontend event service', () => {
-    const originalTextDocuments = Object.getOwnPropertyDescriptor(vscode.workspace, 'textDocuments');
+    const originalTextDocuments = Object.getOwnPropertyDescriptor(
+        vscode.workspace,
+        'textDocuments',
+    );
     const originalExecuteCommand = vscode.commands.executeCommand.bind(vscode.commands);
 
     function setTextDocuments(documents: readonly vscode.TextDocument[]): void {
@@ -46,7 +49,9 @@ suite('[Unit] runtime frontend event service', () => {
     });
 
     teardown(() => {
-        (vscode.commands as { executeCommand: typeof vscode.commands.executeCommand }).executeCommand = originalExecuteCommand;
+        (
+            vscode.commands as { executeCommand: typeof vscode.commands.executeCommand }
+        ).executeCommand = originalExecuteCommand;
 
         if (originalTextDocuments) {
             Object.defineProperty(vscode.workspace, 'textDocuments', originalTextDocuments);
@@ -55,11 +60,12 @@ suite('[Unit] runtime frontend event service', () => {
 
     test('opens runtime-requested workspace in a new window when an editor is dirty', async () => {
         const calls: Array<{ command: string; args: unknown[] }> = [];
-        (vscode.commands as { executeCommand: typeof vscode.commands.executeCommand }).executeCommand =
-            (async (command: string, ...args: unknown[]) => {
-                calls.push({ command, args });
-                return undefined;
-            }) as typeof vscode.commands.executeCommand;
+        (
+            vscode.commands as { executeCommand: typeof vscode.commands.executeCommand }
+        ).executeCommand = (async (command: string, ...args: unknown[]) => {
+            calls.push({ command, args });
+            return undefined;
+        }) as typeof vscode.commands.executeCommand;
         setTextDocuments([{ isDirty: true } as vscode.TextDocument]);
 
         const service = new RuntimeFrontendEventService(
@@ -87,11 +93,12 @@ suite('[Unit] runtime frontend event service', () => {
 
     test('preserves same-window workspace requests when no editor is dirty', async () => {
         const calls: Array<{ command: string; args: unknown[] }> = [];
-        (vscode.commands as { executeCommand: typeof vscode.commands.executeCommand }).executeCommand =
-            (async (command: string, ...args: unknown[]) => {
-                calls.push({ command, args });
-                return undefined;
-            }) as typeof vscode.commands.executeCommand;
+        (
+            vscode.commands as { executeCommand: typeof vscode.commands.executeCommand }
+        ).executeCommand = (async (command: string, ...args: unknown[]) => {
+            calls.push({ command, args });
+            return undefined;
+        }) as typeof vscode.commands.executeCommand;
 
         const service = new RuntimeFrontendEventService(
             { onDidReceiveRuntimeEvent: createEventStub() } as any,

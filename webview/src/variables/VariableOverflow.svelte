@@ -3,8 +3,8 @@
   1:1 Positron replication - Shows "... more values" for truncated lists
 -->
 <script lang="ts">
-    import { localize } from "$lib/localization";
-    import VerticalSplitter from "./VerticalSplitter.svelte";
+    import { localize } from '$lib/localization';
+    import VerticalSplitter from './VerticalSplitter.svelte';
 
     interface Props {
         entryId: string;
@@ -35,7 +35,7 @@
         selected = false,
         focused = false,
         disabled = false,
-        style = "",
+        style = '',
         onselect,
         ondeselect,
         onBeginResizeNameColumn,
@@ -44,15 +44,10 @@
 
     // Detect platform for modifier key
     const isMac =
-        typeof navigator !== "undefined" &&
-        navigator.platform.toLowerCase().includes("mac");
+        typeof navigator !== 'undefined' && navigator.platform.toLowerCase().includes('mac');
 
     let valueText = $derived(
-        localize(
-            "variables.moreValues",
-            "{0} more values",
-            overflowValues.toLocaleString(),
-        ),
+        localize('variables.moreValues', '{0} more values', overflowValues.toLocaleString()),
     );
     let indentMargin = $derived(indentLevel * 20);
 
@@ -89,26 +84,16 @@
     aria-disabled={disabled}
     onmousedown={handleMouseDown}
 >
-    <div
-        class="name-column"
-        style="width: {nameColumnWidth}px; min-width: {nameColumnWidth}px;"
-    >
-        <div
-            class="name-column-indenter"
-            style="margin-left: {indentMargin}px;"
-        >
+    <div class="name-column" style="width: {nameColumnWidth}px; min-width: {nameColumnWidth}px;">
+        <div class="name-column-indenter" style="margin-left: {indentMargin}px;">
             <div class="gutter"></div>
             <div class="name-value">…</div>
         </div>
     </div>
-    <VerticalSplitter
-        onBeginResize={onBeginResizeNameColumn}
-        onResize={onResizeNameColumn}
-    />
+    <VerticalSplitter onBeginResize={onBeginResizeNameColumn} onResize={onResizeNameColumn} />
     <div
         class="details-column"
-        style="width: {detailsColumnWidth -
-            6}px; min-width: {detailsColumnWidth - 6}px;"
+        style="width: {detailsColumnWidth - 6}px; min-width: {detailsColumnWidth - 6}px;"
     >
         <div class="value">{valueText}</div>
     </div>

@@ -13,16 +13,18 @@ suite('[Unit] Data Explorer extension backend', () => {
         let disposed = false;
         const transport: DataExplorerBackendTransport = {
             onDidEmitEvent: eventEmitter.event,
-            handleRpc: async request => {
+            handleRpc: async (request) => {
                 requests.push(request);
                 return request.method === 'get_state' ? backendState() : undefined;
             },
-            dispose: () => { disposed = true; },
+            dispose: () => {
+                disposed = true;
+            },
         };
         const registry = new DataExplorerBackendRegistry();
         registry.registerProvider({
             id: 'test-provider',
-            canHandle: uri => uri.scheme === 'test-data',
+            canHandle: (uri) => uri.scheme === 'test-data',
             open: async () => transport,
         });
         const backend = await registry.open(vscode.Uri.parse('test-data:/table'));
@@ -30,7 +32,10 @@ suite('[Unit] Data Explorer extension backend', () => {
         await backend.setSortColumns([{ column_index: 0, ascending: true }]);
 
         assert.strictEqual(state.display_name, 'Extension table');
-        assert.deepStrictEqual(requests.map(request => request.method), ['get_state', 'set_sort_columns']);
+        assert.deepStrictEqual(
+            requests.map((request) => request.method),
+            ['get_state', 'set_sort_columns'],
+        );
         assert.deepStrictEqual(requests[1].params, {
             sort_keys: [{ column_index: 0, ascending: true }],
         });
@@ -52,11 +57,16 @@ suite('[Unit] Data Explorer extension backend', () => {
         const provider = {
             id: 'duplicate',
             canHandle: () => false,
-            open: async () => { throw new Error('not called'); },
+            open: async () => {
+                throw new Error('not called');
+            },
         };
         registry.registerProvider(provider);
         assert.throws(() => registry.registerProvider(provider), /already registered/);
-        await assert.rejects(() => registry.open(vscode.Uri.parse('file:/data.unknown')), /No Data Explorer backend/);
+        await assert.rejects(
+            () => registry.open(vscode.Uri.parse('file:/data.unknown')),
+            /No Data Explorer backend/,
+        );
         registry.dispose();
     });
 
@@ -69,7 +79,7 @@ suite('[Unit] Data Explorer extension backend', () => {
             open: async () => ({
                 datasetId: 'dataset-42',
                 clientId: 'client-42',
-                handleRpc: async request => {
+                handleRpc: async (request) => {
                     requests.push(request);
                     return { result: request.method === 'get_state' ? backendState() : undefined };
                 },
@@ -85,10 +95,10 @@ suite('[Unit] Data Explorer extension backend', () => {
         assert.strictEqual(backend.datasetId, 'dataset-42');
         assert.strictEqual(backend.clientId, 'client-42');
         assert.strictEqual(state.display_name, 'Extension table');
-        assert.deepStrictEqual(requests.map(request => request.method), [
-            'get_state',
-            'open_data_explorer',
-        ]);
+        assert.deepStrictEqual(
+            requests.map((request) => request.method),
+            ['get_state', 'open_data_explorer'],
+        );
         backend.dispose();
         registry.dispose();
     });
@@ -100,9 +110,10 @@ suite('[Unit] Data Explorer extension backend', () => {
             id: 'error-provider',
             canHandle: () => true,
             open: async () => ({
-                handleRpc: async () => useLegacyError
-                    ? { error_message: 'legacy failure' }
-                    : { error: { code: 'E_DATA', message: 'structured failure' } },
+                handleRpc: async () =>
+                    useLegacyError
+                        ? { error_message: 'legacy failure' }
+                        : { error: { code: 'E_DATA', message: 'structured failure' } },
                 dispose: () => undefined,
             }),
         });
@@ -135,7 +146,10 @@ function backendState() {
             },
             get_column_profiles: { support_status: SupportStatus.Unsupported, supported_types: [] },
             set_sort_columns: { support_status: SupportStatus.Unsupported },
-            export_data_selection: { support_status: SupportStatus.Unsupported, supported_formats: [] },
+            export_data_selection: {
+                support_status: SupportStatus.Unsupported,
+                supported_formats: [],
+            },
             convert_to_code: { support_status: SupportStatus.Unsupported, code_syntaxes: [] },
         },
     };

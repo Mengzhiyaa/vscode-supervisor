@@ -3,19 +3,16 @@
   Port from Positron's dataExplorer.tsx
 -->
 <script lang="ts">
-    import { onMount } from "svelte";
-    import { MediaQuery } from "svelte/reactivity";
-    import { getDataExplorerContext } from "../../../positronDataExplorerContext";
-    import VerticalSplitter from "../../splitters/verticalSplitter.svelte";
-    import SummaryRowActionBar from "./summaryRowActionBar/summaryRowActionBar.svelte";
-    import { PositronDataGrid } from "../../../../dataGrid";
-    import { PositronDataExplorerLayout } from "../../../types";
-    import type { WidthCalculators } from "../../../common/tableDataCache";
-    import {
-        WidthCalculator,
-        getComputedFont,
-    } from "../../../../dataGrid/classes/widthCalculator";
-    import { localize } from "../../../nls";
+    import { onMount } from 'svelte';
+    import { MediaQuery } from 'svelte/reactivity';
+    import { getDataExplorerContext } from '../../../positronDataExplorerContext';
+    import VerticalSplitter from '../../splitters/verticalSplitter.svelte';
+    import SummaryRowActionBar from './summaryRowActionBar/summaryRowActionBar.svelte';
+    import { PositronDataGrid } from '../../../../dataGrid';
+    import { PositronDataExplorerLayout } from '../../../types';
+    import type { WidthCalculators } from '../../../common/tableDataCache';
+    import { WidthCalculator, getComputedFont } from '../../../../dataGrid/classes/widthCalculator';
+    import { localize } from '../../../nls';
 
     const MIN_COLUMN_WIDTH = 300;
     const DEFAULT_SUMMARY_WIDTH = 350;
@@ -23,19 +20,11 @@
     const context = getDataExplorerContext();
     const { notifyFocusChanged, stores } = context;
     const { state: explorerState } = stores;
-    const layout = $derived(
-        $explorerState.layout ?? PositronDataExplorerLayout.SummaryOnLeft,
-    );
-    const summaryWidth = $derived(
-        $explorerState.summaryWidth ?? DEFAULT_SUMMARY_WIDTH,
-    );
+    const layout = $derived($explorerState.layout ?? PositronDataExplorerLayout.SummaryOnLeft);
+    const summaryWidth = $derived($explorerState.summaryWidth ?? DEFAULT_SUMMARY_WIDTH);
     const isSummaryCollapsed = $derived($explorerState.summaryCollapsed ?? false);
-    const tableDataDataGridInstance = $derived(
-        context.instance.tableDataDataGridInstance,
-    );
-    const tableSchemaDataGridInstance = $derived(
-        context.instance.tableSchemaDataGridInstance,
-    );
+    const tableDataDataGridInstance = $derived(context.instance.tableDataDataGridInstance);
+    const tableSchemaDataGridInstance = $derived(context.instance.tableSchemaDataGridInstance);
 
     let dataExplorerRef: HTMLDivElement | null = null;
     let columnNameExemplarRef: HTMLDivElement | null = null;
@@ -43,38 +32,22 @@
     let sortIndexExemplarRef: HTMLDivElement | null = null;
     let cellValueExemplarRef: HTMLDivElement | null = null;
     let widthCalculator: WidthCalculator | undefined;
-    let measuredFonts = "";
+    let measuredFonts = '';
 
     let width = $state(0);
     let columnsWidth = $state(0);
     let animateColumnsWidth = $state(false);
     const columnsCollapsed = $derived(isSummaryCollapsed);
     let initialSummaryLayoutApplied = false;
-    const reducedMotion = new MediaQuery(
-        "prefers-reduced-motion: reduce",
-        false,
-    );
-    const collapseSummaryLabel = localize(
-        "dataExplorer.collapseSummary",
-        "Collapse summary",
-    );
-    const expandSummaryLabel = localize(
-        "dataExplorer.expandSummary",
-        "Expand summary",
-    );
-    const columnSummaryLabel = localize(
-        "dataExplorer.columnSummary",
-        "Column Summary",
-    );
-    const resizeSummaryLabel = localize(
-        "dataExplorer.resizeSummary",
-        "Resize summary panel",
-    );
+    const reducedMotion = new MediaQuery('prefers-reduced-motion: reduce', false);
+    const collapseSummaryLabel = localize('dataExplorer.collapseSummary', 'Collapse summary');
+    const expandSummaryLabel = localize('dataExplorer.expandSummary', 'Expand summary');
+    const columnSummaryLabel = localize('dataExplorer.columnSummary', 'Column Summary');
+    const resizeSummaryLabel = localize('dataExplorer.resizeSummary', 'Resize summary panel');
 
     $effect(() => {
         if (!columnsCollapsed) {
-            const base =
-                summaryWidth > 0 ? summaryWidth : DEFAULT_SUMMARY_WIDTH;
+            const base = summaryWidth > 0 ? summaryWidth : DEFAULT_SUMMARY_WIDTH;
             columnsWidth = Math.max(base, MIN_COLUMN_WIDTH);
         }
     });
@@ -86,11 +59,7 @@
         const measuredWidth = width;
         const preferredWidth = Math.max(summaryWidth || DEFAULT_SUMMARY_WIDTH, MIN_COLUMN_WIDTH);
         const collapsed = isSummaryCollapsed;
-        if (
-            initialSummaryLayoutApplied ||
-            measuredWidth <= 0 ||
-            !$explorerState.backendState
-        ) {
+        if (initialSummaryLayoutApplied || measuredWidth <= 0 || !$explorerState.backendState) {
             return;
         }
         initialSummaryLayoutApplied = true;
@@ -108,20 +77,20 @@
         const fontObserver = new MutationObserver(() => initWidthCalculators());
         const observationOptions = {
             attributes: true,
-            attributeFilter: ["style", "class"],
+            attributeFilter: ['style', 'class'],
         };
         fontObserver.observe(document.documentElement, observationOptions);
         fontObserver.observe(document.body, observationOptions);
 
         const handleFontsLoaded = () => {
-            measuredFonts = "";
+            measuredFonts = '';
             initWidthCalculators();
         };
-        document.fonts.addEventListener("loadingdone", handleFontsLoaded);
+        document.fonts.addEventListener('loadingdone', handleFontsLoaded);
 
         return () => {
             fontObserver.disconnect();
-            document.fonts.removeEventListener("loadingdone", handleFontsLoaded);
+            document.fonts.removeEventListener('loadingdone', handleFontsLoaded);
             tableDataDataGridInstance.setWidthCalculators(undefined);
             widthCalculator?.dispose();
         };
@@ -135,15 +104,17 @@
             !cellValueExemplarRef
         )
             return;
-        if (!tableDataDataGridInstance)
-            return;
+        if (!tableDataDataGridInstance) return;
 
         const columnNameFont = getComputedFont(columnNameExemplarRef);
         const typeNameFont = getComputedFont(typeNameExemplarRef);
         const sortIndexFont = getComputedFont(sortIndexExemplarRef);
         const cellValueFont = getComputedFont(cellValueExemplarRef);
         const nextFonts = JSON.stringify([
-            columnNameFont, typeNameFont, sortIndexFont, cellValueFont,
+            columnNameFont,
+            typeNameFont,
+            sortIndexFont,
+            cellValueFont,
         ]);
         if (measuredFonts === nextFonts) {
             return;
@@ -155,17 +126,14 @@
             columnNameFont,
             typeNameFont,
             sortIndexFont,
-            horizontalCellPadding:
-                tableDataDataGridInstance.horizontalCellPadding ?? 8,
+            horizontalCellPadding: tableDataDataGridInstance.horizontalCellPadding ?? 8,
         });
         widthCalculator = calculator;
 
         const spaceWidth = calculator.measureSpaceWidth(cellValueFont);
         const widthCalculators: WidthCalculators = {
-            columnHeaderWidthCalculator: (
-                columnName: string,
-                typeName: string,
-            ) => calculator.calculateColumnHeaderWidth(columnName, typeName),
+            columnHeaderWidthCalculator: (columnName: string, typeName: string) =>
+                calculator.calculateColumnHeaderWidth(columnName, typeName),
             columnValueWidthCalculator: (length: number) =>
                 calculator.calculateCellValueWidth(length, spaceWidth),
         };
@@ -202,21 +170,18 @@
     }
 
     function handleColumnTransitionEnd(event: TransitionEvent) {
-        if (event.propertyName === "width") {
+        if (event.propertyName === 'width') {
             animateColumnsWidth = false;
         }
     }
 
-    function getColumnWidth(side: "left" | "right"): string {
-        const summarySide =
-            layout === PositronDataExplorerLayout.SummaryOnLeft
-                ? "left"
-                : "right";
+    function getColumnWidth(side: 'left' | 'right'): string {
+        const summarySide = layout === PositronDataExplorerLayout.SummaryOnLeft ? 'left' : 'right';
         if (side !== summarySide) {
-            return "auto";
+            return 'auto';
         }
 
-        return columnsCollapsed ? "0" : `${columnsWidth}px`;
+        return columnsCollapsed ? '0' : `${columnsWidth}px`;
     }
 
     function handleSplitterInvert(invert: boolean) {
@@ -229,8 +194,7 @@
 <div
     class="data-explorer"
     class:summary-on-left={layout === PositronDataExplorerLayout.SummaryOnLeft}
-    class:summary-on-right={layout ===
-        PositronDataExplorerLayout.SummaryOnRight}
+    class:summary-on-right={layout === PositronDataExplorerLayout.SummaryOnRight}
     bind:this={dataExplorerRef}
     bind:clientWidth={width}
 >
@@ -242,7 +206,7 @@
     <div
         class="left-column"
         class:animate-width={animateColumnsWidth}
-        style:width={getColumnWidth("left")}
+        style:width={getColumnWidth('left')}
         ontransitionend={handleColumnTransitionEnd}
     >
         {#if layout === PositronDataExplorerLayout.SummaryOnLeft}
@@ -296,7 +260,7 @@
     <div
         class="right-column"
         class:animate-width={animateColumnsWidth}
-        style:width={getColumnWidth("right")}
+        style:width={getColumnWidth('right')}
         ontransitionend={handleColumnTransitionEnd}
     >
         {#if layout !== PositronDataExplorerLayout.SummaryOnLeft}
@@ -360,32 +324,17 @@
     }
 
     :global(.data-explorer-panel) .data-explorer .column-name-exemplar {
-        font-weight: var(
-            --positron-data-grid-column-header-title-font-weight,
-            600
-        );
-        font-size: var(
-            --positron-data-grid-column-header-title-font-size,
-            12px
-        );
+        font-weight: var(--positron-data-grid-column-header-title-font-weight, 600);
+        font-size: var(--positron-data-grid-column-header-title-font-size, 12px);
     }
 
     :global(.data-explorer-panel) .data-explorer .type-name-exemplar {
-        font-size: var(
-            --positron-data-grid-column-header-description-font-size,
-            11px
-        );
+        font-size: var(--positron-data-grid-column-header-description-font-size, 11px);
     }
 
     :global(.data-explorer-panel) .data-explorer .sort-index-exemplar {
-        font-size: var(
-            --positron-data-grid-column-header-sort-index-font-size,
-            10px
-        );
-        font-weight: var(
-            --positron-data-grid-column-header-sort-index-font-weight,
-            600
-        );
+        font-size: var(--positron-data-grid-column-header-sort-index-font-size, 10px);
+        font-weight: var(--positron-data-grid-column-header-sort-index-font-weight, 600);
         font-variant-numeric: var(
             --positron-data-grid-column-header-sort-index-font-variant-numeric,
             tabular-nums
@@ -414,10 +363,7 @@
         grid-template-rows: [data-grid] 1fr [end-rows];
     }
 
-    :global(.data-explorer-panel)
-        .data-explorer
-        .left-column
-        .data-grid-container {
+    :global(.data-explorer-panel) .data-explorer .left-column .data-grid-container {
         min-height: 0;
         grid-row: data-grid / end-rows;
         position: relative;
@@ -436,15 +382,10 @@
         grid-column: splitter / collapsed-right-spacer;
     }
 
-    :global(.data-explorer-panel)
-        .data-explorer
-        .splitter
-        :global(.vertical-splitter) {
+    :global(.data-explorer-panel) .data-explorer .splitter :global(.vertical-splitter) {
         border-left: 1px solid var(--vscode-positronDataExplorer-border);
         border-right: 1px solid var(--vscode-positronDataExplorer-border);
-        background-color: var(
-            --vscode-positronDataExplorer-contrastBackground
-        );
+        background-color: var(--vscode-positronDataExplorer-contrastBackground);
     }
 
     :global(.data-explorer-panel) .data-explorer .collapsed-right-spacer {
@@ -467,16 +408,11 @@
         grid-template-rows: [data-grid] 1fr [end-rows];
     }
 
-    :global(.data-explorer-panel)
-        .data-explorer.summary-on-right
-        .right-column {
+    :global(.data-explorer-panel) .data-explorer.summary-on-right .right-column {
         grid-template-rows: [summary-row-action-bar] 36px [data-grid] 1fr [end-rows];
     }
 
-    :global(.data-explorer-panel)
-        .data-explorer
-        .right-column
-        .data-grid-container {
+    :global(.data-explorer-panel) .data-explorer .right-column .data-grid-container {
         min-height: 0;
         grid-row: data-grid / end-rows;
         position: relative;
@@ -536,5 +472,4 @@
     .summary-data-grid :global(.column-summary) {
         height: 100%;
     }
-
 </style>

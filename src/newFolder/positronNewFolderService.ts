@@ -21,11 +21,15 @@ interface IPositronNewFolderTaskRegistration {
 export class PositronNewFolderService implements IPositronNewFolderService {
     private readonly _disposables: vscode.Disposable[] = [];
     private readonly _initTaskRegistrations = new Map<number, IPositronNewFolderTaskRegistration>();
-    private readonly _postInitTaskRegistrations = new Map<number, IPositronNewFolderTaskRegistration>();
+    private readonly _postInitTaskRegistrations = new Map<
+        number,
+        IPositronNewFolderTaskRegistration
+    >();
     private readonly _runningInitTasks = new Map<number, Promise<void>>();
     private readonly _runningPostInitTasks = new Map<number, Promise<void>>();
 
-    private readonly _onDidChangeNewFolderStartupPhase = new vscode.EventEmitter<NewFolderStartupPhase>();
+    private readonly _onDidChangeNewFolderStartupPhase =
+        new vscode.EventEmitter<NewFolderStartupPhase>();
     readonly onDidChangeNewFolderStartupPhase = this._onDidChangeNewFolderStartupPhase.event;
 
     private readonly _onDidChangePendingInitTasks = new vscode.EventEmitter<Set<string>>();
@@ -74,7 +78,10 @@ export class PositronNewFolderService implements IPositronNewFolderService {
 
     get pendingPostInitTasks(): Set<string> {
         return new Set(
-            Array.from(this._postInitTaskRegistrations.values(), (registration) => registration.label),
+            Array.from(
+                this._postInitTaskRegistrations.values(),
+                (registration) => registration.label,
+            ),
         );
     }
 
@@ -85,7 +92,10 @@ export class PositronNewFolderService implements IPositronNewFolderService {
     async storeNewFolderConfig(newFolderConfig: NewFolderConfiguration): Promise<void> {
         this._newFolderConfig = newFolderConfig;
         this._newFolderRuntimeMetadata = newFolderConfig.runtimeMetadata;
-        await this._context.globalState.update(POSITRON_NEW_FOLDER_CONFIG_STORAGE_KEY, newFolderConfig);
+        await this._context.globalState.update(
+            POSITRON_NEW_FOLDER_CONFIG_STORAGE_KEY,
+            newFolderConfig,
+        );
     }
 
     async clearNewFolderConfig(): Promise<void> {
@@ -103,13 +113,17 @@ export class PositronNewFolderService implements IPositronNewFolderService {
             return false;
         }
 
-        if (this._newFolderConfig.folderScheme &&
-            workspaceFolder.uri.scheme !== this._newFolderConfig.folderScheme) {
+        if (
+            this._newFolderConfig.folderScheme &&
+            workspaceFolder.uri.scheme !== this._newFolderConfig.folderScheme
+        ) {
             return false;
         }
 
-        if (this._newFolderConfig.folderAuthority &&
-            workspaceFolder.uri.authority !== this._newFolderConfig.folderAuthority) {
+        if (
+            this._newFolderConfig.folderAuthority &&
+            workspaceFolder.uri.authority !== this._newFolderConfig.folderAuthority
+        ) {
             return false;
         }
 
@@ -314,15 +328,15 @@ export class PositronNewFolderService implements IPositronNewFolderService {
                 this._newFolderRuntimeMetadata = registration.runtimeMetadata;
             }
         } catch (error) {
-            this._outputChannel.error(`${logPrefix} '${registration.label}' failed: ${getErrorMessage(error)}`);
+            this._outputChannel.error(
+                `${logPrefix} '${registration.label}' failed: ${getErrorMessage(error)}`,
+            );
         } finally {
             registrations.delete(registration.id);
         }
     }
 
-    private async _waitForRunningTasks(
-        runningTasks: Map<number, Promise<void>>,
-    ): Promise<void> {
+    private async _waitForRunningTasks(runningTasks: Map<number, Promise<void>>): Promise<void> {
         while (runningTasks.size > 0) {
             await Promise.allSettled(Array.from(runningTasks.values()));
         }

@@ -66,17 +66,19 @@ export class ExtensionHostMemoryInfoProvider implements ISupervisorMemoryInfoPro
     ) {
         this.source = remoteName
             ? {
-                providerKind: MemoryInfoProviderKind.Remote,
-                machineId: `remote:${remoteName}`,
-                remoteName,
-            }
+                  providerKind: MemoryInfoProviderKind.Remote,
+                  machineId: `remote:${remoteName}`,
+                  remoteName,
+              }
             : {
-                providerKind: MemoryInfoProviderKind.Local,
-                machineId: 'local-extension-host',
-            };
+                  providerKind: MemoryInfoProviderKind.Local,
+                  machineId: 'local-extension-host',
+              };
     }
 
-    async getProcessMemoryInfo(query: ProcessMemoryQuery = {}): Promise<SupervisorProcessMemoryInfo> {
+    async getProcessMemoryInfo(
+        query: ProcessMemoryQuery = {},
+    ): Promise<SupervisorProcessMemoryInfo> {
         try {
             const processes = await collectProcessSnapshot();
             const supervisorProcessId = this._getSupervisorProcessId();
@@ -96,19 +98,22 @@ export class ExtensionHostMemoryInfoProvider implements ISupervisorMemoryInfoPro
             // Positron accounts for the IDE/server process tree. Prefer the
             // application PID when exposed; otherwise only claim a recognizable
             // VS Code parent, rather than accidentally counting a login shell.
-            const applicationPid = this.source.providerKind === MemoryInfoProviderKind.Local
-                ? Number(process.env.VSCODE_PID) : process.ppid;
-            const application = processes.find(entry => entry.pid === applicationPid);
-            const applicationOverheadBytes = application &&
-                (applicationPid !== process.ppid || /code|electron|server-main/i.test(application.command))
-                ? sumProcessTreeMemory(processes, applicationPid, excludedFromExtensionHost)
-                : undefined;
+            const applicationPid =
+                this.source.providerKind === MemoryInfoProviderKind.Local
+                    ? Number(process.env.VSCODE_PID)
+                    : process.ppid;
+            const application = processes.find((entry) => entry.pid === applicationPid);
+            const applicationOverheadBytes =
+                application &&
+                (applicationPid !== process.ppid ||
+                    /code|electron|server-main/i.test(application.command))
+                    ? sumProcessTreeMemory(processes, applicationPid, excludedFromExtensionHost)
+                    : undefined;
 
             return {
                 totalSystemMemory: os.totalmem(),
                 freeSystemMemory: os.freemem(),
-                extensionHostOverheadBytes: extensionHostOverheadBytes ||
-                    process.memoryUsage().rss,
+                extensionHostOverheadBytes: extensionHostOverheadBytes || process.memoryUsage().rss,
                 applicationOverheadBytes,
                 supervisorOverheadBytes,
                 collectionMethod: 'process-tree',
@@ -193,21 +198,23 @@ async function collectProcessSnapshot(): Promise<ProcessSnapshotEntry[]> {
             ['-NoProfile', '-NonInteractive', '-Command', script],
             { maxBuffer: PROCESS_LIST_MAX_BUFFER, encoding: 'utf8' },
         );
-        const parsed = JSON.parse(stdout || '[]') as Record<string, unknown> | Record<string, unknown>[];
+        const parsed = JSON.parse(stdout || '[]') as
+            Record<string, unknown> | Record<string, unknown>[];
         const rows = Array.isArray(parsed) ? parsed : [parsed];
-        return rows.map(row => ({
-            pid: Number(row.ProcessId),
-            parentPid: Number(row.ParentProcessId),
-            residentBytes: Number(row.WorkingSetSize),
-            command: String(row.Name ?? ''),
-        })).filter(row => Number.isFinite(row.pid) && Number.isFinite(row.residentBytes));
+        return rows
+            .map((row) => ({
+                pid: Number(row.ProcessId),
+                parentPid: Number(row.ParentProcessId),
+                residentBytes: Number(row.WorkingSetSize),
+                command: String(row.Name ?? ''),
+            }))
+            .filter((row) => Number.isFinite(row.pid) && Number.isFinite(row.residentBytes));
     }
 
-    const { stdout } = await execFileAsync(
-        'ps',
-        ['-axo', 'pid=,ppid=,rss=,comm='],
-        { maxBuffer: PROCESS_LIST_MAX_BUFFER, encoding: 'utf8' },
-    );
+    const { stdout } = await execFileAsync('ps', ['-axo', 'pid=,ppid=,rss=,comm='], {
+        maxBuffer: PROCESS_LIST_MAX_BUFFER,
+        encoding: 'utf8',
+    });
     return parsePsProcessSnapshot(stdout);
 }
 

@@ -10,10 +10,11 @@ import { RuntimeClientInstance } from '../../runtime/RuntimeClientInstance';
 import type { RuntimeClientManager } from '../../runtime/runtimeClientManager';
 import { DataExplorerClientInstance } from './languageRuntimeDataExplorerClient';
 import { formatErrorForLogging } from '../../shared/errors';
-import { DataExplorerBackendRequest, PositronDataExplorerComm } from '../../runtime/comms/positronDataExplorerComm';
-import type {
-    IPositronDataExplorerService,
-} from './positronDataExplorerService';
+import {
+    DataExplorerBackendRequest,
+    PositronDataExplorerComm,
+} from '../../runtime/comms/positronDataExplorerComm';
+import type { IPositronDataExplorerService } from './positronDataExplorerService';
 import { RuntimeClientType, RuntimeState } from '../../internal/runtimeTypes';
 import { shouldKeepDataExplorerInline } from './dataExplorerRouting';
 
@@ -40,10 +41,10 @@ export class DataExplorerRuntime implements vscode.Disposable {
     constructor(
         private readonly _session: RuntimeSession,
         private readonly _dataExplorerService: IPositronDataExplorerService,
-        private readonly _logChannel: vscode.LogOutputChannel
+        private readonly _logChannel: vscode.LogOutputChannel,
     ) {
         this._disposables.push(
-            this._session.onDidChangeRuntimeState(state => {
+            this._session.onDidChangeRuntimeState((state) => {
                 if (state === RuntimeState.Exited) {
                     this._detachFromSession();
                 } else if (!this._attached) {
@@ -74,7 +75,7 @@ export class DataExplorerRuntime implements vscode.Disposable {
         this._attached = true;
         this._logChannel.debug(
             `[DataExplorerRuntime] Attaching to session ${this._session.sessionId} ` +
-            `(clientManager=${this._session.clientManager ? 'yes' : 'no'})`
+                `(clientManager=${this._session.clientManager ? 'yes' : 'no'})`,
         );
 
         // If client manager already exists, attach immediately
@@ -84,7 +85,7 @@ export class DataExplorerRuntime implements vscode.Disposable {
 
         // Listen for client manager creation
         this._runtimeDisposables.push(
-            this._session.onDidCreateClientManager(manager => {
+            this._session.onDidCreateClientManager((manager) => {
                 this._attachToClientManager(manager, 'clientManagerCreated');
             }),
         );
@@ -102,7 +103,7 @@ export class DataExplorerRuntime implements vscode.Disposable {
         if (!this._clientHandlerRegistered) {
             this._logChannel.debug(
                 `[DataExplorerRuntime] Registering DataExplorer client handler ` +
-                `for session ${this._session.sessionId} (${reason})`
+                    `for session ${this._session.sessionId} (${reason})`,
             );
 
             // Register handler for DataExplorer comm_open messages from the kernel
@@ -111,7 +112,7 @@ export class DataExplorerRuntime implements vscode.Disposable {
                 callback: (client, params) => {
                     this._handleDataExplorerClient(client, params as Record<string, unknown>);
                     return true; // Take ownership
-                }
+                },
             });
 
             this._clientHandlerRegistered = true;
@@ -122,14 +123,17 @@ export class DataExplorerRuntime implements vscode.Disposable {
         // was registered.
         for (const client of manager.clientInstances) {
             if (client.message.target_name === RuntimeClientType.DataExplorer) {
-                void this._handleDataExplorerClient(client, client.message.data as Record<string, unknown>);
+                void this._handleDataExplorerClient(
+                    client,
+                    client.message.data as Record<string, unknown>,
+                );
             }
         }
     }
 
     private async _handleDataExplorerClient(
         client: RuntimeClientInstance,
-        params: Record<string, unknown>
+        params: Record<string, unknown>,
     ): Promise<void> {
         const clientId = client.getClientId();
         if (this._attachedClients.get(clientId) === client) {
@@ -137,22 +141,20 @@ export class DataExplorerRuntime implements vscode.Disposable {
         }
         this._attachedClients.set(clientId, client);
 
-        this._logChannel.info(
-            `[DataExplorerRuntime] DataExplorer comm opened: ${clientId}`
-        );
+        this._logChannel.info(`[DataExplorerRuntime] DataExplorer comm opened: ${clientId}`);
 
         // Parse upstream metadata from comm_open params
         const requestedInlineOnly = params['inline_only'] === true;
         const inlineOnly = shouldKeepDataExplorerInline(
             this._session.sessionMetadata.sessionMode,
-            requestedInlineOnly
+            requestedInlineOnly,
         );
         const variablePath = parseVariablePath(params['variable_path']);
 
         if (requestedInlineOnly && !inlineOnly) {
             this._logChannel.debug(
                 `[DataExplorerRuntime] Promoting inline-only explorer ${clientId} ` +
-                `to a full editor for ${this._session.sessionMetadata.sessionMode} session ${this._session.sessionId}`
+                    `to a full editor for ${this._session.sessionMetadata.sessionMode} session ${this._session.sessionId}`,
             );
         }
 
@@ -162,10 +164,7 @@ export class DataExplorerRuntime implements vscode.Disposable {
         });
 
         // Create the Data Explorer client instance
-        const dataExplorerClient = new DataExplorerClientInstance(
-            comm,
-            this._logChannel
-        );
+        const dataExplorerClient = new DataExplorerClientInstance(comm, this._logChannel);
 
         try {
             // Create instance in the service
@@ -176,7 +175,7 @@ export class DataExplorerRuntime implements vscode.Disposable {
                     inlineOnly,
                     sessionId: this._session.sessionId,
                     variablePath,
-                }
+                },
             );
 
             this._runtimeDisposables.push(
@@ -184,7 +183,7 @@ export class DataExplorerRuntime implements vscode.Disposable {
                     if (this._attachedClients.get(clientId) === client) {
                         this._attachedClients.delete(clientId);
                     }
-                })
+                }),
             );
 
             // Associate with variable if present in params
@@ -195,14 +194,14 @@ export class DataExplorerRuntime implements vscode.Disposable {
 
             this._logChannel.info(
                 `[DataExplorerRuntime] Created DataExplorer instance: ${instance.identifier} ` +
-                `for "${instance.displayName}"` +
-                (inlineOnly ? ' (inline-only)' : '') +
-                (variablePath ? ` (path: ${JSON.stringify(variablePath)})` : '')
+                    `for "${instance.displayName}"` +
+                    (inlineOnly ? ' (inline-only)' : '') +
+                    (variablePath ? ` (path: ${JSON.stringify(variablePath)})` : ''),
             );
         } catch (error) {
             const message = formatErrorForLogging(error);
             this._logChannel.error(
-                `[DataExplorerRuntime] Failed to create DataExplorer instance: ${message}`
+                `[DataExplorerRuntime] Failed to create DataExplorer instance: ${message}`,
             );
             if (this._attachedClients.get(clientId) === client) {
                 this._attachedClients.delete(clientId);
@@ -216,7 +215,7 @@ export class DataExplorerRuntime implements vscode.Disposable {
         this._clientManagerRegistration?.dispose();
         this._clientManagerRegistration = undefined;
         this._clientManager = undefined;
-        this._runtimeDisposables.forEach(d => d.dispose());
+        this._runtimeDisposables.forEach((d) => d.dispose());
         this._runtimeDisposables.length = 0;
         this._clientHandlerRegistered = false;
         this._attachedClients.clear();
@@ -224,6 +223,6 @@ export class DataExplorerRuntime implements vscode.Disposable {
 
     dispose(): void {
         this._detachFromSession();
-        this._disposables.forEach(d => d.dispose());
+        this._disposables.forEach((d) => d.dispose());
     }
 }

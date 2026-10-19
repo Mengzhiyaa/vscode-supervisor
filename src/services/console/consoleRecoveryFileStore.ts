@@ -45,11 +45,13 @@ function isSerializedConsoleState(value: unknown): value is SerializedConsoleSta
         return false;
     }
     const state = value as Partial<SerializedConsoleState>;
-    return (state.version === 1 || state.version === 2 || state.version === 3) &&
+    return (
+        (state.version === 1 || state.version === 2 || state.version === 3) &&
         Array.isArray(state.items) &&
         Array.isArray(state.inputHistory) &&
         typeof state.trace === 'boolean' &&
-        typeof state.wordWrap === 'boolean';
+        typeof state.wordWrap === 'boolean'
+    );
 }
 
 /**
@@ -84,20 +86,27 @@ export class ConsoleRecoveryFileStore {
         await mkdir(this._sessionsRoot(), { recursive: true });
 
         try {
-            const parsed = JSON.parse(await readFile(this._manifestPath(), 'utf8')) as Partial<RecoveryManifest>;
-            if (parsed.schemaVersion !== SchemaVersion || !parsed.sessions || typeof parsed.sessions !== 'object') {
+            const parsed = JSON.parse(
+                await readFile(this._manifestPath(), 'utf8'),
+            ) as Partial<RecoveryManifest>;
+            if (
+                parsed.schemaVersion !== SchemaVersion ||
+                !parsed.sessions ||
+                typeof parsed.sessions !== 'object'
+            ) {
                 throw new Error('unsupported or malformed recovery manifest');
             }
             this._manifest = {
                 schemaVersion: SchemaVersion,
-                activeSessionId: typeof parsed.activeSessionId === 'string'
-                    ? parsed.activeSessionId
-                    : undefined,
+                activeSessionId:
+                    typeof parsed.activeSessionId === 'string' ? parsed.activeSessionId : undefined,
                 sessions: parsed.sessions,
             };
         } catch (error) {
             if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-                this._logChannel.warn(`[ConsoleRecovery] Ignoring invalid manifest: ${getErrorMessage(error)}`);
+                this._logChannel.warn(
+                    `[ConsoleRecovery] Ignoring invalid manifest: ${getErrorMessage(error)}`,
+                );
             }
             return;
         }
@@ -107,43 +116,44 @@ export class ConsoleRecoveryFileStore {
             state: SerializedConsoleState;
             hash: string;
         }> = [];
-        await Promise.all(Object.values(this._manifest.sessions).map(async entry => {
-            try {
-                const state = JSON.parse(await readFile(this._resolveRelativeFile(entry.file), 'utf8'));
-                if (!isSerializedConsoleState(state)) {
-                    throw new Error('invalid Console checkpoint payload');
-                }
-                if (entry.checksum) {
-                    const checksum = createHash('sha256')
-                        .update(JSON.stringify(state), 'utf8')
-                        .digest('hex');
-                    if (checksum !== entry.checksum) {
-                        throw new Error('Console checkpoint checksum mismatch');
+        await Promise.all(
+            Object.values(this._manifest.sessions).map(async (entry) => {
+                try {
+                    const state = JSON.parse(
+                        await readFile(this._resolveRelativeFile(entry.file), 'utf8'),
+                    );
+                    if (!isSerializedConsoleState(state)) {
+                        throw new Error('invalid Console checkpoint payload');
                     }
-                }
-                let recoveredState = state;
-                if (entry.journal?.file) {
-                    recoveredState = await this._replayJournal(
-                        entry,
-                        recoveredState,
+                    if (entry.checksum) {
+                        const checksum = createHash('sha256')
+                            .update(JSON.stringify(state), 'utf8')
+                            .digest('hex');
+                        if (checksum !== entry.checksum) {
+                            throw new Error('Console checkpoint checksum mismatch');
+                        }
+                    }
+                    let recoveredState = state;
+                    if (entry.journal?.file) {
+                        recoveredState = await this._replayJournal(entry, recoveredState);
+                    }
+                    this._states.set(entry.sessionId, recoveredState);
+                    if (entry.journal?.file) {
+                        journalMigrations.push({
+                            entry,
+                            state: recoveredState,
+                            hash: createHash('sha256')
+                                .update(JSON.stringify(recoveredState), 'utf8')
+                                .digest('hex'),
+                        });
+                    }
+                } catch (error) {
+                    this._logChannel.warn(
+                        `[ConsoleRecovery] Failed to load checkpoint for ${entry.sessionId}: ${getErrorMessage(error)}`,
                     );
                 }
-                this._states.set(entry.sessionId, recoveredState);
-                if (entry.journal?.file) {
-                    journalMigrations.push({
-                        entry,
-                        state: recoveredState,
-                        hash: createHash('sha256')
-                            .update(JSON.stringify(recoveredState), 'utf8')
-                            .digest('hex'),
-                    });
-                }
-            } catch (error) {
-                this._logChannel.warn(
-                    `[ConsoleRecovery] Failed to load checkpoint for ${entry.sessionId}: ${getErrorMessage(error)}`,
-                );
-            }
-        }));
+            }),
+        );
 
         for (const migration of journalMigrations) {
             try {
@@ -191,17 +201,10 @@ export class ConsoleRecoveryFileStore {
         }
 
         const serialized = JSON.stringify(state);
-        const checkpointChecksum = checksum ?? createHash('sha256')
-            .update(serialized, 'utf8')
-            .digest('hex');
+        const checkpointChecksum =
+            checksum ?? createHash('sha256').update(serialized, 'utf8').digest('hex');
         const previous = this._manifest.sessions[sessionId];
-        await this._writeCheckpoint(
-            sessionId,
-            state,
-            checkpointChecksum,
-            serialized,
-            previous,
-        );
+        await this._writeCheckpoint(sessionId, state, checkpointChecksum, serialized, previous);
     }
 
     private async _writeCheckpoint(
@@ -217,10 +220,7 @@ export class ConsoleRecoveryFileStore {
         await mkdir(sessionDirectory, { recursive: true });
 
         const generation = state.generation ?? 'legacy';
-        const generationHash = createHash('sha256')
-            .update(generation)
-            .digest('hex')
-            .slice(0, 16);
+        const generationHash = createHash('sha256').update(generation).digest('hex').slice(0, 16);
         const revision = state.revision ?? 0;
         const fileName = `checkpoint-${generationHash}-${revision}-${randomUUID()}.json`;
         const relativeFile = path.relative(root, path.join(sessionDirectory, fileName));
@@ -238,14 +238,18 @@ export class ConsoleRecoveryFileStore {
         this._states.set(sessionId, state);
         this._logChannel.debug(
             `[ConsoleRecovery] Checkpoint ${sessionId}: ` +
-            `bytes=${Buffer.byteLength(serialized, 'utf8')} revision=${revision}`,
+                `bytes=${Buffer.byteLength(serialized, 'utf8')} revision=${revision}`,
         );
 
         if (previous?.file && previous.file !== relativeFile) {
-            await rm(this._resolveRelativeFile(previous.file), { force: true }).catch(() => undefined);
+            await rm(this._resolveRelativeFile(previous.file), { force: true }).catch(
+                () => undefined,
+            );
         }
         if (previous?.journal?.file) {
-            await rm(this._resolveRelativeFile(previous.journal.file), { force: true }).catch(() => undefined);
+            await rm(this._resolveRelativeFile(previous.journal.file), { force: true }).catch(
+                () => undefined,
+            );
         }
     }
 
@@ -261,10 +265,14 @@ export class ConsoleRecoveryFileStore {
         await this._writeManifest();
         this._states.delete(sessionId);
         if (previous?.file) {
-            await rm(this._resolveRelativeFile(previous.file), { force: true }).catch(() => undefined);
+            await rm(this._resolveRelativeFile(previous.file), { force: true }).catch(
+                () => undefined,
+            );
         }
         if (previous?.journal?.file) {
-            await rm(this._resolveRelativeFile(previous.journal.file), { force: true }).catch(() => undefined);
+            await rm(this._resolveRelativeFile(previous.journal.file), { force: true }).catch(
+                () => undefined,
+            );
         }
     }
 
@@ -294,7 +302,9 @@ export class ConsoleRecoveryFileStore {
                         throw new Error('invalid journal checksum or schema');
                     }
                 } catch (error) {
-                    this._logChannel.warn(`[ConsoleRecovery] Ignoring invalid journal record for ${entry.sessionId}: ${getErrorMessage(error)}`);
+                    this._logChannel.warn(
+                        `[ConsoleRecovery] Ignoring invalid journal record for ${entry.sessionId}: ${getErrorMessage(error)}`,
+                    );
                     continue;
                 }
                 if (
@@ -306,7 +316,9 @@ export class ConsoleRecoveryFileStore {
                 }
             }
         } catch (error) {
-            this._logChannel.warn(`[ConsoleRecovery] Failed to replay journal for ${entry.sessionId}: ${getErrorMessage(error)}`);
+            this._logChannel.warn(
+                `[ConsoleRecovery] Failed to replay journal for ${entry.sessionId}: ${getErrorMessage(error)}`,
+            );
         }
         return recovered;
     }

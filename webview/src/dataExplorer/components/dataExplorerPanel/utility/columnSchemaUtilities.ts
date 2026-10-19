@@ -6,4 +6,4 @@
 export {
     getColumnSchemaTypeIcon as getColumnTypeIcon,
     matchesColumnSchemaSearch,
-} from "../../../columnSchemaUtils";
+} from '../../../columnSchemaUtils';

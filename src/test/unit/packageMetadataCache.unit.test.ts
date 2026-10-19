@@ -60,20 +60,24 @@ suite('[Unit] package metadata cache', () => {
             PositronPackagesInstance.prototype,
         ) as PositronPackagesInstance;
         Object.assign(instance as any, {
-            _packages: [{
-                id: 'numpy',
-                name: 'NumPy',
-                displayName: 'NumPy',
-                version: '2.0.0',
-            }],
-            _metadataCache: new Map([[
-                'numpy',
+            _packages: [
                 {
-                    version: '1.26.0',
-                    outdated: true,
-                    latestVersion: '2.1.0',
+                    id: 'numpy',
+                    name: 'NumPy',
+                    displayName: 'NumPy',
+                    version: '2.0.0',
                 },
-            ]]),
+            ],
+            _metadataCache: new Map([
+                [
+                    'numpy',
+                    {
+                        version: '1.26.0',
+                        outdated: true,
+                        latestVersion: '2.1.0',
+                    },
+                ],
+            ]),
         });
 
         assert.strictEqual(instance.packages[0].outdated, undefined);
@@ -89,13 +93,17 @@ suite('[Unit] package metadata cache', () => {
     test('persists per-runtime version anchors and evicts affected names', async () => {
         const storage = new MemoryMemento();
         const cache = new PackageMetadataCache(storage, logStub());
-        cache.upsert('runtime-1', {
-            numpy: {
-                version: '2.0.0',
-                outdated: true,
-                latestVersion: '2.1.0',
+        cache.upsert(
+            'runtime-1',
+            {
+                numpy: {
+                    version: '2.0.0',
+                    outdated: true,
+                    latestVersion: '2.1.0',
+                },
             },
-        }, 1_000);
+            1_000,
+        );
         await Promise.resolve();
 
         const restored = new PackageMetadataCache(storage, logStub());

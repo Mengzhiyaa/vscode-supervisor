@@ -14,13 +14,15 @@ export async function closeAllEditors(): Promise<void> {
  * editors showing it.
  */
 export async function openTextDocument(
-    uri: vscode.Uri
+    uri: vscode.Uri,
 ): Promise<[vscode.TextDocument, vscode.Disposable]> {
     const doc = await vscode.workspace.openTextDocument(uri);
 
     const disposable = toDisposable(async () => {
         const expected = normalizeUri(uri);
-        const editors = vscode.window.visibleTextEditors.filter(ed => normalizeUri(ed.document.uri) === expected);
+        const editors = vscode.window.visibleTextEditors.filter(
+            (ed) => normalizeUri(ed.document.uri) === expected,
+        );
 
         for (const ed of editors) {
             await vscode.window.showTextDocument(ed.document, ed.viewColumn, false);

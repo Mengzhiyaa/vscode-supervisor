@@ -3,8 +3,8 @@
   Menu button for plot history visibility policy and position
 -->
 <script lang="ts">
-    import { tick } from "svelte";
-    import { HistoryPolicy, HistoryPosition } from "./types";
+    import { tick } from 'svelte';
+    import { HistoryPolicy, HistoryPosition } from './types';
 
     // Props using Svelte 5 runes
     interface Props {
@@ -23,19 +23,19 @@
 
     // Policy labels (matching Positron's localized strings)
     const policyLabels: Record<HistoryPolicy, string> = {
-        [HistoryPolicy.AlwaysVisible]: "Always",
-        [HistoryPolicy.Automatic]: "Auto",
-        [HistoryPolicy.NeverVisible]: "Never",
+        [HistoryPolicy.AlwaysVisible]: 'Always',
+        [HistoryPolicy.Automatic]: 'Auto',
+        [HistoryPolicy.NeverVisible]: 'Never',
     };
 
     // Position labels
     const positionLabels: Record<HistoryPosition, string> = {
-        [HistoryPosition.Auto]: "Auto",
-        [HistoryPosition.Bottom]: "Bottom",
-        [HistoryPosition.Right]: "Right",
+        [HistoryPosition.Auto]: 'Auto',
+        [HistoryPosition.Bottom]: 'Bottom',
+        [HistoryPosition.Right]: 'Right',
     };
 
-    const tooltip = "Set plot history visibility and position";
+    const tooltip = 'Set plot history visibility and position';
     const policies: HistoryPolicy[] = [
         HistoryPolicy.AlwaysVisible,
         HistoryPolicy.Automatic,
@@ -101,8 +101,7 @@
     }
 
     function moveFocus(offset: number) {
-        const nextIndex =
-            (focusedItemIndex + offset + totalMenuItems) % totalMenuItems;
+        const nextIndex = (focusedItemIndex + offset + totalMenuItems) % totalMenuItems;
         void focusMenuItem(nextIndex);
     }
 
@@ -136,18 +135,18 @@
 
     function handleButtonKeydown(event: KeyboardEvent) {
         switch (event.key) {
-            case "ArrowDown":
-            case "Enter":
-            case " ":
-            case "Spacebar":
+            case 'ArrowDown':
+            case 'Enter':
+            case ' ':
+            case 'Spacebar':
                 event.preventDefault();
                 openMenu(getDefaultFocusedIndex());
                 break;
-            case "ArrowUp":
+            case 'ArrowUp':
                 event.preventDefault();
                 openMenu(totalMenuItems - 1);
                 break;
-            case "Escape":
+            case 'Escape':
                 event.preventDefault();
                 closeMenu();
                 break;
@@ -156,33 +155,33 @@
 
     function handleMenuKeydown(event: KeyboardEvent) {
         switch (event.key) {
-            case "ArrowDown":
+            case 'ArrowDown':
                 event.preventDefault();
                 moveFocus(1);
                 break;
-            case "ArrowUp":
+            case 'ArrowUp':
                 event.preventDefault();
                 moveFocus(-1);
                 break;
-            case "Home":
+            case 'Home':
                 event.preventDefault();
                 focusFirstItem();
                 break;
-            case "End":
+            case 'End':
                 event.preventDefault();
                 focusLastItem();
                 break;
-            case "Enter":
-            case " ":
-            case "Spacebar":
+            case 'Enter':
+            case ' ':
+            case 'Spacebar':
                 event.preventDefault();
                 activateFocusedItem();
                 break;
-            case "Escape":
+            case 'Escape':
                 event.preventDefault();
                 closeMenu();
                 break;
-            case "Tab":
+            case 'Tab':
                 closeMenu(false);
                 break;
         }
@@ -198,7 +197,7 @@
         }
 
         const target = event.target as HTMLElement;
-        if (!target.closest(".history-policy-menu")) {
+        if (!target.closest('.history-policy-menu')) {
             closeMenu(false);
         }
     }
@@ -213,7 +212,7 @@
         title={tooltip}
         aria-label={tooltip}
         aria-haspopup="menu"
-        aria-expanded={menuOpen ? "true" : "false"}
+        aria-expanded={menuOpen ? 'true' : 'false'}
         onclick={(e) => {
             e.stopPropagation();
             toggleMenu();

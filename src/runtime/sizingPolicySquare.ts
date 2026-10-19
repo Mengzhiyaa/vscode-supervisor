@@ -15,8 +15,8 @@ import { PlotClientInstance } from './PlotClientInstance';
  */
 export class PlotSizingPolicySquare
     extends SizingPolicyFixedAspectRatio
-    implements IPositronPlotSizingPolicy {
-
+    implements IPositronPlotSizingPolicy
+{
     constructor() {
         super(1);
     }

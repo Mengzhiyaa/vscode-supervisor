@@ -70,10 +70,12 @@ export function computeLowMemoryStatus(
 
     const percentRemaining = (freeBytes / totalBytes) * 100;
     const megabytesRemaining = freeBytes / (1024 * 1024);
-    const percentLow = thresholds.percent !== undefined &&
+    const percentLow =
+        thresholds.percent !== undefined &&
         thresholds.percent > 0 &&
         percentRemaining <= thresholds.percent;
-    const megabytesLow = thresholds.megabytes !== undefined &&
+    const megabytesLow =
+        thresholds.megabytes !== undefined &&
         thresholds.megabytes > 0 &&
         megabytesRemaining <= thresholds.megabytes;
 
@@ -139,16 +141,16 @@ export class MemoryUsageService implements vscode.Disposable {
         this._disposables.push(
             this._onDidUpdateMemoryUsage,
             this._onDidChangeEnabled,
-            this._sessionManager.onDidStartRuntime(session => {
+            this._sessionManager.onDidStartRuntime((session) => {
                 if (this._enabled) {
                     this._addSessionListener(session);
                 }
             }),
-            this._sessionManager.onDidDeleteRuntimeSession(sessionId => {
+            this._sessionManager.onDidDeleteRuntimeSession((sessionId) => {
                 this._removeSessionListener(sessionId);
                 this._poll();
             }),
-            this._sessionManager.onDidChangeRuntimeState(event => {
+            this._sessionManager.onDidChangeRuntimeState((event) => {
                 if (!this._enabled) {
                     return;
                 }
@@ -161,12 +163,13 @@ export class MemoryUsageService implements vscode.Disposable {
 
                 if (
                     event.old_state === RuntimeState.Busy &&
-                    (event.new_state === RuntimeState.Idle || event.new_state === RuntimeState.Ready)
+                    (event.new_state === RuntimeState.Idle ||
+                        event.new_state === RuntimeState.Ready)
                 ) {
                     this._schedulePostExecutionPoll();
                 }
             }),
-            vscode.window.onDidChangeWindowState(state => {
+            vscode.window.onDidChangeWindowState((state) => {
                 this._windowFocused = state.focused;
                 if (!this._enabled) {
                     return;
@@ -177,7 +180,7 @@ export class MemoryUsageService implements vscode.Disposable {
                     void this._poll();
                 }
             }),
-            vscode.workspace.onDidChangeConfiguration(event => {
+            vscode.workspace.onDidChangeConfiguration((event) => {
                 this._handleConfigurationChange(event);
             }),
         );
@@ -199,7 +202,7 @@ export class MemoryUsageService implements vscode.Disposable {
         this._stopPolling();
         this._cancelPostExecutionPoll();
         for (const disposables of this._sessionListeners.values()) {
-            disposables.forEach(disposable => disposable.dispose());
+            disposables.forEach((disposable) => disposable.dispose());
         }
         this._sessionListeners.clear();
         this._kernelMemory.clear();
@@ -255,7 +258,8 @@ export class MemoryUsageService implements vscode.Disposable {
         const listener = session.onDidUpdateResourceUsage((usage: RuntimeResourceUsage) => {
             this._kernelMemory.set(session.sessionId, {
                 sessionId: session.sessionId,
-                sessionName: session.dynState.sessionName ||
+                sessionName:
+                    session.dynState.sessionName ||
                     session.sessionMetadata.sessionName ||
                     session.runtimeMetadata.runtimeName,
                 languageId: session.runtimeMetadata.languageId,
@@ -270,7 +274,7 @@ export class MemoryUsageService implements vscode.Disposable {
     private _removeSessionListener(sessionId: string): void {
         const listeners = this._sessionListeners.get(sessionId);
         if (listeners) {
-            listeners.forEach(listener => listener.dispose());
+            listeners.forEach((listener) => listener.dispose());
             this._sessionListeners.delete(sessionId);
         }
         this._kernelMemory.delete(sessionId);
@@ -281,10 +285,9 @@ export class MemoryUsageService implements vscode.Disposable {
     }
 
     private _readPollingInterval(): number {
-        const configured = vscode.workspace.getConfiguration().get<number>(
-            POLLING_INTERVAL_SETTING,
-            DEFAULT_POLLING_INTERVAL_MS,
-        );
+        const configured = vscode.workspace
+            .getConfiguration()
+            .get<number>(POLLING_INTERVAL_SETTING, DEFAULT_POLLING_INTERVAL_MS);
         return Math.max(1000, configured);
     }
 
@@ -335,8 +338,9 @@ export class MemoryUsageService implements vscode.Disposable {
         this._pollInProgress = true;
         try {
             const processMemoryInfo = await this._memoryInfoProvider.getProcessMemoryInfo({
-                kernelProcessIds: Array.from(this._kernelMemory.values())
-                    .flatMap(session => session.processId ? [session.processId] : []),
+                kernelProcessIds: Array.from(this._kernelMemory.values()).flatMap((session) =>
+                    session.processId ? [session.processId] : [],
+                ),
             });
             if (!this._enabled) {
                 return;
@@ -351,11 +355,17 @@ export class MemoryUsageService implements vscode.Disposable {
                 source,
             } = processMemoryInfo;
             const kernelSessions = Array.from(this._kernelMemory.values());
-            const kernelTotalBytes = kernelSessions.reduce((sum, session) => sum + session.memoryBytes, 0);
+            const kernelTotalBytes = kernelSessions.reduce(
+                (sum, session) => sum + session.memoryBytes,
+                0,
+            );
             const usedBySystem = totalSystemMemory - freeSystemMemory;
             const otherProcessesBytes = Math.max(
                 0,
-                usedBySystem - kernelTotalBytes - (applicationOverheadBytes ?? extensionHostOverheadBytes) - (supervisorOverheadBytes ?? 0),
+                usedBySystem -
+                    kernelTotalBytes -
+                    (applicationOverheadBytes ?? extensionHostOverheadBytes) -
+                    (supervisorOverheadBytes ?? 0),
             );
 
             const snapshot: MemoryUsageSnapshot = {
@@ -383,10 +393,14 @@ export class MemoryUsageService implements vscode.Disposable {
             this._onDidUpdateMemoryUsage.fire(snapshot);
         } catch (error) {
             this._consecutivePollingFailures++;
-            this._outputChannel.warn(`[MemoryUsage] Failed to poll memory usage: ${getErrorMessage(error)}`);
+            this._outputChannel.warn(
+                `[MemoryUsage] Failed to poll memory usage: ${getErrorMessage(error)}`,
+            );
             if (this._consecutivePollingFailures >= 5) {
                 this._stopPolling();
-                this._outputChannel.warn('[MemoryUsage] Polling paused after 5 consecutive failures; focus the window to retry.');
+                this._outputChannel.warn(
+                    '[MemoryUsage] Polling paused after 5 consecutive failures; focus the window to retry.',
+                );
             }
         } finally {
             this._pollInProgress = false;
@@ -402,28 +416,38 @@ export class MemoryUsageService implements vscode.Disposable {
             return;
         }
 
-        if (vscode.workspace.getConfiguration().get<boolean>(LOW_MEMORY_NOTIFICATION_SETTING, true) === false) {
+        if (
+            vscode.workspace
+                .getConfiguration()
+                .get<boolean>(LOW_MEMORY_NOTIFICATION_SETTING, true) === false
+        ) {
             return;
         }
 
-        const settingId = snapshot.lowMemory?.unit === LowMemoryUnit.Percent
-            ? LOW_MEMORY_PERCENT_SETTING
-            : LOW_MEMORY_MB_SETTING;
+        const settingId =
+            snapshot.lowMemory?.unit === LowMemoryUnit.Percent
+                ? LOW_MEMORY_PERCENT_SETTING
+                : LOW_MEMORY_MB_SETTING;
         this._lowMemoryNotificationShown = true;
 
-        void vscode.window.showWarningMessage(
-            `The system is low on memory (${formatBytes(snapshot.freeSystemMemory)} remaining). Consider removing data from memory or closing unused consoles.`,
-            'Configure Low Memory Threshold',
-        ).then(selection => {
-            if (selection === 'Configure Low Memory Threshold') {
-                void vscode.commands.executeCommand('workbench.action.openSettings', `@id:${settingId}`);
-            }
-        });
+        void vscode.window
+            .showWarningMessage(
+                `The system is low on memory (${formatBytes(snapshot.freeSystemMemory)} remaining). Consider removing data from memory or closing unused consoles.`,
+                'Configure Low Memory Threshold',
+            )
+            .then((selection) => {
+                if (selection === 'Configure Low Memory Threshold') {
+                    void vscode.commands.executeCommand(
+                        'workbench.action.openSettings',
+                        `@id:${settingId}`,
+                    );
+                }
+            });
     }
 
     dispose(): void {
         this._deactivate();
-        this._disposables.forEach(disposable => disposable.dispose());
+        this._disposables.forEach((disposable) => disposable.dispose());
     }
 }
 

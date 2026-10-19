@@ -16,10 +16,18 @@ function recordingOutputChannel(): { channel: vscode.OutputChannel; read: () => 
     let output = '';
     const channel = {
         name: 'recording-output',
-        append: (value: string) => { output += value; },
-        appendLine: (value: string) => { output += `${value}\n`; },
-        replace: (value: string) => { output = value; },
-        clear: () => { output = ''; },
+        append: (value: string) => {
+            output += value;
+        },
+        appendLine: (value: string) => {
+            output += `${value}\n`;
+        },
+        replace: (value: string) => {
+            output = value;
+        },
+        clear: () => {
+            output = '';
+        },
         show: () => undefined,
         hide: () => undefined,
         dispose: () => undefined,
@@ -49,10 +57,10 @@ suite('[Unit] Logging sinks', () => {
         assert.strictEqual(
             redactLogMessage(
                 `Authorization: Bearer abc123 bearer_token=xyz --password hunter2 ` +
-                `--access-token=access123 --api_key key123 ${home}/project`,
+                    `--access-token=access123 --api_key key123 ${home}/project`,
             ),
             'Authorization: Bearer <redacted> bearer_token=<redacted> --password <redacted> ' +
-            '--access-token=<redacted> --api_key <redacted> <home>/project',
+                '--access-token=<redacted> --api_key <redacted> <home>/project',
         );
     });
 
@@ -69,9 +77,14 @@ suite('[Unit] Logging sinks', () => {
     test('formatted structured sink preserves Error stacks', () => {
         let captured = '';
         const channel = {
-            error: (message: string | Error) => { captured = String(message); },
+            error: (message: string | Error) => {
+                captured = String(message);
+            },
         } as vscode.LogOutputChannel;
-        const formatted = new LogOutputChannelFormatted(channel, message => `session-1 ${message}`);
+        const formatted = new LogOutputChannelFormatted(
+            channel,
+            (message) => `session-1 ${message}`,
+        );
         const error = new Error('kernel failed');
         error.stack = 'Error: kernel failed\n    at startKernel (kernel.ts:1:1)';
 

@@ -1,13 +1,12 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
-import type {
-    ILanguageCapabilityKey,
-    ILanguageOptionalCapabilityDescriptor,
-} from '../../api';
+import type { ILanguageCapabilityKey, ILanguageOptionalCapabilityDescriptor } from '../../api';
 import { LanguageCapabilityRegistry } from '../../languageRegistry/languageCapabilityRegistry';
 
 function createRegistry(
-    installSnapshot?: ConstructorParameters<typeof LanguageCapabilityRegistry>[0]['installSnapshot'],
+    installSnapshot?: ConstructorParameters<
+        typeof LanguageCapabilityRegistry
+    >[0]['installSnapshot'],
 ): LanguageCapabilityRegistry {
     return new LanguageCapabilityRegistry({
         services: {} as any,
@@ -18,12 +17,20 @@ function createRegistry(
 
 const sessionManager = {} as any;
 
-function coreBuilder(registry: LanguageCapabilityRegistry, revision: number, provider = { languageId: 'r' } as any) {
-    return registry.forExtension('publisher.r-extension').begin({
-        languageId: 'r',
-        registrationId: 'core',
-        revision,
-    }).setRuntimeProvider(provider).setSessionManager(sessionManager);
+function coreBuilder(
+    registry: LanguageCapabilityRegistry,
+    revision: number,
+    provider = { languageId: 'r' } as any,
+) {
+    return registry
+        .forExtension('publisher.r-extension')
+        .begin({
+            languageId: 'r',
+            registrationId: 'core',
+            revision,
+        })
+        .setRuntimeProvider(provider)
+        .setSessionManager(sessionManager);
 }
 
 function capabilityKey(capabilityId: string): ILanguageCapabilityKey {
@@ -41,7 +48,9 @@ suite('[Unit] language capability registry', () => {
         let disposals = 0;
         const registry = createRegistry(() => {
             installs += 1;
-            return new vscode.Disposable(() => { disposals += 1; });
+            return new vscode.Disposable(() => {
+                disposals += 1;
+            });
         });
         const provider = { languageId: 'r' } as any;
 
@@ -62,7 +71,9 @@ suite('[Unit] language capability registry', () => {
     test('binds an extension-owned log channel without disposing it', async () => {
         let disposed = false;
         const logChannel = {
-            dispose: () => { disposed = true; },
+            dispose: () => {
+                disposed = true;
+            },
         } as vscode.LogOutputChannel;
         let activationLogChannel: vscode.LogOutputChannel | undefined;
         const registry = new LanguageCapabilityRegistry({
@@ -121,25 +132,36 @@ suite('[Unit] language capability registry', () => {
         const registry = createRegistry();
         let finishActivation!: (disposable: vscode.Disposable) => void;
         let disposed = false;
-        const first = coreBuilder(registry, 1).addOptionalCapability({
-            id: 'commands.help',
-            kind: 'commands',
-            revision: 1,
-            activate: () => new Promise<vscode.Disposable>(resolve => { finishActivation = resolve; }),
-        }).commit();
+        const first = coreBuilder(registry, 1)
+            .addOptionalCapability({
+                id: 'commands.help',
+                kind: 'commands',
+                revision: 1,
+                activate: () =>
+                    new Promise<vscode.Disposable>((resolve) => {
+                        finishActivation = resolve;
+                    }),
+            })
+            .commit();
         await Promise.resolve();
         const oldReady = first.whenCapabilityReady('commands.help', { timeout: 1000 });
-        const second = coreBuilder(registry, 2).addOptionalCapability({
-            id: 'commands.help',
-            kind: 'commands',
-            revision: 2,
-            activate: () => new vscode.Disposable(() => undefined),
-        }).commit();
+        const second = coreBuilder(registry, 2)
+            .addOptionalCapability({
+                id: 'commands.help',
+                kind: 'commands',
+                revision: 2,
+                activate: () => new vscode.Disposable(() => undefined),
+            })
+            .commit();
         try {
             const retired = await oldReady;
             assert.strictEqual(retired.generation, first.generation);
             assert.strictEqual(retired.phase, 'disposed');
-            finishActivation(new vscode.Disposable(() => { disposed = true; }));
+            finishActivation(
+                new vscode.Disposable(() => {
+                    disposed = true;
+                }),
+            );
             const ready = await second.whenCapabilityReady('commands.help', { timeout: 1000 });
             assert.strictEqual(disposed, true);
             assert.strictEqual(ready.generation, second.generation);
@@ -153,16 +175,22 @@ suite('[Unit] language capability registry', () => {
 
     test('settles an old readiness observer when replacement omits the capability', async () => {
         const registry = createRegistry();
-        const first = coreBuilder(registry, 1).addOptionalCapability({
-            id: 'commands.help', kind: 'commands', revision: 1,
-            activate: () => new vscode.Disposable(() => undefined),
-        }).commit();
+        const first = coreBuilder(registry, 1)
+            .addOptionalCapability({
+                id: 'commands.help',
+                kind: 'commands',
+                revision: 1,
+                activate: () => new vscode.Disposable(() => undefined),
+            })
+            .commit();
         const oldReady = first.whenCapabilityReady('commands.help', { timeout: 1000 });
         const second = coreBuilder(registry, 2).commit();
         try {
             assert.strictEqual((await oldReady).phase, 'disposed');
-            assert.strictEqual(registry.getCapabilityState(capabilityKey('core.runtimeProvider'))?.generation,
-                second.generation);
+            assert.strictEqual(
+                registry.getCapabilityState(capabilityKey('core.runtimeProvider'))?.generation,
+                second.generation,
+            );
         } finally {
             first.dispose();
             second.dispose();

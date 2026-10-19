@@ -76,12 +76,12 @@ export class WidthCalculator {
     calculateColumnHeaderWidth(columnName: string, typeName: string): number {
         // Base width components
         const baseWidth =
-            (this.config.horizontalCellPadding * 2) +  // Left + right padding
-            this.sortIndexWidth +                       // Sort index (e.g., "1", "2")
-            6 +                                         // Sort index padding
-            this.config.sortIndicatorWidth +            // Sort indicator icon
-            this.config.sortingButtonWidth +            // Sorting button
-            1;                                          // Border
+            this.config.horizontalCellPadding * 2 + // Left + right padding
+            this.sortIndexWidth + // Sort index (e.g., "1", "2")
+            6 + // Sort index padding
+            this.config.sortIndicatorWidth + // Sort indicator icon
+            this.config.sortingButtonWidth + // Sorting button
+            1; // Border
 
         // If no text, return base width
         if (!columnName && !typeName) {
@@ -118,9 +118,7 @@ export class WidthCalculator {
      */
     calculateCellValueWidth(textLength: number, spaceWidth: number): number {
         return Math.ceil(
-            (spaceWidth * textLength) +
-            (this.config.horizontalCellPadding * 2) +
-            1 // Border
+            spaceWidth * textLength + this.config.horizontalCellPadding * 2 + 1, // Border
         );
     }
 
@@ -149,7 +147,7 @@ export class WidthCalculator {
 export function createFontString(
     weight: string | number,
     size: string | number,
-    family: string
+    family: string,
 ): string {
     const sizeStr = typeof size === 'number' ? `${size}px` : size;
     return `${weight} ${sizeStr} ${family}`;

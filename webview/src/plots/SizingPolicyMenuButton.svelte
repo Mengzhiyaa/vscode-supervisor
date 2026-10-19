@@ -8,7 +8,7 @@
      * Licensed under the Elastic License 2.0. See LICENSE.txt for license information.
      */
 
-    import ActionBarMenuButton from "../shared/ActionBarMenuButton.svelte";
+    import ActionBarMenuButton from '../shared/ActionBarMenuButton.svelte';
 
     /**
      * IPositronPlotSizingPolicy interface.
@@ -26,13 +26,13 @@
      * SizingPolicy enum for standard policies.
      */
     export const SizingPolicyId = {
-        Auto: "auto",
-        Intrinsic: "intrinsic",
-        Fill: "fill",
-        Custom: "custom",
-        Square: "square",
-        Landscape: "landscape",
-        Portrait: "portrait",
+        Auto: 'auto',
+        Intrinsic: 'intrinsic',
+        Fill: 'fill',
+        Custom: 'custom',
+        Square: 'square',
+        Landscape: 'landscape',
+        Portrait: 'portrait',
     } as const;
 
     interface Props {
@@ -58,10 +58,9 @@
     }: Props = $props();
 
     // Localized strings matching Positron
-    const sizingPolicyTooltip =
-        "Set how the plot's shape and size are determined";
-    const newCustomPolicyTooltip = "New Custom Size...";
-    const changeCustomPolicyTooltip = "Change Custom Size...";
+    const sizingPolicyTooltip = "Set how the plot's shape and size are determined";
+    const newCustomPolicyTooltip = 'New Custom Size...';
+    const changeCustomPolicyTooltip = 'Change Custom Size...';
 
     // Get the active policy label
     const activePolicyLabel = $derived(selectedPolicy.getName());
@@ -100,8 +99,8 @@
                 },
             })),
         {
-            id: "custom-separator",
-            label: "",
+            id: 'custom-separator',
+            label: '',
             separator: true,
         },
         ...policies
@@ -115,10 +114,8 @@
                 },
             })),
         {
-            id: "custom-size",
-            label: customSize
-                ? changeCustomPolicyTooltip
-                : newCustomPolicyTooltip,
+            id: 'custom-size',
+            label: customSize ? changeCustomPolicyTooltip : newCustomPolicyTooltip,
             onSelected: () => {
                 onSetCustomSize?.();
             },

@@ -3,7 +3,7 @@
   Port from Positron's VectorFrequencyTable component
 -->
 <script lang="ts">
-    import type { DataGridHoverManager } from "../../dataGrid/classes/dataGridInstance";
+    import type { DataGridHoverManager } from '../../dataGrid/classes/dataGridInstance';
 
     interface Props {
         frequencyTable: {
@@ -40,16 +40,12 @@
             return [];
         }
 
-        const totalCount =
-            counts.reduce((sum, count) => sum + count, 0) + otherCount;
+        const totalCount = counts.reduce((sum, count) => sum + count, 0) + otherCount;
         const barWidth = (width - (slotCount - 1)) / slotCount;
         const graphHeight = height;
 
         const nextBars = counts.map((count, index) => {
-            const percent =
-                totalCount > 0
-                    ? ((count / totalCount) * 100).toFixed(1)
-                    : "0.0";
+            const percent = totalCount > 0 ? ((count / totalCount) * 100).toFixed(1) : '0.0';
             const barHeight = Math.max(1, (count / maxCount) * graphHeight);
 
             return {
@@ -58,15 +54,12 @@
                 y: graphHeight - xAxisHeight - barHeight,
                 height: barHeight,
                 other: false,
-                tooltip: `Value: ${values[index] ?? ""}\nCount: ${count} (${percent}%)`,
+                tooltip: `Value: ${values[index] ?? ''}\nCount: ${count} (${percent}%)`,
             };
         });
 
         if (otherCount > 0) {
-            const percent =
-                totalCount > 0
-                    ? ((otherCount / totalCount) * 100).toFixed(1)
-                    : "0.0";
+            const percent = totalCount > 0 ? ((otherCount / totalCount) * 100).toFixed(1) : '0.0';
             const barHeight = Math.max(1, (otherCount / maxCount) * graphHeight);
 
             nextBars.push({
@@ -93,11 +86,7 @@
     }
 </script>
 
-<div
-    class="vector-frequency-table-container"
-    style:width="{width}px"
-    style:height="{height}px"
->
+<div class="vector-frequency-table-container" style:width="{width}px" style:height="{height}px">
     <svg
         class="vector-frequency-table"
         viewBox="0 0 {width} {height + xAxisHeight}"
@@ -105,13 +94,7 @@
         height="100%"
         shape-rendering="crispEdges"
     >
-        <rect
-            class="x-axis"
-            x="0"
-            y={height - xAxisHeight}
-            width={width}
-            height={xAxisHeight}
-        />
+        <rect class="x-axis" x="0" y={height - xAxisHeight} {width} height={xAxisHeight} />
 
         {#each bars as bar, i (i)}
             <rect
@@ -141,11 +124,7 @@
                 role="presentation"
                 aria-hidden="true"
                 onmouseenter={(event) =>
-                    handleBarEnter(
-                        event.currentTarget as HTMLElement,
-                        i,
-                        bar.tooltip,
-                    )}
+                    handleBarEnter(event.currentTarget as HTMLElement, i, bar.tooltip)}
                 onmouseleave={handleBarLeave}
             ></div>
         {/each}

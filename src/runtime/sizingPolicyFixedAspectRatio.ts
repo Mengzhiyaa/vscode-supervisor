@@ -16,7 +16,7 @@ import { IPlotSize } from './sizingPolicy';
 export class SizingPolicyFixedAspectRatio {
     private static minimumPlotSize = 400;
 
-    constructor(public readonly aspectRatio: number) { }
+    constructor(public readonly aspectRatio: number) {}
 
     /**
      * Computes the size of the plot in pixels, given the size of the viewport in pixels.
@@ -26,7 +26,10 @@ export class SizingPolicyFixedAspectRatio {
      */
     public getPlotSize(viewportSize: IPlotSize): IPlotSize | undefined {
         let plotWidth = Math.max(viewportSize.width, SizingPolicyFixedAspectRatio.minimumPlotSize);
-        let plotHeight = Math.max(viewportSize.height, SizingPolicyFixedAspectRatio.minimumPlotSize);
+        let plotHeight = Math.max(
+            viewportSize.height,
+            SizingPolicyFixedAspectRatio.minimumPlotSize,
+        );
         if (plotWidth / plotHeight > this.aspectRatio) {
             plotWidth = plotHeight * this.aspectRatio;
         } else {

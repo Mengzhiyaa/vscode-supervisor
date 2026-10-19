@@ -20,7 +20,7 @@ export {
     VariablesClientInstance,
     isVariablesTreeGroup,
     isVariablesTreeItem,
-    isVariablesTreeOverflow
+    isVariablesTreeOverflow,
 } from './interfaces/variablesService';
 
 // Classes

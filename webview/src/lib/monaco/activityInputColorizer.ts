@@ -7,7 +7,7 @@
  * classes, whose module layout changed in Monaco 0.56.
  */
 
-type MonacoApi = typeof import("monaco-editor/editor");
+type MonacoApi = typeof import('monaco-editor/editor');
 
 /**
  * Colorizes plain code lines for activity input history.
@@ -26,7 +26,7 @@ export async function colorizeActivityInputLines(
     }
 
     const html = await monaco.editor.colorize(
-        codeOutputLines.join("\n"),
+        codeOutputLines.join('\n'),
         languageId,
         // Render each tab as one character so token text offsets still match
         // source UTF-16 offsets. CSS controls the restored tabs' visual width.
@@ -35,7 +35,7 @@ export async function colorizeActivityInputLines(
     const colorizedLines = html.split(/<br\s*\/?>/iu);
 
     // Monaco appends a final <br/> after every rendered line.
-    if (colorizedLines.at(-1) === "") {
+    if (colorizedLines.at(-1) === '') {
         colorizedLines.pop();
     }
 
@@ -56,10 +56,7 @@ export async function colorizeActivityInputLines(
             return [];
         }
 
-        const walker = document.createTreeWalker(
-            template.content,
-            NodeFilter.SHOW_TEXT,
-        );
+        const walker = document.createTreeWalker(template.content, NodeFilter.SHOW_TEXT);
         let offset = 0;
         let node: Node | null;
         while ((node = walker.nextNode())) {

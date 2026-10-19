@@ -8,8 +8,8 @@
      * Licensed under the Elastic License 2.0. See LICENSE.txt for license information.
      */
 
-    import ActionBarMenuButton from "../shared/ActionBarMenuButton.svelte";
-    import { ZoomLevel } from "./types";
+    import ActionBarMenuButton from '../shared/ActionBarMenuButton.svelte';
+    import { ZoomLevel } from './types';
 
     interface Props {
         /** Current zoom level */
@@ -21,11 +21,11 @@
 
     // Zoom level labels matching Positron's zoomLevelMap
     const zoomLevelMap = new Map<ZoomLevel, string>([
-        [ZoomLevel.Fit, "Fit"],
-        [ZoomLevel.Fifty, "50%"],
-        [ZoomLevel.SeventyFive, "75%"],
-        [ZoomLevel.OneHundred, "100%"],
-        [ZoomLevel.TwoHundred, "200%"],
+        [ZoomLevel.Fit, 'Fit'],
+        [ZoomLevel.Fifty, '50%'],
+        [ZoomLevel.SeventyFive, '75%'],
+        [ZoomLevel.OneHundred, '100%'],
+        [ZoomLevel.TwoHundred, '200%'],
     ]);
 
     // All available zoom levels
@@ -38,10 +38,10 @@
     ];
 
     // Localized strings
-    const zoomPlotTooltip = "Set the plot zoom";
+    const zoomPlotTooltip = 'Set the plot zoom';
 
     // Active zoom label
-    const activeZoomLabel = $derived(zoomLevelMap.get(zoomLevel) || "Fit");
+    const activeZoomLabel = $derived(zoomLevelMap.get(zoomLevel) || 'Fit');
 </script>
 
 <ActionBarMenuButton
@@ -53,11 +53,10 @@
     actions={() =>
         zoomLevels.map((level) => ({
             id: String(level),
-            label: zoomLevelMap.get(level) ?? "Fit",
+            label: zoomLevelMap.get(level) ?? 'Fit',
             checked: level === zoomLevel,
             onSelected: () => {
                 onZoomChange?.(level);
             },
-        }))
-    }
+        }))}
 />

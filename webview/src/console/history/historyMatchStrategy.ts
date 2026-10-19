@@ -1,6 +1,6 @@
 /**
  * historyMatchStrategy.ts
- * 
+ *
  * History match strategy interfaces and base classes.
  * Mirrors: positron/.../common/historyMatchStrategy.ts
  */

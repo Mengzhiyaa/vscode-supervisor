@@ -3,9 +3,9 @@
   1:1 Positron replication - Menu button to open plot in editor
 -->
 <script lang="ts">
-    import ContextMenu from "../shared/ContextMenu.svelte";
-    import type { EditorTarget } from "./types";
-    import { localize } from "../lib/localization";
+    import ContextMenu from '../shared/ContextMenu.svelte';
+    import type { EditorTarget } from './types';
+    import { localize } from '../lib/localization';
 
     // Props using Svelte 5 runes
     interface Props {
@@ -16,7 +16,7 @@
     }
 
     let {
-        defaultTarget = "newWindow",
+        defaultTarget = 'newWindow',
         tooltip = localize('plots.openInEditor', 'Open in editor'),
         ariaLabel = localize('plots.openInEditor', 'Open in editor'),
         onopenInEditor,
@@ -29,7 +29,7 @@
         sideGroup: localize('plots.openInEditorSide', 'Open in editor tab to the Side'),
     };
 
-    const targets: EditorTarget[] = ["newWindow", "activeGroup", "sideGroup"];
+    const targets: EditorTarget[] = ['newWindow', 'activeGroup', 'sideGroup'];
 
     let menuOpen = $state(false);
     let dropdownButtonElement = $state<HTMLButtonElement | null>(null);
@@ -74,7 +74,7 @@
             title={localize('plots.selectWhereToOpen', 'Select where to open plot')}
             aria-label={localize('plots.selectWhereToOpen', 'Select where to open plot')}
             aria-haspopup="menu"
-            aria-expanded={menuOpen ? "true" : "false"}
+            aria-expanded={menuOpen ? 'true' : 'false'}
             onclick={(e) => {
                 e.stopPropagation();
                 toggleMenu();

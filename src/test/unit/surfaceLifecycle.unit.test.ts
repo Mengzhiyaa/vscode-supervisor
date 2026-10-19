@@ -145,9 +145,10 @@ suite('[Unit] surface-neutral model lifecycle', () => {
 
         const snapshot = service.getModel('shared-data-explorer');
         assert.strictEqual(snapshot?.state, 'attached');
-        assert.deepStrictEqual(snapshot?.attachments.map(attachment => attachment.kind), [
-            SurfaceKind.DataExplorerInline,
-        ]);
+        assert.deepStrictEqual(
+            snapshot?.attachments.map((attachment) => attachment.kind),
+            [SurfaceKind.DataExplorerInline],
+        );
         inline.dispose();
     });
 
@@ -190,7 +191,12 @@ suite('[Unit] surface-neutral model lifecycle', () => {
             errors: {},
         });
 
-        service.setRestoreState('three-layer', 'backend', 'failed', new Error('backend unavailable'));
+        service.setRestoreState(
+            'three-layer',
+            'backend',
+            'failed',
+            new Error('backend unavailable'),
+        );
         const lease = service.attach('three-layer', {
             surfaceId: 'viewer:three-layer',
             kind: SurfaceKind.ViewerPane,
@@ -233,7 +239,10 @@ suite('[Unit] surface-neutral model lifecycle', () => {
         for (const [kind, surfaceKind] of cases) {
             const id = createSurfaceModelId(kind, 'persistent');
             assert.deepStrictEqual(restored.getModel(id)?.restore, {
-                descriptor: 'ready', backend: 'pending', surface: 'pending', errors: {},
+                descriptor: 'ready',
+                backend: 'pending',
+                surface: 'pending',
+                errors: {},
             });
             restored.setRestoreState(id, 'backend', 'ready');
             restored.attach(id, {
@@ -242,7 +251,10 @@ suite('[Unit] surface-neutral model lifecycle', () => {
                 ownerId: 'restore-test',
             });
             assert.deepStrictEqual(restored.getModel(id)?.restore, {
-                descriptor: 'ready', backend: 'ready', surface: 'ready', errors: {},
+                descriptor: 'ready',
+                backend: 'ready',
+                surface: 'ready',
+                errors: {},
             });
         }
         restored.assertConsistency();

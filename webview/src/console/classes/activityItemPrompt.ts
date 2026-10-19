@@ -52,7 +52,7 @@ export class ActivityItemPrompt extends ActivityItem {
         when: Date,
         readonly prompt: string,
         readonly password: boolean,
-        readonly sessionId?: string
+        readonly sessionId?: string,
     ) {
         // Call the base class's constructor.
         super(id, parentId, when);

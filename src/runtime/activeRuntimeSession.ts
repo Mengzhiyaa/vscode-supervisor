@@ -64,8 +64,7 @@ export class ActiveRuntimeSession implements vscode.Disposable {
     private readonly _disposables: vscode.Disposable[] = [];
     private readonly _onDidReceiveRuntimeEventEmitter =
         new vscode.EventEmitter<ILanguageRuntimeGlobalEvent>();
-    private readonly _onUiClientStartedEmitter =
-        new vscode.EventEmitter<UiClientInstance>();
+    private readonly _onUiClientStartedEmitter = new vscode.EventEmitter<UiClientInstance>();
 
     private _uiClient: UiClientInstance | undefined;
     private _uiClientId: string | undefined;
@@ -124,7 +123,9 @@ export class ActiveRuntimeSession implements vscode.Disposable {
     dispose(): void {
         this._runtimeClientManagerDisposable?.dispose();
         this._disposeUiClient();
-        this._startingUiClient?.error(new Error(`UI client was disposed for session '${this.session.sessionId}'`));
+        this._startingUiClient?.error(
+            new Error(`UI client was disposed for session '${this.session.sessionId}'`),
+        );
         this._startingUiClient = undefined;
         this._disposables.forEach((disposable) => disposable.dispose());
     }
@@ -138,9 +139,8 @@ export class ActiveRuntimeSession implements vscode.Disposable {
             return;
         }
 
-        this._runtimeClientManagerDisposable = manager.watchClient(
-            RuntimeClientType.Ui,
-            (client) => this._attachUiClientInstance(client),
+        this._runtimeClientManagerDisposable = manager.watchClient(RuntimeClientType.Ui, (client) =>
+            this._attachUiClientInstance(client),
         );
     }
 

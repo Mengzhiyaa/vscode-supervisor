@@ -1,22 +1,26 @@
-import type * as MonacoApi from "monaco-editor/editor";
-import type { MessageConnection } from "vscode-jsonrpc/browser";
-import type { IInputHistoryEntry } from "../history";
-import type { LspClientManager } from "$lib/lsp/lspClientManager";
-import { consoleLspModelUri } from "@shared/lspTunnel";
-import { reconcileConsoleInputEdit, type ConsoleInputDraft, type ConsoleInputEdit } from "@shared/consoleInputState";
+import type * as MonacoApi from 'monaco-editor/editor';
+import type { MessageConnection } from 'vscode-jsonrpc/browser';
+import type { IInputHistoryEntry } from '../history';
+import type { LspClientManager } from '$lib/lsp/lspClientManager';
+import { consoleLspModelUri } from '@shared/lspTunnel';
+import {
+    reconcileConsoleInputEdit,
+    type ConsoleInputDraft,
+    type ConsoleInputEdit,
+} from '@shared/consoleInputState';
 
 export type ConsoleInputCommand =
-    | { kind: "focus" }
-    | { kind: "insertText"; text: string }
-    | { kind: "paste"; text: string }
-    | { kind: "historyUp"; usingPrefixMatch: boolean }
-    | { kind: "historyDown" }
-    | { kind: "historyClear" }
-    | { kind: "openInEditor" }
-    | { kind: "cancelSubmission"; skipHostRequest?: boolean }
-    | ({ kind: "setPendingCode" } & ConsoleInputEdit)
-    | { kind: "historyAdd"; input: string; when?: number }
-    | { kind: "historySet"; entries: { input: string; when?: number }[] };
+    | { kind: 'focus' }
+    | { kind: 'insertText'; text: string }
+    | { kind: 'paste'; text: string }
+    | { kind: 'historyUp'; usingPrefixMatch: boolean }
+    | { kind: 'historyDown' }
+    | { kind: 'historyClear' }
+    | { kind: 'openInEditor' }
+    | { kind: 'cancelSubmission'; skipHostRequest?: boolean }
+    | ({ kind: 'setPendingCode' } & ConsoleInputEdit)
+    | { kind: 'historyAdd'; input: string; when?: number }
+    | { kind: 'historySet'; entries: { input: string; when?: number }[] };
 
 export interface SessionHistoryState {
     historyEntries: IInputHistoryEntry[];
@@ -47,10 +51,7 @@ export interface SessionModelManager {
     ensureSessions(sessions: KnownSessionInfo[]): void;
     getHistoryState(sessionId: string): SessionHistoryState;
     setHistoryState(sessionId: string, historyState: SessionHistoryState): void;
-    setViewState(
-        sessionId: string,
-        viewState: MonacoApi.editor.ICodeEditorViewState | null,
-    ): void;
+    setViewState(sessionId: string, viewState: MonacoApi.editor.ICodeEditorViewState | null): void;
     enqueuePending(sessionId: string, command: ConsoleInputCommand): void;
     flushPending(sessionId: string): ConsoleInputCommand[];
     removeSession(sessionId: string): void;
@@ -91,16 +92,23 @@ export function createSessionModelManager(
 
     function readInputDraft(sessionId: string): ConsoleInputDraft | undefined {
         const state = sessionStateById.get(sessionId);
-        return state ? {
-            clientId: state.draftClientId,
-            version: state.editor.model.getVersionId(),
-            code: state.editor.model.getValue(),
-        } : undefined;
+        return state
+            ? {
+                  clientId: state.draftClientId,
+                  version: state.editor.model.getVersionId(),
+                  code: state.editor.model.getValue(),
+              }
+            : undefined;
     }
 
     function publishDraft(sessionId: string): void {
         const draft = readInputDraft(sessionId);
-        if (draft) { void getConnection()?.sendNotification('console/inputDraftChanged', { sessionId, draft }); }
+        if (draft) {
+            void getConnection()?.sendNotification('console/inputDraftChanged', {
+                sessionId,
+                draft,
+            });
+        }
     }
 
     function applyInputEdit(sessionId: string, edit: ConsoleInputEdit): void {
@@ -129,20 +137,14 @@ export function createSessionModelManager(
 
     function normalizeLanguageId(languageId: string | undefined): string {
         const normalizedLanguageId = languageId?.trim().toLowerCase();
-        return normalizedLanguageId || "plaintext";
+        return normalizedLanguageId || 'plaintext';
     }
 
-    function buildModelUri(
-        sessionId: string,
-        languageId: string,
-    ): MonacoApi.Uri {
+    function buildModelUri(sessionId: string, languageId: string): MonacoApi.Uri {
         return monaco.Uri.parse(consoleLspModelUri(sessionId, normalizeLanguageId(languageId)));
     }
 
-    function syncModelLanguage(
-        model: MonacoApi.editor.ITextModel,
-        languageId: string,
-    ): void {
+    function syncModelLanguage(model: MonacoApi.editor.ITextModel, languageId: string): void {
         if (model.getLanguageId() !== languageId) {
             monaco.editor.setModelLanguage(model, languageId);
         }
@@ -170,14 +172,13 @@ export function createSessionModelManager(
         languageId: string,
         historyState: SessionHistoryState,
         viewState: MonacoApi.editor.ICodeEditorViewState | null,
-        initialValue = "",
+        initialValue = '',
     ): SessionState {
         const normalizedLanguageId = normalizeLanguageId(languageId);
         const uri = buildModelUri(sessionId, normalizedLanguageId);
         const existingModel = monaco.editor.getModel(uri);
         const model =
-            existingModel ??
-            monaco.editor.createModel(initialValue, normalizedLanguageId, uri);
+            existingModel ?? monaco.editor.createModel(initialValue, normalizedLanguageId, uri);
 
         syncModelLanguage(model, normalizedLanguageId);
 
@@ -220,20 +221,13 @@ export function createSessionModelManager(
         return nextState;
     }
 
-    function getOrCreateSessionState(
-        sessionId: string,
-        languageId: string,
-    ): SessionState {
+    function getOrCreateSessionState(sessionId: string, languageId: string): SessionState {
         const normalizedLanguageId = normalizeLanguageId(languageId);
         const existing = sessionStateById.get(sessionId);
         if (existing) {
             syncModelLanguage(existing.editor.model, normalizedLanguageId);
             if (existing.languageId !== normalizedLanguageId) {
-                return replaceSessionLanguage(
-                    sessionId,
-                    existing,
-                    normalizedLanguageId,
-                );
+                return replaceSessionLanguage(sessionId, existing, normalizedLanguageId);
             }
             return existing;
         }
@@ -255,7 +249,7 @@ export function createSessionModelManager(
             return existing;
         }
 
-        return getOrCreateSessionState(sessionId, "plaintext");
+        return getOrCreateSessionState(sessionId, 'plaintext');
     }
 
     return {
@@ -272,9 +266,7 @@ export function createSessionModelManager(
         },
 
         getHistoryState(sessionId) {
-            return cloneHistoryState(
-                getExistingOrCreateSessionState(sessionId).history,
-            );
+            return cloneHistoryState(getExistingOrCreateSessionState(sessionId).history);
         },
 
         setHistoryState(sessionId, historyState) {
@@ -290,10 +282,7 @@ export function createSessionModelManager(
         enqueuePending(sessionId, command) {
             const queue = pendingCommandsBySession.get(sessionId) ?? [];
             const previousCommand = queue[queue.length - 1];
-            if (
-                previousCommand?.kind === "insertText" &&
-                command.kind === "insertText"
-            ) {
+            if (previousCommand?.kind === 'insertText' && command.kind === 'insertText') {
                 previousCommand.text += command.text;
             } else {
                 queue.push(command);
@@ -336,18 +325,24 @@ export function createSessionModelManager(
 
         updateConnection(connection) {
             if (draftConnection !== connection) {
-                draftHandlers.forEach(handler => handler.dispose());
+                draftHandlers.forEach((handler) => handler.dispose());
                 draftHandlers = [];
                 draftConnection = connection;
                 if (connection) {
                     draftHandlers.push(
-                        connection.onRequest('console/getInputDraft', (params: { sessionId: string }) => ({
-                            draft: readInputDraft(params.sessionId),
-                        })),
-                        connection.onRequest('console/applyInputEdit', (params: { sessionId: string } & ConsoleInputEdit) => {
-                            applyInputEdit(params.sessionId, params);
-                            return { draft: readInputDraft(params.sessionId) };
-                        }),
+                        connection.onRequest(
+                            'console/getInputDraft',
+                            (params: { sessionId: string }) => ({
+                                draft: readInputDraft(params.sessionId),
+                            }),
+                        ),
+                        connection.onRequest(
+                            'console/applyInputEdit',
+                            (params: { sessionId: string } & ConsoleInputEdit) => {
+                                applyInputEdit(params.sessionId, params);
+                                return { draft: readInputDraft(params.sessionId) };
+                            },
+                        ),
                     );
                 }
             }
@@ -360,16 +355,12 @@ export function createSessionModelManager(
 
             for (const [sessionId, state] of sessionStateById.entries()) {
                 publishDraft(sessionId);
-                registerSessionModel(
-                    state.editor.model,
-                    sessionId,
-                    connection,
-                );
+                registerSessionModel(state.editor.model, sessionId, connection);
             }
         },
 
         clear() {
-            draftHandlers.forEach(handler => handler.dispose());
+            draftHandlers.forEach((handler) => handler.dispose());
             draftHandlers = [];
             draftConnection = undefined;
             for (const [sessionId] of sessionStateById.entries()) {

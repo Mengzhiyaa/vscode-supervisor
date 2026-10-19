@@ -3,7 +3,7 @@
   1:1 Positron replication - Displays runtime icon based on session mode
 -->
 <script lang="ts">
-    import type { SessionMode } from "../types/console";
+    import type { SessionMode } from '../types/console';
 
     // Props using Svelte 5 runes
     interface Props {
@@ -15,13 +15,13 @@
 
     let {
         base64EncodedIconSvg,
-        sessionMode = "console",
-        languageId = "plaintext",
+        sessionMode = 'console',
+        languageId = 'plaintext',
         fileIconThemeSettingsId,
     }: Props = $props();
 
-    let isNotebook = $derived(sessionMode === "notebook");
-    let setiIconThemeActive = $derived(fileIconThemeSettingsId === "vs-seti");
+    let isNotebook = $derived(sessionMode === 'notebook');
+    let setiIconThemeActive = $derived(fileIconThemeSettingsId === 'vs-seti');
 </script>
 
 {#if isNotebook}
@@ -67,7 +67,7 @@
         background-size: 15px;
     }
 
-    .language-icon:not([style*="background-image"]) .codicon {
+    .language-icon:not([style*='background-image']) .codicon {
         font-size: 14px;
     }
 

@@ -28,7 +28,9 @@ export class SupervisorProcessLease implements vscode.Disposable {
     }
 
     renew(): void {
-        if (!this._disposed) { this.write(process.pid); }
+        if (!this._disposed) {
+            this.write(process.pid);
+        }
     }
 
     private write(ownerPid: number): void {
@@ -44,23 +46,33 @@ export class SupervisorProcessLease implements vscode.Disposable {
                     return;
                 }
             }
-            fs.writeFileSync(temporaryPath, JSON.stringify({
-                version: 1,
-                ownerId: this._ownerId,
-                ownerPid,
-                expiresAt: Date.now() + SUPERVISOR_RECONNECT_GRACE_MS,
-                keepAlive: this._keepAlive(),
-            }), { mode: 0o600 });
+            fs.writeFileSync(
+                temporaryPath,
+                JSON.stringify({
+                    version: 1,
+                    ownerId: this._ownerId,
+                    ownerPid,
+                    expiresAt: Date.now() + SUPERVISOR_RECONNECT_GRACE_MS,
+                    keepAlive: this._keepAlive(),
+                }),
+                { mode: 0o600 },
+            );
             fs.renameSync(temporaryPath, this.leasePath);
             this._claimed = true;
         } catch (error) {
-            try { fs.unlinkSync(temporaryPath); } catch { /* already removed */ }
+            try {
+                fs.unlinkSync(temporaryPath);
+            } catch {
+                /* already removed */
+            }
             this._onError(error);
         }
     }
 
     dispose(): void {
-        if (this._disposed) { return; }
+        if (this._disposed) {
+            return;
+        }
         this._disposed = true;
         clearInterval(this._timer);
         // An extension can be disabled without its host process exiting.
@@ -78,24 +90,32 @@ export function launchSupervisorProcess(
 ): { child: ChildProcess; lease: SupervisorProcessLease } {
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'supervisor-process-'));
     fs.chmodSync(directory, 0o700);
-    const lease = new SupervisorProcessLease(path.join(directory, 'lease.json'), keepAlive, onError);
+    const lease = new SupervisorProcessLease(
+        path.join(directory, 'lease.json'),
+        keepAlive,
+        onError,
+    );
     let output: number | undefined;
     try {
         output = fs.openSync(outFile, 'a', 0o600);
-        const child = spawn(process.execPath, [
-            path.join(extensionPath, 'resources', 'supervisor-launcher.cjs'),
-            JSON.stringify({
-                leasePath: lease.leasePath,
-                wrapperPath: path.join(extensionPath, 'resources', 'supervisor-wrapper.sh'),
-                args,
-                outFile,
-            }),
-        ], {
-            detached: true,
-            windowsHide: true,
-            env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
-            stdio: ['ignore', output, output, 'ipc'],
-        });
+        const child = spawn(
+            process.execPath,
+            [
+                path.join(extensionPath, 'resources', 'supervisor-launcher.cjs'),
+                JSON.stringify({
+                    leasePath: lease.leasePath,
+                    wrapperPath: path.join(extensionPath, 'resources', 'supervisor-wrapper.sh'),
+                    args,
+                    outFile,
+                }),
+            ],
+            {
+                detached: true,
+                windowsHide: true,
+                env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+                stdio: ['ignore', output, output, 'ipc'],
+            },
+        );
         child.on('error', onError);
         child.unref();
         return { child, lease };
@@ -104,14 +124,19 @@ export function launchSupervisorProcess(
         fs.rmSync(directory, { recursive: true, force: true });
         throw error;
     } finally {
-        if (output !== undefined) { fs.closeSync(output); }
+        if (output !== undefined) {
+            fs.closeSync(output);
+        }
     }
 }
 
 /** Send the authenticated shutdown target over IPC, never via argv or a file. */
-export async function configureSupervisorProcess(child: ChildProcess, state: KallichoreServerState): Promise<void> {
+export async function configureSupervisorProcess(
+    child: ChildProcess,
+    state: KallichoreServerState,
+): Promise<void> {
     await new Promise<void>((resolve, reject) => {
-        child.send({ kind: 'connection', state }, error => error ? reject(error) : resolve());
+        child.send({ kind: 'connection', state }, (error) => (error ? reject(error) : resolve()));
     });
 }
 
@@ -125,21 +150,37 @@ export function createSupervisorLogTerminal(outFile: string): vscode.Terminal {
         try {
             descriptor = fs.openSync(outFile, 'r');
             const size = fs.fstatSync(descriptor).size;
-            if (size < offset) { offset = 0; }
+            if (size < offset) {
+                offset = 0;
+            }
             const buffer = Buffer.alloc(Math.min(64 * 1024, size - offset));
             const length = fs.readSync(descriptor, buffer, 0, buffer.length, offset);
             offset += length;
-            if (length) { write.fire(buffer.subarray(0, length).toString('utf8').replace(/\r?\n/g, '\r\n')); }
-        } catch { /* The launcher may not have created the file yet. */ }
-        finally { if (descriptor !== undefined) { fs.closeSync(descriptor); } }
+            if (length) {
+                write.fire(buffer.subarray(0, length).toString('utf8').replace(/\r?\n/g, '\r\n'));
+            }
+        } catch {
+            /* The launcher may not have created the file yet. */
+        } finally {
+            if (descriptor !== undefined) {
+                fs.closeSync(descriptor);
+            }
+        }
     };
     return vscode.window.createTerminal({
         name: 'Kallichore',
         isTransient: true,
         pty: {
             onDidWrite: write.event,
-            open: () => { read(); timer = setInterval(read, 500); timer.unref(); },
-            close: () => { clearInterval(timer); write.dispose(); },
+            open: () => {
+                read();
+                timer = setInterval(read, 500);
+                timer.unref();
+            },
+            close: () => {
+                clearInterval(timer);
+                write.dispose();
+            },
         },
     });
 }

@@ -1,10 +1,14 @@
 <script lang="ts">
-    import { getErrorMessage } from "@shared/errors";
-    import { onDestroy, onMount } from "svelte";
-    import type { MessageConnection } from "vscode-jsonrpc/browser";
-    import { getRpcConnection } from "$lib/rpc/client";
-    import { localize } from "$lib/localization";
-    import type { LanguageRuntimePackage as PackageItem, PackagesItemSize, PackageSpec } from "@shared/packageTypes";
+    import { getErrorMessage } from '@shared/errors';
+    import { onDestroy, onMount } from 'svelte';
+    import type { MessageConnection } from 'vscode-jsonrpc/browser';
+    import { getRpcConnection } from '$lib/rpc/client';
+    import { localize } from '$lib/localization';
+    import type {
+        LanguageRuntimePackage as PackageItem,
+        PackagesItemSize,
+        PackageSpec,
+    } from '@shared/packageTypes';
 
     interface SessionState {
         id: string;
@@ -34,10 +38,10 @@
     let searchGeneration = 0;
     let lastRevision = -1;
     let selectedPackage = $state<string | undefined>();
-    let itemSize = $state<PackagesItemSize>("card");
-    let filterText = $state("");
-    let installText = $state("");
-    let searchText = $state("");
+    let itemSize = $state<PackagesItemSize>('card');
+    let filterText = $state('');
+    let installText = $state('');
+    let searchText = $state('');
     let searchResults = $state<PackageItem[]>([]);
     let searchLoading = $state(false);
     let operationError = $state<string | undefined>();
@@ -56,43 +60,47 @@
         let outdated = false;
         let attached = false;
         let descending = false;
-        const text = filterText.replace(/@(\w+)(?::([\w-]+))?/gi, (_match, key: string, value?: string) => {
-            key = key.toLowerCase();
-            value = value?.toLowerCase();
-            if (key === "sort" && (value === "name" || value === "name-desc")) {
-                descending = value === "name-desc";
-            } else if (value === undefined) {
-                outdated ||= key === "outdated";
-                attached ||= key === "attached";
-            }
-            return "";
-        }).replace(/\s+/g, " ").trim().toLowerCase();
+        const text = filterText
+            .replace(/@(\w+)(?::([\w-]+))?/gi, (_match, key: string, value?: string) => {
+                key = key.toLowerCase();
+                value = value?.toLowerCase();
+                if (key === 'sort' && (value === 'name' || value === 'name-desc')) {
+                    descending = value === 'name-desc';
+                } else if (value === undefined) {
+                    outdated ||= key === 'outdated';
+                    attached ||= key === 'attached';
+                }
+                return '';
+            })
+            .replace(/\s+/g, ' ')
+            .trim()
+            .toLowerCase();
         return { text, outdated, attached, descending };
     });
 
     const filteredPackages = $derived(
-        deduplicatedPackages.filter((pkg) => {
-            if (parsedFilter.outdated && !pkg.outdated) return false;
-            if (parsedFilter.attached && !pkg.attached) return false;
-            if (!parsedFilter.text) return true;
-            return (
-                pkg.name.toLowerCase().includes(parsedFilter.text) ||
-                pkg.displayName.toLowerCase().includes(parsedFilter.text) ||
-                (pkg.description ?? "").toLowerCase().includes(parsedFilter.text)
-            );
-        }).sort((a, b) => {
-            const result = a.name.localeCompare(b.name);
-            return parsedFilter.descending ? -result : result;
-        }),
+        deduplicatedPackages
+            .filter((pkg) => {
+                if (parsedFilter.outdated && !pkg.outdated) return false;
+                if (parsedFilter.attached && !pkg.attached) return false;
+                if (!parsedFilter.text) return true;
+                return (
+                    pkg.name.toLowerCase().includes(parsedFilter.text) ||
+                    pkg.displayName.toLowerCase().includes(parsedFilter.text) ||
+                    (pkg.description ?? '').toLowerCase().includes(parsedFilter.text)
+                );
+            })
+            .sort((a, b) => {
+                const result = a.name.localeCompare(b.name);
+                return parsedFilter.descending ? -result : result;
+            }),
     );
 
     const installedPackageNames = $derived(
         new Set(deduplicatedPackages.map((pkg) => pkg.name.toLowerCase())),
     );
 
-    const outdatedCount = $derived(
-        deduplicatedPackages.filter((pkg) => pkg.outdated).length,
-    );
+    const outdatedCount = $derived(deduplicatedPackages.filter((pkg) => pkg.outdated).length);
 
     function applyState(state: PackagesState): void {
         if (state.revision !== undefined) {
@@ -103,9 +111,9 @@
             sessionGeneration++;
             searchGeneration++;
             searchResults = [];
-            searchText = "";
+            searchText = '';
             searchLoading = false;
-            installText = "";
+            installText = '';
             operationError = undefined;
             requestPending = false;
         }
@@ -113,20 +121,21 @@
         activeSession = state.activeSession;
         hostBusy = state.busy;
         selectedPackage = state.selectedPackage;
-        itemSize = state.itemSize ?? "card";
+        itemSize = state.itemSize ?? 'card';
     }
 
     async function requestState(): Promise<void> {
         if (!connection) {
             return;
         }
-        const state = (await connection.sendRequest(
-            "packages/getState",
-        )) as PackagesState;
+        const state = (await connection.sendRequest('packages/getState')) as PackagesState;
         applyState(state);
     }
 
-    async function runStateRequest(method: string, params: Record<string, unknown> = {}): Promise<boolean> {
+    async function runStateRequest(
+        method: string,
+        params: Record<string, unknown> = {},
+    ): Promise<boolean> {
         if (!connection || !activeSession || busy) {
             return false;
         }
@@ -135,10 +144,10 @@
         const generation = sessionGeneration;
         requestPending = true;
         try {
-            const state = (await connection.sendRequest(
-                method,
-                { ...params, sessionId: activeSession.id },
-            )) as PackagesState;
+            const state = (await connection.sendRequest(method, {
+                ...params,
+                sessionId: activeSession.id,
+            })) as PackagesState;
             if (generation !== sessionGeneration) return false;
             applyState(state);
             return generation === sessionGeneration && !state.cancelled;
@@ -156,7 +165,7 @@
             .map((entry) => entry.trim())
             .filter(Boolean)
             .map((entry) => {
-                const separatorIndex = entry.indexOf("@");
+                const separatorIndex = entry.indexOf('@');
                 if (separatorIndex <= 0) {
                     return { name: entry };
                 }
@@ -168,11 +177,11 @@
     }
 
     async function refreshPackages(): Promise<void> {
-        await runStateRequest("packages/refresh");
+        await runStateRequest('packages/refresh');
     }
 
     async function updateAllPackages(): Promise<void> {
-        await runStateRequest("packages/updateAll");
+        await runStateRequest('packages/updateAll');
     }
 
     async function installFromInput(): Promise<void> {
@@ -181,27 +190,27 @@
             return;
         }
 
-        if (await runStateRequest("packages/install", { packages: specs })) {
-            installText = "";
+        if (await runStateRequest('packages/install', { packages: specs })) {
+            installText = '';
         }
     }
 
     async function installPackage(pkg: PackageItem): Promise<void> {
-        await runStateRequest("packages/install", {
+        await runStateRequest('packages/install', {
             packages: [{ name: pkg.name }],
             chooseVersion: true,
         });
     }
 
     async function updatePackage(pkg: PackageItem): Promise<void> {
-        await runStateRequest("packages/update", {
+        await runStateRequest('packages/update', {
             packages: [{ name: pkg.name }],
             chooseVersion: true,
         });
     }
 
     async function uninstallPackage(pkg: PackageItem): Promise<void> {
-        await runStateRequest("packages/uninstall", {
+        await runStateRequest('packages/uninstall', {
             packageNames: [pkg.name],
         });
     }
@@ -217,7 +226,7 @@
         const generation = ++searchGeneration;
         searchLoading = true;
         try {
-            const results = (await connection.sendRequest("packages/search", {
+            const results = (await connection.sendRequest('packages/search', {
                 query,
                 sessionId: activeSession.id,
             })) as PackageItem[];
@@ -229,7 +238,9 @@
                 seen.add(key);
                 return true;
             });
-            const exactIndex = uniqueResults.findIndex(pkg => pkg.name.toLowerCase() === query.toLowerCase());
+            const exactIndex = uniqueResults.findIndex(
+                (pkg) => pkg.name.toLowerCase() === query.toLowerCase(),
+            );
             if (exactIndex > 0) uniqueResults.unshift(...uniqueResults.splice(exactIndex, 1));
             searchResults = uniqueResults.slice(0, 100);
         } catch (error) {
@@ -244,28 +255,49 @@
 
     function selectPackage(pkg: PackageItem, pinned = false): void {
         selectedPackage = pkg.name;
-        connection?.sendNotification("packages/setSelected", { name: pkg.name, sessionId: activeSession?.id });
+        connection?.sendNotification('packages/setSelected', {
+            name: pkg.name,
+            sessionId: activeSession?.id,
+        });
         if (connection && activeSession) {
             const generation = sessionGeneration;
-            void connection.sendRequest("packages/openPackage", {
-                name: pkg.name, sessionId: activeSession.id, pinned,
-            }).catch(error => {
-                if (generation === sessionGeneration) operationError = getErrorMessage(error);
-            });
+            void connection
+                .sendRequest('packages/openPackage', {
+                    name: pkg.name,
+                    sessionId: activeSession.id,
+                    pinned,
+                })
+                .catch((error) => {
+                    if (generation === sessionGeneration) operationError = getErrorMessage(error);
+                });
         }
     }
 
     function selectPackageFromKeyboard(event: KeyboardEvent, pkg: PackageItem): void {
         if (event.target !== event.currentTarget) return;
-        if (event.key === "Enter" || event.key === " ") {
+        if (event.key === 'Enter' || event.key === ' ') {
             event.preventDefault();
             selectPackage(pkg);
-        } else if (["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) {
+        } else if (['ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) {
             const element = event.currentTarget as HTMLElement;
-            const entries = Array.from(element.parentElement?.querySelectorAll<HTMLElement>(".package-item, .search-result") ?? []);
+            const entries = Array.from(
+                element.parentElement?.querySelectorAll<HTMLElement>(
+                    '.package-item, .search-result',
+                ) ?? [],
+            );
             const current = entries.indexOf(element);
-            const next = event.key === "Home" ? 0 : event.key === "End" ? entries.length - 1
-                : Math.max(0, Math.min(entries.length - 1, current + (event.key === "ArrowDown" ? 1 : -1)));
+            const next =
+                event.key === 'Home'
+                    ? 0
+                    : event.key === 'End'
+                      ? entries.length - 1
+                      : Math.max(
+                            0,
+                            Math.min(
+                                entries.length - 1,
+                                current + (event.key === 'ArrowDown' ? 1 : -1),
+                            ),
+                        );
             event.preventDefault();
             entries[next]?.focus();
             entries[next]?.click();
@@ -274,26 +306,30 @@
 
     function clearSelection(): void {
         selectedPackage = undefined;
-        connection?.sendNotification("packages/setSelected", { sessionId: activeSession?.id });
+        connection?.sendNotification('packages/setSelected', { sessionId: activeSession?.id });
     }
 
-    function toggleFilter(filter: "outdated" | "attached"): void {
+    function toggleFilter(filter: 'outdated' | 'attached'): void {
         const active = parsedFilter[filter];
-        filterText = filterText.replace(/@(\w+)(?::([\w-]+))?/gi, (match, key: string, value?: string) =>
-            key.toLowerCase() === filter && value === undefined ? "" : match).replace(/\s+/g, " ").trim();
+        filterText = filterText
+            .replace(/@(\w+)(?::([\w-]+))?/gi, (match, key: string, value?: string) =>
+                key.toLowerCase() === filter && value === undefined ? '' : match,
+            )
+            .replace(/\s+/g, ' ')
+            .trim();
         if (!active) filterText = `@${filter} ${filterText}`.trim();
         clearSelection();
     }
 
     function toggleSort(): void {
-        const sort = parsedFilter.descending ? "name" : "name-desc";
-        filterText = `@sort:${sort} ${filterText.replace(/@sort:[\w-]+/gi, "").trim()}`.trim();
+        const sort = parsedFilter.descending ? 'name' : 'name-desc';
+        filterText = `@sort:${sort} ${filterText.replace(/@sort:[\w-]+/gi, '').trim()}`.trim();
         clearSelection();
     }
 
-    function setItemSize(nextSize: "card" | "row"): void {
+    function setItemSize(nextSize: 'card' | 'row'): void {
         itemSize = nextSize;
-        connection?.sendNotification("packages/setItemSize", {
+        connection?.sendNotification('packages/setItemSize', {
             itemSize: nextSize,
         });
     }
@@ -301,18 +337,18 @@
     function clearSearch(): void {
         searchGeneration++;
         searchLoading = false;
-        searchText = "";
+        searchText = '';
         searchResults = [];
     }
 
     function onInstallKeydown(event: KeyboardEvent): void {
-        if (event.key === "Enter") {
+        if (event.key === 'Enter') {
             void installFromInput();
         }
     }
 
     function onSearchKeydown(event: KeyboardEvent): void {
-        if (event.key === "Enter") {
+        if (event.key === 'Enter') {
             void searchPackages();
         }
     }
@@ -320,11 +356,12 @@
     onMount(() => {
         const rpc = getRpcConnection();
         connection = rpc;
-        const stateDisposable = rpc.onNotification(
-            "packages/state",
-            (state: unknown) => applyState(state as PackagesState),
+        const stateDisposable = rpc.onNotification('packages/state', (state: unknown) =>
+            applyState(state as PackagesState),
         );
-        void requestState().catch(error => { operationError = getErrorMessage(error); });
+        void requestState().catch((error) => {
+            operationError = getErrorMessage(error);
+        });
 
         return () => {
             stateDisposable.dispose();
@@ -340,7 +377,7 @@
 
 <main class="packages-view" class:busy>
     <header class="packages-toolbar">
-        <div class="session-label" title={activeSession?.name ?? ""}>
+        <div class="session-label" title={activeSession?.name ?? ''}>
             {#if activeSession}
                 <span class="codicon codicon-debug-start"></span>
                 <span class="session-name">{activeSession.name}</span>
@@ -351,20 +388,20 @@
         </div>
         <div class="toolbar-actions">
             <button
-                class:active={itemSize === "card"}
+                class:active={itemSize === 'card'}
                 title="Card view"
                 aria-label="Card view"
                 disabled={busy}
-                onclick={() => setItemSize("card")}
+                onclick={() => setItemSize('card')}
             >
                 <span class="codicon codicon-list-selection"></span>
             </button>
             <button
-                class:active={itemSize === "row"}
+                class:active={itemSize === 'row'}
                 title="Row view"
                 aria-label="Row view"
                 disabled={busy}
-                onclick={() => setItemSize("row")}
+                onclick={() => setItemSize('row')}
             >
                 <span class="codicon codicon-list-flat"></span>
             </button>
@@ -454,7 +491,8 @@
                         tabindex="0"
                         onclick={() => selectPackage(pkg)}
                         ondblclick={(event) => {
-                            if (!(event.target as HTMLElement).closest("button")) selectPackage(pkg, true);
+                            if (!(event.target as HTMLElement).closest('button'))
+                                selectPackage(pkg, true);
                         }}
                         onkeydown={(event) => selectPackageFromKeyboard(event, pkg)}
                     >
@@ -504,23 +542,48 @@
 
         <div class="filter-row">
             <span class="codicon codicon-filter"></span>
-            <input type="text" placeholder={localize("packages.filter", "Filter packages")} bind:value={filterText} oninput={clearSelection} />
-            <button class:active={parsedFilter.outdated} aria-pressed={parsedFilter.outdated}
-                title={localize("packages.outdated", "Outdated packages")} aria-label={localize("packages.outdated", "Outdated packages")}
-                onclick={() => toggleFilter("outdated")}><span class="codicon codicon-arrow-up"></span></button>
-            <button class:active={parsedFilter.attached} aria-pressed={parsedFilter.attached}
-                title={localize("packages.attached", "Attached packages")} aria-label={localize("packages.attached", "Attached packages")}
-                onclick={() => toggleFilter("attached")}><span class="codicon codicon-plug"></span></button>
-            <button title={parsedFilter.descending ? localize("packages.sortAscending", "Sort by name (A-Z)") : localize("packages.sortDescending", "Sort by name (Z-A)")}
-                aria-label={parsedFilter.descending ? localize("packages.sortAscending", "Sort by name (A-Z)") : localize("packages.sortDescending", "Sort by name (Z-A)")}
-                onclick={toggleSort}><span class="codicon codicon-sort-precedence"></span></button>
+            <input
+                type="text"
+                placeholder={localize('packages.filter', 'Filter packages')}
+                bind:value={filterText}
+                oninput={clearSelection}
+            />
+            <button
+                class:active={parsedFilter.outdated}
+                aria-pressed={parsedFilter.outdated}
+                title={localize('packages.outdated', 'Outdated packages')}
+                aria-label={localize('packages.outdated', 'Outdated packages')}
+                onclick={() => toggleFilter('outdated')}
+                ><span class="codicon codicon-arrow-up"></span></button
+            >
+            <button
+                class:active={parsedFilter.attached}
+                aria-pressed={parsedFilter.attached}
+                title={localize('packages.attached', 'Attached packages')}
+                aria-label={localize('packages.attached', 'Attached packages')}
+                onclick={() => toggleFilter('attached')}
+                ><span class="codicon codicon-plug"></span></button
+            >
+            <button
+                title={parsedFilter.descending
+                    ? localize('packages.sortAscending', 'Sort by name (A-Z)')
+                    : localize('packages.sortDescending', 'Sort by name (Z-A)')}
+                aria-label={parsedFilter.descending
+                    ? localize('packages.sortAscending', 'Sort by name (A-Z)')
+                    : localize('packages.sortDescending', 'Sort by name (Z-A)')}
+                onclick={toggleSort}><span class="codicon codicon-sort-precedence"></span></button
+            >
         </div>
 
-        <section class="package-list" class:row-mode={itemSize === "row"}>
+        <section class="package-list" class:row-mode={itemSize === 'row'}>
             {#if filteredPackages.length === 0}
                 <div class="empty-state">
                     <span class="codicon codicon-package"></span>
-                    <span>{filterText.trim() ? localize("packages.noMatches", "No matching packages") : localize("packages.empty", "No packages")}</span>
+                    <span
+                        >{filterText.trim()
+                            ? localize('packages.noMatches', 'No matching packages')
+                            : localize('packages.empty', 'No packages')}</span
+                    >
                 </div>
             {:else}
                 {#each filteredPackages as pkg (pkg.name.toLowerCase())}
@@ -533,7 +596,8 @@
                         tabindex="0"
                         onclick={() => selectPackage(pkg)}
                         ondblclick={(event) => {
-                            if (!(event.target as HTMLElement).closest("button")) selectPackage(pkg, true);
+                            if (!(event.target as HTMLElement).closest('button'))
+                                selectPackage(pkg, true);
                         }}
                         onkeydown={(event) => selectPackageFromKeyboard(event, pkg)}
                     >
@@ -544,7 +608,7 @@
                                     <span class="attached-dot" title="Attached"></span>
                                 {/if}
                             </span>
-                            {#if itemSize === "card" && pkg.description}
+                            {#if itemSize === 'card' && pkg.description}
                                 <span class="package-description">{pkg.description}</span>
                             {/if}
                         </span>
@@ -559,7 +623,10 @@
                         <span class="package-actions">
                             {#if pkg.outdated}
                                 <button
-                                    title={localize("packages.changeVersion", "Select package version")}
+                                    title={localize(
+                                        'packages.changeVersion',
+                                        'Select package version',
+                                    )}
                                     aria-label={`Update ${pkg.name}`}
                                     disabled={busy}
                                     onclick={(event) => {

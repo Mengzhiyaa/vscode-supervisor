@@ -3,7 +3,8 @@ import { readXlsxWorksheetNames } from '../../services/duckdb/xlsxWorkbook';
 
 suite('[Unit] XLSX workbook metadata', () => {
     test('reads worksheet names in workbook order and decodes XML entities', () => {
-        const xml = '<workbook><sheets><sheet name="Summary"/><sheet name="Sales &amp; Tax"/></sheets></workbook>';
+        const xml =
+            '<workbook><sheets><sheet name="Summary"/><sheet name="Sales &amp; Tax"/></sheets></workbook>';
         const archive = createStoredZip('xl/workbook.xml', Buffer.from(xml));
         assert.deepStrictEqual(readXlsxWorksheetNames(archive), ['Summary', 'Sales & Tax']);
     });

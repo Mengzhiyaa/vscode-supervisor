@@ -49,7 +49,8 @@ export class DuckDBDataExplorerComm implements IDataExplorerComm {
     // Event emitters
     private readonly _onDidSchemaUpdate = new vscode.EventEmitter<SchemaUpdateEvent>();
     private readonly _onDidDataUpdate = new vscode.EventEmitter<DataUpdateEvent>();
-    private readonly _onDidReturnColumnProfiles = new vscode.EventEmitter<ReturnColumnProfilesEvent>();
+    private readonly _onDidReturnColumnProfiles =
+        new vscode.EventEmitter<ReturnColumnProfilesEvent>();
     private readonly _onDidClose = new vscode.EventEmitter<void>();
 
     readonly onDidSchemaUpdate = this._onDidSchemaUpdate.event;
@@ -59,7 +60,7 @@ export class DuckDBDataExplorerComm implements IDataExplorerComm {
 
     constructor(
         private readonly _tableView: DuckDBTableView,
-        private readonly _logChannel: vscode.LogOutputChannel
+        private readonly _logChannel: vscode.LogOutputChannel,
     ) {
         this._profileEvaluator = new ColumnProfileEvaluator();
         this._disposables.push(this._onDidSchemaUpdate);
@@ -88,28 +89,28 @@ export class DuckDBDataExplorerComm implements IDataExplorerComm {
 
     async searchSchema(
         filters: ColumnFilter[],
-        sortOrder: SearchSchemaSortOrder
+        sortOrder: SearchSchemaSortOrder,
     ): Promise<SearchSchemaResult> {
         return this._tableView.searchSchema(filters, sortOrder);
     }
 
     async getDataValues(
         columns: ColumnSelection[],
-        formatOptions: FormatOptions
+        formatOptions: FormatOptions,
     ): Promise<TableData> {
         return this._tableView.getDataValues(columns, formatOptions);
     }
 
     async getRowLabels(
         selection: ArraySelection,
-        formatOptions: FormatOptions
+        formatOptions: FormatOptions,
     ): Promise<TableRowLabels> {
         return this._tableView.getRowLabels(selection, formatOptions);
     }
 
     async exportDataSelection(
         selection: TableSelection,
-        format: ExportFormat
+        format: ExportFormat,
     ): Promise<ExportedData> {
         return this._tableView.exportDataSelection(selection, format);
     }
@@ -118,11 +119,9 @@ export class DuckDBDataExplorerComm implements IDataExplorerComm {
         columnFilters: ColumnFilter[],
         rowFilters: RowFilter[],
         sortKeys: ColumnSortKey[],
-        codeSyntaxName: CodeSyntaxName
+        codeSyntaxName: CodeSyntaxName,
     ): Promise<ConvertedCode> {
-        return this._tableView.convertToCode(
-            columnFilters, rowFilters, sortKeys, codeSyntaxName
-        );
+        return this._tableView.convertToCode(columnFilters, rowFilters, sortKeys, codeSyntaxName);
     }
 
     async suggestCodeSyntax(): Promise<CodeSyntaxName | undefined> {
@@ -148,7 +147,7 @@ export class DuckDBDataExplorerComm implements IDataExplorerComm {
     async getColumnProfiles(
         callbackId: string,
         profiles: ColumnProfileRequest[],
-        formatOptions: FormatOptions
+        formatOptions: FormatOptions,
     ): Promise<void> {
         // Compute profiles asynchronously, then fire the event
         try {
@@ -158,7 +157,7 @@ export class DuckDBDataExplorerComm implements IDataExplorerComm {
                 profiles,
                 formatOptions,
                 this._tableView.whereClause,
-                this._tableView.filteredRowCount
+                this._tableView.filteredRowCount,
             );
 
             this._onDidReturnColumnProfiles.fire({
@@ -166,7 +165,9 @@ export class DuckDBDataExplorerComm implements IDataExplorerComm {
                 profiles: results,
             });
         } catch (error) {
-            this._logChannel.error(`[DuckDB] Column profile evaluation failed: ${getErrorMessage(error)}`);
+            this._logChannel.error(
+                `[DuckDB] Column profile evaluation failed: ${getErrorMessage(error)}`,
+            );
             this._onDidReturnColumnProfiles.fire({
                 callback_id: callbackId,
                 profiles: profiles.map(() => ({})),
@@ -176,7 +177,7 @@ export class DuckDBDataExplorerComm implements IDataExplorerComm {
     }
 
     async setDatasetImportOptions(
-        options: DatasetImportOptions
+        options: DatasetImportOptions,
     ): Promise<SetDatasetImportOptionsResult> {
         const result = await this._tableView.setDatasetImportOptions(options);
         if (!result.error_message) {
@@ -207,7 +208,7 @@ export class DuckDBDataExplorerComm implements IDataExplorerComm {
         }
 
         // Dispose the table view (drops DuckDB resources)
-        this._tableView.dispose().catch(() => { });
+        this._tableView.dispose().catch(() => {});
 
         for (const d of this._disposables) {
             d.dispose();
@@ -228,7 +229,7 @@ export class DuckDBDataExplorerComm implements IDataExplorerComm {
         try {
             const pattern = new vscode.RelativePattern(
                 vscode.Uri.file(uri.path.substring(0, uri.path.lastIndexOf('/'))),
-                uri.path.split('/').pop()!
+                uri.path.split('/').pop()!,
             );
 
             this._fileWatcher = vscode.workspace.createFileSystemWatcher(pattern);
@@ -245,7 +246,9 @@ export class DuckDBDataExplorerComm implements IDataExplorerComm {
                     if (error instanceof vscode.CancellationError) {
                         return;
                     }
-                    this._logChannel.error(`[DuckDB] File reload failed: ${getErrorMessage(error)}`);
+                    this._logChannel.error(
+                        `[DuckDB] File reload failed: ${getErrorMessage(error)}`,
+                    );
                 }
             });
 

@@ -23,13 +23,27 @@ export interface IRawLogSink {
 export class RedactingLogOutputChannel implements vscode.LogOutputChannel {
     constructor(private readonly channel: vscode.LogOutputChannel) {}
 
-    get name(): string { return this.channel.name; }
-    get logLevel(): vscode.LogLevel { return this.channel.logLevel; }
-    get onDidChangeLogLevel(): vscode.Event<vscode.LogLevel> { return this.channel.onDidChangeLogLevel; }
-    append(value: string): void { this.channel.append(normalizeStructuredMessage(value)); }
-    appendLine(value: string): void { this.channel.appendLine(normalizeStructuredMessage(value)); }
-    replace(value: string): void { this.channel.replace(normalizeStructuredMessage(value)); }
-    clear(): void { this.channel.clear(); }
+    get name(): string {
+        return this.channel.name;
+    }
+    get logLevel(): vscode.LogLevel {
+        return this.channel.logLevel;
+    }
+    get onDidChangeLogLevel(): vscode.Event<vscode.LogLevel> {
+        return this.channel.onDidChangeLogLevel;
+    }
+    append(value: string): void {
+        this.channel.append(normalizeStructuredMessage(value));
+    }
+    appendLine(value: string): void {
+        this.channel.appendLine(normalizeStructuredMessage(value));
+    }
+    replace(value: string): void {
+        this.channel.replace(normalizeStructuredMessage(value));
+    }
+    clear(): void {
+        this.channel.clear();
+    }
     show(preserveFocus?: boolean): void;
     show(column?: vscode.ViewColumn, preserveFocus?: boolean): void;
     show(columnOrPreserveFocus?: vscode.ViewColumn | boolean, preserveFocus?: boolean): void {
@@ -39,18 +53,32 @@ export class RedactingLogOutputChannel implements vscode.LogOutputChannel {
             this.channel.show(preserveFocus);
         }
     }
-    hide(): void { this.channel.hide(); }
-    trace(message: string, ...args: unknown[]): void { this.channel.trace(normalizeStructuredMessage(message), ...redactLogArgs(args)); }
-    debug(message: string, ...args: unknown[]): void { this.channel.debug(normalizeStructuredMessage(message), ...redactLogArgs(args)); }
-    info(message: string, ...args: unknown[]): void { this.channel.info(normalizeStructuredMessage(message), ...redactLogArgs(args)); }
-    warn(message: string, ...args: unknown[]): void { this.channel.warn(normalizeStructuredMessage(message), ...redactLogArgs(args)); }
+    hide(): void {
+        this.channel.hide();
+    }
+    trace(message: string, ...args: unknown[]): void {
+        this.channel.trace(normalizeStructuredMessage(message), ...redactLogArgs(args));
+    }
+    debug(message: string, ...args: unknown[]): void {
+        this.channel.debug(normalizeStructuredMessage(message), ...redactLogArgs(args));
+    }
+    info(message: string, ...args: unknown[]): void {
+        this.channel.info(normalizeStructuredMessage(message), ...redactLogArgs(args));
+    }
+    warn(message: string, ...args: unknown[]): void {
+        this.channel.warn(normalizeStructuredMessage(message), ...redactLogArgs(args));
+    }
     error(message: string | Error, ...args: unknown[]): void {
         this.channel.error(
-            typeof message === 'string' ? normalizeStructuredMessage(message) : redactError(message),
+            typeof message === 'string'
+                ? normalizeStructuredMessage(message)
+                : redactError(message),
             ...redactLogArgs(args),
         );
     }
-    dispose(): void { this.channel.dispose(); }
+    dispose(): void {
+        this.channel.dispose();
+    }
 }
 
 export function dispatchStructuredLog(
@@ -58,9 +86,8 @@ export function dispatchStructuredLog(
     message: string | Error,
     level: vscode.LogLevel = vscode.LogLevel.Info,
 ): void {
-    const redactedMessage = message instanceof Error
-        ? redactError(message)
-        : redactLogMessage(message);
+    const redactedMessage =
+        message instanceof Error ? redactError(message) : redactLogMessage(message);
     switch (level) {
         case vscode.LogLevel.Error:
             sink.error(redactedMessage);
@@ -69,10 +96,14 @@ export function dispatchStructuredLog(
             sink.warn(redactedMessage instanceof Error ? redactedMessage.message : redactedMessage);
             break;
         case vscode.LogLevel.Debug:
-            sink.debug(redactedMessage instanceof Error ? redactedMessage.message : redactedMessage);
+            sink.debug(
+                redactedMessage instanceof Error ? redactedMessage.message : redactedMessage,
+            );
             break;
         case vscode.LogLevel.Trace:
-            sink.trace(redactedMessage instanceof Error ? redactedMessage.message : redactedMessage);
+            sink.trace(
+                redactedMessage instanceof Error ? redactedMessage.message : redactedMessage,
+            );
             break;
         case vscode.LogLevel.Info:
         default:
@@ -93,15 +124,16 @@ export function formatRawSupervisorLine(
     level: vscode.LogLevel = vscode.LogLevel.Info,
     now = new Date(),
 ): string {
-    const severity = level === vscode.LogLevel.Error
-        ? ' [error]'
-        : level === vscode.LogLevel.Warning
-            ? ' [warn]'
-            : level === vscode.LogLevel.Debug
+    const severity =
+        level === vscode.LogLevel.Error
+            ? ' [error]'
+            : level === vscode.LogLevel.Warning
+              ? ' [warn]'
+              : level === vscode.LogLevel.Debug
                 ? ' [debug]'
                 : level === vscode.LogLevel.Trace
-                    ? ' [trace]'
-                    : '';
+                  ? ' [trace]'
+                  : '';
     return `${now.toISOString().substring(11, 19)} [Supervisor Extension]${severity} ${redactLogMessage(message)}`;
 }
 
@@ -145,7 +177,7 @@ function normalizeStructuredMessage(message: string): string {
 }
 
 function redactLogArgs(args: readonly unknown[]): unknown[] {
-    return args.map(argument => {
+    return args.map((argument) => {
         if (typeof argument === 'string') {
             return redactLogMessage(argument);
         }

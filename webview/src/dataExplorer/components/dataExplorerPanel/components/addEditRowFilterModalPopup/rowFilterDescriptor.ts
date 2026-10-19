@@ -22,8 +22,8 @@ export {
  */
 function generateUuid(): string {
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-        const r = Math.random() * 16 | 0;
-        const v = c === 'x' ? r : (r & 0x3 | 0x8);
+        const r = (Math.random() * 16) | 0;
+        const v = c === 'x' ? r : (r & 0x3) | 0x8;
         return v.toString(16);
     });
 }
@@ -55,7 +55,7 @@ export enum RowFilterDescrType {
 
     // Filters with two parameters.
     IS_BETWEEN = 'is-between',
-    IS_NOT_BETWEEN = 'is-not-between'
+    IS_NOT_BETWEEN = 'is-not-between',
 }
 
 /**
@@ -89,7 +89,7 @@ abstract class BaseRowFilterDescriptor {
         return {
             filter_id: this.identifier,
             column_schema: this.props.columnSchema,
-            condition: this.props.condition
+            condition: this.props.condition,
         };
     }
 }
@@ -97,67 +97,79 @@ abstract class BaseRowFilterDescriptor {
 // No-parameter filter descriptors
 
 export class RowFilterDescriptorIsEmpty extends BaseRowFilterDescriptor {
-    get descrType() { return RowFilterDescrType.IS_EMPTY; }
+    get descrType() {
+        return RowFilterDescrType.IS_EMPTY;
+    }
     get backendFilter(): RowFilter {
         return {
             filter_type: RowFilterType.IsEmpty,
             is_valid: this.props.isValid ?? true,
-            ...this._sharedBackendParams()
+            ...this._sharedBackendParams(),
         };
     }
 }
 
 export class RowFilterDescriptorIsNotEmpty extends BaseRowFilterDescriptor {
-    get descrType() { return RowFilterDescrType.IS_NOT_EMPTY; }
+    get descrType() {
+        return RowFilterDescrType.IS_NOT_EMPTY;
+    }
     get backendFilter(): RowFilter {
         return {
             filter_type: RowFilterType.NotEmpty,
             is_valid: this.props.isValid ?? true,
-            ...this._sharedBackendParams()
+            ...this._sharedBackendParams(),
         };
     }
 }
 
 export class RowFilterDescriptorIsNull extends BaseRowFilterDescriptor {
-    get descrType() { return RowFilterDescrType.IS_NULL; }
+    get descrType() {
+        return RowFilterDescrType.IS_NULL;
+    }
     get backendFilter(): RowFilter {
         return {
             filter_type: RowFilterType.IsNull,
             is_valid: this.props.isValid ?? true,
-            ...this._sharedBackendParams()
+            ...this._sharedBackendParams(),
         };
     }
 }
 
 export class RowFilterDescriptorIsNotNull extends BaseRowFilterDescriptor {
-    get descrType() { return RowFilterDescrType.IS_NOT_NULL; }
+    get descrType() {
+        return RowFilterDescrType.IS_NOT_NULL;
+    }
     get backendFilter(): RowFilter {
         return {
             filter_type: RowFilterType.NotNull,
             is_valid: this.props.isValid ?? true,
-            ...this._sharedBackendParams()
+            ...this._sharedBackendParams(),
         };
     }
 }
 
 export class RowFilterDescriptorIsTrue extends BaseRowFilterDescriptor {
-    get descrType() { return RowFilterDescrType.IS_TRUE; }
+    get descrType() {
+        return RowFilterDescrType.IS_TRUE;
+    }
     get backendFilter(): RowFilter {
         return {
             filter_type: RowFilterType.IsTrue,
             is_valid: this.props.isValid ?? true,
-            ...this._sharedBackendParams()
+            ...this._sharedBackendParams(),
         };
     }
 }
 
 export class RowFilterDescriptorIsFalse extends BaseRowFilterDescriptor {
-    get descrType() { return RowFilterDescrType.IS_FALSE; }
+    get descrType() {
+        return RowFilterDescrType.IS_FALSE;
+    }
     get backendFilter(): RowFilter {
         return {
             filter_type: RowFilterType.IsFalse,
             is_valid: this.props.isValid ?? true,
-            ...this._sharedBackendParams()
+            ...this._sharedBackendParams(),
         };
     }
 }
@@ -165,7 +177,10 @@ export class RowFilterDescriptorIsFalse extends BaseRowFilterDescriptor {
 // Single-value filter descriptors
 
 export abstract class SingleValueRowFilterDescriptor extends BaseRowFilterDescriptor {
-    constructor(props: RowFilterCommonProps, public readonly value: string) {
+    constructor(
+        props: RowFilterCommonProps,
+        public readonly value: string,
+    ) {
         super(props);
     }
 }
@@ -178,28 +193,43 @@ export class RowFilterDescriptorComparison extends SingleValueRowFilterDescripto
         this._descrType = descrType;
     }
 
-    get descrType() { return this._descrType; }
+    get descrType() {
+        return this._descrType;
+    }
 
     get operatorText(): string {
         switch (this.descrType) {
-            case RowFilterDescrType.IS_EQUAL_TO: return '=';
-            case RowFilterDescrType.IS_GREATER_OR_EQUAL: return '>=';
-            case RowFilterDescrType.IS_GREATER_THAN: return '>';
-            case RowFilterDescrType.IS_LESS_OR_EQUAL: return '<=';
-            case RowFilterDescrType.IS_LESS_THAN: return '<';
-            case RowFilterDescrType.IS_NOT_EQUAL_TO: return '!=';
-            default: return '';
+            case RowFilterDescrType.IS_EQUAL_TO:
+                return '=';
+            case RowFilterDescrType.IS_GREATER_OR_EQUAL:
+                return '>=';
+            case RowFilterDescrType.IS_GREATER_THAN:
+                return '>';
+            case RowFilterDescrType.IS_LESS_OR_EQUAL:
+                return '<=';
+            case RowFilterDescrType.IS_LESS_THAN:
+                return '<';
+            case RowFilterDescrType.IS_NOT_EQUAL_TO:
+                return '!=';
+            default:
+                return '';
         }
     }
 
     private getCompareOp(): FilterComparisonOp {
         switch (this.descrType) {
-            case RowFilterDescrType.IS_EQUAL_TO: return FilterComparisonOp.Eq;
-            case RowFilterDescrType.IS_GREATER_OR_EQUAL: return FilterComparisonOp.GtEq;
-            case RowFilterDescrType.IS_GREATER_THAN: return FilterComparisonOp.Gt;
-            case RowFilterDescrType.IS_LESS_OR_EQUAL: return FilterComparisonOp.LtEq;
-            case RowFilterDescrType.IS_LESS_THAN: return FilterComparisonOp.Lt;
-            default: return FilterComparisonOp.NotEq;
+            case RowFilterDescrType.IS_EQUAL_TO:
+                return FilterComparisonOp.Eq;
+            case RowFilterDescrType.IS_GREATER_OR_EQUAL:
+                return FilterComparisonOp.GtEq;
+            case RowFilterDescrType.IS_GREATER_THAN:
+                return FilterComparisonOp.Gt;
+            case RowFilterDescrType.IS_LESS_OR_EQUAL:
+                return FilterComparisonOp.LtEq;
+            case RowFilterDescrType.IS_LESS_THAN:
+                return FilterComparisonOp.Lt;
+            default:
+                return FilterComparisonOp.NotEq;
         }
     }
 
@@ -208,7 +238,7 @@ export class RowFilterDescriptorComparison extends SingleValueRowFilterDescripto
             filter_type: RowFilterType.Compare,
             is_valid: this.props.isValid ?? true,
             params: { op: this.getCompareOp(), value: this.value },
-            ...this._sharedBackendParams()
+            ...this._sharedBackendParams(),
         };
     }
 }
@@ -221,25 +251,37 @@ export class RowFilterDescriptorSearch extends SingleValueRowFilterDescriptor {
         this._descrType = descrType;
     }
 
-    get descrType() { return this._descrType; }
+    get descrType() {
+        return this._descrType;
+    }
 
     get operatorText(): string {
         switch (this._descrType) {
-            case RowFilterDescrType.SEARCH_CONTAINS: return 'contains';
-            case RowFilterDescrType.SEARCH_NOT_CONTAINS: return 'does not contain';
-            case RowFilterDescrType.SEARCH_STARTS_WITH: return 'starts with';
-            case RowFilterDescrType.SEARCH_ENDS_WITH: return 'ends with';
-            default: return 'matches regex';
+            case RowFilterDescrType.SEARCH_CONTAINS:
+                return 'contains';
+            case RowFilterDescrType.SEARCH_NOT_CONTAINS:
+                return 'does not contain';
+            case RowFilterDescrType.SEARCH_STARTS_WITH:
+                return 'starts with';
+            case RowFilterDescrType.SEARCH_ENDS_WITH:
+                return 'ends with';
+            default:
+                return 'matches regex';
         }
     }
 
     private getSearchType(): TextSearchType {
         switch (this._descrType) {
-            case RowFilterDescrType.SEARCH_CONTAINS: return TextSearchType.Contains;
-            case RowFilterDescrType.SEARCH_NOT_CONTAINS: return TextSearchType.NotContains;
-            case RowFilterDescrType.SEARCH_STARTS_WITH: return TextSearchType.StartsWith;
-            case RowFilterDescrType.SEARCH_ENDS_WITH: return TextSearchType.EndsWith;
-            default: return TextSearchType.RegexMatch;
+            case RowFilterDescrType.SEARCH_CONTAINS:
+                return TextSearchType.Contains;
+            case RowFilterDescrType.SEARCH_NOT_CONTAINS:
+                return TextSearchType.NotContains;
+            case RowFilterDescrType.SEARCH_STARTS_WITH:
+                return TextSearchType.StartsWith;
+            case RowFilterDescrType.SEARCH_ENDS_WITH:
+                return TextSearchType.EndsWith;
+            default:
+                return TextSearchType.RegexMatch;
         }
     }
 
@@ -250,9 +292,9 @@ export class RowFilterDescriptorSearch extends SingleValueRowFilterDescriptor {
             params: {
                 search_type: this.getSearchType(),
                 term: this.value,
-                case_sensitive: false
+                case_sensitive: false,
             },
-            ...this._sharedBackendParams()
+            ...this._sharedBackendParams(),
         };
     }
 }
@@ -263,32 +305,36 @@ export abstract class RangeRowFilterDescriptor extends BaseRowFilterDescriptor {
     constructor(
         props: RowFilterCommonProps,
         public readonly lowerLimit: string,
-        public readonly upperLimit: string
+        public readonly upperLimit: string,
     ) {
         super(props);
     }
 }
 
 export class RowFilterDescriptorIsBetween extends RangeRowFilterDescriptor {
-    get descrType() { return RowFilterDescrType.IS_BETWEEN; }
+    get descrType() {
+        return RowFilterDescrType.IS_BETWEEN;
+    }
     get backendFilter(): RowFilter {
         return {
             filter_type: RowFilterType.Between,
             is_valid: this.props.isValid ?? true,
             params: { left_value: this.lowerLimit, right_value: this.upperLimit },
-            ...this._sharedBackendParams()
+            ...this._sharedBackendParams(),
         };
     }
 }
 
 export class RowFilterDescriptorIsNotBetween extends RangeRowFilterDescriptor {
-    get descrType() { return RowFilterDescrType.IS_NOT_BETWEEN; }
+    get descrType() {
+        return RowFilterDescrType.IS_NOT_BETWEEN;
+    }
     get backendFilter(): RowFilter {
         return {
             filter_type: RowFilterType.NotBetween,
             is_valid: this.props.isValid ?? true,
             params: { left_value: this.lowerLimit, right_value: this.upperLimit },
-            ...this._sharedBackendParams()
+            ...this._sharedBackendParams(),
         };
     }
 }
@@ -297,24 +343,37 @@ export class RowFilterDescriptorIsNotBetween extends RangeRowFilterDescriptor {
 
 function getCompareDescrType(op: string): RowFilterDescrType {
     switch (op) {
-        case FilterComparisonOp.Eq: return RowFilterDescrType.IS_EQUAL_TO;
-        case FilterComparisonOp.NotEq: return RowFilterDescrType.IS_NOT_EQUAL_TO;
-        case FilterComparisonOp.Lt: return RowFilterDescrType.IS_LESS_THAN;
-        case FilterComparisonOp.LtEq: return RowFilterDescrType.IS_LESS_OR_EQUAL;
-        case FilterComparisonOp.Gt: return RowFilterDescrType.IS_GREATER_THAN;
-        case FilterComparisonOp.GtEq: return RowFilterDescrType.IS_GREATER_OR_EQUAL;
-        default: return RowFilterDescrType.IS_EQUAL_TO;
+        case FilterComparisonOp.Eq:
+            return RowFilterDescrType.IS_EQUAL_TO;
+        case FilterComparisonOp.NotEq:
+            return RowFilterDescrType.IS_NOT_EQUAL_TO;
+        case FilterComparisonOp.Lt:
+            return RowFilterDescrType.IS_LESS_THAN;
+        case FilterComparisonOp.LtEq:
+            return RowFilterDescrType.IS_LESS_OR_EQUAL;
+        case FilterComparisonOp.Gt:
+            return RowFilterDescrType.IS_GREATER_THAN;
+        case FilterComparisonOp.GtEq:
+            return RowFilterDescrType.IS_GREATER_OR_EQUAL;
+        default:
+            return RowFilterDescrType.IS_EQUAL_TO;
     }
 }
 
 function getSearchDescrType(searchType: string): RowFilterDescrType {
     switch (searchType) {
-        case TextSearchType.Contains: return RowFilterDescrType.SEARCH_CONTAINS;
-        case TextSearchType.NotContains: return RowFilterDescrType.SEARCH_NOT_CONTAINS;
-        case TextSearchType.EndsWith: return RowFilterDescrType.SEARCH_ENDS_WITH;
-        case TextSearchType.StartsWith: return RowFilterDescrType.SEARCH_STARTS_WITH;
-        case TextSearchType.RegexMatch: return RowFilterDescrType.SEARCH_REGEX_MATCHES;
-        default: return RowFilterDescrType.SEARCH_CONTAINS;
+        case TextSearchType.Contains:
+            return RowFilterDescrType.SEARCH_CONTAINS;
+        case TextSearchType.NotContains:
+            return RowFilterDescrType.SEARCH_NOT_CONTAINS;
+        case TextSearchType.EndsWith:
+            return RowFilterDescrType.SEARCH_ENDS_WITH;
+        case TextSearchType.StartsWith:
+            return RowFilterDescrType.SEARCH_STARTS_WITH;
+        case TextSearchType.RegexMatch:
+            return RowFilterDescrType.SEARCH_REGEX_MATCHES;
+        default:
+            return RowFilterDescrType.SEARCH_CONTAINS;
     }
 }
 
@@ -326,21 +385,33 @@ export function getRowFilterDescriptor(backendFilter: RowFilter): RowFilterDescr
         columnSchema: backendFilter.column_schema,
         isValid: backendFilter.is_valid,
         errorMessage: backendFilter.error_message,
-        condition: (backendFilter.condition as RowFilterCondition) ?? RowFilterCondition.And
+        condition: (backendFilter.condition as RowFilterCondition) ?? RowFilterCondition.And,
     };
 
     switch (backendFilter.filter_type) {
         case RowFilterType.Compare: {
             const params = backendFilter.params as { op: string; value: string };
-            return new RowFilterDescriptorComparison(commonProps, params.value, getCompareDescrType(params.op));
+            return new RowFilterDescriptorComparison(
+                commonProps,
+                params.value,
+                getCompareDescrType(params.op),
+            );
         }
         case RowFilterType.Between: {
             const params = backendFilter.params as { left_value: string; right_value: string };
-            return new RowFilterDescriptorIsBetween(commonProps, params.left_value, params.right_value);
+            return new RowFilterDescriptorIsBetween(
+                commonProps,
+                params.left_value,
+                params.right_value,
+            );
         }
         case RowFilterType.NotBetween: {
             const params = backendFilter.params as { left_value: string; right_value: string };
-            return new RowFilterDescriptorIsNotBetween(commonProps, params.left_value, params.right_value);
+            return new RowFilterDescriptorIsNotBetween(
+                commonProps,
+                params.left_value,
+                params.right_value,
+            );
         }
         case RowFilterType.IsEmpty:
             return new RowFilterDescriptorIsEmpty(commonProps);
@@ -356,7 +427,11 @@ export function getRowFilterDescriptor(backendFilter: RowFilter): RowFilterDescr
             return new RowFilterDescriptorIsFalse(commonProps);
         case RowFilterType.Search: {
             const params = backendFilter.params as { search_type: string; term: string };
-            return new RowFilterDescriptorSearch(commonProps, params.term, getSearchDescrType(params.search_type));
+            return new RowFilterDescriptorSearch(
+                commonProps,
+                params.term,
+                getSearchDescrType(params.search_type),
+            );
         }
         default:
             // Default to IsNull for unrecognized types
@@ -387,7 +462,7 @@ export function getAvailableFilterTypes(columnType: string): RowFilterDescrType[
         RowFilterDescrType.IS_NULL,
         RowFilterDescrType.IS_NOT_NULL,
         RowFilterDescrType.IS_EMPTY,
-        RowFilterDescrType.IS_NOT_EMPTY
+        RowFilterDescrType.IS_NOT_EMPTY,
     ];
 
     const numericFilters = [
@@ -398,7 +473,7 @@ export function getAvailableFilterTypes(columnType: string): RowFilterDescrType[
         RowFilterDescrType.IS_GREATER_THAN,
         RowFilterDescrType.IS_GREATER_OR_EQUAL,
         RowFilterDescrType.IS_BETWEEN,
-        RowFilterDescrType.IS_NOT_BETWEEN
+        RowFilterDescrType.IS_NOT_BETWEEN,
     ];
 
     const stringFilters = [
@@ -408,13 +483,10 @@ export function getAvailableFilterTypes(columnType: string): RowFilterDescrType[
         RowFilterDescrType.SEARCH_NOT_CONTAINS,
         RowFilterDescrType.SEARCH_STARTS_WITH,
         RowFilterDescrType.SEARCH_ENDS_WITH,
-        RowFilterDescrType.SEARCH_REGEX_MATCHES
+        RowFilterDescrType.SEARCH_REGEX_MATCHES,
     ];
 
-    const booleanFilters = [
-        RowFilterDescrType.IS_TRUE,
-        RowFilterDescrType.IS_FALSE
-    ];
+    const booleanFilters = [RowFilterDescrType.IS_TRUE, RowFilterDescrType.IS_FALSE];
 
     const type = columnType.toLowerCase();
     if (type.includes('bool') || type.includes('logical')) {
@@ -440,26 +512,46 @@ export function getAvailableFilterTypes(columnType: string): RowFilterDescrType[
  */
 export function getFilterTypeLabel(type: RowFilterDescrType): string {
     switch (type) {
-        case RowFilterDescrType.IS_EMPTY: return 'Is empty';
-        case RowFilterDescrType.IS_NOT_EMPTY: return 'Is not empty';
-        case RowFilterDescrType.IS_NULL: return 'Is null';
-        case RowFilterDescrType.IS_NOT_NULL: return 'Is not null';
-        case RowFilterDescrType.IS_TRUE: return 'Is true';
-        case RowFilterDescrType.IS_FALSE: return 'Is false';
-        case RowFilterDescrType.IS_LESS_THAN: return 'Less than';
-        case RowFilterDescrType.IS_LESS_OR_EQUAL: return 'Less than or equal';
-        case RowFilterDescrType.IS_GREATER_THAN: return 'Greater than';
-        case RowFilterDescrType.IS_GREATER_OR_EQUAL: return 'Greater than or equal';
-        case RowFilterDescrType.IS_EQUAL_TO: return 'Equal to';
-        case RowFilterDescrType.IS_NOT_EQUAL_TO: return 'Not equal to';
-        case RowFilterDescrType.SEARCH_CONTAINS: return 'Contains';
-        case RowFilterDescrType.SEARCH_NOT_CONTAINS: return 'Does not contain';
-        case RowFilterDescrType.SEARCH_STARTS_WITH: return 'Starts with';
-        case RowFilterDescrType.SEARCH_ENDS_WITH: return 'Ends with';
-        case RowFilterDescrType.SEARCH_REGEX_MATCHES: return 'Matches regex';
-        case RowFilterDescrType.IS_BETWEEN: return 'Between';
-        case RowFilterDescrType.IS_NOT_BETWEEN: return 'Not between';
-        default: return type;
+        case RowFilterDescrType.IS_EMPTY:
+            return 'Is empty';
+        case RowFilterDescrType.IS_NOT_EMPTY:
+            return 'Is not empty';
+        case RowFilterDescrType.IS_NULL:
+            return 'Is null';
+        case RowFilterDescrType.IS_NOT_NULL:
+            return 'Is not null';
+        case RowFilterDescrType.IS_TRUE:
+            return 'Is true';
+        case RowFilterDescrType.IS_FALSE:
+            return 'Is false';
+        case RowFilterDescrType.IS_LESS_THAN:
+            return 'Less than';
+        case RowFilterDescrType.IS_LESS_OR_EQUAL:
+            return 'Less than or equal';
+        case RowFilterDescrType.IS_GREATER_THAN:
+            return 'Greater than';
+        case RowFilterDescrType.IS_GREATER_OR_EQUAL:
+            return 'Greater than or equal';
+        case RowFilterDescrType.IS_EQUAL_TO:
+            return 'Equal to';
+        case RowFilterDescrType.IS_NOT_EQUAL_TO:
+            return 'Not equal to';
+        case RowFilterDescrType.SEARCH_CONTAINS:
+            return 'Contains';
+        case RowFilterDescrType.SEARCH_NOT_CONTAINS:
+            return 'Does not contain';
+        case RowFilterDescrType.SEARCH_STARTS_WITH:
+            return 'Starts with';
+        case RowFilterDescrType.SEARCH_ENDS_WITH:
+            return 'Ends with';
+        case RowFilterDescrType.SEARCH_REGEX_MATCHES:
+            return 'Matches regex';
+        case RowFilterDescrType.IS_BETWEEN:
+            return 'Between';
+        case RowFilterDescrType.IS_NOT_BETWEEN:
+            return 'Not between';
+        default:
+            return type;
     }
 }
 
@@ -473,7 +565,7 @@ export function filterTypeRequiresValue(type: RowFilterDescrType): boolean {
         RowFilterDescrType.IS_NULL,
         RowFilterDescrType.IS_NOT_NULL,
         RowFilterDescrType.IS_TRUE,
-        RowFilterDescrType.IS_FALSE
+        RowFilterDescrType.IS_FALSE,
     ];
     return !noValueFilters.includes(type);
 }

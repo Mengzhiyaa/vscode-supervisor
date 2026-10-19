@@ -6,7 +6,7 @@
     Mirrors VS Code Terminal's search widget appearance and behavior.
 -->
 <script lang="ts">
-    import { localize } from "$lib/localization";
+    import { localize } from '$lib/localization';
 
     interface Props {
         /** Whether the search widget is visible */
@@ -46,7 +46,7 @@
     }: Props = $props();
 
     // Internal state
-    let query = $state("");
+    let query = $state('');
     let caseSensitive = $state(false);
     let useRegex = $state(false);
     let wholeWord = $state(false);
@@ -96,11 +96,11 @@
     });
 
     function handleInputKeyDown(e: KeyboardEvent) {
-        if (e.key === "Escape") {
+        if (e.key === 'Escape') {
             e.preventDefault();
             e.stopPropagation();
             onClose();
-        } else if (e.key === "Enter") {
+        } else if (e.key === 'Enter') {
             e.preventDefault();
             e.stopPropagation();
             if (e.shiftKey) {
@@ -132,10 +132,7 @@
 
     function resize(event: PointerEvent): void {
         if (!resizeHandle?.hasPointerCapture(event.pointerId)) return;
-        widgetWidth = Math.max(
-            260,
-            Math.min(640, resizeStartWidth + resizeStartX - event.clientX),
-        );
+        widgetWidth = Math.max(260, Math.min(640, resizeStartWidth + resizeStartX - event.clientX));
     }
 
     function finishResize(event: PointerEvent): void {
@@ -146,23 +143,13 @@
 
     // Match count display
     const matchCountText = $derived.by(() => {
-        if (!query) return "";
-        if (isInvalidRegex) return localize("console.find.invalidRegex", "Invalid regex");
-        if (matchCount === 0) return localize("console.find.noResults", "No results");
+        if (!query) return '';
+        if (isInvalidRegex) return localize('console.find.invalidRegex', 'Invalid regex');
+        if (matchCount === 0) return localize('console.find.noResults', 'No results');
         return matchCount === 1000
-            ? localize(
-                  "console.find.matchCountLimited",
-                  "{0} of 1000+",
-                  currentMatchIndex + 1,
-              )
-            : localize(
-                  "console.find.matchCount",
-                  "{0} of {1}",
-                  currentMatchIndex + 1,
-                  matchCount,
-              );
+            ? localize('console.find.matchCountLimited', '{0} of 1000+', currentMatchIndex + 1)
+            : localize('console.find.matchCount', '{0} of {1}', currentMatchIndex + 1, matchCount);
     });
-
 </script>
 
 {#if visible}
@@ -171,7 +158,7 @@
             bind:this={resizeHandle}
             class="resize-handle"
             role="separator"
-            aria-label={localize("console.find.resize", "Resize Find")}
+            aria-label={localize('console.find.resize', 'Resize Find')}
             aria-orientation="vertical"
             onpointerdown={beginResize}
             onpointermove={resize}
@@ -191,7 +178,7 @@
                         bind:value={query}
                         class="search-input"
                         type="text"
-                        placeholder={localize("console.find.placeholder", "Find")}
+                        placeholder={localize('console.find.placeholder', 'Find')}
                         spellcheck="false"
                         autocomplete="off"
                         onkeydown={handleInputKeyDown}
@@ -202,8 +189,8 @@
                             type="button"
                             class="option-button"
                             class:active={caseSensitive}
-                            title={localize("console.find.matchCase", "Match Case")}
-                            aria-label={localize("console.find.matchCase", "Match Case")}
+                            title={localize('console.find.matchCase', 'Match Case')}
+                            aria-label={localize('console.find.matchCase', 'Match Case')}
                             onclick={toggleCaseSensitive}
                         >
                             <span class="codicon codicon-case-sensitive"></span>
@@ -213,8 +200,8 @@
                             type="button"
                             class="option-button"
                             class:active={wholeWord}
-                            title={localize("console.find.matchWholeWord", "Match Whole Word")}
-                            aria-label={localize("console.find.matchWholeWord", "Match Whole Word")}
+                            title={localize('console.find.matchWholeWord', 'Match Whole Word')}
+                            aria-label={localize('console.find.matchWholeWord', 'Match Whole Word')}
                             onclick={toggleWholeWord}
                         >
                             <span class="codicon codicon-whole-word"></span>
@@ -224,8 +211,8 @@
                             type="button"
                             class="option-button"
                             class:active={useRegex}
-                            title={localize("console.find.useRegex", "Use Regular Expression")}
-                            aria-label={localize("console.find.useRegex", "Use Regular Expression")}
+                            title={localize('console.find.useRegex', 'Use Regular Expression')}
+                            aria-label={localize('console.find.useRegex', 'Use Regular Expression')}
                             onclick={toggleRegex}
                         >
                             <span class="codicon codicon-regex"></span>
@@ -235,9 +222,7 @@
 
                 <span
                     class="match-count"
-                    class:no-results={matchCount === 0 &&
-                        query.length > 0 &&
-                        !isInvalidRegex}
+                    class:no-results={matchCount === 0 && query.length > 0 && !isInvalidRegex}
                 >
                     {matchCountText}
                 </span>
@@ -245,8 +230,8 @@
                 <button
                     type="button"
                     class="nav-button previous-button"
-                    title={localize("console.find.previousWithKey", "Previous Match (Enter)")}
-                    aria-label={localize("console.find.previous", "Previous Match")}
+                    title={localize('console.find.previousWithKey', 'Previous Match (Enter)')}
+                    aria-label={localize('console.find.previous', 'Previous Match')}
                     disabled={matchCount === 0}
                     onclick={onPreviousMatch}
                 >
@@ -256,8 +241,8 @@
                 <button
                     type="button"
                     class="nav-button next-button"
-                    title={localize("console.find.nextWithKey", "Next Match (Shift+Enter)")}
-                    aria-label={localize("console.find.next", "Next Match")}
+                    title={localize('console.find.nextWithKey', 'Next Match (Shift+Enter)')}
+                    aria-label={localize('console.find.next', 'Next Match')}
                     disabled={matchCount === 0}
                     onclick={onNextMatch}
                 >
@@ -267,8 +252,8 @@
                 <button
                     type="button"
                     class="nav-button close-button"
-                    title={localize("console.find.closeWithKey", "Close (Escape)")}
-                    aria-label={localize("common.close", "Close")}
+                    title={localize('console.find.closeWithKey', 'Close (Escape)')}
+                    aria-label={localize('common.close', 'Close')}
                     onclick={onClose}
                 >
                     <span class="codicon codicon-close"></span>
@@ -317,7 +302,8 @@
         line-height: 19px;
         background: var(--vscode-editorWidget-background);
         color: var(--vscode-editorWidget-foreground);
-        border: 1px solid var(--vscode-widget-border, var(--vscode-editorWidget-border, transparent));
+        border: 1px solid
+            var(--vscode-widget-border, var(--vscode-editorWidget-border, transparent));
         border-bottom-left-radius: 4px;
         border-bottom-right-radius: 4px;
         box-shadow: 0 0 8px 2px var(--vscode-widget-shadow, rgba(0, 0, 0, 0.16));
@@ -409,10 +395,7 @@
 
     .option-button.active {
         opacity: 1;
-        background: var(
-            --vscode-inputOption-activeBackground,
-            rgba(0, 100, 200, 0.3)
-        );
+        background: var(--vscode-inputOption-activeBackground, rgba(0, 100, 200, 0.3));
         color: var(--vscode-inputOption-activeForeground, inherit);
         border-color: var(--vscode-inputOption-activeBorder, transparent);
     }
@@ -465,17 +448,11 @@
 
     /* CSS Custom Highlight styles for search matches */
     :global(::highlight(console-search-matches)) {
-        background-color: var(
-            --vscode-editor-findMatchHighlightBackground,
-            rgba(234, 92, 0, 0.33)
-        );
+        background-color: var(--vscode-editor-findMatchHighlightBackground, rgba(234, 92, 0, 0.33));
     }
 
     :global(::highlight(console-search-current)) {
-        background-color: var(
-            --vscode-editor-findMatchBackground,
-            rgba(255, 200, 0, 0.4)
-        );
+        background-color: var(--vscode-editor-findMatchBackground, rgba(255, 200, 0, 0.4));
         outline: 1px solid var(--vscode-editor-findMatchBorder, transparent);
     }
 </style>

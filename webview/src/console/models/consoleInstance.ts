@@ -1,18 +1,18 @@
-import type { RuntimeResourceUsage as ResourceUsage } from "@shared/runtime";
-import type { ConsoleState } from "../../types/console";
+import type { RuntimeResourceUsage as ResourceUsage } from '@shared/runtime';
+import type { ConsoleState } from '../../types/console';
 import {
     ActivityItemPrompt,
     ActivityItemPromptState,
     type RuntimeItem,
     type RuntimeItemActivity,
-} from "../classes";
+} from '../classes';
 
 export interface ConsoleSessionInfo {
     id: string;
     name: string;
     runtimeName: string;
     languageId?: string;
-    sessionMode: "console" | "notebook" | "background";
+    sessionMode: 'console' | 'notebook' | 'background';
     createdTimestamp: number;
     state: ConsoleState;
     runtimeState: ConsoleState;
@@ -30,7 +30,7 @@ export interface ConsoleInstanceModel {
     sessionName: string;
     runtimeName: string;
     languageId: string;
-    sessionMode: "console" | "notebook" | "background";
+    sessionMode: 'console' | 'notebook' | 'background';
     createdTimestamp: number;
     state: ConsoleState;
     runtimePath?: string;
@@ -68,9 +68,7 @@ interface CreateConsoleInstanceModelOptions {
     sessionDataHydrated: boolean;
 }
 
-function hasUnansweredPrompt(
-    runtimeItemActivities: Map<string, RuntimeItemActivity>,
-): boolean {
+function hasUnansweredPrompt(runtimeItemActivities: Map<string, RuntimeItemActivity>): boolean {
     for (const runtimeItemActivity of runtimeItemActivities.values()) {
         if (
             runtimeItemActivity.activityItems.some(
@@ -110,7 +108,7 @@ export function createConsoleInstanceModel(
         sessionId: session.id,
         sessionName: session.name || session.runtimeName,
         runtimeName: session.runtimeName,
-        languageId: session.languageId ?? "plaintext",
+        languageId: session.languageId ?? 'plaintext',
         sessionMode: session.sessionMode,
         createdTimestamp: session.createdTimestamp,
         state: session.state,
@@ -124,7 +122,7 @@ export function createConsoleInstanceModel(
             options.sessionDataHydrated,
         ),
         runtimeAttached: session.runtimeAttached,
-        disconnected: session.state === "disconnected",
+        disconnected: session.state === 'disconnected',
         inputPrompt: options.inputPrompt,
         continuationPrompt: options.continuationPrompt,
         runtimeItems: options.runtimeItems,

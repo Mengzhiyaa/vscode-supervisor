@@ -1,6 +1,6 @@
 <script lang="ts">
-    import ActionBarMenuButton from "../shared/ActionBarMenuButton.svelte";
-    import { DarkFilter } from "./types";
+    import ActionBarMenuButton from '../shared/ActionBarMenuButton.svelte';
+    import { DarkFilter } from './types';
 
     interface Props {
         darkFilterMode: DarkFilter;
@@ -8,35 +8,26 @@
         onOpenSettings?: () => void;
     }
 
-    let {
-        darkFilterMode,
-        onDarkFilterChange,
-        onOpenSettings,
-    }: Props = $props();
+    let { darkFilterMode, onDarkFilterChange, onOpenSettings }: Props = $props();
 
     const darkFilterLabels = new Map<DarkFilter, string>([
-        [DarkFilter.On, "Dark Filter"],
-        [DarkFilter.Off, "No Filter"],
-        [DarkFilter.Auto, "Follow Theme"],
+        [DarkFilter.On, 'Dark Filter'],
+        [DarkFilter.Off, 'No Filter'],
+        [DarkFilter.Auto, 'Follow Theme'],
     ]);
-    const darkFilterModes: DarkFilter[] = [
-        DarkFilter.On,
-        DarkFilter.Off,
-        DarkFilter.Auto,
-    ];
-    const darkFilterTooltip =
-        "Set whether a dark filter is applied to plots.";
-    const openDarkFilterSettings = "Change Default in Settings...";
+    const darkFilterModes: DarkFilter[] = [DarkFilter.On, DarkFilter.Off, DarkFilter.Auto];
+    const darkFilterTooltip = 'Set whether a dark filter is applied to plots.';
+    const openDarkFilterSettings = 'Change Default in Settings...';
 
     function getDarkFilterIcon(mode: DarkFilter): string {
         switch (mode) {
             case DarkFilter.On:
-                return "circle-large-filled";
+                return 'circle-large-filled';
             case DarkFilter.Off:
-                return "circle-large";
+                return 'circle-large';
             case DarkFilter.Auto:
             default:
-                return "color-mode";
+                return 'color-mode';
         }
     }
 </script>
@@ -55,13 +46,13 @@
             },
         })),
         {
-            id: "settings-separator",
-            label: "",
+            id: 'settings-separator',
+            label: '',
             separator: true,
             onSelected: () => {},
         },
         {
-            id: "open-settings",
+            id: 'open-settings',
             label: openDarkFilterSettings,
             onSelected: () => {
                 onOpenSettings?.();

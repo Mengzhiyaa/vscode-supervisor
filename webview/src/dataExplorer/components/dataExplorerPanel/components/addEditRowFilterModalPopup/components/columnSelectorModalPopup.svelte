@@ -3,13 +3,13 @@
   Port from Positron's columnSelectorModalPopup.tsx
 -->
 <script lang="ts">
-    import { onDestroy, tick, untrack } from "svelte";
-    import { PositronDataGrid } from "../../../../../../dataGrid";
-    import type { SchemaColumn } from "../../../../../../dataGrid/types";
-    import ModalPopup from "../../../../../../shared/ModalPopup.svelte";
-    import { getDataExplorerContext } from "../../../../../positronDataExplorerContext";
-    import ColumnSearch from "./columnSearch.svelte";
-    import { ColumnSelectorDataGridInstance } from "./columnSelectorDataGridInstance";
+    import { onDestroy, tick, untrack } from 'svelte';
+    import { PositronDataGrid } from '../../../../../../dataGrid';
+    import type { SchemaColumn } from '../../../../../../dataGrid/types';
+    import ModalPopup from '../../../../../../shared/ModalPopup.svelte';
+    import { getDataExplorerContext } from '../../../../../positronDataExplorerContext';
+    import ColumnSearch from './columnSearch.svelte';
+    import { ColumnSelectorDataGridInstance } from './columnSelectorDataGridInstance';
 
     const SEARCH_AREA_HEIGHT = 34;
     const FOCUSABLE_ELEMENT_SELECTORS =
@@ -37,7 +37,7 @@
         onClose,
     }: Props = $props();
 
-    let searchText = $state("");
+    let searchText = $state('');
     let gridContainerRef = $state<HTMLDivElement | null>(null);
     const { instance } = getDataExplorerContext();
     const selectorInstance = untrack(
@@ -56,23 +56,17 @@
     const enableSearch = $derived(totalColumns > 10);
 
     const minPopupHeight = $derived.by(() => {
-        const baseHeight =
-            (enableSearch ? SEARCH_AREA_HEIGHT : 0) +
-            2 * rowsMargin +
-            2;
+        const baseHeight = (enableSearch ? SEARCH_AREA_HEIGHT : 0) + 2 * rowsMargin + 2;
         return baseHeight + 2 * rowHeight;
     });
 
     const maxPopupHeight = $derived.by(() => {
-        const baseHeight =
-            (enableSearch ? SEARCH_AREA_HEIGHT : 0) +
-            2 * rowsMargin +
-            2;
+        const baseHeight = (enableSearch ? SEARCH_AREA_HEIGHT : 0) + 2 * rowsMargin + 2;
         return baseHeight + Math.max(displayedRows, 2) * rowHeight;
     });
 
     $effect(() => {
-        searchText = initialSearchText ?? "";
+        searchText = initialSearchText ?? '';
     });
 
     $effect(() => {
@@ -110,17 +104,14 @@
                 return;
             }
 
-            const gridElement = gridContainer.querySelector<HTMLElement>(
-                ".data-grid-waffle",
-            );
+            const gridElement = gridContainer.querySelector<HTMLElement>('.data-grid-waffle');
             selectorInstance.ensureCursorVisible();
             gridElement?.focus();
         });
     });
 
     $effect(() => {
-        const gridElement =
-            gridContainerRef?.querySelector<HTMLElement>(".data-grid-waffle");
+        const gridElement = gridContainerRef?.querySelector<HTMLElement>('.data-grid-waffle');
         if (!gridElement) {
             return;
         }
@@ -129,10 +120,10 @@
             handleGridKeyDown(event);
         };
 
-        gridElement.addEventListener("keydown", listener, true);
+        gridElement.addEventListener('keydown', listener, true);
 
         return () => {
-            gridElement.removeEventListener("keydown", listener, true);
+            gridElement.removeEventListener('keydown', listener, true);
         };
     });
 
@@ -141,18 +132,14 @@
     });
 
     function selectCurrentItem() {
-        const columnSchema = selectorInstance.selectItem(
-            selectorInstance.cursorRowIndex,
-        );
+        const columnSchema = selectorInstance.selectItem(selectorInstance.cursorRowIndex);
         if (columnSchema) {
             onItemSelected(columnSchema);
         }
     }
 
     function focusGrid() {
-        const gridElement = gridContainerRef?.querySelector<HTMLElement>(
-            ".data-grid-waffle",
-        );
+        const gridElement = gridContainerRef?.querySelector<HTMLElement>('.data-grid-waffle');
         selectorInstance.ensureCursorVisible();
         gridElement?.focus();
     }
@@ -170,7 +157,7 @@
     }
 
     function handleGridKeyDown(event: KeyboardEvent) {
-        if (event.code === "Enter" || event.code === "Space") {
+        if (event.code === 'Enter' || event.code === 'Space') {
             event.preventDefault();
             event.stopPropagation();
             selectCurrentItem();
@@ -195,7 +182,7 @@
             <div class="column-selector-search">
                 <ColumnSearch
                     focus={focusInput}
-                    initialSearchText={initialSearchText}
+                    {initialSearchText}
                     onSearchTextChanged={handleSearchTextChanged}
                     onNavigateOut={handleNavigateOut}
                     onConfirmSearch={handleConfirmSearch}
@@ -203,14 +190,8 @@
             </div>
         {/if}
 
-        <div
-            class="column-selector-data-grid"
-            bind:this={gridContainerRef}
-        >
-            <PositronDataGrid
-                instance={selectorInstance}
-                gridRole="column-selector"
-            />
+        <div class="column-selector-data-grid" bind:this={gridContainerRef}>
+            <PositronDataGrid instance={selectorInstance} gridRole="column-selector" />
         </div>
     </div>
 </ModalPopup>

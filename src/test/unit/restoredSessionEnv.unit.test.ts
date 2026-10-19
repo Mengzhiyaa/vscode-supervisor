@@ -6,7 +6,14 @@ import {
 } from '../../api';
 import { KallichoreTransport } from '../../supervisor/KallichoreApiInstance';
 import { KallichoreSession } from '../../supervisor/KallichoreSession';
-import { ActiveSession, DefaultApi, InterruptMode, SessionMode, Status, VarActionType } from '../../supervisor/kcclient/api';
+import {
+    ActiveSession,
+    DefaultApi,
+    InterruptMode,
+    SessionMode,
+    Status,
+    VarActionType,
+} from '../../supervisor/kcclient/api';
 import { JupyterKernelSpec } from '../../supervisor/positron-supervisor';
 
 suite('[Unit] restored session environment', () => {
@@ -74,13 +81,17 @@ suite('[Unit] restored session environment', () => {
 
     test('restart of a restored session replays the launch environment', async () => {
         const session = newSession(false);
-        session.restore(activeSession({
-            R_HOME: '/opt/R/4.5/lib/R',
-            R_LIBS: '/opt/R/library',
-        }));
+        session.restore(
+            activeSession({
+                R_HOME: '/opt/R/4.5/lib/R',
+                R_LIBS: '/opt/R/library',
+            }),
+        );
         try {
             const actions = await session.buildEnvVarActions(true);
-            const replayed = actions.filter(action => action.name === 'R_HOME' || action.name === 'R_LIBS');
+            const replayed = actions.filter(
+                (action) => action.name === 'R_HOME' || action.name === 'R_LIBS',
+            );
             assert.deepStrictEqual(replayed, [
                 { action: VarActionType.Replace, name: 'R_HOME', value: '/opt/R/4.5/lib/R' },
                 { action: VarActionType.Replace, name: 'R_LIBS', value: '/opt/R/library' },
@@ -103,7 +114,7 @@ suite('[Unit] restored session environment', () => {
         session.restore(activeSession({ R_HOME: '/reconnect/R' }));
         try {
             const actions = await session.buildEnvVarActions(true);
-            const rHome = actions.filter(action => action.name === 'R_HOME');
+            const rHome = actions.filter((action) => action.name === 'R_HOME');
             assert.deepStrictEqual(rHome, [
                 { action: VarActionType.Replace, name: 'R_HOME', value: '/spec/R' },
             ]);

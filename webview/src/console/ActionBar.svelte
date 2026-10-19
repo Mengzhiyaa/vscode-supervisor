@@ -6,17 +6,15 @@
     Mirrors: positron/.../components/actionBar.tsx
 -->
 <script lang="ts">
-    import ActionBarButton from "../shared/ActionBarButton.svelte";
-    import type { ConsoleState } from "../types/console";
-    import DynamicActionBar, {
-        type DynamicAction,
-    } from "../shared/DynamicActionBar.svelte";
-    import CurrentWorkingDirectory from "./CurrentWorkingDirectory.svelte";
-    import ConsoleInfoButton from "./ConsoleInfoButton.svelte";
-    import ConsoleResourceMonitor from "./ConsoleResourceMonitor.svelte";
-    import ContextMenu, { type ContextMenuEntry } from "../shared/ContextMenu.svelte";
-    import { localize } from "$lib/localization";
-    
+    import ActionBarButton from '../shared/ActionBarButton.svelte';
+    import type { ConsoleState } from '../types/console';
+    import DynamicActionBar, { type DynamicAction } from '../shared/DynamicActionBar.svelte';
+    import CurrentWorkingDirectory from './CurrentWorkingDirectory.svelte';
+    import ConsoleInfoButton from './ConsoleInfoButton.svelte';
+    import ConsoleResourceMonitor from './ConsoleResourceMonitor.svelte';
+    import ContextMenu, { type ContextMenuEntry } from '../shared/ContextMenu.svelte';
+    import { localize } from '$lib/localization';
+
     interface SessionInfo {
         id: string;
         name: string;
@@ -79,24 +77,31 @@
 
     let actionBarElement = $state<HTMLDivElement | null>(null);
     let contextMenuPoint = $state<{ x: number; y: number } | null>(null);
-    const contextMenuEntries = $derived.by((): ContextMenuEntry[] => [{
-        label: localize("console.showResourceMonitor", "Show Resource Monitor"),
-        checked: showResourceMonitor,
-        onSelected: () => onToggleResourceMonitor?.(),
-    }]);
+    const contextMenuEntries = $derived.by((): ContextMenuEntry[] => [
+        {
+            label: localize('console.showResourceMonitor', 'Show Resource Monitor'),
+            checked: showResourceMonitor,
+            onSelected: () => onToggleResourceMonitor?.(),
+        },
+    ]);
 
     // Localized strings (Positron pattern)
-    const positronInterruptExecution = localize("console.interruptExecution", "Interrupt Execution");
-    const positronRestartSession = $derived(localize(
-        "console.restartLanguage",
-        "Restart {0}",
-        session?.runtimeName ?? localize("console.session", "Session"),
-    ));
-    const positronToggleWordWrap = localize("console.toggleWordWrap", "Toggle Word Wrap");
-    const positronClearConsole = localize("console.clearConsole", "Clear Console");
-    const positronToggleTrace = localize("console.toggleTrace", "Toggle Trace");
-    const positronDeleteSession = localize("console.deleteSession", "Delete Session");
-    const positronOpenInEditor = localize("console.openInEditor", "Open in Editor");
+    const positronInterruptExecution = localize(
+        'console.interruptExecution',
+        'Interrupt Execution',
+    );
+    const positronRestartSession = $derived(
+        localize(
+            'console.restartLanguage',
+            'Restart {0}',
+            session?.runtimeName ?? localize('console.session', 'Session'),
+        ),
+    );
+    const positronToggleWordWrap = localize('console.toggleWordWrap', 'Toggle Word Wrap');
+    const positronClearConsole = localize('console.clearConsole', 'Clear Console');
+    const positronToggleTrace = localize('console.toggleTrace', 'Toggle Trace');
+    const positronDeleteSession = localize('console.deleteSession', 'Delete Session');
+    const positronOpenInEditor = localize('console.openInEditor', 'Open in Editor');
     const RESOURCE_MONITOR_MAX_WIDTH = 180;
 
     // --- Build DynamicActionBar actions ---
@@ -132,7 +137,7 @@
                 component: interruptSnippet,
                 overflowMenuItem: {
                     label: positronInterruptExecution,
-                    icon: "positron-interrupt-runtime",
+                    icon: 'positron-interrupt-runtime',
                     disabled: interrupting,
                     onSelected: () => onInterrupt(),
                 },
@@ -142,11 +147,7 @@
         // Match Positron's right-hand action group: the interrupt button is
         // followed immediately by the resource monitor. The monitor remains
         // shrinkable so the working directory yields space gracefully.
-        if (
-            showResourceMonitor &&
-            resourceUsageHistory.length > 0 &&
-            session?.state !== "exited"
-        ) {
+        if (showResourceMonitor && resourceUsageHistory.length > 0 && session?.state !== 'exited') {
             actions.push({
                 fixedWidth: RESOURCE_MONITOR_MAX_WIDTH,
                 minWidth: 92,
@@ -162,7 +163,7 @@
             component: restartSnippet,
             overflowMenuItem: {
                 label: positronRestartSession,
-                icon: "refresh",
+                icon: 'refresh',
                 disabled: !canShutdown || restarting,
                 onSelected: () => onRestart(),
             },
@@ -175,7 +176,7 @@
                 component: deleteSnippet,
                 overflowMenuItem: {
                     label: positronDeleteSession,
-                    icon: "trash",
+                    icon: 'trash',
                     disabled: !(canShutdown || canStart),
                     onSelected: () => onDeleteSession(),
                 },
@@ -196,7 +197,7 @@
                 component: traceSnippet,
                 overflowMenuItem: {
                     label: positronToggleTrace,
-                    icon: "wand",
+                    icon: 'wand',
                     onSelected: () => onToggleTrace(),
                 },
             });
@@ -209,7 +210,7 @@
             component: wordWrapSnippet,
             overflowMenuItem: {
                 label: positronToggleWordWrap,
-                icon: "word-wrap",
+                icon: 'word-wrap',
                 onSelected: () => onToggleWordWrap(),
             },
         });
@@ -221,7 +222,7 @@
             component: openInEditorSnippet,
             overflowMenuItem: {
                 label: positronOpenInEditor,
-                icon: "positron-open-in-editor",
+                icon: 'positron-open-in-editor',
                 onSelected: () => onOpenInEditor(),
             },
         });
@@ -233,7 +234,7 @@
             component: clearSnippet,
             overflowMenuItem: {
                 label: positronClearConsole,
-                icon: "clear-all",
+                icon: 'clear-all',
                 onSelected: () => onClear(),
             },
         });
@@ -252,10 +253,7 @@
 {/snippet}
 
 {#snippet resourceMonitorSnippet()}
-    <ConsoleResourceMonitor
-        busy={interruptible}
-        {resourceUsageHistory}
-    />
+    <ConsoleResourceMonitor busy={interruptible} {resourceUsageHistory} />
 {/snippet}
 
 {#snippet interruptSnippet()}
@@ -333,12 +331,12 @@
     bind:this={actionBarElement}
     class="console-action-bar"
     role="toolbar"
-    aria-label={localize("console.actions", "Console actions")}
+    aria-label={localize('console.actions', 'Console actions')}
     tabindex="-1"
     data-trace-enabled={traceEnabled}
     oncontextmenu={(event) => {
         if (!onToggleResourceMonitor) return;
-        if (!(event.target as Element).closest(".console-resource-monitor")) return;
+        if (!(event.target as Element).closest('.console-resource-monitor')) return;
         event.preventDefault();
         contextMenuPoint = { x: event.clientX, y: event.clientY };
     }}
@@ -403,14 +401,10 @@
     }
 
     .console-action-bar :global(.action-bar-separator::after) {
-        background: var(
-            --vscode-positronActionBar-separator,
-            var(--positron-action-bar-border)
-        );
+        background: var(--vscode-positronActionBar-separator, var(--positron-action-bar-border));
     }
 
-    .console-action-bar
-        :global(.action-bar-button.interrupt .action-bar-button-icon::before) {
+    .console-action-bar :global(.action-bar-button.interrupt .action-bar-button-icon::before) {
         color: var(--vscode-errorForeground, #f44747);
     }
 

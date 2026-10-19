@@ -8,7 +8,7 @@
      * Licensed under the Elastic License 2.0. See LICENSE.txt for license information.
      */
 
-    import { onMount, onDestroy } from "svelte";
+    import { onMount, onDestroy } from 'svelte';
 
     interface Props {
         /** Whether to show infinite progress (no estimated time) */

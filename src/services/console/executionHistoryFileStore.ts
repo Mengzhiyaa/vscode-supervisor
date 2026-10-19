@@ -26,9 +26,7 @@ export class ExecutionHistoryFileStore {
         storageUri: vscode.Uri | undefined,
         private readonly _outputChannel: vscode.LogOutputChannel,
     ) {
-        this._root = storageUri?.fsPath
-            ? path.join(storageUri.fsPath, 'history', 'v1')
-            : undefined;
+        this._root = storageUri?.fsPath ? path.join(storageUri.fsPath, 'history', 'v1') : undefined;
     }
 
     get enabled(): boolean {
@@ -94,29 +92,33 @@ export class ExecutionHistoryFileStore {
 
     private async _loadDirectory(directory: string): Promise<void> {
         const files = await readdir(directory, { withFileTypes: true });
-        await Promise.all(files
-            .filter(entry => entry.isFile() && entry.name.endsWith('.json'))
-            .map(async entry => {
-                const file = path.join(directory, entry.name);
-                try {
-                    const value = JSON.parse(await readFile(file, 'utf8')) as Partial<StoredHistoryFile>;
-                    if (
-                        value.schemaVersion !== SchemaVersion ||
-                        typeof value.id !== 'string' ||
-                        !Array.isArray(value.entries) ||
-                        (value.kind !== 'session-input' &&
-                            value.kind !== 'language-input' &&
-                            value.kind !== 'execution')
-                    ) {
-                        throw new Error('unsupported or malformed history file');
+        await Promise.all(
+            files
+                .filter((entry) => entry.isFile() && entry.name.endsWith('.json'))
+                .map(async (entry) => {
+                    const file = path.join(directory, entry.name);
+                    try {
+                        const value = JSON.parse(
+                            await readFile(file, 'utf8'),
+                        ) as Partial<StoredHistoryFile>;
+                        if (
+                            value.schemaVersion !== SchemaVersion ||
+                            typeof value.id !== 'string' ||
+                            !Array.isArray(value.entries) ||
+                            (value.kind !== 'session-input' &&
+                                value.kind !== 'language-input' &&
+                                value.kind !== 'execution')
+                        ) {
+                            throw new Error('unsupported or malformed history file');
+                        }
+                        this._mapFor(value.kind).set(value.id, value.entries);
+                    } catch (error) {
+                        this._outputChannel.warn(
+                            `[ExecutionHistoryService] Ignoring invalid history file ${file}: ${getErrorMessage(error)}`,
+                        );
                     }
-                    this._mapFor(value.kind).set(value.id, value.entries);
-                } catch (error) {
-                    this._outputChannel.warn(
-                        `[ExecutionHistoryService] Ignoring invalid history file ${file}: ${getErrorMessage(error)}`,
-                    );
-                }
-            }));
+                }),
+        );
     }
 
     private async _write(
@@ -148,9 +150,7 @@ export class ExecutionHistoryFileStore {
 
     private _filePath(kind: HistoryKind, id: string): string {
         const name = createHash('sha256').update(id).digest('hex');
-        const directory = kind === 'language-input'
-            ? this._languagesRoot()
-            : this._sessionsRoot();
+        const directory = kind === 'language-input' ? this._languagesRoot() : this._sessionsRoot();
         const suffix = kind === 'execution' ? 'execution' : 'input';
         return path.join(directory, `${name}.${suffix}.json`);
     }

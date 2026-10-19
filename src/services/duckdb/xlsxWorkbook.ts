@@ -39,12 +39,17 @@ function workbookSheets(xml: string): Array<{ name: string; relationship?: strin
 }
 
 function parseRange(value: string | undefined): XlsxRange | undefined {
-    const match = value?.trim().match(/^\$?([A-Za-z]+)\$?([1-9]\d*)(?::\$?([A-Za-z]+)\$?([1-9]\d*))?$/);
+    const match = value
+        ?.trim()
+        .match(/^\$?([A-Za-z]+)\$?([1-9]\d*)(?::\$?([A-Za-z]+)\$?([1-9]\d*))?$/);
     if (!match) {
         return undefined;
     }
-    const column = (letters: string) => [...letters.toUpperCase()]
-        .reduce((result, letter) => result * 26 + letter.charCodeAt(0) - 64, 0);
+    const column = (letters: string) =>
+        [...letters.toUpperCase()].reduce(
+            (result, letter) => result * 26 + letter.charCodeAt(0) - 64,
+            0,
+        );
     const left = column(match[1]);
     const right = column(match[3] ?? match[1]);
     const top = Number(match[2]);
@@ -65,30 +70,53 @@ export async function readXlsxWorksheetMetadata(
     sheetName: string | undefined,
     token: vscode.CancellationToken,
 ): Promise<XlsxWorksheetMetadata> {
-    const workbook = await readEntryText(data, WorkbookEntryName, MaxWorkbookMetadataBytes, false, token);
+    const workbook = await readEntryText(
+        data,
+        WorkbookEntryName,
+        MaxWorkbookMetadataBytes,
+        false,
+        token,
+    );
     if (workbook === undefined) {
         return {};
     }
     const sheets = workbookSheets(workbook);
-    const metadata: XlsxWorksheetMetadata = { sheets: sheets.length > 0 ? sheets.map(sheet => sheet.name) : undefined };
-    const selected = sheetName === undefined ? sheets[0] : sheets.find(sheet => sheet.name === sheetName);
+    const metadata: XlsxWorksheetMetadata = {
+        sheets: sheets.length > 0 ? sheets.map((sheet) => sheet.name) : undefined,
+    };
+    const selected =
+        sheetName === undefined ? sheets[0] : sheets.find((sheet) => sheet.name === sheetName);
     if (!selected?.relationship) {
         return metadata;
     }
-    const relationships = await readEntryText(data, 'xl/_rels/workbook.xml.rels', MaxWorkbookMetadataBytes, false, token);
+    const relationships = await readEntryText(
+        data,
+        'xl/_rels/workbook.xml.rels',
+        MaxWorkbookMetadataBytes,
+        false,
+        token,
+    );
     if (relationships === undefined) {
         return metadata;
     }
     for (const match of relationships.matchAll(/<(?:[\w.-]+:)?Relationship\b[^>]*>/g)) {
-        if (attribute(match[0], 'Id') !== selected.relationship || attribute(match[0], 'TargetMode') === 'External') {
+        if (
+            attribute(match[0], 'Id') !== selected.relationship ||
+            attribute(match[0], 'TargetMode') === 'External'
+        ) {
             continue;
         }
         const target = attribute(match[0], 'Target');
         if (!target) {
             break;
         }
-        const entry = path.posix.normalize(target.startsWith('/')
-            ? target.slice(1) : target.startsWith('xl/') ? target : `xl/${target}`);
+        const entry = path.posix.normalize(
+            target.startsWith('/')
+                ? target.slice(1)
+                : target.startsWith('xl/')
+                  ? target
+                  : `xl/${target}`,
+        );
         if (!entry.startsWith('xl/')) {
             break;
         }
@@ -114,7 +142,8 @@ async function readEntryText(
     }
     if (entry.method === 0) {
         return !allowPrefix && entry.bytes.byteLength > limit
-            ? undefined : entry.bytes.subarray(0, limit).toString('utf8');
+            ? undefined
+            : entry.bytes.subarray(0, limit).toString('utf8');
     }
     if (entry.method !== 8) {
         return undefined;
@@ -132,9 +161,15 @@ async function readEntryText(
             settled = true;
             subscription?.dispose();
             stream.destroy();
-            if (error) { reject(error); } else { resolve(text); }
+            if (error) {
+                reject(error);
+            } else {
+                resolve(text);
+            }
         };
-        subscription = token.onCancellationRequested(() => finish(undefined, new vscode.CancellationError()));
+        subscription = token.onCancellationRequested(() =>
+            finish(undefined, new vscode.CancellationError()),
+        );
         stream.on('error', () => finish());
         stream.on('data', (chunk: Buffer) => {
             if (settled) {
@@ -165,11 +200,14 @@ export function readXlsxWorksheetNames(data: Uint8Array): readonly string[] | un
         return undefined;
     }
     const xml = new TextDecoder('utf-8').decode(workbookXml);
-    const names = workbookSheets(xml).map(sheet => sheet.name);
+    const names = workbookSheets(xml).map((sheet) => sheet.name);
     return names.length > 0 ? names : undefined;
 }
 
-function findZipEntry(data: Uint8Array, entryName: string): { bytes: Buffer; method: number } | undefined {
+function findZipEntry(
+    data: Uint8Array,
+    entryName: string,
+): { bytes: Buffer; method: number } | undefined {
     const buffer = Buffer.from(data.buffer, data.byteOffset, data.byteLength);
     const eocdOffset = findEndOfCentralDirectory(buffer);
     if (eocdOffset < 0 || eocdOffset + 22 > buffer.length) {
@@ -194,15 +232,23 @@ function findZipEntry(data: Uint8Array, entryName: string): { bytes: Buffer; met
         }
         const name = buffer.subarray(nameStart, nameStart + fileNameLength).toString('utf8');
         if (name === entryName) {
-            if (localHeaderOffset + 30 > buffer.length ||
+            if (
+                localHeaderOffset + 30 > buffer.length ||
                 buffer.readUInt32LE(localHeaderOffset) !== LocalFileHeaderSignature ||
-                (buffer.readUInt16LE(offset + 8) & 1) !== 0) {
+                (buffer.readUInt16LE(offset + 8) & 1) !== 0
+            ) {
                 return undefined;
             }
-            const dataOffset = localHeaderOffset + 30 + buffer.readUInt16LE(localHeaderOffset + 26) +
+            const dataOffset =
+                localHeaderOffset +
+                30 +
+                buffer.readUInt16LE(localHeaderOffset + 26) +
                 buffer.readUInt16LE(localHeaderOffset + 28);
             return dataOffset + compressedSize <= buffer.length
-                ? { bytes: buffer.subarray(dataOffset, dataOffset + compressedSize), method: compressionMethod }
+                ? {
+                      bytes: buffer.subarray(dataOffset, dataOffset + compressedSize),
+                      method: compressionMethod,
+                  }
                 : undefined;
         }
         offset = nameStart + fileNameLength + extraLength + commentLength;
@@ -239,18 +285,30 @@ function readZipEntry(data: Uint8Array, entryName: string): Uint8Array | undefin
 }
 
 function decodeXmlEntities(value: string): string {
-    return value.replace(/&(?:amp|lt|gt|quot|apos|#\d+|#x[\da-f]+);/gi, entity => {
+    return value.replace(/&(?:amp|lt|gt|quot|apos|#\d+|#x[\da-f]+);/gi, (entity) => {
         switch (entity.toLowerCase()) {
-            case '&amp;': return '&';
-            case '&lt;': return '<';
-            case '&gt;': return '>';
-            case '&quot;': return '"';
-            case '&apos;': return '\'';
+            case '&amp;':
+                return '&';
+            case '&lt;':
+                return '<';
+            case '&gt;':
+                return '>';
+            case '&quot;':
+                return '"';
+            case '&apos;':
+                return "'";
             default: {
                 const hexadecimal = entity[2]?.toLowerCase() === 'x';
-                const value = Number.parseInt(entity.slice(hexadecimal ? 3 : 2, -1), hexadecimal ? 16 : 10);
-                return Number.isInteger(value) && value >= 0 && value <= 0x10ffff &&
-                    !(value >= 0xd800 && value <= 0xdfff) ? String.fromCodePoint(value) : entity;
+                const value = Number.parseInt(
+                    entity.slice(hexadecimal ? 3 : 2, -1),
+                    hexadecimal ? 16 : 10,
+                );
+                return Number.isInteger(value) &&
+                    value >= 0 &&
+                    value <= 0x10ffff &&
+                    !(value >= 0xd800 && value <= 0xdfff)
+                    ? String.fromCodePoint(value)
+                    : entity;
             }
         }
     });

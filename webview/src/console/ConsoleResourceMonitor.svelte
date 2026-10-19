@@ -1,9 +1,9 @@
 <script lang="ts">
-    import { onDestroy } from "svelte";
-    import ResourceUsageGraph from "./ResourceUsageGraph.svelte";
-    import ResourceUsageStats from "./ResourceUsageStats.svelte";
-    import { computeResourceMonitorLayout } from "@shared/resourceMonitorLayout";
-    import { localize } from "$lib/localization";
+    import { onDestroy } from 'svelte';
+    import ResourceUsageGraph from './ResourceUsageGraph.svelte';
+    import ResourceUsageStats from './ResourceUsageStats.svelte';
+    import { computeResourceMonitorLayout } from '@shared/resourceMonitorLayout';
+    import { localize } from '$lib/localization';
 
     interface ResourceUsage {
         cpu_percent: number;
@@ -25,15 +25,12 @@
     const ariaLabel = $derived(
         latest
             ? localize(
-                  "console.resource.aria",
-                  "Runtime resource usage: CPU {0}%, memory {1} bytes",
+                  'console.resource.aria',
+                  'Runtime resource usage: CPU {0}%, memory {1} bytes',
                   latest.cpu_percent.toFixed(0),
                   latest.memory_bytes,
               )
-            : localize(
-                  "console.resource.unavailable",
-                  "Runtime resource usage unavailable",
-              ),
+            : localize('console.resource.unavailable', 'Runtime resource usage unavailable'),
     );
 
     $effect(() => {
@@ -62,16 +59,12 @@
         <div
             class="graph-chip"
             title={localize(
-                "console.resource.cpuTooltip",
-                "CPU {0}%",
+                'console.resource.cpuTooltip',
+                'CPU {0}%',
                 latest.cpu_percent.toFixed(0),
             )}
         >
-            <ResourceUsageGraph
-                data={resourceUsageHistory}
-                width={layout.graphWidth}
-                height={16}
-            />
+            <ResourceUsageGraph data={resourceUsageHistory} width={layout.graphWidth} height={16} />
         </div>
     {/if}
     {#if latest && layout.showMemory}

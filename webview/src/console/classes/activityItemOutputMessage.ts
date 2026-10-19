@@ -47,7 +47,7 @@ export class ActivityItemOutputMessage extends ActivityItem {
         parentId: string,
         when: Date,
         readonly data: ILanguageRuntimeMessageOutputData,
-        readonly outputId?: string
+        readonly outputId?: string,
     ) {
         // Call the base class's constructor.
         super(id, parentId, when);
@@ -102,9 +102,8 @@ export class ActivityItemOutputMessage extends ActivityItem {
      * @returns The remaining scrollback size.
      */
     public override optimizeScrollback(scrollbackSize: number, _clearData: boolean = true) {
-        const nextScrollbackSize = this._outputLines.length <= scrollbackSize
-            ? undefined
-            : scrollbackSize;
+        const nextScrollbackSize =
+            this._outputLines.length <= scrollbackSize ? undefined : scrollbackSize;
         if (nextScrollbackSize !== this._scrollbackSize) {
             this._scrollbackSize = nextScrollbackSize;
             this._outputLinesStore.set(this.outputLines);

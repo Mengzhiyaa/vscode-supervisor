@@ -120,26 +120,50 @@ function createDeferred<T>(): {
 suite('[Unit] supervisor core backports', () => {
     test('service cleanup failures do not prevent kernel shutdown or remaining disposal', async () => {
         const session = new RuntimeSession(
-            'session-1', makeRuntimeMetadata(), makeSessionMetadata(), makeNoopLogChannel(), 'Session 1',
+            'session-1',
+            makeRuntimeMetadata(),
+            makeSessionMetadata(),
+            makeNoopLogChannel(),
+            'Session 1',
         );
         const calls: string[] = [];
         (session as any)._kernel = {
-            shutdown: async () => { calls.push('shutdown'); },
-            dispose: () => { calls.push('kernel-dispose'); },
+            shutdown: async () => {
+                calls.push('shutdown');
+            },
+            dispose: () => {
+                calls.push('kernel-dispose');
+            },
         };
         (session as any)._supportsLsp = true;
         (session as any)._lsp = {
             state: LanguageLspState.Running,
-            deactivate: async () => { throw new Error('LSP stop failed'); },
-            dispose: () => { throw new Error('LSP dispose failed'); },
+            deactivate: async () => {
+                throw new Error('LSP stop failed');
+            },
+            dispose: () => {
+                throw new Error('LSP dispose failed');
+            },
         };
         (session as any)._dapComm = Promise.resolve({
-            disconnect: async () => { throw new Error('DAP stop failed'); },
-            dispose: () => { throw new Error('DAP dispose failed'); },
+            disconnect: async () => {
+                throw new Error('DAP stop failed');
+            },
+            dispose: () => {
+                throw new Error('DAP dispose failed');
+            },
         });
         (session as any)._disposables.push(
-            { dispose: () => { throw new Error('Listener dispose failed'); } },
-            { dispose: () => { calls.push('listener-dispose'); } },
+            {
+                dispose: () => {
+                    throw new Error('Listener dispose failed');
+                },
+            },
+            {
+                dispose: () => {
+                    calls.push('listener-dispose');
+                },
+            },
         );
 
         await session.shutdown();
@@ -154,9 +178,17 @@ suite('[Unit] supervisor core backports', () => {
         const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'supervisor-lease-test-'));
         const leasePath = path.join(directory, 'lease.json');
         const errors: unknown[] = [];
-        const previous = new SupervisorProcessLease(leasePath, () => false, error => errors.push(error));
+        const previous = new SupervisorProcessLease(
+            leasePath,
+            () => false,
+            (error) => errors.push(error),
+        );
         let keepAlive = false;
-        const replacement = new SupervisorProcessLease(leasePath, () => keepAlive, error => errors.push(error));
+        const replacement = new SupervisorProcessLease(
+            leasePath,
+            () => keepAlive,
+            (error) => errors.push(error),
+        );
         try {
             const claimed = JSON.parse(fs.readFileSync(leasePath, 'utf8'));
             previous.dispose();
@@ -168,7 +200,8 @@ suite('[Unit] supervisor core backports', () => {
             assert.strictEqual(JSON.parse(fs.readFileSync(leasePath, 'utf8')).ownerPid, 0);
             assert.deepStrictEqual(errors, []);
         } finally {
-            previous.dispose(); replacement.dispose();
+            previous.dispose();
+            replacement.dispose();
             fs.rmSync(directory, { recursive: true, force: true });
         }
     });
@@ -177,7 +210,7 @@ suite('[Unit] supervisor core backports', () => {
         assert.strictEqual(quotePowerShellArgument('--transport'), "'--transport'");
         assert.strictEqual(
             quotePowerShellArgument('C:\\Users\\Jane Doe\\supervisor.log'),
-            "'\"C:\\Users\\Jane Doe\\supervisor.log\"'",
+            '\'"C:\\Users\\Jane Doe\\supervisor.log"\'',
         );
         assert.strictEqual(
             quotePowerShellArgument("C:\\Users\\O'Brien Doe\\supervisor.log"),
@@ -186,26 +219,11 @@ suite('[Unit] supervisor core backports', () => {
     });
 
     test('uses ephemeral reconnect state only for non-reconnect-target supervisors', async () => {
-        assert.strictEqual(
-            sharesApplicationLifetime(vscode.UIKind.Desktop, 'immediately'),
-            true,
-        );
-        assert.strictEqual(
-            isReconnectTarget(vscode.UIKind.Desktop, 'immediately'),
-            false,
-        );
-        assert.strictEqual(
-            isReconnectTarget(vscode.UIKind.Desktop, 'when idle'),
-            false,
-        );
-        assert.strictEqual(
-            isReconnectTarget(vscode.UIKind.Desktop, '4'),
-            true,
-        );
-        assert.strictEqual(
-            isReconnectTarget(vscode.UIKind.Web, 'immediately'),
-            true,
-        );
+        assert.strictEqual(sharesApplicationLifetime(vscode.UIKind.Desktop, 'immediately'), true);
+        assert.strictEqual(isReconnectTarget(vscode.UIKind.Desktop, 'immediately'), false);
+        assert.strictEqual(isReconnectTarget(vscode.UIKind.Desktop, 'when idle'), false);
+        assert.strictEqual(isReconnectTarget(vscode.UIKind.Desktop, '4'), true);
+        assert.strictEqual(isReconnectTarget(vscode.UIKind.Web, 'immediately'), true);
 
         const ephemeral = createMemento();
         const persistent = createMemento();
@@ -229,31 +247,20 @@ suite('[Unit] supervisor core backports', () => {
     test('reload reconnect state survives a replacement extension host in the same application epoch', async () => {
         const workspaceState = createMemento();
         const ownerEpoch = 'application-epoch-1';
-        const firstExtensionHostState = createReloadPersistentState(
-            workspaceState,
-            ownerEpoch,
-        );
+        const firstExtensionHostState = createReloadPersistentState(workspaceState, ownerEpoch);
         const state = {
             base_path: 'http://127.0.0.1:9000',
             bearer_token: 'secret',
             server_pid: 42,
         } as any;
 
-        await saveServerStateToTier(
-            true,
-            firstExtensionHostState,
-            workspaceState,
-            state,
-        );
+        await saveServerStateToTier(true, firstExtensionHostState, workspaceState, state);
 
         const replacementExtensionHostState = createReloadPersistentState(
             workspaceState,
             ownerEpoch,
         );
-        assert.deepStrictEqual(
-            replacementExtensionHostState.get(KALLICHORE_STATE_KEY),
-            state,
-        );
+        assert.deepStrictEqual(replacementExtensionHostState.get(KALLICHORE_STATE_KEY), state);
         assert.strictEqual(workspaceState.get(KALLICHORE_STATE_KEY), undefined);
         assert.deepStrictEqual(replacementExtensionHostState.keys(), [KALLICHORE_STATE_KEY]);
     });
@@ -293,22 +300,15 @@ suite('[Unit] supervisor core backports', () => {
         await nextApplicationState.update(KALLICHORE_STATE_KEY, { server_pid: 43 });
 
         await new Promise<void>((resolve) => queueMicrotask(resolve));
-        assert.deepStrictEqual(
-            nextApplicationState.get(KALLICHORE_STATE_KEY),
-            { server_pid: 43 },
-        );
+        assert.deepStrictEqual(nextApplicationState.get(KALLICHORE_STATE_KEY), { server_pid: 43 });
     });
 
     test('reload reconnect state rejects and removes the legacy unscoped format', async () => {
         const workspaceState = createMemento();
-        const legacyStorageKey =
-            `vscode-supervisor.reloadState.v1.${KALLICHORE_STATE_KEY}`;
+        const legacyStorageKey = `vscode-supervisor.reloadState.v1.${KALLICHORE_STATE_KEY}`;
         await workspaceState.update(legacyStorageKey, { server_pid: 42 });
 
-        const reloadState = createReloadPersistentState(
-            workspaceState,
-            'application-epoch-1',
-        );
+        const reloadState = createReloadPersistentState(workspaceState, 'application-epoch-1');
         assert.strictEqual(reloadState.get(KALLICHORE_STATE_KEY), undefined);
         assert.strictEqual(reloadState.get('missing', 'fallback'), 'fallback');
 
@@ -328,12 +328,7 @@ suite('[Unit] supervisor core backports', () => {
             bearer_token: 'secret',
             server_pid: 42,
         } as any;
-        await saveServerStateToTier(
-            false,
-            firstApplicationState,
-            persistentState,
-            state,
-        );
+        await saveServerStateToTier(false, firstApplicationState, persistentState, state);
 
         const nextApplicationState = createReloadPersistentState(
             workspaceState,
@@ -381,25 +376,11 @@ suite('[Unit] supervisor core backports', () => {
             metadata: { sessionId: 'runtime-session-1' },
         };
 
-        const dapComm = await DapComm.create(
-            session as any,
-            'ark_dap',
-            'ark',
-            'Ark VS Code R',
-        );
+        const dapComm = await DapComm.create(session as any, 'ark_dap', 'ark', 'Ark VS Code R');
 
-        assert.strictEqual(
-            (dapComm as any).debugOptions.suppressSaveBeforeStart,
-            true,
-        );
-        assert.strictEqual(
-            (dapComm as any).debugOptions.suppressDebugView,
-            undefined,
-        );
-        assert.strictEqual(
-            (dapComm as any).config.positronRuntimeSessionId,
-            'runtime-session-1',
-        );
+        assert.strictEqual((dapComm as any).debugOptions.suppressSaveBeforeStart, true);
+        assert.strictEqual((dapComm as any).debugOptions.suppressDebugView, undefined);
+        assert.strictEqual((dapComm as any).config.positronRuntimeSessionId, 'runtime-session-1');
 
         dapComm.dispose();
     });
@@ -407,22 +388,10 @@ suite('[Unit] supervisor core backports', () => {
     test('detached startup ignores successful terminal exits during startup', () => {
         const shouldIgnore = (KCApi.prototype as any)._shouldIgnoreTerminalCloseDuringStartup;
 
-        assert.strictEqual(
-            shouldIgnore.call({}, '1 hour', { code: 0 }),
-            true,
-        );
-        assert.strictEqual(
-            shouldIgnore.call({}, '1 hour', { code: undefined }),
-            true,
-        );
-        assert.strictEqual(
-            shouldIgnore.call({}, 'immediately', { code: 0 }),
-            false,
-        );
-        assert.strictEqual(
-            shouldIgnore.call({}, '1 hour', { code: 23 }),
-            false,
-        );
+        assert.strictEqual(shouldIgnore.call({}, '1 hour', { code: 0 }), true);
+        assert.strictEqual(shouldIgnore.call({}, '1 hour', { code: undefined }), true);
+        assert.strictEqual(shouldIgnore.call({}, 'immediately', { code: 0 }), false);
+        assert.strictEqual(shouldIgnore.call({}, '1 hour', { code: 23 }), false);
     });
 
     test('server startup polling can continue past 100 attempts within the timeout', async () => {
@@ -504,7 +473,13 @@ suite('[Unit] supervisor core backports', () => {
         await KCApi.prototype.shutdownForQuit.call({
             serverSharesApplicationLifetime: () => false,
             _started: { isOpen: () => true },
-            _api: { api: { shutdownServer: async () => { detachedShutdownCalls += 1; } } },
+            _api: {
+                api: {
+                    shutdownServer: async () => {
+                        detachedShutdownCalls += 1;
+                    },
+                },
+            },
             log: () => undefined,
         } as any);
         assert.strictEqual(detachedShutdownCalls, 0);
@@ -561,15 +536,29 @@ suite('[Unit] supervisor core backports', () => {
             _established: { wait: async () => undefined },
             _getStartupTimeoutMs: () => 100,
             _withStartupTimeout: async (promise: Promise<unknown>) => promise,
-            _connectWithStartupRetry: async () => { calls.push('connect'); },
-            onStateChange: (state: RuntimeState) => { session._runtimeState = state; },
+            _connectWithStartupRetry: async () => {
+                calls.push('connect');
+            },
+            onStateChange: (state: RuntimeState) => {
+                session._runtimeState = state;
+            },
             _api: {
-                getSession: async () => ({ data: { status: calls.includes('start') ? 'ready' : 'exited', process_id: 42 } }),
+                getSession: async () => ({
+                    data: { status: calls.includes('start') ? 'ready' : 'exited', process_id: 42 },
+                }),
                 startSession: async () => {
                     calls.push('start');
-                    return { data: { status: 'ok', banner: 'new process', language_info: { version: '4.3.3' } } };
+                    return {
+                        data: {
+                            status: 'ok',
+                            banner: 'new process',
+                            language_info: { version: '4.3.3' },
+                        },
+                    };
                 },
-                restartSession: async () => { throw new Error('Cannot wait for an already-exited process'); },
+                restartSession: async () => {
+                    throw new Error('Cannot wait for an already-exited process');
+                },
             },
         });
         const info = await session.tryStart(true);
@@ -582,17 +571,26 @@ suite('[Unit] supervisor core backports', () => {
     test('restoring an idle kernel checks the live session without launching another process', async () => {
         let queries = 0;
         const session = Object.assign(Object.create(KallichoreSession.prototype), {
-            metadata: { sessionId: 'restored' }, dynState: {}, _new: false,
+            metadata: { sessionId: 'restored' },
+            dynState: {},
+            _new: false,
             _runtimeInfo: { banner: 'existing process' },
             getKernelInfo: async () => ({ banner: 'existing process' }),
             _established: { wait: async () => undefined },
             _getStartupTimeoutMs: () => 100,
             _withStartupTimeout: async (promise: Promise<unknown>) => promise,
             _connectWithStartupRetry: async () => undefined,
-            onStateChange: (state: RuntimeState) => { session._runtimeState = state; },
+            onStateChange: (state: RuntimeState) => {
+                session._runtimeState = state;
+            },
             _api: {
-                getSession: async () => { queries++; return { data: { status: 'idle', process_id: 7 } }; },
-                startSession: async () => { throw new Error('Must preserve the running process'); },
+                getSession: async () => {
+                    queries++;
+                    return { data: { status: 'idle', process_id: 7 } };
+                },
+                startSession: async () => {
+                    throw new Error('Must preserve the running process');
+                },
             },
         });
         assert.strictEqual((await session.tryStart(true)).banner, 'existing process');
@@ -604,25 +602,38 @@ suite('[Unit] supervisor core backports', () => {
         for (const status of ['exited', 'offline']) {
             let queries = 0;
             const session = Object.assign(Object.create(KallichoreSession.prototype), {
-                metadata: { sessionId: 'restored' }, _new: false,
+                metadata: { sessionId: 'restored' },
+                _new: false,
                 _runtimeInfo: { banner: 'stale' },
                 _established: { wait: async () => undefined },
                 _getStartupTimeoutMs: () => 100,
                 _withStartupTimeout: async (promise: Promise<unknown>) => promise,
                 _connectWithStartupRetry: async () => undefined,
-                onStateChange: (state: RuntimeState) => { session._runtimeState = state; },
-                _api: { getSession: async () => ({ data: { status: ++queries === 1 ? 'idle' : status } }) },
+                onStateChange: (state: RuntimeState) => {
+                    session._runtimeState = state;
+                },
+                _api: {
+                    getSession: async () => ({
+                        data: { status: ++queries === 1 ? 'idle' : status },
+                    }),
+                },
             });
-            await assert.rejects(session.tryStart(true), new RegExp(`is ${status} after connecting`));
+            await assert.rejects(
+                session.tryStart(true),
+                new RegExp(`is ${status} after connecting`),
+            );
             assert.notStrictEqual(session.runtimeState, RuntimeState.Ready);
         }
     });
 
     test('kernel readiness messages are deferred until startup validation completes', () => {
         const session = Object.assign(Object.create(KallichoreSession.prototype), {
-            _runtimeState: RuntimeState.Starting, _validatingStartup: true,
+            _runtimeState: RuntimeState.Starting,
+            _validatingStartup: true,
             log: () => undefined,
-            onStateChange: (state: RuntimeState) => { session._runtimeState = state; },
+            onStateChange: (state: RuntimeState) => {
+                session._runtimeState = state;
+            },
         });
         for (const status of [RuntimeState.Ready, RuntimeState.Idle, RuntimeState.Busy]) {
             session.handleKernelMessage({ status: { status, reason: 'kernel status' } });
@@ -637,18 +648,30 @@ suite('[Unit] supervisor core backports', () => {
     test('a restart waits for fresh kernel information and propagates handshake failure', async () => {
         const calls: string[] = [];
         const session = Object.assign(Object.create(KallichoreSession.prototype), {
-            metadata: { sessionId: 'running' }, _runtimeInfo: { banner: 'old' },
+            metadata: { sessionId: 'running' },
+            _runtimeInfo: { banner: 'old' },
             _connected: { isCancelled: () => false },
             _getStartupTimeoutMs: () => 100,
             _withStartupTimeout: async (promise: Promise<unknown>) => promise,
             buildEnvVarActions: async () => [],
-            _connectWithStartupRetry: async () => { calls.push('connect'); },
-            getKernelInfo: async () => { calls.push('kernel-info'); throw new Error('kernel handshake failed'); },
-            markReady: () => { throw new Error('Must not announce a failed restart'); },
-            onStateChange: (state: RuntimeState) => { session._runtimeState = state; },
+            _connectWithStartupRetry: async () => {
+                calls.push('connect');
+            },
+            getKernelInfo: async () => {
+                calls.push('kernel-info');
+                throw new Error('kernel handshake failed');
+            },
+            markReady: () => {
+                throw new Error('Must not announce a failed restart');
+            },
+            onStateChange: (state: RuntimeState) => {
+                session._runtimeState = state;
+            },
             _api: {
                 getSession: async () => ({ data: { status: 'idle' } }),
-                restartSession: async () => { calls.push('restart'); },
+                restartSession: async () => {
+                    calls.push('restart');
+                },
             },
         });
         await assert.rejects(session.restart(), /kernel handshake failed/);
@@ -663,28 +686,24 @@ suite('[Unit] supervisor core backports', () => {
             method: 'post',
             url: '/sessions/session-1/start',
         };
-        const cause = new AxiosError(
-            'Request failed with status code 500',
-            config,
-            {
-                status: 500,
-                response: {
-                    config,
-                    data: {
-                        error: {
-                            code: 'KERNEL_START_FAILED',
-                            message: 'ARK exited before opening its connection file.',
-                            details: 'The configured R library could not be loaded.',
-                        },
-                        exit_code: 127,
-                        output: 'libR.so: cannot open shared object file; --bearer-token=secret-value',
+        const cause = new AxiosError('Request failed with status code 500', config, {
+            status: 500,
+            response: {
+                config,
+                data: {
+                    error: {
+                        code: 'KERNEL_START_FAILED',
+                        message: 'ARK exited before opening its connection file.',
+                        details: 'The configured R library could not be loaded.',
                     },
-                    headers: {},
-                    status: 500,
-                    statusText: 'Internal Server Error',
+                    exit_code: 127,
+                    output: 'libR.so: cannot open shared object file; --bearer-token=secret-value',
                 },
+                headers: {},
+                status: 500,
+                statusText: 'Internal Server Error',
             },
-        );
+        });
         const fakeSession = {
             metadata: { sessionId: 'session-1' },
             _getStartupSourceLabel: (KallichoreSession.prototype as any)._getStartupSourceLabel,
@@ -703,7 +722,9 @@ suite('[Unit] supervisor core backports', () => {
                 message: error.message,
                 exitCode: error.exitCode,
                 hasServerCode: error.details.includes('Server error code: KERNEL_START_FAILED'),
-                hasServerDetails: error.details.includes('The configured R library could not be loaded.'),
+                hasServerDetails: error.details.includes(
+                    'The configured R library could not be loaded.',
+                ),
                 hasKernelOutput: error.details.includes('libR.so: cannot open shared object file'),
                 redactsKernelOutput: !error.details.includes('secret-value'),
                 ownsStack: error.stack?.startsWith('RuntimeStartupError: Startup failed at '),
@@ -726,13 +747,25 @@ suite('[Unit] supervisor core backports', () => {
 
     test('force quit bounds service cleanup and tolerates cleanup failure', async () => {
         for (const outcome of ['pending', 'failed'] as const) {
-            const session = new RuntimeSession('session-1', makeRuntimeMetadata(), makeSessionMetadata(), makeNoopLogChannel());
+            const session = new RuntimeSession(
+                'session-1',
+                makeRuntimeMetadata(),
+                makeSessionMetadata(),
+                makeNoopLogChannel(),
+            );
             let release!: () => void;
             let killed = 0;
-            const cleanup = new Promise<void>(resolve => { release = resolve; });
-            session.deactivateLsp = () => outcome === 'pending' ? cleanup : Promise.reject(new Error('LSP unavailable'));
+            const cleanup = new Promise<void>((resolve) => {
+                release = resolve;
+            });
+            session.deactivateLsp = () =>
+                outcome === 'pending' ? cleanup : Promise.reject(new Error('LSP unavailable'));
             session.disconnectDap = async () => undefined;
-            (session as any)._kernel = { forceQuit: async () => { killed++; } };
+            (session as any)._kernel = {
+                forceQuit: async () => {
+                    killed++;
+                },
+            };
             try {
                 await session.forceQuit();
                 assert.strictEqual(killed, 1);
@@ -744,26 +777,44 @@ suite('[Unit] supervisor core backports', () => {
     });
 
     test('execution cancellation distinguishes completed work from interrupted and rejected requests', async () => {
-        const session = new RuntimeSession('session-1', makeRuntimeMetadata(), makeSessionMetadata(), makeNoopLogChannel());
+        const session = new RuntimeSession(
+            'session-1',
+            makeRuntimeMetadata(),
+            makeSessionMetadata(),
+            makeNoopLogChannel(),
+        );
         const cancelled: string[] = [];
-        session.onDidCancelExecution(id => cancelled.push(id));
+        session.onDidCancelExecution((id) => cancelled.push(id));
         (session as any)._kernel = {
             execute: async (_code: string, id: string) => {
-                if (id === 'rejected') { throw new Error('Transport unavailable'); }
+                if (id === 'rejected') {
+                    throw new Error('Transport unavailable');
+                }
             },
-            interrupt: async () => { throw new Error('Interrupt failed'); },
+            interrupt: async () => {
+                throw new Error('Interrupt failed');
+            },
         };
         try {
             await session.execute('1', 'completed');
-            (session as any).processMessage({ type: LanguageRuntimeMessageType.State, parent_id: 'completed', state: 'idle' });
+            (session as any).processMessage({
+                type: LanguageRuntimeMessageType.State,
+                parent_id: 'completed',
+                state: 'idle',
+            });
             await session.execute('slow()', 'running');
             await assert.rejects(session.interrupt(), /Interrupt failed/);
             assert.deepStrictEqual(cancelled, ['running']);
-            await assert.rejects(Promise.resolve(session.execute('2', 'rejected')), /Transport unavailable/);
+            await assert.rejects(
+                Promise.resolve(session.execute('2', 'rejected')),
+                /Transport unavailable/,
+            );
             assert.deepStrictEqual(cancelled, ['running', 'rejected']);
             session.cancelExecutions(['queued']);
             assert.deepStrictEqual(cancelled, ['running', 'rejected', 'queued']);
-        } finally { await session.dispose(); }
+        } finally {
+            await session.dispose();
+        }
     });
 
     test('runtime session converts editor attribution into utf8 code locations', async () => {
@@ -834,15 +885,18 @@ suite('[Unit] supervisor core backports', () => {
         );
         const calls: Array<{ message: string; level?: vscode.LogLevel }> = [];
         (session as any)._kernel = {
-            emitJupyterLog: (message: string, level?: vscode.LogLevel) => calls.push({ message, level }),
+            emitJupyterLog: (message: string, level?: vscode.LogLevel) =>
+                calls.push({ message, level }),
         };
 
         session.emitLog('Starting language services', vscode.LogLevel.Debug);
 
-        assert.deepStrictEqual(calls, [{
-            message: 'Starting language services',
-            level: vscode.LogLevel.Debug,
-        }]);
+        assert.deepStrictEqual(calls, [
+            {
+                message: 'Starting language services',
+                level: vscode.LogLevel.Debug,
+            },
+        ]);
     });
 
     test('runtime session lists and opens console, kernel, and LSP channels', () => {
@@ -860,7 +914,11 @@ suite('[Unit] supervisor core backports', () => {
             listOutputChannels: () => ['console', 'kernel'],
             showOutput: (channel: unknown) => nativeChannels.push(channel),
         };
-        (session as any)._lsp = { showOutput: () => { lspShows += 1; } };
+        (session as any)._lsp = {
+            showOutput: () => {
+                lspShows += 1;
+            },
+        };
 
         assert.deepStrictEqual(session.listOutputChannels(), ['console', 'kernel', 'lsp']);
         session.showOutput('console');
@@ -880,7 +938,8 @@ suite('[Unit] supervisor core backports', () => {
                 return {} as unknown;
             },
             log: () => undefined,
-            _toJupyterPositronLocation: (KallichoreSession.prototype as any)._toJupyterPositronLocation,
+            _toJupyterPositronLocation: (KallichoreSession.prototype as any)
+                ._toJupyterPositronLocation,
         };
 
         execute.call(
@@ -935,10 +994,10 @@ suite('[Unit] supervisor core backports', () => {
         );
         const received: any[] = [];
         const genericReceived: any[] = [];
-        const listener = session.onDidReceiveRuntimeMessageIPyWidget(message => {
+        const listener = session.onDidReceiveRuntimeMessageIPyWidget((message) => {
             received.push(message);
         });
-        const genericListener = session.onDidReceiveRuntimeMessage(message => {
+        const genericListener = session.onDidReceiveRuntimeMessage((message) => {
             genericReceived.push(message);
         });
         const originalMessage = {
@@ -1002,7 +1061,8 @@ suite('[Unit] supervisor core backports', () => {
                     return deferred.promise;
                 },
             },
-            _refreshProcessIdFromSession: (KallichoreSession.prototype as any)._refreshProcessIdFromSession,
+            _refreshProcessIdFromSession: (KallichoreSession.prototype as any)
+                ._refreshProcessIdFromSession,
         };
 
         emitResourceUsage.call(fakeSession, {
@@ -1033,7 +1093,9 @@ suite('[Unit] supervisor core backports', () => {
         let activated = 0;
         const lsp = {
             state: LanguageLspState.Stopped,
-            activate: async () => { activated += 1; },
+            activate: async () => {
+                activated += 1;
+            },
             deactivate: async () => undefined,
             wait: async () => true,
             showOutput: () => undefined,
@@ -1065,16 +1127,21 @@ suite('[Unit] supervisor core backports', () => {
 
     test('rejects an LSP server startup failure so its owner can retry', async () => {
         const session = new RuntimeSession(
-            'failed-lsp-session', makeRuntimeMetadata(), makeSessionMetadata(),
-            makeNoopLogChannel(), 'Session 1',
+            'failed-lsp-session',
+            makeRuntimeMetadata(),
+            makeSessionMetadata(),
+            makeNoopLogChannel(),
+            'Session 1',
         );
         const error = new Error('server startup failed');
         (session as any)._supportsLsp = true;
         (session as any)._kernel = {
             createPositronLspClientId: () => 'failed-lsp-client',
-            startPositronLsp: async () => { throw error; },
+            startPositronLsp: async () => {
+                throw error;
+            },
         };
-        await assert.rejects(session.activateLsp(), failure => failure === error);
+        await assert.rejects(session.activateLsp(), (failure) => failure === error);
         (session as any)._kernel = undefined;
         await session.dispose();
     });
@@ -1085,7 +1152,9 @@ suite('[Unit] supervisor core backports', () => {
         let removedClients = 0;
         const lsp = {
             state: LanguageLspState.Stopped,
-            activate: async () => { activated += 1; },
+            activate: async () => {
+                activated += 1;
+            },
             deactivate: async () => undefined,
             wait: async () => false,
             showOutput: () => undefined,
@@ -1102,8 +1171,13 @@ suite('[Unit] supervisor core backports', () => {
         (session as any)._state = RuntimeState.Ready;
         (session as any)._kernel = {
             createPositronLspClientId: () => 'slow-lsp-client',
-            startPositronLsp: () => new Promise<number>(resolve => { resolvePort = resolve; }),
-            removeClient: () => { removedClients += 1; },
+            startPositronLsp: () =>
+                new Promise<number>((resolve) => {
+                    resolvePort = resolve;
+                }),
+            removeClient: () => {
+                removedClients += 1;
+            },
         };
 
         const activation = session.activateLsp();
@@ -1118,7 +1192,10 @@ suite('[Unit] supervisor core backports', () => {
     });
 
     test('re-emits a foreground request so language ownership can retry', async () => {
-        const service = new RuntimeSessionService(createMemento() as any, makeNoopLogChannel()) as any;
+        const service = new RuntimeSessionService(
+            createMemento() as any,
+            makeNoopLogChannel(),
+        ) as any;
         const session = { sessionId: 'python-session' };
         service._sessions.set(session.sessionId, session);
         service._foregroundSessionId = session.sessionId;
@@ -1131,7 +1208,10 @@ suite('[Unit] supervisor core backports', () => {
     });
 
     test('does not reconcile LSPs when the global foreground changes languages', async () => {
-        const service = new RuntimeSessionService(createMemento() as any, makeNoopLogChannel()) as any;
+        const service = new RuntimeSessionService(
+            createMemento() as any,
+            makeNoopLogChannel(),
+        ) as any;
         let oldForeground = true;
         let newForeground = false;
         let oldDeactivations = 0;
@@ -1140,15 +1220,23 @@ suite('[Unit] supervisor core backports', () => {
             sessionId: 'python-session',
             runtimeMetadata: { languageId: 'python' },
             sessionMetadata: { sessionMode: LanguageRuntimeSessionMode.Console },
-            setForeground: (value: boolean) => { oldForeground = value; },
-            deactivateLsp: async () => { oldDeactivations += 1; },
+            setForeground: (value: boolean) => {
+                oldForeground = value;
+            },
+            deactivateLsp: async () => {
+                oldDeactivations += 1;
+            },
         };
         const newSession = {
             sessionId: 'r-session',
             runtimeMetadata: { languageId: 'r' },
             sessionMetadata: { sessionMode: LanguageRuntimeSessionMode.Console },
-            setForeground: (value: boolean) => { newForeground = value; },
-            activateLsp: async () => { newActivations += 1; },
+            setForeground: (value: boolean) => {
+                newForeground = value;
+            },
+            activateLsp: async () => {
+                newActivations += 1;
+            },
         };
         service._sessions.set(oldSession.sessionId, oldSession);
         service._sessions.set(newSession.sessionId, newSession);

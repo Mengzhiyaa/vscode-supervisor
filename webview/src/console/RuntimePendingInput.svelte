@@ -1,20 +1,17 @@
 <script lang="ts">
-    import { localize } from "$lib/localization";
-    import OutputRun from "./OutputRun.svelte";
-    import { RuntimeItemPendingInput } from "./classes";
+    import { localize } from '$lib/localization';
+    import OutputRun from './OutputRun.svelte';
+    import { RuntimeItemPendingInput } from './classes';
 
     interface RuntimePendingInputProps {
         readonly runtimeItemPendingInput: RuntimeItemPendingInput;
         readonly charWidth?: number;
     }
 
-    let { runtimeItemPendingInput, charWidth = 0 }: RuntimePendingInputProps =
-        $props();
+    let { runtimeItemPendingInput, charWidth = 0 }: RuntimePendingInputProps = $props();
 
     const promptWidthPx = $derived(
-        charWidth > 0
-            ? `${runtimeItemPendingInput.inputPrompt.length * charWidth}px`
-            : undefined,
+        charWidth > 0 ? `${runtimeItemPendingInput.inputPrompt.length * charWidth}px` : undefined,
     );
 </script>
 
@@ -22,7 +19,7 @@
     class="pending-input"
     class:submitting={runtimeItemPendingInput.submitting}
     aria-label={runtimeItemPendingInput.submitting
-        ? localize("console.submittingCode", "Submitting code")
+        ? localize('console.submittingCode', 'Submitting code')
         : undefined}
 >
     {#if runtimeItemPendingInput.submitting}
@@ -33,8 +30,8 @@
             <span class="prompt" style:width={promptWidthPx}
                 >{runtimeItemPendingInput.inputPrompt}</span
             >{#each outputLine.outputRuns as outputRun (outputRun.id)}<OutputRun
-                {outputRun}
-            />{/each}
+                    {outputRun}
+                />{/each}
         </div>
     {/each}
 </div>
@@ -62,7 +59,8 @@
         background-image: repeating-linear-gradient(
             45deg,
             var(--vscode-positronConsole-ansiBrightGreen, var(--vscode-terminal-ansiBrightGreen)),
-            var(--vscode-positronConsole-ansiBrightGreen, var(--vscode-terminal-ansiBrightGreen)) 3px,
+            var(--vscode-positronConsole-ansiBrightGreen, var(--vscode-terminal-ansiBrightGreen))
+                3px,
             transparent 3px,
             transparent 6px
         );

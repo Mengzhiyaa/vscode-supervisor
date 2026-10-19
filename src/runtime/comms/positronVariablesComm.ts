@@ -72,7 +72,7 @@ export interface Variable {
  */
 export enum ClipboardFormatFormat {
     TextHtml = 'text/html',
-    TextPlain = 'text/plain'
+    TextPlain = 'text/plain',
 }
 
 /**
@@ -91,7 +91,7 @@ export enum VariableKind {
     String = 'string',
     Table = 'table',
     Lazy = 'lazy',
-    Connection = 'connection'
+    Connection = 'connection',
 }
 
 /**
@@ -129,13 +129,13 @@ export enum VariablesBackendRequest {
     Delete = 'delete',
     Inspect = 'inspect',
     ClipboardFormat = 'clipboard_format',
-    View = 'view'
+    View = 'view',
 }
 
 /**
  * A comm wrapper for the variables client.
  * Provides typed methods and events for variable operations.
- * 
+ *
  * Matches Positron's PositronVariablesComm pattern.
  */
 export class PositronVariablesComm extends PositronBaseComm {
@@ -151,20 +151,23 @@ export class PositronVariablesComm extends PositronBaseComm {
 
     constructor(
         client: RuntimeClientInstance,
-        options?: PositronCommOptions<VariablesBackendRequest>
+        options?: PositronCommOptions<VariablesBackendRequest>,
     ) {
         super(client, options);
 
         // Create event emitters for the 'update' and 'refresh' events
-        this.onDidUpdate = this.createEventEmitter<UpdateEvent>(
-            'update',
-            ['assigned', 'unevaluated', 'removed', 'version']
-        );
+        this.onDidUpdate = this.createEventEmitter<UpdateEvent>('update', [
+            'assigned',
+            'unevaluated',
+            'removed',
+            'version',
+        ]);
 
-        this.onDidRefresh = this.createEventEmitter<RefreshEvent>(
-            'refresh',
-            ['variables', 'length', 'version']
-        );
+        this.onDidRefresh = this.createEventEmitter<RefreshEvent>('refresh', [
+            'variables',
+            'length',
+            'version',
+        ]);
     }
 
     /**
@@ -217,7 +220,11 @@ export class PositronVariablesComm extends PositronBaseComm {
      * @returns An object formatted for copying to the clipboard.
      */
     clipboardFormat(path: string[], format: ClipboardFormatFormat): Promise<FormattedVariable> {
-        return this.performRpc<FormattedVariable>('clipboard_format', ['path', 'format'], [path, format]);
+        return this.performRpc<FormattedVariable>(
+            'clipboard_format',
+            ['path', 'format'],
+            [path, format],
+        );
     }
 
     /**

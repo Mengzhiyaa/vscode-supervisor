@@ -3,9 +3,9 @@
   Port from Positron's dataGridColumnHeaders.tsx
 -->
 <script lang="ts">
-    import { getPositronDataGridContext } from "../positronDataGridContext";
-    import DataGridColumnHeader from "./dataGridColumnHeader.svelte";
-    import type { ColumnDescriptors } from "../classes/dataGridInstance";
+    import { getPositronDataGridContext } from '../positronDataGridContext';
+    import DataGridColumnHeader from './dataGridColumnHeader.svelte';
+    import type { ColumnDescriptors } from '../classes/dataGridInstance';
 
     interface Props {
         columnDescriptors: ColumnDescriptors;
@@ -28,9 +28,7 @@
         />
     {/each}
 
-    {#each columnDescriptors.unpinnedColumnDescriptors as column (
-        column.columnIndex
-    )}
+    {#each columnDescriptors.unpinnedColumnDescriptors as column (column.columnIndex)}
         <DataGridColumnHeader
             columnIndex={column.columnIndex}
             left={column.left - instance.horizontalScrollOffset}

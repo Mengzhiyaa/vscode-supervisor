@@ -25,7 +25,7 @@
         selected = false,
         focused = false,
         disabled = false,
-        style = "",
+        style = '',
         onselect,
         ondeselect,
         ontoggleExpand,
@@ -34,8 +34,7 @@
 
     // Detect platform for modifier key
     const isMac =
-        typeof navigator !== "undefined" &&
-        navigator.platform.toLowerCase().includes("mac");
+        typeof navigator !== 'undefined' && navigator.platform.toLowerCase().includes('mac');
 
     function handleMouseDown(event: MouseEvent) {
         event.preventDefault();
@@ -120,8 +119,7 @@
             --vscode-positronVariables-headerBackground,
             var(--vscode-sideBarSectionHeader-background)
         );
-        border-top: 0.5px solid
-            var(--vscode-positronVariables-border, var(--vscode-panel-border));
+        border-top: 0.5px solid var(--vscode-positronVariables-border, var(--vscode-panel-border));
         border-bottom: 0.5px solid
             var(--vscode-positronVariables-border, var(--vscode-panel-border));
         user-select: none;

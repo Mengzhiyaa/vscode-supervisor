@@ -51,11 +51,14 @@ suite('[Unit] Kallichore 0.1.67 upgrade', () => {
     });
 
     test('reads connection details replayed by a broker socket', async () => {
-        const brokerPath = os.platform() === 'win32'
-            ? `\\\\.\\pipe\\kc-test-${uniqueName()}`
-            : path.join(os.tmpdir(), `kc-test-${uniqueName()}.sock`);
-        const broker = net.createServer(socket => socket.end(`${JSON.stringify(SAMPLE_PAYLOAD)}\n`));
-        await new Promise<void>(resolve => broker.listen(brokerPath, resolve));
+        const brokerPath =
+            os.platform() === 'win32'
+                ? `\\\\.\\pipe\\kc-test-${uniqueName()}`
+                : path.join(os.tmpdir(), `kc-test-${uniqueName()}.sock`);
+        const broker = net.createServer((socket) =>
+            socket.end(`${JSON.stringify(SAMPLE_PAYLOAD)}\n`),
+        );
+        await new Promise<void>((resolve) => broker.listen(brokerPath, resolve));
         try {
             assert.deepStrictEqual(await HandshakeSocket.connect(brokerPath, 5000), SAMPLE_PAYLOAD);
         } finally {

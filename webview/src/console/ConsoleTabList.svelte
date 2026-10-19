@@ -3,17 +3,17 @@
      * ConsoleTabList.svelte - Session sidebar with tabs
      * Based on Positron's ConsoleTabList in consoleTabList.tsx
      */
-    import type { ConsoleState } from "../types/console";
-    import ConsoleTab from "./ConsoleTab.svelte";
-    import { SvelteSet } from "svelte/reactivity";
-    import { localize } from "$lib/localization";
+    import type { ConsoleState } from '../types/console';
+    import ConsoleTab from './ConsoleTab.svelte';
+    import { SvelteSet } from 'svelte/reactivity';
+    import { localize } from '$lib/localization';
 
     interface SessionInfo {
         id: string;
         name: string;
         runtimeName: string;
         languageId?: string;
-        sessionMode: "console" | "notebook" | "background";
+        sessionMode: 'console' | 'notebook' | 'background';
         createdTimestamp: number;
         state: ConsoleState;
         runtimePath?: string;
@@ -54,10 +54,7 @@
     const sessionsWithHiddenName = new SvelteSet<string>();
     const hideSessionNames = $derived(sessionsWithHiddenName.size > 0);
 
-    function handleSessionNameHiddenChange(
-        sessionId: string,
-        hidden: boolean,
-    ): void {
+    function handleSessionNameHiddenChange(sessionId: string, hidden: boolean): void {
         if (hidden) {
             sessionsWithHiddenName.add(sessionId);
         } else {
@@ -105,22 +102,22 @@
         let newIndex = activeIndex;
 
         switch (e.code) {
-            case "ArrowDown":
+            case 'ArrowDown':
                 e.preventDefault();
                 e.stopPropagation();
                 newIndex = Math.min(sessions.length - 1, activeIndex + 1);
                 break;
-            case "ArrowUp":
+            case 'ArrowUp':
                 e.preventDefault();
                 e.stopPropagation();
                 newIndex = Math.max(0, activeIndex - 1);
                 break;
-            case "Home":
+            case 'Home':
                 e.preventDefault();
                 e.stopPropagation();
                 newIndex = 0;
                 break;
-            case "End":
+            case 'End':
                 e.preventDefault();
                 e.stopPropagation();
                 newIndex = sessions.length - 1;
@@ -129,11 +126,7 @@
                 return;
         }
 
-        if (
-            newIndex !== activeIndex &&
-            newIndex >= 0 &&
-            newIndex < sessions.length
-        ) {
+        if (newIndex !== activeIndex && newIndex >= 0 && newIndex < sessions.length) {
             const session = sessions[newIndex];
             handleSelectSession(session.id);
 
@@ -170,22 +163,20 @@
             onDelete={() => handleDeleteSession(session.id)}
             onRename={(newName) => handleRenameSession(session.id, newName)}
             onSessionNameHiddenChange={handleSessionNameHiddenChange}
-            onToggleResourceMonitor={() =>
-                onToggleResourceMonitor()}
+            onToggleResourceMonitor={() => onToggleResourceMonitor()}
         />
     {/each}
 
     {#if sessions.length === 0}
         <div class="no-sessions">
-            <p>{localize("console.noSessions", "No sessions")}</p>
+            <p>{localize('console.noSessions', 'No sessions')}</p>
         </div>
     {/if}
 </div>
 
 <style>
     .tabs-container {
-        border-top: 1px solid
-            var(--vscode-positronActionBar-border, var(--vscode-panel-border));
+        border-top: 1px solid var(--vscode-positronActionBar-border, var(--vscode-panel-border));
         background-color: var(--vscode-tab-inactiveBackground);
         flex-grow: 1;
         overflow-y: auto;

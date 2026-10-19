@@ -8,10 +8,7 @@ export interface DecodedImageData {
  * Decode a data URL produced by the plot clients.
  * Supports both base64 encoded binary images and percent-encoded text (SVG).
  */
-export function decodeImageDataUrl(
-    value: string,
-    fallbackMime = 'image/png',
-): DecodedImageData {
+export function decodeImageDataUrl(value: string, fallbackMime = 'image/png'): DecodedImageData {
     if (!value.startsWith('data:')) {
         throw new Error('Expected a data URL');
     }

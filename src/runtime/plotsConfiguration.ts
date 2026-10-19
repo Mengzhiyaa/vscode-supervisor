@@ -9,14 +9,20 @@ export const PlotsConfiguration = {
     legacyDarkFilterMode: 'plots.darkFilterMode',
 } as const;
 
-function hasExplicitValue<T>(inspection: {
-    globalValue?: T;
-    workspaceValue?: T;
-    workspaceFolderValue?: T;
-} | undefined): boolean {
-    return inspection?.globalValue !== undefined ||
+function hasExplicitValue<T>(
+    inspection:
+        | {
+              globalValue?: T;
+              workspaceValue?: T;
+              workspaceFolderValue?: T;
+          }
+        | undefined,
+): boolean {
+    return (
+        inspection?.globalValue !== undefined ||
         inspection?.workspaceValue !== undefined ||
-        inspection?.workspaceFolderValue !== undefined;
+        inspection?.workspaceFolderValue !== undefined
+    );
 }
 
 /**
@@ -64,29 +70,32 @@ export async function migrateLegacyPlotsConfiguration(
 
     let migrated = false;
     const plotsConfiguration = vscode.workspace.getConfiguration('plots');
-    migrated = await migrateConfigurationTarget(
-        plotsConfiguration,
-        vscode.ConfigurationTarget.Global,
-        legacy.globalValue,
-        canonical?.globalValue,
-    ) || migrated;
-    migrated = await migrateConfigurationTarget(
-        plotsConfiguration,
-        vscode.ConfigurationTarget.Workspace,
-        legacy.workspaceValue,
-        canonical?.workspaceValue,
-    ) || migrated;
+    migrated =
+        (await migrateConfigurationTarget(
+            plotsConfiguration,
+            vscode.ConfigurationTarget.Global,
+            legacy.globalValue,
+            canonical?.globalValue,
+        )) || migrated;
+    migrated =
+        (await migrateConfigurationTarget(
+            plotsConfiguration,
+            vscode.ConfigurationTarget.Workspace,
+            legacy.workspaceValue,
+            canonical?.workspaceValue,
+        )) || migrated;
 
     for (const folder of vscode.workspace.workspaceFolders ?? []) {
         const scopedRoot = vscode.workspace.getConfiguration(undefined, folder.uri);
         const scopedLegacy = scopedRoot.inspect<string>(PlotsConfiguration.legacyDarkFilterMode);
         const scopedCanonical = scopedRoot.inspect<string>(PlotsConfiguration.darkFilter);
-        migrated = await migrateConfigurationTarget(
-            vscode.workspace.getConfiguration('plots', folder.uri),
-            vscode.ConfigurationTarget.WorkspaceFolder,
-            scopedLegacy?.workspaceFolderValue,
-            scopedCanonical?.workspaceFolderValue,
-        ) || migrated;
+        migrated =
+            (await migrateConfigurationTarget(
+                vscode.workspace.getConfiguration('plots', folder.uri),
+                vscode.ConfigurationTarget.WorkspaceFolder,
+                scopedLegacy?.workspaceFolderValue,
+                scopedCanonical?.workspaceFolderValue,
+            )) || migrated;
     }
 
     if (migrated) {

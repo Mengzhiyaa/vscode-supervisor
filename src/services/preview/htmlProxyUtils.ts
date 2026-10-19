@@ -102,15 +102,15 @@ export function normalizeProxyPath(proxyPath: string): string {
     }
 
     const withLeadingSlash = proxyPath.startsWith('/') ? proxyPath : `/${proxyPath}`;
-    return withLeadingSlash.endsWith('/')
-        ? withLeadingSlash.slice(0, -1)
-        : withLeadingSlash;
+    return withLeadingSlash.endsWith('/') ? withLeadingSlash.slice(0, -1) : withLeadingSlash;
 }
 
 export function buildProxyPath(basePath: string, targetPath: string): string {
     const normalizedBasePath = normalizeProxyPath(basePath);
     const normalizedTargetPath = targetPath
-        ? (targetPath.startsWith('/') ? targetPath : `/${targetPath}`)
+        ? targetPath.startsWith('/')
+            ? targetPath
+            : `/${targetPath}`
         : '/';
 
     if (normalizedBasePath === '/') {
@@ -141,7 +141,7 @@ export function rewriteRootRelativeUrls(content: string, proxyPath: string): str
             }
 
             return `${attribute}=${quote}${buildProxyPath(normalizedProxyPath, matchedPath)}${quote}`;
-        }
+        },
     );
 }
 
@@ -161,7 +161,7 @@ export function injectViewerBridge(content: string, proxyPath: string): string {
 export function rewriteProxyLocation(
     location: string,
     targetOrigin: string,
-    proxyPath: string
+    proxyPath: string,
 ): string {
     if (!location || (!location.startsWith('/') && !hasScheme(location))) {
         return location;
@@ -184,8 +184,12 @@ export function rewriteProxyLocation(
 export function resolveProxyRequestUrl(targetOrigin: string, requestPath: string): URL {
     const target = new URL(targetOrigin);
     const resolved = new URL(requestPath || '/', target);
-    if ((target.protocol !== 'http:' && target.protocol !== 'https:') ||
-        resolved.origin !== target.origin || resolved.username || resolved.password) {
+    if (
+        (target.protocol !== 'http:' && target.protocol !== 'https:') ||
+        resolved.origin !== target.origin ||
+        resolved.username ||
+        resolved.password
+    ) {
         throw new Error('Proxy request must use the configured HTTP origin');
     }
     return resolved;

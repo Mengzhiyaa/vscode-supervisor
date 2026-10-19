@@ -50,13 +50,24 @@ export class ViewerViewProvider extends BaseWebviewProvider {
         super(extensionUri, outputChannel, getAdditionalLocalResourceRoots);
         this._subscribeToPreviewService();
         const restoreGeneration = this._restoreGeneration;
-        void this._previewService.restoreLastPreview?.().then(preview => {
-            if (preview && !this._lastPreview && restoreGeneration === this._restoreGeneration && !this._disposed) {
-                this._acceptPreview(preview, false);
-            }
-        }).catch(error => {
-            this.log(`Failed to restore Viewer model: ${getErrorMessage(error)}`, vscode.LogLevel.Warning);
-        });
+        void this._previewService
+            .restoreLastPreview?.()
+            .then((preview) => {
+                if (
+                    preview &&
+                    !this._lastPreview &&
+                    restoreGeneration === this._restoreGeneration &&
+                    !this._disposed
+                ) {
+                    this._acceptPreview(preview, false);
+                }
+            })
+            .catch((error) => {
+                this.log(
+                    `Failed to restore Viewer model: ${getErrorMessage(error)}`,
+                    vscode.LogLevel.Warning,
+                );
+            });
     }
 
     protected get _providerName(): string {
@@ -81,7 +92,7 @@ export class ViewerViewProvider extends BaseWebviewProvider {
 
     private _subscribeToPreviewService(): void {
         this._disposables.push(
-            this._previewService.onDidShowPreview(preview => this._acceptPreview(preview)),
+            this._previewService.onDidShowPreview((preview) => this._acceptPreview(preview)),
             this._previewService.onDidChangePreviewInterruptState?.(() => {
                 void this._sendInterruptState();
             }),
@@ -98,7 +109,9 @@ export class ViewerViewProvider extends BaseWebviewProvider {
             return;
         }
         this._restoreGeneration++;
-        const replacesCurrentOutput = !navigation && !!preview.outputId &&
+        const replacesCurrentOutput =
+            !navigation &&
+            !!preview.outputId &&
             preview.outputId === this._lastPreview?.outputId &&
             preview.sessionId === this._lastPreview.sessionId;
         this._lastPreview = preview;
@@ -109,7 +122,8 @@ export class ViewerViewProvider extends BaseWebviewProvider {
             void this._revealViewerIfHidden(true);
         }
 
-        const replacesHistory = replacesCurrentOutput || (navigation && navigation.navigationType !== 'push');
+        const replacesHistory =
+            replacesCurrentOutput || (navigation && navigation.navigationType !== 'push');
         const historyEntry: ViewerHistoryEntry = {
             preview,
             documentId: navigation?.documentId,
@@ -121,7 +135,9 @@ export class ViewerViewProvider extends BaseWebviewProvider {
             this._history[this._historyIndex] = historyEntry;
         } else {
             if (this._historyIndex < this._history.length - 1) {
-                this._history.splice(this._historyIndex + 1).forEach(entry => entry.proxyLease?.dispose());
+                this._history
+                    .splice(this._historyIndex + 1)
+                    .forEach((entry) => entry.proxyLease?.dispose());
             }
             this._history.push(historyEntry);
             while (this._history.length > MaxViewerHistoryEntries) {
@@ -176,10 +192,14 @@ export class ViewerViewProvider extends BaseWebviewProvider {
             if (success) {
                 await this._previewService.setDefaultOpenTarget(params.target);
             }
-            return success ? { success: true } : {
-                success: false,
-                error: vscode.l10n.t('The preview could not be opened in the selected location.'),
-            };
+            return success
+                ? { success: true }
+                : {
+                      success: false,
+                      error: vscode.l10n.t(
+                          'The preview could not be opened in the selected location.',
+                      ),
+                  };
         });
         // --- Navigation ---
         _connection.onNotification('viewer/navigate', (params: { url: string }) => {
@@ -187,9 +207,8 @@ export class ViewerViewProvider extends BaseWebviewProvider {
             this._navigate(params.url);
         });
 
-        _connection.onNotification(
-            ViewerProtocol.ViewerDidNavigateNotification.type,
-            params => this._didNavigate(params),
+        _connection.onNotification(ViewerProtocol.ViewerDidNavigateNotification.type, (params) =>
+            this._didNavigate(params),
         );
 
         _connection.onNotification('viewer/navigateBack', () => {
@@ -217,7 +236,7 @@ export class ViewerViewProvider extends BaseWebviewProvider {
             this._surfaceAttachment?.dispose();
             this._surfaceAttachment = undefined;
             this._lastPreview = undefined;
-            this._history.forEach(entry => entry.proxyLease?.dispose());
+            this._history.forEach((entry) => entry.proxyLease?.dispose());
             this._history = [];
             this._historyIndex = -1;
             this._sendInterruptStateNotification(false, false);
@@ -274,14 +293,16 @@ export class ViewerViewProvider extends BaseWebviewProvider {
                     );
                     return;
                 } catch (err) {
-                    this.log(`[ViewerViewProvider] Source interrupt failed: ${getErrorMessage(err)}`, vscode.LogLevel.Warning);
+                    this.log(
+                        `[ViewerViewProvider] Source interrupt failed: ${getErrorMessage(err)}`,
+                        vscode.LogLevel.Warning,
+                    );
                     return;
                 }
             } finally {
                 void this._sendInterruptState();
             }
         });
-
     }
 
     private async _sendInterruptState(): Promise<void> {
@@ -291,19 +312,27 @@ export class ViewerViewProvider extends BaseWebviewProvider {
             return;
         }
         try {
-            const state = typeof this._previewService.getPreviewInterruptState === 'function'
-                ? await this._previewService.getPreviewInterruptState(preview)
-                : {
-                    interruptible: typeof this._previewService.isPreviewInterruptible === 'function'
-                        ? await this._previewService.isPreviewInterruptible(preview)
-                        : Boolean(preview.sessionId && this._consoleService?.getConsoleInstance(preview.sessionId)),
-                    interrupting: false,
-                };
+            const state =
+                typeof this._previewService.getPreviewInterruptState === 'function'
+                    ? await this._previewService.getPreviewInterruptState(preview)
+                    : {
+                          interruptible:
+                              typeof this._previewService.isPreviewInterruptible === 'function'
+                                  ? await this._previewService.isPreviewInterruptible(preview)
+                                  : Boolean(
+                                        preview.sessionId &&
+                                        this._consoleService?.getConsoleInstance(preview.sessionId),
+                                    ),
+                          interrupting: false,
+                      };
             if (preview === this._lastPreview) {
                 this._sendInterruptStateNotification(state.interruptible, state.interrupting);
             }
         } catch (error) {
-            this.log(`[ViewerViewProvider] Failed to resolve interrupt state: ${getErrorMessage(error)}`, vscode.LogLevel.Warning);
+            this.log(
+                `[ViewerViewProvider] Failed to resolve interrupt state: ${getErrorMessage(error)}`,
+                vscode.LogLevel.Warning,
+            );
             if (preview === this._lastPreview) {
                 this._sendInterruptStateNotification(false, false);
             }
@@ -343,24 +372,40 @@ export class ViewerViewProvider extends BaseWebviewProvider {
             // Keep that URI and let the provider own the history rather than
             // accidentally wrapping the proxy in another proxy.
             if (resolved.origin === currentUrl.origin) {
-                this._acceptPreview({
-                    ...current,
-                    uri: vscode.Uri.parse(resolved.toString()),
-                    restoreUri: this._previewService.getProxySourceUri?.(vscode.Uri.parse(resolved.toString()))
-                        ?? current.restoreUri,
-                    title: title || current.title,
-                }, true, { url: resolved.toString(), navigationType: 'push' });
+                this._acceptPreview(
+                    {
+                        ...current,
+                        uri: vscode.Uri.parse(resolved.toString()),
+                        restoreUri:
+                            this._previewService.getProxySourceUri?.(
+                                vscode.Uri.parse(resolved.toString()),
+                            ) ?? current.restoreUri,
+                        title: title || current.title,
+                    },
+                    true,
+                    { url: resolved.toString(), navigationType: 'push' },
+                );
                 return;
             }
         } catch (error) {
-            this.log(`Ignored invalid Viewer navigation ${rawUrl}: ${getErrorMessage(error)}`, vscode.LogLevel.Debug);
+            this.log(
+                `Ignored invalid Viewer navigation ${rawUrl}: ${getErrorMessage(error)}`,
+                vscode.LogLevel.Debug,
+            );
             return;
         }
 
-        void this._previewService.handleShowUrl(current.sessionId, {
-            url: targetUrl,
-            source: current.sourceIdentity,
-        }).catch(error => this.log(`Failed to navigate Viewer: ${getErrorMessage(error)}`, vscode.LogLevel.Warning));
+        void this._previewService
+            .handleShowUrl(current.sessionId, {
+                url: targetUrl,
+                source: current.sourceIdentity,
+            })
+            .catch((error) =>
+                this.log(
+                    `Failed to navigate Viewer: ${getErrorMessage(error)}`,
+                    vscode.LogLevel.Warning,
+                ),
+            );
     }
 
     private _didNavigate(params: ViewerProtocol.ViewerDidNavigateNotification.Params): void {
@@ -374,22 +419,32 @@ export class ViewerViewProvider extends BaseWebviewProvider {
             if (url.origin !== new URL(current.uri.toString(true)).origin) return;
             this._activeDocumentId = params.documentId;
             if (navigationType === 'traverse') {
-                const index = this._history.findIndex(entry =>
-                    entry.documentId === params.documentId &&
-                    (params.navigationKey ? entry.navigationKey === params.navigationKey :
-                        entry.preview.uri.toString(true) === url.toString()),
+                const index = this._history.findIndex(
+                    (entry) =>
+                        entry.documentId === params.documentId &&
+                        (params.navigationKey
+                            ? entry.navigationKey === params.navigationKey
+                            : entry.preview.uri.toString(true) === url.toString()),
                 );
                 if (index >= 0) this._historyIndex = index;
             }
             const uri = vscode.Uri.parse(url.toString());
-            this._acceptPreview({
-                ...current,
-                uri,
-                restoreUri: this._previewService.getProxySourceUri?.(uri) ?? current.restoreUri,
-                title: params.title || current.title,
-            }, false, { ...params, navigationType }, 'sync');
+            this._acceptPreview(
+                {
+                    ...current,
+                    uri,
+                    restoreUri: this._previewService.getProxySourceUri?.(uri) ?? current.restoreUri,
+                    title: params.title || current.title,
+                },
+                false,
+                { ...params, navigationType },
+                'sync',
+            );
         } catch (error) {
-            this.log(`Ignored invalid Viewer location: ${getErrorMessage(error)}`, vscode.LogLevel.Debug);
+            this.log(
+                `Ignored invalid Viewer location: ${getErrorMessage(error)}`,
+                vscode.LogLevel.Debug,
+            );
         }
     }
 
@@ -399,7 +454,8 @@ export class ViewerViewProvider extends BaseWebviewProvider {
         const entry = this._history[index];
         this._lastPreview = entry.preview;
         this._attachPreviewSurface(entry.preview);
-        const canTraverse = entry.documentId && entry.documentId === this._activeDocumentId && entry.navigationKey;
+        const canTraverse =
+            entry.documentId && entry.documentId === this._activeDocumentId && entry.navigationKey;
         this._sendPreview(entry.preview, canTraverse ? 'traverse' : 'load');
         this._sendNavState();
         void this._sendInterruptState();
@@ -418,7 +474,13 @@ export class ViewerViewProvider extends BaseWebviewProvider {
 
     protected _getHtmlContent(webview: vscode.Webview): string {
         const scriptUri = this._getWebviewUri(webview, 'webview', 'dist', 'viewer', 'index.js');
-        const commonStyleUri = this._getWebviewUri(webview, 'webview', 'dist', 'common', 'index.css');
+        const commonStyleUri = this._getWebviewUri(
+            webview,
+            'webview',
+            'dist',
+            'common',
+            'index.css',
+        );
         const styleUri = this._getWebviewUri(webview, 'webview', 'dist', 'viewer', 'index.css');
         const nonce = this._getNonce();
 
@@ -456,18 +518,24 @@ export class ViewerViewProvider extends BaseWebviewProvider {
             }
             await vscode.window.showTextDocument(editorToRestore.document, {
                 viewColumn: editorToRestore.viewColumn,
-                preserveFocus: false
+                preserveFocus: false,
             });
         };
 
         try {
             await vscode.commands.executeCommand('workbench.views.action.showView', ViewIds.viewer);
         } catch (err) {
-            this.log(`Failed to reveal viewer view: ${getErrorMessage(err)}`, vscode.LogLevel.Warning);
+            this.log(
+                `Failed to reveal viewer view: ${getErrorMessage(err)}`,
+                vscode.LogLevel.Warning,
+            );
             try {
                 await vscode.commands.executeCommand(WorkbenchViewContainerCommands.viewer);
             } catch (fallbackErr) {
-                this.log(`Failed to reveal viewer container: ${getErrorMessage(fallbackErr)}`, vscode.LogLevel.Warning);
+                this.log(
+                    `Failed to reveal viewer container: ${getErrorMessage(fallbackErr)}`,
+                    vscode.LogLevel.Warning,
+                );
             }
         } finally {
             await restoreFocus();
@@ -491,7 +559,10 @@ export class ViewerViewProvider extends BaseWebviewProvider {
                 return await this._openPreviewInEditor(preview);
             }
         } catch (error) {
-            this.log(`Failed to open preview in ${target}: ${getErrorMessage(error)}`, vscode.LogLevel.Warning);
+            this.log(
+                `Failed to open preview in ${target}: ${getErrorMessage(error)}`,
+                vscode.LogLevel.Warning,
+            );
             return false;
         }
     }
@@ -500,7 +571,7 @@ export class ViewerViewProvider extends BaseWebviewProvider {
         const openedInSimpleBrowser = await this._openPreviewInEditor(preview);
         if (!openedInSimpleBrowser) {
             void vscode.window.showWarningMessage(
-                'Viewer preview could not be opened in a new window because no editor-backed browser is available.'
+                'Viewer preview could not be opened in a new window because no editor-backed browser is available.',
             );
             return false;
         }
@@ -510,13 +581,16 @@ export class ViewerViewProvider extends BaseWebviewProvider {
             await vscode.commands.executeCommand('workbench.action.moveEditorToNewWindow');
             return true;
         } catch (error) {
-            this.log(`Failed to move preview to a new window: ${getErrorMessage(error)}`, vscode.LogLevel.Warning);
+            this.log(
+                `Failed to move preview to a new window: ${getErrorMessage(error)}`,
+                vscode.LogLevel.Warning,
+            );
             return false;
         }
     }
 
     private async _waitForNextWorkbenchTurn(): Promise<void> {
-        await new Promise<void>(resolve => {
+        await new Promise<void>((resolve) => {
             if (typeof queueMicrotask === 'function') {
                 queueMicrotask(resolve);
             } else {
@@ -532,45 +606,70 @@ export class ViewerViewProvider extends BaseWebviewProvider {
 
         const generation = ++this._previewSendGeneration;
         this._previewPublished = false;
-        const entry = this._history.find(candidate => candidate.preview === preview);
-        if (mode === 'load' && entry && !entry.proxyLease && this._previewService.refreshPreviewUri) {
-            void this._previewService.refreshPreviewUri(preview).then(uri => {
-                if (!this._connection || generation !== this._previewSendGeneration) {
-                    return;
-                }
-                preview.uri = uri;
-                entry.proxyLease = this._previewService.retainProxyUri(uri);
-                this._publishPreviewToWebview(preview, generation, mode);
-            }).catch(error => this.log(`Failed to restore preview: ${getErrorMessage(error)}`, vscode.LogLevel.Warning));
+        const entry = this._history.find((candidate) => candidate.preview === preview);
+        if (
+            mode === 'load' &&
+            entry &&
+            !entry.proxyLease &&
+            this._previewService.refreshPreviewUri
+        ) {
+            void this._previewService
+                .refreshPreviewUri(preview)
+                .then((uri) => {
+                    if (!this._connection || generation !== this._previewSendGeneration) {
+                        return;
+                    }
+                    preview.uri = uri;
+                    entry.proxyLease = this._previewService.retainProxyUri(uri);
+                    this._publishPreviewToWebview(preview, generation, mode);
+                })
+                .catch((error) =>
+                    this.log(
+                        `Failed to restore preview: ${getErrorMessage(error)}`,
+                        vscode.LogLevel.Warning,
+                    ),
+                );
             return;
         }
         this._publishPreviewToWebview(preview, generation, mode);
     }
 
-    private _publishPreviewToWebview(preview: PreviewItem, generation: number, mode: 'load' | 'sync' | 'traverse'): void {
+    private _publishPreviewToWebview(
+        preview: PreviewItem,
+        generation: number,
+        mode: 'load' | 'sync' | 'traverse',
+    ): void {
         const connection = this._connection;
         if (!connection || !this._webviewReady) {
             return;
         }
         const entry = this._history[this._historyIndex];
         if (mode === 'load') this._activeDocumentId = undefined;
-        void connection.sendNotification(ViewerProtocol.ViewerShowNotification.type, {
-            mode,
-            documentId: entry?.documentId,
-            navigationKey: entry?.navigationKey,
-            url: preview.uri.toString(),
-            title: preview.title,
-            height: preview.height,
-            sessionId: preview.sessionId,
-            kind: preview.type
-        }).then(() => {
-            if (generation !== this._previewSendGeneration || connection !== this._connection) {
-                return;
-            }
-            this._previewPublished = true;
-            this._flushPendingActions();
-            void this._sendInterruptState();
-        }).catch(error => this.log(`Failed to publish preview: ${getErrorMessage(error)}`, vscode.LogLevel.Warning));
+        void connection
+            .sendNotification(ViewerProtocol.ViewerShowNotification.type, {
+                mode,
+                documentId: entry?.documentId,
+                navigationKey: entry?.navigationKey,
+                url: preview.uri.toString(),
+                title: preview.title,
+                height: preview.height,
+                sessionId: preview.sessionId,
+                kind: preview.type,
+            })
+            .then(() => {
+                if (generation !== this._previewSendGeneration || connection !== this._connection) {
+                    return;
+                }
+                this._previewPublished = true;
+                this._flushPendingActions();
+                void this._sendInterruptState();
+            })
+            .catch((error) =>
+                this.log(
+                    `Failed to publish preview: ${getErrorMessage(error)}`,
+                    vscode.LogLevel.Warning,
+                ),
+            );
     }
 
     private _flushPendingActions(): void {
@@ -579,7 +678,9 @@ export class ViewerViewProvider extends BaseWebviewProvider {
         }
         for (const action of this._pendingActions) {
             void this._connection.sendNotification(
-                action === 'find' ? ViewerProtocol.ViewerFindNotification.type : ViewerProtocol.ViewerFocusNotification.type,
+                action === 'find'
+                    ? ViewerProtocol.ViewerFindNotification.type
+                    : ViewerProtocol.ViewerFocusNotification.type,
                 {},
             );
         }
@@ -592,7 +693,7 @@ export class ViewerViewProvider extends BaseWebviewProvider {
         this._previewPublished = false;
         this._pendingActions.clear();
         this._previewSendGeneration++;
-        this._history.forEach(entry => {
+        this._history.forEach((entry) => {
             entry.proxyLease?.dispose();
             entry.proxyLease = undefined;
         });
@@ -605,11 +706,11 @@ export class ViewerViewProvider extends BaseWebviewProvider {
         this._webviewReady = false;
         this._pendingActions.clear();
         this._previewSendGeneration++;
-        this._history.forEach(entry => entry.proxyLease?.dispose());
+        this._history.forEach((entry) => entry.proxyLease?.dispose());
         this._history = [];
         this._surfaceAttachment?.dispose();
         this._surfaceAttachment = undefined;
-        this._disposables.forEach(disposable => disposable.dispose());
+        this._disposables.forEach((disposable) => disposable.dispose());
         this._connection?.dispose();
     }
 }

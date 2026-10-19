@@ -5,9 +5,9 @@
     Mirrors: positron/.../components/activityErrorMessage.tsx
 -->
 <script lang="ts">
-    import { ActivityItemErrorMessage } from "./classes";
-    import ConsoleOutputLines from "./ConsoleOutputLines.svelte";
-    import { localize } from "$lib/localization";
+    import { ActivityItemErrorMessage } from './classes';
+    import ConsoleOutputLines from './ConsoleOutputLines.svelte';
+    import { localize } from '$lib/localization';
 
     interface Props {
         activityItemErrorMessage: ActivityItemErrorMessage;
@@ -30,7 +30,7 @@
         // Ensure that the component is scrolled into view when traceback is showing
         if (showTraceback) {
             setTimeout(() => {
-                activityErrorMessageRef?.scrollIntoView({ behavior: "auto" });
+                activityErrorMessageRef?.scrollIntoView({ behavior: 'auto' });
             }, 0);
         }
     }
@@ -41,9 +41,7 @@
     <div class="error-information">
         <!-- Error message -->
         {#if $messageOutputLinesStore.length > 0}
-            <ConsoleOutputLines
-                outputLines={$messageOutputLinesStore}
-            />
+            <ConsoleOutputLines outputLines={$messageOutputLinesStore} />
         {/if}
 
         <!-- Error footer with traceback toggle -->
@@ -58,15 +56,17 @@
                             type="button"
                         >
                             {#if showTraceback}
-                                <div
-                                    class="expansion-indicator codicon codicon-chevron-down"
-                                ></div>
-                                <div class="link-text">{localize('console.hideTraceback', 'Hide Traceback')}</div>
+                                <div class="expansion-indicator codicon codicon-chevron-down"></div>
+                                <div class="link-text">
+                                    {localize('console.hideTraceback', 'Hide Traceback')}
+                                </div>
                             {:else}
                                 <div
                                     class="expansion-indicator codicon codicon-chevron-right"
                                 ></div>
-                                <div class="link-text">{localize('console.showTraceback', 'Show Traceback')}</div>
+                                <div class="link-text">
+                                    {localize('console.showTraceback', 'Show Traceback')}
+                                </div>
                             {/if}
                         </button>
                     {/if}
@@ -77,9 +77,7 @@
                     <div class="traceback-lines">
                         <div></div>
                         <div>
-                            <ConsoleOutputLines
-                                outputLines={$tracebackOutputLinesStore}
-                            />
+                            <ConsoleOutputLines outputLines={$tracebackOutputLinesStore} />
                         </div>
                     </div>
                 {/if}
@@ -104,10 +102,7 @@
         width: 4px;
         display: flex;
         opacity: 0.75;
-        background-color: var(
-            --vscode-positronConsole-ansiRed,
-            var(--vscode-terminal-ansiRed)
-        );
+        background-color: var(--vscode-positronConsole-ansiRed, var(--vscode-terminal-ansiRed));
     }
 
     .error-information {

@@ -16,9 +16,7 @@ type UpdateListener = () => void;
 
 export class ColumnSchemaCache {
     private _updatingCache = false;
-    private _pendingCacheUpdateDescriptor:
-        | ColumnSchemaCacheUpdateDescriptor
-        | undefined;
+    private _pendingCacheUpdateDescriptor: ColumnSchemaCacheUpdateDescriptor | undefined;
     private _trimCacheHandle: ReturnType<typeof setTimeout> | undefined;
     private readonly _columnSchemaCache = new Map<number, SchemaColumn>();
     private readonly _listeners = new Set<UpdateListener>();
@@ -36,9 +34,7 @@ export class ColumnSchemaCache {
         };
     };
 
-    async update(
-        cacheUpdateDescriptor: ColumnSchemaCacheUpdateDescriptor,
-    ): Promise<void> {
+    async update(cacheUpdateDescriptor: ColumnSchemaCacheUpdateDescriptor): Promise<void> {
         if (this._disposed) {
             return;
         }
@@ -61,10 +57,7 @@ export class ColumnSchemaCache {
             const visibleIndices = [...new Set(cacheUpdateDescriptor.columnIndices)];
             const columnIndices = cacheUpdateDescriptor.invalidateCache
                 ? visibleIndices
-                : visibleIndices.filter(
-                      (columnIndex) =>
-                          !this._columnSchemaCache.has(columnIndex),
-                  );
+                : visibleIndices.filter((columnIndex) => !this._columnSchemaCache.has(columnIndex));
             const tableSchema = await this._schemaClient.getSchema(columnIndices);
             if (this._disposed || version !== this._version) {
                 return;
@@ -74,10 +67,7 @@ export class ColumnSchemaCache {
                 this._columnSchemaCache.clear();
             }
             for (const columnSchema of tableSchema) {
-                this._columnSchemaCache.set(
-                    columnSchema.column_index,
-                    columnSchema,
-                );
+                this._columnSchemaCache.set(columnSchema.column_index, columnSchema);
             }
             this._emitDidUpdateCache();
         } finally {
@@ -86,8 +76,7 @@ export class ColumnSchemaCache {
                 return;
             }
             if (this._pendingCacheUpdateDescriptor) {
-                const pendingCacheUpdateDescriptor =
-                    this._pendingCacheUpdateDescriptor;
+                const pendingCacheUpdateDescriptor = this._pendingCacheUpdateDescriptor;
                 this._pendingCacheUpdateDescriptor = undefined;
                 await this.update(pendingCacheUpdateDescriptor);
                 return;
@@ -100,9 +89,7 @@ export class ColumnSchemaCache {
             ) {
                 this._trimCacheHandle = setTimeout(() => {
                     this._trimCacheHandle = undefined;
-                    this._trimCache(
-                        new Set(cacheUpdateDescriptor.columnIndices),
-                    );
+                    this._trimCache(new Set(cacheUpdateDescriptor.columnIndices));
                 }, TRIM_CACHE_TIMEOUT);
             }
         }

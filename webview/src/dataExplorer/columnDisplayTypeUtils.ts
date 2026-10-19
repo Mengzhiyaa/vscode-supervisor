@@ -89,10 +89,7 @@ export function isDateDisplayType(typeDisplay: string): boolean {
 }
 
 export function isDatetimeDisplayType(typeDisplay: string): boolean {
-    return (
-        typeDisplay === COLUMN_DISPLAY_TYPE_DATETIME ||
-        typeDisplay.includes('timestamp')
-    );
+    return typeDisplay === COLUMN_DISPLAY_TYPE_DATETIME || typeDisplay.includes('timestamp');
 }
 
 export function isTimeDisplayType(typeDisplay: string): boolean {
@@ -104,10 +101,7 @@ export function isIntervalDisplayType(typeDisplay: string): boolean {
 }
 
 export function isObjectDisplayType(typeDisplay: string): boolean {
-    return (
-        typeDisplay === COLUMN_DISPLAY_TYPE_OBJECT ||
-        typeDisplay.includes('object')
-    );
+    return typeDisplay === COLUMN_DISPLAY_TYPE_OBJECT || typeDisplay.includes('object');
 }
 
 export function isArrayDisplayType(typeDisplay: string): boolean {

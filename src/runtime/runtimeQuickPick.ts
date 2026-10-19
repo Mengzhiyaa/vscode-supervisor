@@ -30,8 +30,8 @@ function compareVersionsDescending(left: string | undefined, right: string | und
         return 0;
     }
 
-    const leftParts = left.split('.').map(part => Number.parseInt(part, 10));
-    const rightParts = right.split('.').map(part => Number.parseInt(part, 10));
+    const leftParts = left.split('.').map((part) => Number.parseInt(part, 10));
+    const rightParts = right.split('.').map((part) => Number.parseInt(part, 10));
     const length = Math.max(leftParts.length, rightParts.length);
     for (let index = 0; index < length; index++) {
         const difference = (rightParts[index] || 0) - (leftParts[index] || 0);
@@ -71,11 +71,12 @@ export function buildRuntimeQuickPickItems(
 
     const groups: RuntimeQuickPickGroup[] = [];
     for (const languageCandidates of candidatesByLanguage.values()) {
-        const primary = languageCandidates.find(candidate => candidate.preferred) ?? languageCandidates[0];
+        const primary =
+            languageCandidates.find((candidate) => candidate.preferred) ?? languageCandidates[0];
         groups.push({
             languageName: primary.languageName,
             primary,
-            alternates: languageCandidates.filter(candidate => candidate !== primary),
+            alternates: languageCandidates.filter((candidate) => candidate !== primary),
         });
     }
     groups.sort((left, right) => left.languageName.localeCompare(right.languageName));
@@ -86,7 +87,7 @@ export function buildRuntimeQuickPickItems(
             kind: vscode.QuickPickItemKind.Separator,
             label: 'Suggested',
         });
-        items.push(...groups.map(group => toQuickPickItem(group.primary)));
+        items.push(...groups.map((group) => toQuickPickItem(group.primary)));
     }
 
     for (const group of groups) {
@@ -103,11 +104,12 @@ export function buildRuntimeQuickPickItems(
                 label: source,
             });
             sourceCandidates
-                .sort((left, right) =>
-                    compareVersionsDescending(left.languageVersion, right.languageVersion) ||
-                    left.runtimeName.localeCompare(right.runtimeName)
+                .sort(
+                    (left, right) =>
+                        compareVersionsDescending(left.languageVersion, right.languageVersion) ||
+                        left.runtimeName.localeCompare(right.runtimeName),
                 )
-                .forEach(candidate => items.push(toQuickPickItem(candidate)));
+                .forEach((candidate) => items.push(toQuickPickItem(candidate)));
         }
     }
 

@@ -3,9 +3,9 @@
   Port from Positron's ColumnNullPercent component in columnSummaryCell.tsx
 -->
 <script lang="ts">
-    import { onDestroy } from "svelte";
-    import type { DataGridHoverManager } from "../../dataGrid/classes/dataGridInstance";
-    import { localize } from "../nls";
+    import { onDestroy } from 'svelte';
+    import type { DataGridHoverManager } from '../../dataGrid/classes/dataGridInstance';
+    import { localize } from '../nls';
 
     interface Props {
         nullPercent?: number;
@@ -38,15 +38,15 @@
         }
 
         if (nullPercent <= 0) {
-            return "0%";
+            return '0%';
         }
 
         if (nullPercent >= 100) {
-            return "100%";
+            return '100%';
         }
 
         if (nullPercent > 0 && nullPercent < 1) {
-            return "<1%";
+            return '<1%';
         }
 
         return `${Math.floor(nullPercent)}%`;
@@ -54,31 +54,25 @@
 
     const tooltipText = $derived.by(() => {
         if (nullPercent === undefined || nullCount === undefined) {
-            return localize(
-                "positron.missingValues.calculating",
-                "Calculating...",
-            );
+            return localize('positron.missingValues.calculating', 'Calculating...');
         }
 
         if (nullPercent === 0) {
-            return localize(
-                "positron.missingValues.none",
-                "No missing values",
-            );
+            return localize('positron.missingValues.none', 'No missing values');
         }
 
         if (nullPercent === 100) {
             return localize(
-                "positron.missingValues.all",
-                "All values are missing ({0} values)",
+                'positron.missingValues.all',
+                'All values are missing ({0} values)',
                 nullCount.toLocaleString(),
             );
         }
 
         return localize(
-            "positron.missingValues.some",
-            "{0} of values are missing ({1} values)",
-            displayNullPercent ?? "",
+            'positron.missingValues.some',
+            '{0} of values are missing ({1} values)',
+            displayNullPercent ?? '',
             nullCount.toLocaleString(),
         );
     });
@@ -196,15 +190,27 @@
 
     .column-null-percent .graph-percent .empty {
         fill: transparent;
-        stroke: var(--vscode-positronDataExplorer-columnNullPercentGraphBackgroundStroke, var(--vscode-editorGroup-border));
+        stroke: var(
+            --vscode-positronDataExplorer-columnNullPercentGraphBackgroundStroke,
+            var(--vscode-editorGroup-border)
+        );
     }
 
     .column-null-percent .graph-percent .background {
-        fill: var(--vscode-positronDataExplorer-columnNullPercentGraphBackgroundFill, var(--vscode-inputValidation-warningBackground, rgba(255, 204, 0, 0.2)));
-        stroke: var(--vscode-positronDataExplorer-columnNullPercentGraphBackgroundStroke, var(--vscode-editorGroup-border));
+        fill: var(
+            --vscode-positronDataExplorer-columnNullPercentGraphBackgroundFill,
+            var(--vscode-inputValidation-warningBackground, rgba(255, 204, 0, 0.2))
+        );
+        stroke: var(
+            --vscode-positronDataExplorer-columnNullPercentGraphBackgroundStroke,
+            var(--vscode-editorGroup-border)
+        );
     }
 
     .column-null-percent .graph-percent .indicator {
-        fill: var(--vscode-positronDataExplorer-columnNullPercentGraphIndicatorFill, var(--vscode-progressBar-background, #0e70c0));
+        fill: var(
+            --vscode-positronDataExplorer-columnNullPercentGraphIndicatorFill,
+            var(--vscode-progressBar-background, #0e70c0)
+        );
     }
 </style>

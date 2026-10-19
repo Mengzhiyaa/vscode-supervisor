@@ -12,13 +12,13 @@ import {
     InspectedVariable,
     UpdateEvent,
     RefreshEvent,
-    ClipboardFormatFormat
+    ClipboardFormatFormat,
 } from './comms/positronVariablesComm';
 
 /**
  * Represents a variable in a language runtime; wraps the raw data format with
  * additional metadata and methods.
- * 
+ *
  * Matches Positron's PositronVariable pattern.
  */
 export class PositronVariable {
@@ -34,8 +34,8 @@ export class PositronVariable {
         public readonly data: Variable,
         public readonly parentKeys: string[] = [],
         public readonly evaluated: boolean,
-        private readonly _comm: PositronVariablesComm
-    ) { }
+        private readonly _comm: PositronVariablesComm,
+    ) {}
 
     /**
      * Gets the path of this variable.
@@ -64,8 +64,8 @@ export class PositronVariable {
         } else {
             throw new Error(
                 `Attempt to retrieve children of ` +
-                `${this.data.display_name} (${JSON.stringify(this.parentKeys)}) ` +
-                `which has no children.`
+                    `${this.data.display_name} (${JSON.stringify(this.parentKeys)}) ` +
+                    `which has no children.`,
             );
         }
     }
@@ -102,9 +102,9 @@ export class PositronVariablesList {
     constructor(
         public readonly data: Variable[],
         parentKeys: string[] = [],
-        comm: PositronVariablesComm
+        comm: PositronVariablesComm,
     ) {
-        this.variables = data.map(v => new PositronVariable(v, parentKeys, true, comm));
+        this.variables = data.map((v) => new PositronVariable(v, parentKeys, true, comm));
     }
 }
 
@@ -120,14 +120,14 @@ export class PositronVariablesUpdate {
 
     constructor(
         public readonly data: UpdateEvent,
-        comm: PositronVariablesComm
+        comm: PositronVariablesComm,
     ) {
         // Add all the assigned variables to the list of assignments
-        this.assigned = data.assigned.map(v => new PositronVariable(v, [], true, comm));
+        this.assigned = data.assigned.map((v) => new PositronVariable(v, [], true, comm));
 
         // Add all the unevaluated variables, but mark them as unevaluated
         this.assigned = this.assigned.concat(
-            data.unevaluated.map(v => new PositronVariable(v, [], false, comm))
+            data.unevaluated.map((v) => new PositronVariable(v, [], false, comm)),
         );
 
         this.removed = data.removed;
@@ -137,7 +137,7 @@ export class PositronVariablesUpdate {
 /**
  * The client-side interface to a variables (a set of named variables) inside
  * a language runtime.
- * 
+ *
  * Matches Positron's VariablesClientInstance pattern.
  */
 export class VariablesClientInstance implements vscode.Disposable {
@@ -176,18 +176,16 @@ export class VariablesClientInstance implements vscode.Disposable {
         this._disposables.push(
             this._comm.onDidRefresh((e: RefreshEvent) => {
                 this._onDidReceiveListEmitter.fire(
-                    new PositronVariablesList(e.variables, [], this._comm)
+                    new PositronVariablesList(e.variables, [], this._comm),
                 );
-            })
+            }),
         );
 
         // Connect to update events
         this._disposables.push(
             this._comm.onDidUpdate((e: UpdateEvent) => {
-                this._onDidReceiveUpdateEmitter.fire(
-                    new PositronVariablesUpdate(e, this._comm)
-                );
-            })
+                this._onDidReceiveUpdateEmitter.fire(new PositronVariablesUpdate(e, this._comm));
+            }),
         );
     }
 
@@ -225,12 +223,15 @@ export class VariablesClientInstance implements vscode.Disposable {
      */
     async requestDelete(names: string[]): Promise<PositronVariablesUpdate> {
         const removed = await this._comm.delete(names);
-        return new PositronVariablesUpdate({
-            assigned: [],
-            unevaluated: [],
-            removed,
-            version: 0
-        }, this._comm);
+        return new PositronVariablesUpdate(
+            {
+                assigned: [],
+                unevaluated: [],
+                removed,
+                version: 0,
+            },
+            this._comm,
+        );
     }
 
     /**
@@ -316,7 +317,7 @@ export class VariablesClientInstance implements vscode.Disposable {
      * Disposes the client instance.
      */
     dispose(): void {
-        this._disposables.forEach(d => d.dispose());
+        this._disposables.forEach((d) => d.dispose());
         this._onDidReceiveListEmitter.dispose();
         this._onDidReceiveUpdateEmitter.dispose();
         this._comm.dispose();

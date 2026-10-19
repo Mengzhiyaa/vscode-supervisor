@@ -9,9 +9,9 @@
  * @link https://jupyter-client.readthedocs.io/en/stable/messaging.html#messages-on-the-stdin-router-dealer-channel
  */
 export interface JupyterInputRequest {
-	/** The text to show at the prompt */
-	prompt: string;
+    /** The text to show at the prompt */
+    prompt: string;
 
-	/** Whether the user is being prompted for a password */
-	password: boolean;
+    /** Whether the user is being prompted for a password */
+    password: boolean;
 }

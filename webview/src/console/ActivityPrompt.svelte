@@ -6,36 +6,34 @@
     undo, and context-menu behaviour matches the normal Console input.
 -->
 <script lang="ts">
-    import { getContext, onMount, tick } from "svelte";
-    import { monaco, ensureMonacoRuntime } from "$lib/monaco/setup";
-    import { getRpcConnection } from "$lib/rpc/client";
-    import ConsoleOutputLines from "./ConsoleOutputLines.svelte";
-    import OutputRun from "./OutputRun.svelte";
-    import { ActivityItemPrompt, ActivityItemPromptState } from "./classes";
+    import { getContext, onMount, tick } from 'svelte';
+    import { monaco, ensureMonacoRuntime } from '$lib/monaco/setup';
+    import { getRpcConnection } from '$lib/rpc/client';
+    import ConsoleOutputLines from './ConsoleOutputLines.svelte';
+    import OutputRun from './OutputRun.svelte';
+    import { ActivityItemPrompt, ActivityItemPromptState } from './classes';
     import {
         promptInputControllersContext,
         type PromptInputController,
         type PromptInputControllers,
-    } from "./services/promptInputController";
-    import { copyEditorSelection } from "./utils/editorClipboard";
+    } from './services/promptInputController';
+    import { copyEditorSelection } from './utils/editorClipboard';
 
     interface Props {
         activityItemPrompt: ActivityItemPrompt;
     }
 
     let { activityItemPrompt }: Props = $props();
-    const isMacintosh = navigator.platform.toLowerCase().includes("mac");
+    const isMacintosh = navigator.platform.toLowerCase().includes('mac');
     const promptInputs = getContext<PromptInputControllers | undefined>(
         promptInputControllersContext,
     );
 
     let passwordInputRef = $state<HTMLInputElement | undefined>(undefined);
     let editorContainerRef = $state<HTMLDivElement | undefined>(undefined);
-    let passwordValue = $state("");
-    let promptState = $state<ActivityItemPromptState>(
-        ActivityItemPromptState.Unanswered,
-    );
-    let promptAnswer = $state("");
+    let passwordValue = $state('');
+    let promptState = $state<ActivityItemPromptState>(ActivityItemPromptState.Unanswered);
+    let promptAnswer = $state('');
     let mounted = false;
     let destroyed = false;
     let editorInitialization = 0;
@@ -47,7 +45,7 @@
 
     $effect(() => {
         promptState = activityItemPrompt.state;
-        promptAnswer = activityItemPrompt.answer ?? "";
+        promptAnswer = activityItemPrompt.answer ?? '';
 
         if (promptState !== ActivityItemPromptState.Unanswered) {
             disposeEditor();
@@ -134,19 +132,17 @@
 
         const styles = getComputedStyle(editorContainerRef);
         const fontFamily =
-            styles.getPropertyValue("--console-content-font-family").trim() ||
+            styles.getPropertyValue('--console-content-font-family').trim() ||
             styles.fontFamily ||
-            "monospace";
-        const fontSize = Number.parseFloat(
-            styles.getPropertyValue("--console-content-font-size"),
-        );
+            'monospace';
+        const fontSize = Number.parseFloat(styles.getPropertyValue('--console-content-font-size'));
         const lineHeight = Math.max(
             16,
             Number.parseFloat(styles.lineHeight) ||
                 (Number.isFinite(fontSize) ? fontSize * 1.4 : 20),
         );
 
-        codeEditorModel = monaco.editor.createModel("", "plaintext");
+        codeEditorModel = monaco.editor.createModel('', 'plaintext');
         codeEditorWidget = monaco.editor.create(editorContainerRef, {
             model: codeEditorModel,
             automaticLayout: false,
@@ -159,20 +155,20 @@
             lineHeight,
             glyphMargin: false,
             lineDecorationsWidth: 0,
-            lineNumbers: "off",
+            lineNumbers: 'off',
             minimap: { enabled: false },
             overviewRulerLanes: 0,
             padding: { top: 0, bottom: 0 },
-            renderLineHighlight: "none",
-            renderValidationDecorations: "off",
+            renderLineHighlight: 'none',
+            renderValidationDecorations: 'off',
             scrollBeyondLastLine: false,
             scrollbar: {
-                vertical: "hidden",
-                horizontal: "hidden",
+                vertical: 'hidden',
+                horizontal: 'hidden',
                 useShadows: false,
                 handleMouseWheel: false,
             },
-            wordWrap: "off",
+            wordWrap: 'off',
         });
 
         editorDisposables.push(
@@ -184,7 +180,7 @@
 
         const container = editorContainerRef;
         const handlePaste = (event: ClipboardEvent) => {
-            const pastedText = event.clipboardData?.getData("text/plain");
+            const pastedText = event.clipboardData?.getData('text/plain');
             if (!pastedText || !/[\r\n]/.test(pastedText)) {
                 return;
             }
@@ -193,12 +189,12 @@
             event.stopPropagation();
             insertTextAtSelection(pastedText);
         };
-        container.addEventListener("keydown", handleKeyDownCapture, true);
-        container.addEventListener("paste", handlePaste, true);
+        container.addEventListener('keydown', handleKeyDownCapture, true);
+        container.addEventListener('paste', handlePaste, true);
         editorDisposables.push({
             dispose: () => {
-                container.removeEventListener("keydown", handleKeyDownCapture, true);
-                container.removeEventListener("paste", handlePaste, true);
+                container.removeEventListener('keydown', handleKeyDownCapture, true);
+                container.removeEventListener('paste', handlePaste, true);
             },
         });
 
@@ -220,8 +216,8 @@
 
     function insertTextAtSelection(text: string): void {
         // Runtime prompts accept a single line; Monaco owns the edit and caret.
-        codeEditorWidget?.trigger("activity-prompt", "paste", {
-            text: text.replace(/[\r\n]+/g, " "),
+        codeEditorWidget?.trigger('activity-prompt', 'paste', {
+            text: text.replace(/[\r\n]+/g, ' '),
         });
     }
 
@@ -240,11 +236,14 @@
         const container = activityItemPrompt.password ? passwordInputRef : editorContainerRef;
         // Focus newly requested prompts even after the ordinary input is hidden.
         // Hidden session tabs must not steal focus from the foreground session.
-        if (destroyed || promptState !== ActivityItemPromptState.Unanswered ||
-            !container?.getClientRects().length) {
+        if (
+            destroyed ||
+            promptState !== ActivityItemPromptState.Unanswered ||
+            !container?.getClientRects().length
+        ) {
             return;
         }
-        container.scrollIntoView({ behavior: "auto" });
+        container.scrollIntoView({ behavior: 'auto' });
         if (activityItemPrompt.password) {
             passwordInputRef?.focus();
         } else {
@@ -263,10 +262,10 @@
                 return;
             }
             input.setRangeText(
-                text.replace(/[\r\n]+/g, " "),
+                text.replace(/[\r\n]+/g, ' '),
                 input.selectionStart ?? input.value.length,
                 input.selectionEnd ?? input.value.length,
-                "end",
+                'end',
             );
             passwordValue = input.value;
         } else {
@@ -275,7 +274,7 @@
     }
 
     function reportInputError(error: unknown): void {
-        console.error("Failed to handle prompt input:", error);
+        console.error('Failed to handle prompt input:', error);
     }
 
     async function pasteFromClipboard(): Promise<void> {
@@ -294,10 +293,19 @@
             return;
         }
         const key = event.key.toLowerCase();
-        const onlyCtrl = event.ctrlKey && !event.metaKey && !event.shiftKey &&
-            !event.altKey && !event.getModifierState("AltGraph");
-        if (!activityItemPrompt.password && key === "c" && onlyCtrl &&
-            (isMacintosh || !codeEditorWidget?.getSelections()?.some((selection) => !selection.isEmpty()))) {
+        const onlyCtrl =
+            event.ctrlKey &&
+            !event.metaKey &&
+            !event.shiftKey &&
+            !event.altKey &&
+            !event.getModifierState('AltGraph');
+        if (
+            !activityItemPrompt.password &&
+            key === 'c' &&
+            onlyCtrl &&
+            (isMacintosh ||
+                !codeEditorWidget?.getSelections()?.some((selection) => !selection.isEmpty()))
+        ) {
             event.preventDefault();
             event.stopPropagation();
             void interruptPrompt();
@@ -311,12 +319,16 @@
             return;
         }
 
-        if (key === "v" && activityItemPrompt.password) {
+        if (key === 'v' && activityItemPrompt.password) {
             event.preventDefault();
             event.stopPropagation();
             void pasteFromClipboard();
-        } else if (!activityItemPrompt.password && codeEditorWidget &&
-            (key === "c" || key === "x") && copyEditorSelection(codeEditorWidget, key === "x")) {
+        } else if (
+            !activityItemPrompt.password &&
+            codeEditorWidget &&
+            (key === 'c' || key === 'x') &&
+            copyEditorSelection(codeEditorWidget, key === 'x')
+        ) {
             event.preventDefault();
             event.stopPropagation();
         }
@@ -326,28 +338,20 @@
         if (event.keyCode === monaco.KeyCode.Enter) {
             event.preventDefault();
             event.stopPropagation();
-            void submitAnswer(codeEditorWidget?.getValue() ?? "");
+            void submitAnswer(codeEditorWidget?.getValue() ?? '');
             return;
         }
     }
 
     function handlePasswordKeyDown(event: KeyboardEvent): void {
         event.stopPropagation();
-        const noModifiers =
-            !event.ctrlKey &&
-            !event.metaKey &&
-            !event.shiftKey &&
-            !event.altKey;
-        const onlyCtrl =
-            event.ctrlKey &&
-            !event.metaKey &&
-            !event.shiftKey &&
-            !event.altKey;
+        const noModifiers = !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey;
+        const onlyCtrl = event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey;
 
-        if (noModifiers && event.key === "Enter") {
+        if (noModifiers && event.key === 'Enter') {
             event.preventDefault();
             void submitAnswer(passwordValue);
-        } else if (onlyCtrl && event.key.toLowerCase() === "c") {
+        } else if (onlyCtrl && event.key.toLowerCase() === 'c') {
             event.preventDefault();
             void interruptPrompt();
         }
@@ -355,7 +359,7 @@
 
     async function submitAnswer(value: string): Promise<void> {
         try {
-            await getRpcConnection().sendRequest("console/replyPrompt", {
+            await getRpcConnection().sendRequest('console/replyPrompt', {
                 id: activityItemPrompt.id,
                 value,
                 sessionId: activityItemPrompt.sessionId,
@@ -368,21 +372,21 @@
             }
             disposeEditor();
         } catch (error) {
-            console.error("Failed to reply to prompt:", error);
+            console.error('Failed to reply to prompt:', error);
             await readyInput();
         }
     }
 
     async function interruptPrompt(): Promise<void> {
         try {
-            await getRpcConnection().sendRequest("console/interrupt", {
+            await getRpcConnection().sendRequest('console/interrupt', {
                 sessionId: activityItemPrompt.sessionId,
             });
             promptState = ActivityItemPromptState.Interrupted;
             activityItemPrompt.state = ActivityItemPromptState.Interrupted;
             disposeEditor();
         } catch (error) {
-            console.error("Failed to interrupt prompt:", error);
+            console.error('Failed to interrupt prompt:', error);
             await readyInput();
         }
     }
@@ -402,9 +406,7 @@
     onclick={stopPromptPropagation}
 >
     {#if activityItemPrompt.outputLines.length > 1}
-        <ConsoleOutputLines
-            outputLines={activityItemPrompt.outputLines.slice(0, -1)}
-        />
+        <ConsoleOutputLines outputLines={activityItemPrompt.outputLines.slice(0, -1)} />
     {/if}
 
     <div class="prompt-line">
@@ -427,10 +429,7 @@
                     onclick={stopPromptPropagation}
                 />
             {:else}
-                <div
-                    bind:this={editorContainerRef}
-                    class="editor-input-container"
-                ></div>
+                <div bind:this={editorContainerRef} class="editor-input-container"></div>
             {/if}
         {:else if promptState === ActivityItemPromptState.Answered}
             {#if !activityItemPrompt.password}

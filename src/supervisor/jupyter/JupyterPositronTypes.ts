@@ -4,16 +4,16 @@
  *--------------------------------------------------------------------------------------------*/
 
 export interface JupyterPositronLocation {
-	uri: string;
-	range: JupyterPositronRange;
+    uri: string;
+    range: JupyterPositronRange;
 }
 
 export interface JupyterPositronRange {
-	start: JupyterPositronPosition;
-	end: JupyterPositronPosition;
+    start: JupyterPositronPosition;
+    end: JupyterPositronPosition;
 }
 
 export interface JupyterPositronPosition {
-	line: number;
-	character: number;
+    line: number;
+    character: number;
 }

@@ -3,9 +3,9 @@
   Port from Positron's columnProfileSparklines.tsx
 -->
 <script lang="ts">
-    import type { DataGridHoverManager } from "../../dataGrid/classes/dataGridInstance";
-    import VectorFrequencyTable from "./vectorFrequencyTable.svelte";
-    import VectorHistogram from "./vectorHistogram.svelte";
+    import type { DataGridHoverManager } from '../../dataGrid/classes/dataGridInstance';
+    import VectorFrequencyTable from './vectorFrequencyTable.svelte';
+    import VectorHistogram from './vectorHistogram.svelte';
 
     const GRAPH_WIDTH = 200;
     const GRAPH_HEIGHT = 50;
@@ -25,12 +25,7 @@
         hoverManager?: DataGridHoverManager;
     }
 
-    let {
-        columnHistogram,
-        columnFrequencyTable,
-        displayType,
-        hoverManager,
-    }: Props = $props();
+    let { columnHistogram, columnFrequencyTable, displayType, hoverManager }: Props = $props();
 </script>
 
 {#if columnHistogram}

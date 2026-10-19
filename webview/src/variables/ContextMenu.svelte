@@ -3,7 +3,7 @@
      * ContextMenu.svelte
      * Reusable context menu component matching Positron's behavior.
      */
-    import { onMount } from "svelte";
+    import { onMount } from 'svelte';
 
     interface MenuItem {
         id: string;
@@ -51,29 +51,30 @@
 
     function handleKeyDown(e: KeyboardEvent) {
         const buttons = menuRef
-            ? Array.from(menuRef.querySelectorAll<HTMLButtonElement>(".menu-item:not(:disabled)"))
+            ? Array.from(menuRef.querySelectorAll<HTMLButtonElement>('.menu-item:not(:disabled)'))
             : [];
-        const currentIndex = document.activeElement instanceof HTMLButtonElement
-            ? buttons.indexOf(document.activeElement)
-            : -1;
+        const currentIndex =
+            document.activeElement instanceof HTMLButtonElement
+                ? buttons.indexOf(document.activeElement)
+                : -1;
         switch (e.key) {
-            case "Escape":
+            case 'Escape':
                 e.preventDefault();
                 onClose();
                 break;
-            case "ArrowDown":
+            case 'ArrowDown':
                 e.preventDefault();
                 buttons[(currentIndex + 1 + buttons.length) % buttons.length]?.focus();
                 break;
-            case "ArrowUp":
+            case 'ArrowUp':
                 e.preventDefault();
                 buttons[(currentIndex - 1 + buttons.length) % buttons.length]?.focus();
                 break;
-            case "Home":
+            case 'Home':
                 e.preventDefault();
                 buttons[0]?.focus();
                 break;
-            case "End":
+            case 'End':
                 e.preventDefault();
                 buttons.at(-1)?.focus();
                 break;
@@ -94,7 +95,7 @@
 
     onMount(() => {
         requestAnimationFrame(() => {
-            menuRef?.querySelector<HTMLButtonElement>(".menu-item:not(:disabled)")?.focus();
+            menuRef?.querySelector<HTMLButtonElement>('.menu-item:not(:disabled)')?.focus();
         });
     });
 </script>
@@ -102,12 +103,7 @@
 <svelte:document onmousedown={handleClickOutside} />
 
 <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-<div
-    class="context-menu-overlay"
-    role="menu"
-    tabindex="-1"
-    onkeydown={handleKeyDown}
->
+<div class="context-menu-overlay" role="menu" tabindex="-1" onkeydown={handleKeyDown}>
     <div
         class="context-menu"
         bind:this={menuRef}

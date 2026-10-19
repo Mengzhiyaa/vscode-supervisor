@@ -39,16 +39,23 @@ export type RuntimeOutputConsumerId =
  * Exhaustive consumer ownership contract. Adding a RuntimeOutputKind fails
  * compilation until its normal consumer or explicit fallback is declared.
  */
-export const RuntimeOutputConsumers: Record<RuntimeOutputKind, readonly RuntimeOutputConsumerId[]> = {
-    [RuntimeOutputKind.Text]: ['console'],
-    [RuntimeOutputKind.StaticImage]: ['console', 'plots'],
-    [RuntimeOutputKind.InlineHtml]: ['console'],
-    [RuntimeOutputKind.ViewerWidget]: ['rich-output-router', 'renderer', 'viewer', 'data-explorer', 'notebook-inline-data-explorer'],
-    [RuntimeOutputKind.PlotWidget]: ['rich-output-router', 'renderer', 'plots'],
-    [RuntimeOutputKind.IPyWidget]: ['rich-output-router', 'renderer', 'viewer-fallback'],
-    [RuntimeOutputKind.WebviewPreload]: ['rich-output-router', 'renderer', 'viewer-fallback'],
-    [RuntimeOutputKind.Unknown]: ['console'],
-};
+export const RuntimeOutputConsumers: Record<RuntimeOutputKind, readonly RuntimeOutputConsumerId[]> =
+    {
+        [RuntimeOutputKind.Text]: ['console'],
+        [RuntimeOutputKind.StaticImage]: ['console', 'plots'],
+        [RuntimeOutputKind.InlineHtml]: ['console'],
+        [RuntimeOutputKind.ViewerWidget]: [
+            'rich-output-router',
+            'renderer',
+            'viewer',
+            'data-explorer',
+            'notebook-inline-data-explorer',
+        ],
+        [RuntimeOutputKind.PlotWidget]: ['rich-output-router', 'renderer', 'plots'],
+        [RuntimeOutputKind.IPyWidget]: ['rich-output-router', 'renderer', 'viewer-fallback'],
+        [RuntimeOutputKind.WebviewPreload]: ['rich-output-router', 'renderer', 'viewer-fallback'],
+        [RuntimeOutputKind.Unknown]: ['console'],
+    };
 
 export const RoutedRichOutputKinds: ReadonlySet<RuntimeOutputKind> = new Set([
     RuntimeOutputKind.ViewerWidget,

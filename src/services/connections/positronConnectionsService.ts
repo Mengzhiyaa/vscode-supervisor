@@ -77,7 +77,7 @@ export class PositronConnectionInstance implements IConnectionInstance {
                 this._children.clear();
                 this._onDidChange.fire();
             }),
-            this._client.onDidChangeClientState(state => {
+            this._client.onDidChangeClientState((state) => {
                 if (state === RuntimeClientState.Closed) {
                     this._active = false;
                     this._onDidChange.fire();
@@ -98,15 +98,17 @@ export class PositronConnectionInstance implements IConnectionInstance {
         return this._comm.onDidFocus;
     }
 
-    async getChildren(path: readonly ConnectionPathEntry[] = []): Promise<readonly PositronConnectionNode[]> {
-        const key = JSON.stringify(path.map(entry => [entry.name, entry.kind]));
+    async getChildren(
+        path: readonly ConnectionPathEntry[] = [],
+    ): Promise<readonly PositronConnectionNode[]> {
+        const key = JSON.stringify(path.map((entry) => [entry.name, entry.kind]));
         const cached = this._children.get(key);
         if (cached) {
             return cached;
         }
 
         let children: readonly ConnectionPathEntry[];
-        if (path.length > 0 && await this._comm.containsData(path)) {
+        if (path.length > 0 && (await this._comm.containsData(path))) {
             children = (await this._comm.listFields(path)).map((field: ConnectionFieldSchema) => ({
                 name: field.name,
                 kind: 'field',
@@ -117,23 +119,25 @@ export class PositronConnectionInstance implements IConnectionInstance {
             children = await this._comm.listObjects(path);
         }
 
-        const nodes = await Promise.all(children.map(async child => {
-            const childPath = [...path, child];
-            let containsData = false;
-            if (child.kind !== 'field') {
-                try {
-                    containsData = await this._comm.containsData(childPath);
-                } catch {
-                    // A failed capability check must not hide the object tree.
+        const nodes = await Promise.all(
+            children.map(async (child) => {
+                const childPath = [...path, child];
+                let containsData = false;
+                if (child.kind !== 'field') {
+                    try {
+                        containsData = await this._comm.containsData(childPath);
+                    } catch {
+                        // A failed capability check must not hide the object tree.
+                    }
                 }
-            }
-            return {
-                ...child,
-                id: childPath.map(entry => `${entry.kind}:${entry.name}`).join('/'),
-                path: childPath,
-                containsData,
-            };
-        }));
+                return {
+                    ...child,
+                    id: childPath.map((entry) => `${entry.kind}:${entry.name}`).join('/'),
+                    path: childPath,
+                    containsData,
+                };
+            }),
+        );
         this._children.set(key, nodes);
         return nodes;
     }
@@ -153,7 +157,7 @@ export class PositronConnectionInstance implements IConnectionInstance {
 
     dispose(): void {
         this._comm.dispose();
-        this._disposables.forEach(disposable => disposable.dispose());
+        this._disposables.forEach((disposable) => disposable.dispose());
     }
 }
 
@@ -182,12 +186,19 @@ class ProfileConnectionInstance implements IConnectionInstance {
             name: profile.connectionName,
             language_id: driver.supportedLanguageIds[0] ?? 'unknown',
             type: driver.name,
-            host: typeof profile.parameterValues.host === 'string' ? profile.parameterValues.host : undefined,
+            host:
+                typeof profile.parameterValues.host === 'string'
+                    ? profile.parameterValues.host
+                    : undefined,
         };
     }
 
-    get id(): string { return `${this.sessionId}:${this.clientId}`; }
-    get active(): boolean { return this._active; }
+    get id(): string {
+        return `${this.sessionId}:${this.clientId}`;
+    }
+    get active(): boolean {
+        return this._active;
+    }
 
     updateProfile(profile: DataConnectionProfile): void {
         this.profile = profile;
@@ -195,12 +206,15 @@ class ProfileConnectionInstance implements IConnectionInstance {
         this._onDidChange.fire();
     }
 
-    async getChildren(path: readonly ConnectionPathEntry[] = []): Promise<readonly PositronConnectionNode[]> {
+    async getChildren(
+        path: readonly ConnectionPathEntry[] = [],
+    ): Promise<readonly PositronConnectionNode[]> {
         const parent = path.at(-1);
-        const children = parent?.dataConnectionNode === undefined
-            ? await this._handle.getChildren()
-            : await parent.dataConnectionNode.getChildren?.() ?? [];
-        return children.map(child => {
+        const children =
+            parent?.dataConnectionNode === undefined
+                ? await this._handle.getChildren()
+                : ((await parent.dataConnectionNode.getChildren?.()) ?? []);
+        return children.map((child) => {
             const entry: ConnectionPathEntry = {
                 name: child.name,
                 kind: child.kind,
@@ -211,7 +225,7 @@ class ProfileConnectionInstance implements IConnectionInstance {
             const childPath = [...path, entry];
             return {
                 ...entry,
-                id: childPath.map(item => `${item.kind}:${item.name}`).join('/'),
+                id: childPath.map((item) => `${item.kind}:${item.name}`).join('/'),
                 path: childPath,
                 containsData: !!child.preview,
             };
@@ -226,25 +240,32 @@ class ProfileConnectionInstance implements IConnectionInstance {
         await node.preview();
     }
 
-    refresh(): void { this._onDidChange.fire(); }
+    refresh(): void {
+        this._onDidChange.fire();
+    }
 
     disconnect(): void {
-        void this._disconnect().catch(error => {
-            this._outputChannel.error(`[Connections] Failed to disconnect ${this.id}: ${getErrorMessage(error)}`);
+        void this._disconnect().catch((error) => {
+            this._outputChannel.error(
+                `[Connections] Failed to disconnect ${this.id}: ${getErrorMessage(error)}`,
+            );
         });
     }
 
     private _disconnect(): Promise<void> {
         if (!this._disconnectPromise) {
-            this._disconnectPromise = Promise.resolve().then(() => this._handle.disconnect()).then(() => {
-                this._active = false;
-                if (!this._disposed) {
-                    this._onDidChange.fire();
-                }
-            }).catch(error => {
-                this._disconnectPromise = undefined;
-                throw error;
-            });
+            this._disconnectPromise = Promise.resolve()
+                .then(() => this._handle.disconnect())
+                .then(() => {
+                    this._active = false;
+                    if (!this._disposed) {
+                        this._onDidChange.fire();
+                    }
+                })
+                .catch((error) => {
+                    this._disconnectPromise = undefined;
+                    throw error;
+                });
         }
         return this._disconnectPromise;
     }
@@ -283,26 +304,44 @@ class StoredProfileConnectionInstance implements IConnectionInstance {
             name: profile.connectionName,
             language_id: 'unknown',
             type: profile.driverId,
-            host: typeof profile.parameterValues.host === 'string' ? profile.parameterValues.host : undefined,
+            host:
+                typeof profile.parameterValues.host === 'string'
+                    ? profile.parameterValues.host
+                    : undefined,
         };
     }
 
-    get id(): string { return `profile:${this.clientId}`; }
-    async getChildren(): Promise<readonly PositronConnectionNode[]> { return []; }
-    async preview(): Promise<void> { throw new Error('Connect this profile before previewing data.'); }
-    refresh(): void { this._onDidChange.fire(); }
-    disconnect(): void { }
-    dispose(): void { this._onDidChange.dispose(); this._onDidFocus.dispose(); }
+    get id(): string {
+        return `profile:${this.clientId}`;
+    }
+    async getChildren(): Promise<readonly PositronConnectionNode[]> {
+        return [];
+    }
+    async preview(): Promise<void> {
+        throw new Error('Connect this profile before previewing data.');
+    }
+    refresh(): void {
+        this._onDidChange.fire();
+    }
+    disconnect(): void {}
+    dispose(): void {
+        this._onDidChange.dispose();
+        this._onDidFocus.dispose();
+    }
 }
 
 export class PositronConnectionsService implements vscode.Disposable {
-    private readonly _dataConnectionsEnabled = vscode.workspace.getConfiguration().get<boolean>('dataConnections.enabled', true);
+    private readonly _dataConnectionsEnabled = vscode.workspace
+        .getConfiguration()
+        .get<boolean>('dataConnections.enabled', true);
     private readonly _instances = new Map<string, IConnectionInstance>();
     private readonly _sessionDisposables = new Map<string, vscode.Disposable[]>();
     private readonly _attachedManagers = new WeakSet<RuntimeClientManager>();
     private readonly _pendingClients = new Set<string>();
     private readonly _disposables: vscode.Disposable[] = [];
-    private readonly _onDidChangeConnections = new vscode.EventEmitter<readonly IConnectionInstance[]>();
+    private readonly _onDidChangeConnections = new vscode.EventEmitter<
+        readonly IConnectionInstance[]
+    >();
     private readonly _onDidFocusConnection = new vscode.EventEmitter<IConnectionInstance>();
     private readonly _pendingProfiles = new Map<string, Promise<IConnectionInstance>>();
     readonly driverManager = new DataConnectionsDriverManager();
@@ -327,13 +366,17 @@ export class PositronConnectionsService implements vscode.Disposable {
             this.driverManager,
             this.profileStore,
             this.driverManager.onDidChangeDrivers(() => this._loadProfiles()),
-            this.profileStore.onDidChangeProfiles(() => this._onDidChangeConnections.fire(this.connections)),
+            this.profileStore.onDidChangeProfiles(() =>
+                this._onDidChangeConnections.fire(this.connections),
+            ),
         );
     }
 
     get connections(): readonly IConnectionInstance[] {
-        return [...this._instances.values()].filter(instance =>
-            this._dataConnectionsEnabled || instance instanceof PositronConnectionInstance);
+        return [...this._instances.values()].filter(
+            (instance) =>
+                this._dataConnectionsEnabled || instance instanceof PositronConnectionInstance,
+        );
     }
 
     initialize(): void {
@@ -347,10 +390,12 @@ export class PositronConnectionsService implements vscode.Disposable {
             }
         }
         this._loadProfiles();
-        this._sessionManager.sessions.forEach(session => this._attachSession(session));
+        this._sessionManager.sessions.forEach((session) => this._attachSession(session));
         this._disposables.push(
-            this._sessionManager.onDidCreateSession(session => this._attachSession(session)),
-            this._sessionManager.onDidDeleteRuntimeSession(sessionId => this._detachSession(sessionId)),
+            this._sessionManager.onDidCreateSession((session) => this._attachSession(session)),
+            this._sessionManager.onDidDeleteRuntimeSession((sessionId) =>
+                this._detachSession(sessionId),
+            ),
         );
     }
 
@@ -362,7 +407,10 @@ export class PositronConnectionsService implements vscode.Disposable {
         return this.driverManager.registerDriver(driver);
     }
 
-    async addUpdateProfile(profile: DataConnectionProfile, connect = true): Promise<DataConnectionProfile> {
+    async addUpdateProfile(
+        profile: DataConnectionProfile,
+        connect = true,
+    ): Promise<DataConnectionProfile> {
         const driver = this.driverManager.getDriver(profile.driverId);
         if (!driver) {
             throw new Error(`Data connection driver '${profile.driverId}' is not registered.`);
@@ -374,12 +422,25 @@ export class PositronConnectionsService implements vscode.Disposable {
         ]);
         // Compare before saving: secret storage has already replaced the old
         // value afterwards. Re-entering a secret also retires the old channel.
-        const parametersChanged = previous !== undefined && (
-            previous.driverId !== profile.driverId || previous.mechanismId !== profile.mechanismId ||
-            [...secretIds].some(id => profile.parameterValues[id] !== undefined && profile.parameterValues[id] !== '') ||
-            [...new Set([...Object.keys(previous.parameterValues), ...Object.keys(profile.parameterValues)])]
-                .some(id => !secretIds.has(id) && previous.parameterValues[id] !== profile.parameterValues[id])
-        );
+        const parametersChanged =
+            previous !== undefined &&
+            (previous.driverId !== profile.driverId ||
+                previous.mechanismId !== profile.mechanismId ||
+                [...secretIds].some(
+                    (id) =>
+                        profile.parameterValues[id] !== undefined &&
+                        profile.parameterValues[id] !== '',
+                ) ||
+                [
+                    ...new Set([
+                        ...Object.keys(previous.parameterValues),
+                        ...Object.keys(profile.parameterValues),
+                    ]),
+                ].some(
+                    (id) =>
+                        !secretIds.has(id) &&
+                        previous.parameterValues[id] !== profile.parameterValues[id],
+                ));
         if (parametersChanged) {
             this._pendingProfiles.delete(profile.id);
         }
@@ -414,14 +475,20 @@ export class PositronConnectionsService implements vscode.Disposable {
             return Promise.resolve(existing);
         }
         // Register before the first await, including SecretStorage reads.
-        const pendingConnection: Promise<IConnectionInstance> = Promise.resolve().then(() => this._connectProfile(
-            profileId,
-            () => !this._disposed && this._pendingProfiles.get(profileId) === pendingConnection,
-        )).finally(() => {
-            if (this._pendingProfiles.get(profileId) === pendingConnection) {
-                this._pendingProfiles.delete(profileId);
-            }
-        });
+        const pendingConnection: Promise<IConnectionInstance> = Promise.resolve()
+            .then(() =>
+                this._connectProfile(
+                    profileId,
+                    () =>
+                        !this._disposed &&
+                        this._pendingProfiles.get(profileId) === pendingConnection,
+                ),
+            )
+            .finally(() => {
+                if (this._pendingProfiles.get(profileId) === pendingConnection) {
+                    this._pendingProfiles.delete(profileId);
+                }
+            });
         this._pendingProfiles.set(profileId, pendingConnection);
         return pendingConnection;
     }
@@ -461,10 +528,12 @@ export class PositronConnectionsService implements vscode.Disposable {
             this._instances.set(instance.id, instance);
             published = true;
             const connectedInstance = instance;
-            this._disposables.push(instance.onDidChange(() => {
-                this._updateModel(connectedInstance);
-                this._onDidChangeConnections.fire(this.connections);
-            }));
+            this._disposables.push(
+                instance.onDidChange(() => {
+                    this._updateModel(connectedInstance);
+                    this._onDidChangeConnections.fire(this.connections);
+                }),
+            );
             this._updateModel(instance);
             this._lifecycle.setRestoreState(modelId, 'backend', 'ready');
             this._onDidChangeConnections.fire(this.connections);
@@ -500,7 +569,9 @@ export class PositronConnectionsService implements vscode.Disposable {
         try {
             await instance?.dispose();
         } catch (error) {
-            this._outputChannel.warn(`[Connections] Failed to dispose ${instance?.id}: ${getErrorMessage(error)}`);
+            this._outputChannel.warn(
+                `[Connections] Failed to dispose ${instance?.id}: ${getErrorMessage(error)}`,
+            );
         }
     }
 
@@ -515,17 +586,28 @@ export class PositronConnectionsService implements vscode.Disposable {
                 return;
             }
             this._attachedManagers.add(manager);
-            if (this._dataConnectionsEnabled && session.sessionMetadata.sessionMode !== LanguageRuntimeSessionMode.Notebook) {
-                disposables.push(manager.watchClient(RuntimeClientType.Connection, client => client.dispose()));
+            if (
+                this._dataConnectionsEnabled &&
+                session.sessionMetadata.sessionMode !== LanguageRuntimeSessionMode.Notebook
+            ) {
+                disposables.push(
+                    manager.watchClient(RuntimeClientType.Connection, (client) => client.dispose()),
+                );
                 return;
             }
-            disposables.push(manager.registerClientHandler({
-                clientType: RuntimeClientType.Connection,
-                callback: (client, params) => {
-                    void this._registerConnection(session, client, params as Record<string, unknown>);
-                    return true;
-                },
-            }));
+            disposables.push(
+                manager.registerClientHandler({
+                    clientType: RuntimeClientType.Connection,
+                    callback: (client, params) => {
+                        void this._registerConnection(
+                            session,
+                            client,
+                            params as Record<string, unknown>,
+                        );
+                        return true;
+                    },
+                }),
+            );
             for (const client of manager.clientInstances) {
                 if (client.getClientType() === RuntimeClientType.Connection) {
                     void this._registerConnection(session, client, client.message.data);
@@ -553,9 +635,7 @@ export class PositronConnectionsService implements vscode.Disposable {
             [ConnectionsBackendRequest.PreviewObject]: { timeout: undefined },
         });
         try {
-            const metadata = isConnectionMetadata(params)
-                ? params
-                : await comm.getMetadata();
+            const metadata = isConnectionMetadata(params) ? params : await comm.getMetadata();
             const instance = new PositronConnectionInstance(
                 session.sessionId,
                 client.getClientId(),
@@ -575,7 +655,9 @@ export class PositronConnectionsService implements vscode.Disposable {
             this._onDidChangeConnections.fire(this.connections);
         } catch (error) {
             comm.dispose();
-            this._outputChannel.error(`[Connections] Failed to register ${id}: ${getErrorMessage(error)}`);
+            this._outputChannel.error(
+                `[Connections] Failed to register ${id}: ${getErrorMessage(error)}`,
+            );
         } finally {
             this._pendingClients.delete(id);
         }
@@ -608,7 +690,9 @@ export class PositronConnectionsService implements vscode.Disposable {
     }
 
     private _loadProfiles(): void {
-        if (!this._dataConnectionsEnabled) { return; }
+        if (!this._dataConnectionsEnabled) {
+            return;
+        }
         for (const profile of this.profileStore.getProfiles()) {
             this._registerProfileDescriptor(profile);
         }
@@ -617,7 +701,11 @@ export class PositronConnectionsService implements vscode.Disposable {
     private _updateModel(instance: IConnectionInstance): void {
         const profileBacked = instance.sessionId === 'profile';
         this._lifecycle.upsertModel({
-            id: createSurfaceModelId(SurfaceModelKind.Connection, instance.sessionId, instance.clientId),
+            id: createSurfaceModelId(
+                SurfaceModelKind.Connection,
+                instance.sessionId,
+                instance.clientId,
+            ),
             kind: SurfaceModelKind.Connection,
             resourceId: instance.id,
             title: instance.metadata.name,
@@ -638,7 +726,7 @@ export class PositronConnectionsService implements vscode.Disposable {
     }
 
     private _detachSession(sessionId: string): void {
-        this._sessionDisposables.get(sessionId)?.forEach(disposable => disposable.dispose());
+        this._sessionDisposables.get(sessionId)?.forEach((disposable) => disposable.dispose());
         this._sessionDisposables.delete(sessionId);
         for (const [id, instance] of [...this._instances]) {
             if (instance.sessionId === sessionId) {
@@ -655,14 +743,20 @@ export class PositronConnectionsService implements vscode.Disposable {
         }
         this._disposed = true;
         this._pendingProfiles.clear();
-        this._sessionDisposables.forEach(disposables => disposables.forEach(disposable => disposable.dispose()));
+        this._sessionDisposables.forEach((disposables) =>
+            disposables.forEach((disposable) => disposable.dispose()),
+        );
         this._sessionDisposables.clear();
-        this._instances.forEach(instance => { void this._disposeConnection(instance); });
+        this._instances.forEach((instance) => {
+            void this._disposeConnection(instance);
+        });
         this._instances.clear();
-        this._disposables.forEach(disposable => disposable.dispose());
+        this._disposables.forEach((disposable) => disposable.dispose());
     }
 }
 
-function isConnectionMetadata(value: Record<string, unknown>): value is Record<string, unknown> & ConnectionMetadata {
+function isConnectionMetadata(
+    value: Record<string, unknown>,
+): value is Record<string, unknown> & ConnectionMetadata {
     return typeof value.name === 'string' && typeof value.language_id === 'string';
 }

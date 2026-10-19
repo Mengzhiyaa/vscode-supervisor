@@ -46,13 +46,17 @@ export class WebviewManager implements vscode.Disposable {
         private readonly _helpService: PositronHelpService,
         private readonly _runtimeStartupService: RuntimeStartupService,
         private readonly _getAdditionalLocalResourceRoots: () => readonly vscode.Uri[],
-        private readonly _getLanguageMonacoSupportModuleUris: (webview: vscode.Webview) => Readonly<Record<string, string>>,
+        private readonly _getLanguageMonacoSupportModuleUris: (
+            webview: vscode.Webview,
+        ) => Readonly<Record<string, string>>,
         private readonly _getLanguageTextMateGrammarDefinitions: (
             webview: vscode.Webview,
         ) => Readonly<Record<string, { scopeName: string; grammarUrl: string }>>,
-        private readonly _createSessionFromPicker: (sessionName?: string) => Promise<RuntimeSession | undefined>,
+        private readonly _createSessionFromPicker: (
+            sessionName?: string,
+        ) => Promise<RuntimeSession | undefined>,
         private readonly _dataExplorerService?: PositronDataExplorerService,
-    ) { }
+    ) {}
 
     /**
      * Registers all webview providers with VS Code
@@ -73,30 +77,22 @@ export class WebviewManager implements vscode.Disposable {
         );
         this._consoleService.setConsoleViewProvider(this._consoleProvider);
         this._disposables.push(
-            vscode.window.registerWebviewViewProvider(
-                ViewIds.console,
-                this._consoleProvider,
-                {
-                    webviewOptions: {
-                        retainContextWhenHidden: true
-                    }
-                }
+            vscode.window.registerWebviewViewProvider(ViewIds.console, this._consoleProvider, {
+                webviewOptions: {
+                    retainContextWhenHidden: true,
+                },
+            }),
+            vscode.commands.registerCommand(CoreCommandIds.consoleFind, () =>
+                this._consoleProvider?.runFindCommand('focus'),
             ),
-            vscode.commands.registerCommand(
-                CoreCommandIds.consoleFind,
-                () => this._consoleProvider?.runFindCommand('focus'),
+            vscode.commands.registerCommand(CoreCommandIds.consoleFindNext, () =>
+                this._consoleProvider?.runFindCommand('next'),
             ),
-            vscode.commands.registerCommand(
-                CoreCommandIds.consoleFindNext,
-                () => this._consoleProvider?.runFindCommand('next'),
+            vscode.commands.registerCommand(CoreCommandIds.consoleFindPrevious, () =>
+                this._consoleProvider?.runFindCommand('previous'),
             ),
-            vscode.commands.registerCommand(
-                CoreCommandIds.consoleFindPrevious,
-                () => this._consoleProvider?.runFindCommand('previous'),
-            ),
-            vscode.commands.registerCommand(
-                CoreCommandIds.consoleFindClose,
-                () => this._consoleProvider?.runFindCommand('close'),
+            vscode.commands.registerCommand(CoreCommandIds.consoleFindClose, () =>
+                this._consoleProvider?.runFindCommand('close'),
             ),
         );
 
@@ -111,34 +107,25 @@ export class WebviewManager implements vscode.Disposable {
             this._dataExplorerService,
         );
         this._disposables.push(
-            vscode.window.registerWebviewViewProvider(
-                ViewIds.variables,
-                this._variablesProvider,
-                {
-                    webviewOptions: {
-                        retainContextWhenHidden: true
-                    }
-                }
+            vscode.window.registerWebviewViewProvider(ViewIds.variables, this._variablesProvider, {
+                webviewOptions: {
+                    retainContextWhenHidden: true,
+                },
+            }),
+            vscode.commands.registerCommand(CoreCommandIds.variablesFocus, () =>
+                vscode.commands.executeCommand(`${ViewIds.variables}.focus`),
             ),
-            vscode.commands.registerCommand(
-                CoreCommandIds.variablesFocus,
-                () => vscode.commands.executeCommand(`${ViewIds.variables}.focus`),
+            vscode.commands.registerCommand(CoreCommandIds.variablesExpand, () =>
+                this._variablesProvider?.runListCommand('expand'),
             ),
-            vscode.commands.registerCommand(
-                CoreCommandIds.variablesExpand,
-                () => this._variablesProvider?.runListCommand('expand'),
+            vscode.commands.registerCommand(CoreCommandIds.variablesCollapse, () =>
+                this._variablesProvider?.runListCommand('collapse'),
             ),
-            vscode.commands.registerCommand(
-                CoreCommandIds.variablesCollapse,
-                () => this._variablesProvider?.runListCommand('collapse'),
+            vscode.commands.registerCommand(CoreCommandIds.variablesCopyAsText, () =>
+                this._variablesProvider?.runListCommand('copyAsText'),
             ),
-            vscode.commands.registerCommand(
-                CoreCommandIds.variablesCopyAsText,
-                () => this._variablesProvider?.runListCommand('copyAsText'),
-            ),
-            vscode.commands.registerCommand(
-                CoreCommandIds.variablesCopyAsHtml,
-                () => this._variablesProvider?.runListCommand('copyAsHtml'),
+            vscode.commands.registerCommand(CoreCommandIds.variablesCopyAsHtml, () =>
+                this._variablesProvider?.runListCommand('copyAsHtml'),
             ),
         );
 
@@ -152,15 +139,11 @@ export class WebviewManager implements vscode.Disposable {
             this._getAdditionalLocalResourceRoots,
         );
         this._disposables.push(
-            vscode.window.registerWebviewViewProvider(
-                ViewIds.plots,
-                this._plotsProvider,
-                {
-                    webviewOptions: {
-                        retainContextWhenHidden: true
-                    }
-                }
-            )
+            vscode.window.registerWebviewViewProvider(ViewIds.plots, this._plotsProvider, {
+                webviewOptions: {
+                    retainContextWhenHidden: true,
+                },
+            }),
         );
 
         // Packages Sidebar Provider
@@ -173,27 +156,27 @@ export class WebviewManager implements vscode.Disposable {
                 if (session.runtimeMetadata.languageId === 'r') {
                     await session.execute(
                         `help(package = ${JSON.stringify(name)}, help_type = "html")`,
-                        randomUUID(), RuntimeCodeExecutionMode.Interactive, RuntimeErrorBehavior.Stop,
+                        randomUUID(),
+                        RuntimeCodeExecutionMode.Interactive,
+                        RuntimeErrorBehavior.Stop,
                     );
                     return;
                 }
                 const found = await this._helpService.showSessionHelpTopic(session.sessionId, name);
                 if (!found) {
-                    void vscode.window.showInformationMessage(vscode.l10n.t("No help found for '{0}'.", name));
+                    void vscode.window.showInformationMessage(
+                        vscode.l10n.t("No help found for '{0}'.", name),
+                    );
                 }
             },
         );
         this._disposables.push(
             this._packagesProvider,
-            vscode.window.registerWebviewViewProvider(
-                ViewIds.packages,
-                this._packagesProvider,
-                {
-                    webviewOptions: {
-                        retainContextWhenHidden: true
-                    }
-                }
-            )
+            vscode.window.registerWebviewViewProvider(ViewIds.packages, this._packagesProvider, {
+                webviewOptions: {
+                    retainContextWhenHidden: true,
+                },
+            }),
         );
 
         // Viewer Sidebar Provider
@@ -206,22 +189,16 @@ export class WebviewManager implements vscode.Disposable {
         );
         this._disposables.push(
             this._viewerProvider,
-            vscode.window.registerWebviewViewProvider(
-                ViewIds.viewer,
-                this._viewerProvider,
-                {
-                    webviewOptions: {
-                        retainContextWhenHidden: true
-                    }
-                }
+            vscode.window.registerWebviewViewProvider(ViewIds.viewer, this._viewerProvider, {
+                webviewOptions: {
+                    retainContextWhenHidden: true,
+                },
+            }),
+            vscode.commands.registerCommand(CoreCommandIds.viewerFind, () =>
+                this._viewerProvider?.find(),
             ),
-            vscode.commands.registerCommand(
-                CoreCommandIds.viewerFind,
-                () => this._viewerProvider?.find(),
-            ),
-            vscode.commands.registerCommand(
-                CoreCommandIds.viewerFocusContent,
-                () => this._viewerProvider?.focus(),
+            vscode.commands.registerCommand(CoreCommandIds.viewerFocusContent, () =>
+                this._viewerProvider?.focus(),
             ),
         );
 
@@ -234,22 +211,16 @@ export class WebviewManager implements vscode.Disposable {
         );
         this._disposables.push(
             this._helpProvider,
-            vscode.window.registerWebviewViewProvider(
-                ViewIds.help,
-                this._helpProvider,
-                {
-                    webviewOptions: {
-                        retainContextWhenHidden: true
-                    }
-                }
+            vscode.window.registerWebviewViewProvider(ViewIds.help, this._helpProvider, {
+                webviewOptions: {
+                    retainContextWhenHidden: true,
+                },
+            }),
+            vscode.commands.registerCommand(CoreCommandIds.helpFind, () =>
+                this._helpProvider?.find(),
             ),
-            vscode.commands.registerCommand(
-                CoreCommandIds.helpFind,
-                () => this._helpProvider?.find(),
-            ),
-            vscode.commands.registerCommand(
-                CoreCommandIds.helpFocusContent,
-                () => this._helpProvider?.focus(),
+            vscode.commands.registerCommand(CoreCommandIds.helpFocusContent, () =>
+                this._helpProvider?.focus(),
             ),
         );
 
@@ -272,45 +243,59 @@ export class WebviewManager implements vscode.Disposable {
     private _subscribeToServiceEvents(): void {
         // Console service events
         this._disposables.push(
-            this._consoleService.onDidStartPositronConsoleInstance(instance => {
-                this._outputChannel.debug(`[WebviewManager] Console instance started: ${instance.sessionId}`);
+            this._consoleService.onDidStartPositronConsoleInstance((instance) => {
+                this._outputChannel.debug(
+                    `[WebviewManager] Console instance started: ${instance.sessionId}`,
+                );
                 // Providers can subscribe directly to console instance events
             }),
-            this._consoleService.onDidDeletePositronConsoleInstance(instance => {
-                this._outputChannel.debug(`[WebviewManager] Console instance deleted: ${instance.sessionId}`);
+            this._consoleService.onDidDeletePositronConsoleInstance((instance) => {
+                this._outputChannel.debug(
+                    `[WebviewManager] Console instance deleted: ${instance.sessionId}`,
+                );
             }),
-            this._consoleService.onDidChangeActivePositronConsoleInstance(instance => {
-                this._outputChannel.debug(`[WebviewManager] Active console instance changed: ${instance?.sessionId || 'none'}`);
+            this._consoleService.onDidChangeActivePositronConsoleInstance((instance) => {
+                this._outputChannel.debug(
+                    `[WebviewManager] Active console instance changed: ${instance?.sessionId || 'none'}`,
+                );
             }),
-            this._consoleService.onDidExecuteCode(event => {
+            this._consoleService.onDidExecuteCode((event) => {
                 this._outputChannel.debug(`[WebviewManager] Code executed: ${event.executionId}`);
-            })
+            }),
         );
 
         // Variables service events
         this._disposables.push(
-            this._variablesService.onDidStartPositronVariablesInstance(instance => {
-                this._outputChannel.debug(`[WebviewManager] Variables instance started: ${instance.session.sessionId}`);
+            this._variablesService.onDidStartPositronVariablesInstance((instance) => {
+                this._outputChannel.debug(
+                    `[WebviewManager] Variables instance started: ${instance.session.sessionId}`,
+                );
             }),
-            this._variablesService.onDidStopPositronVariablesInstance(instance => {
-                this._outputChannel.debug(`[WebviewManager] Variables instance stopped: ${instance.session.sessionId}`);
+            this._variablesService.onDidStopPositronVariablesInstance((instance) => {
+                this._outputChannel.debug(
+                    `[WebviewManager] Variables instance stopped: ${instance.session.sessionId}`,
+                );
             }),
-            this._variablesService.onDidChangeActivePositronVariablesInstance(instance => {
-                this._outputChannel.debug(`[WebviewManager] Active variables instance changed: ${instance?.session.sessionId || 'none'}`);
-            })
+            this._variablesService.onDidChangeActivePositronVariablesInstance((instance) => {
+                this._outputChannel.debug(
+                    `[WebviewManager] Active variables instance changed: ${instance?.session.sessionId || 'none'}`,
+                );
+            }),
         );
 
         // Plots service events
         this._disposables.push(
-            this._plotsService.onDidEmitPlot(plot => {
-                this._outputChannel.debug(`[WebviewManager] Plot emitted: ${plot.id} from session ${plot.metadata.session_id}`);
+            this._plotsService.onDidEmitPlot((plot) => {
+                this._outputChannel.debug(
+                    `[WebviewManager] Plot emitted: ${plot.id} from session ${plot.metadata.session_id}`,
+                );
             }),
-            this._plotsService.onDidSelectPlot(plotId => {
+            this._plotsService.onDidSelectPlot((plotId) => {
                 this._outputChannel.debug(`[WebviewManager] Plot selected: ${plotId || 'none'}`);
             }),
-            this._plotsService.onDidRemovePlot(plot => {
+            this._plotsService.onDidRemovePlot((plot) => {
                 this._outputChannel.debug(`[WebviewManager] Plot removed: ${plot.id}`);
-            })
+            }),
         );
     }
 
@@ -323,7 +308,9 @@ export class WebviewManager implements vscode.Disposable {
      * Subscribes all providers to the new session's events.
      */
     onSessionCreated(session: RuntimeSession): void {
-        this._outputChannel.debug(`[WebviewManager] Session created: ${session.sessionId} (multi-session)`);
+        this._outputChannel.debug(
+            `[WebviewManager] Session created: ${session.sessionId} (multi-session)`,
+        );
         this._consoleProvider?.subscribeToSession(session);
         this._variablesProvider?.subscribeToSession(session);
         this._plotsProvider?.subscribeToSession(session);
@@ -387,6 +374,6 @@ export class WebviewManager implements vscode.Disposable {
     }
 
     dispose(): void {
-        this._disposables.forEach(d => d.dispose());
+        this._disposables.forEach((d) => d.dispose());
     }
 }
