@@ -91,6 +91,7 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
             webview: vscode.Webview,
         ) => Readonly<Record<string, { scopeName: string; grammarUrl: string }>> = () => ({}),
         private readonly _plotsService?: PositronPlotsService,
+        private readonly _createSessionFromPicker?: (sessionName?: string) => Promise<RuntimeSession | undefined>,
     ) {
         super(extensionUri, outputChannel, getAdditionalLocalResourceRoots);
         this._sessionSnapshotBuilder = new SessionSnapshotBuilder(this._sessionManager, this._consoleService);
@@ -704,9 +705,15 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
             }
             try {
                 const requestedName = params.name?.trim();
-                const session = params.showRuntimePicker
-                    ? await this._sessionManager.createSessionFromPicker(requestedName || undefined)
-                    : await this._sessionManager.startConsoleSession(requestedName || undefined);
+                let session: RuntimeSession | undefined;
+                if (params.showRuntimePicker) {
+                    if (!this._createSessionFromPicker) {
+                        throw new Error('Session picker not available');
+                    }
+                    session = await this._createSessionFromPicker(requestedName || undefined);
+                } else {
+                    session = await this._sessionManager.startConsoleSession(requestedName || undefined);
+                }
 
                 if (!session) {
                     return {};

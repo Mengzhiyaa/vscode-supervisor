@@ -50,6 +50,7 @@ export class WebviewManager implements vscode.Disposable {
         private readonly _getLanguageTextMateGrammarDefinitions: (
             webview: vscode.Webview,
         ) => Readonly<Record<string, { scopeName: string; grammarUrl: string }>>,
+        private readonly _createSessionFromPicker: (sessionName?: string) => Promise<RuntimeSession | undefined>,
         private readonly _dataExplorerService?: PositronDataExplorerService,
     ) { }
 
@@ -68,6 +69,7 @@ export class WebviewManager implements vscode.Disposable {
             this._getLanguageMonacoSupportModuleUris,
             this._getLanguageTextMateGrammarDefinitions,
             this._plotsService,
+            this._createSessionFromPicker,
         );
         this._consoleService.setConsoleViewProvider(this._consoleProvider);
         this._disposables.push(

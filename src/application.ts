@@ -477,6 +477,7 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
             () => this._getLanguageWebviewLocalResourceRoots(),
             (webview) => this._getLanguageMonacoSupportModuleUris(webview),
             (webview) => this._getLanguageTextMateGrammarDefinitions(webview),
+            sessionName => this._startNewSessionFromDiscoveredRuntimes(sessionName),
             this._positronDataExplorerService,
         );
         this._disposables.push(this._webviewManager);
@@ -1143,23 +1144,20 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
         return session;
     }
 
-    private async _startNewSessionFromDiscoveredRuntimes(): Promise<void> {
-        try {
-            const selected = await this._pickRuntimeFromCache();
-            if (!selected?.languageId || selected.installation === undefined) {
-                return;
-            }
-
-            const provider = this._requireRuntimeProvider(selected.languageId);
-            await this._startSessionForInstallation(
-                selected.languageId,
-                selected.installation,
-                provider.formatRuntimeName(selected.installation)
-            );
-        } catch (error) {
-            this._outputChannel.error(`[Supervisor] Failed to create session: ${getErrorMessage(error)}`);
-            vscode.window.showErrorMessage(`Failed to create session: ${getErrorMessage(error)}`);
+    private async _startNewSessionFromDiscoveredRuntimes(
+        sessionName?: string,
+    ): Promise<RuntimeSession | undefined> {
+        const selected = await this._pickRuntimeFromCache();
+        if (!selected?.languageId || selected.installation === undefined) {
+            return undefined;
         }
+
+        const provider = this._requireRuntimeProvider(selected.languageId);
+        return this._startSessionForInstallation(
+            selected.languageId,
+            selected.installation,
+            sessionName || provider.formatRuntimeName(selected.installation),
+        );
     }
 
     private async _quickLaunchSessionFromRecentRuntimes(): Promise<void> {
@@ -1212,13 +1210,13 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
         const installation = this._runtimeManager.getInstallations(currentSession.runtimeMetadata.languageId).find(
             inst => provider?.getRuntimePath(inst) === runtimePath
         ) ?? provider?.restoreInstallationFromMetadata?.(currentSession.runtimeMetadata);
-        if (!installation) {
-            this._outputChannel.warn(`[Supervisor] Active runtime ${runtimePath} not found in cache; opening runtime picker`);
-            await this._startNewSessionFromDiscoveredRuntimes();
-            return;
-        }
-
         try {
+            if (!installation) {
+                this._outputChannel.warn(`[Supervisor] Active runtime ${runtimePath} not found in cache; opening runtime picker`);
+                await this._startNewSessionFromDiscoveredRuntimes();
+                return;
+            }
+
             await this._startSessionForInstallation(
                 currentSession.runtimeMetadata.languageId,
                 installation,
@@ -1484,7 +1482,12 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
         // Start New Session command (Positron pattern: choose from discovered runtimes)
         this._disposables.push(
             vscode.commands.registerCommand(CoreCommandIds.newSession, async () => {
-                await this._startNewSessionFromDiscoveredRuntimes();
+                try {
+                    await this._startNewSessionFromDiscoveredRuntimes();
+                } catch (error) {
+                    this._outputChannel.error(`[Supervisor] Failed to create session: ${getErrorMessage(error)}`);
+                    void vscode.window.showErrorMessage(`Failed to create session: ${getErrorMessage(error)}`);
+                }
             })
         );
 

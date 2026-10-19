@@ -631,39 +631,6 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
         return this._restoredSessionIds.has(sessionId);
     }
 
-    async createSessionFromPicker(sessionName?: string): Promise<RuntimeSession | undefined> {
-        this._requireLocalSupervisor();
-
-        const provider = this._getDefaultRuntimeProvider();
-        const defaultInstallation = this.getDefaultInstallation(provider.languageId);
-        const activeSession = this.activeSession;
-        const preselectRuntimePath = activeSession?.runtimeMetadata.languageId === provider.languageId
-            ? activeSession.runtimeMetadata.runtimePath
-            : defaultInstallation
-                ? provider.getRuntimePath(defaultInstallation)
-                : undefined;
-
-        const installation = await this.selectInstallation(provider.languageId, {
-            forcePick: true,
-            allowBrowse: true,
-            persistSelection: false,
-            preselectRuntimePath,
-            title: `Start New ${provider.languageName} Session`,
-            placeHolder: `Select ${provider.languageName} installation to start`,
-        });
-
-        if (!installation) {
-            return undefined;
-        }
-
-        return this.startConsoleSessionFromInstallation(
-            provider.languageId,
-            installation,
-            sessionName,
-            'createSessionFromPicker',
-        );
-    }
-
     /**
      * Creates a console session from a provider installation selected by a UI.
      * Runtime pickers should use this shared path so metadata registration,
