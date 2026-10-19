@@ -32,6 +32,9 @@ export interface KallichoreServerState {
 	/** The path to the log file */
 	log_path: string;
 
+	/** Credential-free lease used by the independent process launcher (absent on older servers). */
+	launcher_lease_path?: string;
+
 	/** The transport protocol used */
 	transport?: KallichoreTransport;
 

@@ -1,7 +1,10 @@
 {
+  "kernelSupervisor.shutdownTimeout.immediately": "窗口关闭后退出，保留 60 秒的重连宽限期",
+  "kernelSupervisor.shutdownTimeout.description": "控制窗口关闭后内核 Supervisor 的保留时间。默认保留 60 秒重连宽限期，以支持窗口重载。其他值按空闲超时保留会话；固定小时数和 indefinitely 还允许应用重启后重新连接。",
+  "supervisor.openSupervisorManager.title": "打开内核 Supervisor 管理器",
   "supervisor.connections.connect.title": "连接",
   "supervisor.inlineDataExplorer.displayName": "Supervisor 内联数据浏览器",
-  "supervisor.dataExplorer.category": "Ark 数据浏览器",
+  "supervisor.dataExplorer.category": "Supervisor 数据浏览器",
   "supervisor.dataExplorer.import.title": "导入数据...",
   "supervisor.dataExplorer.importFromView.title": "导入到会话...",
   "supervisor.dataConnections.enabled.description": "使用由驱动管理的数据连接。更改此设置后需重新加载窗口。",

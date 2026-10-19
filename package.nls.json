@@ -1,7 +1,10 @@
 {
+  "kernelSupervisor.shutdownTimeout.immediately": "Shut down after the window closes, allowing 60 seconds for reconnection",
+  "kernelSupervisor.shutdownTimeout.description": "Controls how long the kernel supervisor keeps sessions alive after the window closes. The default allows a 60-second reconnection grace period for window reloads. Non-immediate values keep sessions alive according to the idle timeout; fixed-hour values and indefinitely also enable reconnection after application restarts.",
+  "supervisor.openSupervisorManager.title": "Open Kernel Supervisor Manager",
   "supervisor.connections.connect.title": "Connect",
   "supervisor.inlineDataExplorer.displayName": "Supervisor Inline Data Explorer",
-  "supervisor.dataExplorer.category": "Ark Data Explorer",
+  "supervisor.dataExplorer.category": "Supervisor Data Explorer",
   "supervisor.dataExplorer.import.title": "Import Data...",
   "supervisor.dataExplorer.importFromView.title": "Import into Session...",
   "supervisor.dataConnections.enabled.description": "Use driver-based data connections. Reload the window after changing this setting.",

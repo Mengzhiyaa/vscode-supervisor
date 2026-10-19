@@ -27,10 +27,11 @@ export class SocketSession implements vscode.Disposable {
 		public readonly uri: string,
 		public readonly sessionId: string,
 		public readonly channel: vscode.LogOutputChannel,
-		headers?: { [key: string]: string }
+		headers?: { [key: string]: string },
+		handshakeTimeoutMs?: number,
 	) {
 		// Create a new WebSocket client with optional headers
-		this.ws = createWebSocket(uri, undefined, { headers });
+		this.ws = createWebSocket(uri, undefined, { headers, handshakeTimeout: handshakeTimeoutMs });
 
 		// Record the current user ID; this is attached to every message sent
 		// from the client

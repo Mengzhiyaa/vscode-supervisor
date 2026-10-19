@@ -16,6 +16,7 @@ import {
 } from '../api';
 import { KCApi } from '../supervisor/KallichoreAdapterApi';
 import { KallichoreTransport } from '../supervisor/KallichoreApiInstance';
+import type { KallichoreServerState } from '../supervisor/ServerState';
 import { KallichoreInstances } from '../supervisor/KallichoreInstances';
 import {
     JupyterKernelExtra,
@@ -190,6 +191,29 @@ export class LocalSupervisorApi implements vscode.Disposable {
      */
     showLog(): void {
         this._supervisorLog.show();
+    }
+
+    getServerState(): KallichoreServerState | undefined {
+        return this._adapterApi?.getServerState();
+    }
+
+    async restartSupervisor(): Promise<void> {
+        if (!this._adapterApi) { throw new Error('Supervisor not initialized'); }
+        await this._adapterApi.restartSupervisor();
+    }
+
+    async shutdownSupervisor(): Promise<void> {
+        if (!this._adapterApi) { throw new Error('Supervisor not initialized'); }
+        await this._adapterApi.shutdownSupervisor();
+    }
+
+    getSessionConnectionInfo(sessionId: string) {
+        return this._adapterApi?.getSessionConnectionInfo(sessionId);
+    }
+
+    async reconnectSession(sessionId: string): Promise<void> {
+        if (!this._adapterApi) { throw new Error('Supervisor not initialized'); }
+        await this._adapterApi.reconnectSession(sessionId);
     }
 
     /** Best-effort shutdown for supervisors that share the application's lifetime. */

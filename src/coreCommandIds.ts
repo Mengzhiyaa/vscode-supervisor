@@ -7,6 +7,7 @@ export const CoreCommandIds = {
     interruptExecution: 'supervisor.interruptExecution',
     clearOutput: 'supervisor.clearOutput',
     showSupervisorLog: 'supervisor.showSupervisorLog',
+    openSupervisorManager: 'supervisor.openSupervisorManager',
     refreshRuntimeSessions: 'supervisor.runtimeSessions.refresh',
     openPlotsGallery: 'supervisor.openPlotsGallery',
     openPlotInEditor: 'supervisor.openPlotInEditor',

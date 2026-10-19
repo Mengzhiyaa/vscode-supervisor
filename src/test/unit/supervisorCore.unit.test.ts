@@ -1,4 +1,7 @@
 import * as assert from 'assert';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 import * as vscode from 'vscode';
 import {
     LanguageRuntimeSessionMode,
@@ -36,6 +39,7 @@ import {
 import { KallichoreSession } from '../../supervisor/KallichoreSession';
 import { AxiosError } from '../../supervisor/httpClient';
 import { ExecuteRequest } from '../../supervisor/jupyter/ExecuteRequest';
+import { SupervisorProcessLease } from '../../supervisor/SupervisorProcess';
 
 function createMemento(): vscode.Memento {
     const store = new Map<string, unknown>();
@@ -144,6 +148,29 @@ suite('[Unit] supervisor core backports', () => {
         assert.ok(calls.includes('listener-dispose'));
         assert.ok(calls.includes('kernel-dispose'));
         assert.strictEqual((session as any)._kernel, undefined);
+    });
+
+    test('a replacement host owns the lease even if its predecessor tears down late', () => {
+        const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'supervisor-lease-test-'));
+        const leasePath = path.join(directory, 'lease.json');
+        const errors: unknown[] = [];
+        const previous = new SupervisorProcessLease(leasePath, () => false, error => errors.push(error));
+        let keepAlive = false;
+        const replacement = new SupervisorProcessLease(leasePath, () => keepAlive, error => errors.push(error));
+        try {
+            const claimed = JSON.parse(fs.readFileSync(leasePath, 'utf8'));
+            previous.dispose();
+            assert.deepStrictEqual(JSON.parse(fs.readFileSync(leasePath, 'utf8')), claimed);
+            keepAlive = true;
+            replacement.renew();
+            assert.strictEqual(JSON.parse(fs.readFileSync(leasePath, 'utf8')).keepAlive, true);
+            replacement.dispose();
+            assert.strictEqual(JSON.parse(fs.readFileSync(leasePath, 'utf8')).ownerPid, 0);
+            assert.deepStrictEqual(errors, []);
+        } finally {
+            previous.dispose(); replacement.dispose();
+            fs.rmSync(directory, { recursive: true, force: true });
+        }
     });
 
     test('quotes space-containing PowerShell Start-Process arguments', () => {
@@ -521,6 +548,113 @@ suite('[Unit] supervisor core backports', () => {
 
         assert.strictEqual(attempts, 2);
         assert.ok(logs.some((entry) => entry.level === vscode.LogLevel.Warning));
+    });
+
+    test('an exited restored kernel starts a new process instead of replaying cached readiness', async () => {
+        const calls: string[] = [];
+        const session = Object.assign(Object.create(KallichoreSession.prototype), {
+            metadata: { sessionId: 'restored' },
+            dynState: {},
+            _new: false,
+            _runtimeState: RuntimeState.Exited,
+            _runtimeInfo: { banner: 'old process' },
+            _established: { wait: async () => undefined },
+            _getStartupTimeoutMs: () => 100,
+            _withStartupTimeout: async (promise: Promise<unknown>) => promise,
+            _connectWithStartupRetry: async () => { calls.push('connect'); },
+            onStateChange: (state: RuntimeState) => { session._runtimeState = state; },
+            _api: {
+                getSession: async () => ({ data: { status: calls.includes('start') ? 'ready' : 'exited', process_id: 42 } }),
+                startSession: async () => {
+                    calls.push('start');
+                    return { data: { status: 'ok', banner: 'new process', language_info: { version: '4.3.3' } } };
+                },
+                restartSession: async () => { throw new Error('Cannot wait for an already-exited process'); },
+            },
+        });
+        const info = await session.tryStart(true);
+        assert.deepStrictEqual(calls, ['start', 'connect']);
+        assert.strictEqual(info.banner, 'new process');
+        assert.strictEqual(session._processId, 42);
+        assert.strictEqual(session.runtimeState, RuntimeState.Ready);
+    });
+
+    test('restoring an idle kernel checks the live session without launching another process', async () => {
+        let queries = 0;
+        const session = Object.assign(Object.create(KallichoreSession.prototype), {
+            metadata: { sessionId: 'restored' }, dynState: {}, _new: false,
+            _runtimeInfo: { banner: 'existing process' },
+            getKernelInfo: async () => ({ banner: 'existing process' }),
+            _established: { wait: async () => undefined },
+            _getStartupTimeoutMs: () => 100,
+            _withStartupTimeout: async (promise: Promise<unknown>) => promise,
+            _connectWithStartupRetry: async () => undefined,
+            onStateChange: (state: RuntimeState) => { session._runtimeState = state; },
+            _api: {
+                getSession: async () => { queries++; return { data: { status: 'idle', process_id: 7 } }; },
+                startSession: async () => { throw new Error('Must preserve the running process'); },
+            },
+        });
+        assert.strictEqual((await session.tryStart(true)).banner, 'existing process');
+        assert.strictEqual(queries, 2);
+        assert.strictEqual(session._processId, 7);
+    });
+
+    test('a cached banner cannot turn a dead or offline backend into a ready session', async () => {
+        for (const status of ['exited', 'offline']) {
+            let queries = 0;
+            const session = Object.assign(Object.create(KallichoreSession.prototype), {
+                metadata: { sessionId: 'restored' }, _new: false,
+                _runtimeInfo: { banner: 'stale' },
+                _established: { wait: async () => undefined },
+                _getStartupTimeoutMs: () => 100,
+                _withStartupTimeout: async (promise: Promise<unknown>) => promise,
+                _connectWithStartupRetry: async () => undefined,
+                onStateChange: (state: RuntimeState) => { session._runtimeState = state; },
+                _api: { getSession: async () => ({ data: { status: ++queries === 1 ? 'idle' : status } }) },
+            });
+            await assert.rejects(session.tryStart(true), new RegExp(`is ${status} after connecting`));
+            assert.notStrictEqual(session.runtimeState, RuntimeState.Ready);
+        }
+    });
+
+    test('kernel readiness messages are deferred until startup validation completes', () => {
+        const session = Object.assign(Object.create(KallichoreSession.prototype), {
+            _runtimeState: RuntimeState.Starting, _validatingStartup: true,
+            log: () => undefined,
+            onStateChange: (state: RuntimeState) => { session._runtimeState = state; },
+        });
+        for (const status of [RuntimeState.Ready, RuntimeState.Idle, RuntimeState.Busy]) {
+            session.handleKernelMessage({ status: { status, reason: 'kernel status' } });
+            assert.strictEqual(session.runtimeState, RuntimeState.Starting);
+            assert.strictEqual(session._pendingKernelState, status);
+        }
+        session.markReady('validated');
+        assert.strictEqual(session.runtimeState, RuntimeState.Ready);
+        assert.strictEqual(session._validatingStartup, false);
+    });
+
+    test('a restart waits for fresh kernel information and propagates handshake failure', async () => {
+        const calls: string[] = [];
+        const session = Object.assign(Object.create(KallichoreSession.prototype), {
+            metadata: { sessionId: 'running' }, _runtimeInfo: { banner: 'old' },
+            _connected: { isCancelled: () => false },
+            _getStartupTimeoutMs: () => 100,
+            _withStartupTimeout: async (promise: Promise<unknown>) => promise,
+            buildEnvVarActions: async () => [],
+            _connectWithStartupRetry: async () => { calls.push('connect'); },
+            getKernelInfo: async () => { calls.push('kernel-info'); throw new Error('kernel handshake failed'); },
+            markReady: () => { throw new Error('Must not announce a failed restart'); },
+            onStateChange: (state: RuntimeState) => { session._runtimeState = state; },
+            _api: {
+                getSession: async () => ({ data: { status: 'idle' } }),
+                restartSession: async () => { calls.push('restart'); },
+            },
+        });
+        await assert.rejects(session.restart(), /kernel handshake failed/);
+        assert.deepStrictEqual(calls, ['restart', 'connect', 'kernel-info']);
+        assert.strictEqual(session._runtimeInfo, undefined);
+        assert.strictEqual(session._restarting, false);
     });
 
     test('startup errors preserve supervisor response diagnostics', () => {

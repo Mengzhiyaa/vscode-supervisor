@@ -18,6 +18,7 @@ export interface RawAxiosRequestConfig {
 	proxy?: false;
 	socketPath?: string;
 	timeout?: number;
+	signal?: AbortSignal;
 	url?: string;
 }
 
@@ -273,11 +274,15 @@ function createRequest(
 		agent: config.httpAgent,
 		headers,
 		method: config.method?.toUpperCase(),
+		signal: config.signal,
 	};
 
 	return new Promise((resolve, reject) => {
 		const request = client.request(requestOptions, (response) => {
 			const chunks: Buffer[] = [];
+			response.on('error', (error: NodeJS.ErrnoException) => {
+				reject(new AxiosError(error.message, config, { cause: error, code: error.code }));
+			});
 
 			response.on('data', (chunk: Buffer | string) => {
 				chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));

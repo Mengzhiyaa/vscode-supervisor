@@ -136,9 +136,12 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 	/** The WebSocket connection to the Kallichore server for this session
 	 */
 	private _socket: SocketSession | undefined;
+	private _connecting: Promise<void> | undefined;
 
 	/** The current runtime state of this session */
 	private _runtimeState: positron.RuntimeState = positron.RuntimeState.Uninitialized;
+	private _validatingStartup = false;
+	private _pendingKernelState: positron.RuntimeState | undefined;
 
 	/** A map of pending RPCs, used to pair up requests and replies */
 	private _pendingRequests: Map<string, JupyterRequest<any, any>> = new Map();
@@ -1324,6 +1327,7 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 			const info = await this.tryStart(true);
 			return info;
 		} catch (err) {
+			this._validatingStartup = false;
 			// tryStart() annotates failures with their startup phase and
 			// preserves Kallichore's response diagnostics. Emit that same
 			// error through the exit and startup-failure paths so every UI
@@ -1507,13 +1511,31 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 			'waiting for the session to be established'
 		);
 
-		let runtimeInfo: positron.LanguageRuntimeInfo | undefined = this._runtimeInfo;
+		// A restored snapshot is not proof that its process is still alive. In
+		// particular, an exited restored session must invoke startSession too.
+		let startProcess = this._new;
+		if (!this._new) {
+			const response = await this._withStartupTimeout(
+				this._api.getSession(this.metadata.sessionId, { timeout: this._getStartupTimeoutMs() }),
+				'establish', 'checking the current session state');
+			this._activeSession = response.data;
+			startProcess = response.data.status === Status.Exited || response.data.status === Status.Uninitialized;
+			if (response.data.status === Status.Offline) {
+				throw new Error(`Session ${this.metadata.sessionId} is offline; cannot confirm that its kernel is ready`);
+			}
+		}
+		let runtimeInfo: positron.LanguageRuntimeInfo | undefined = startProcess ? undefined : this._runtimeInfo;
+		if (startProcess) { this._runtimeInfo = undefined; }
 
-		// Mark the session as starting
+		// Hold unsolicited usable-state messages until the process and its
+		// connection have been validated; opening a socket alone is insufficient.
+		this._validatingStartup = true;
+		this._pendingKernelState = undefined;
 		this.onStateChange(positron.RuntimeState.Starting, 'invoking start API');
 
-		// If it's a new session, wait for it to be created before connecting
-		if (this._new) {
+		// Kallichore's restart endpoint waits for a future exit notification;
+		// an already-exited process must use startSession instead.
+		if (startProcess) {
 			try {
 				const result = await this._withStartupTimeout(
 					this._api.startSession(this.metadata.sessionId),
@@ -1524,7 +1546,7 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 				// starting a new session, but the server doesn't validate the
 				// result returned by the kernel, so check for a `status` field
 				// before assuming it's a Jupyter message.
-				if (result.data.status === 'ok') {
+				if (result.data.status === 'ok' && result.data.language_info) {
 					runtimeInfo = this.runtimeInfoFromKernelInfo(result.data);
 				}
 			} catch (err) {
@@ -1578,13 +1600,31 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 			throw this._createStartupError('websocket', summarizeError(error), error);
 		}
 
-		if (this._new) {
+		const live = (await this._withStartupTimeout(
+			this._api.getSession(this.metadata.sessionId, { timeout: this._getStartupTimeoutMs() }),
+			'establish', 'confirming the connected kernel state')).data;
+		if (live.status === Status.Exited || live.status === Status.Offline || live.status === Status.Uninitialized) {
+			throw new Error(`Session ${this.metadata.sessionId} is ${live.status} after connecting`);
+		}
+		this._processId = live.process_id;
+		this._activeSession = live;
+
+		// Do not announce Ready before a fresh kernel-info request has completed.
+		if (!runtimeInfo || !runtimeInfo.banner || (!startProcess && live.status !== Status.Busy)) {
+			runtimeInfo = await this._withStartupTimeout(this.getKernelInfo(), 'startSession', 'requesting kernel information');
+		}
+		if (this._runtimeState === positron.RuntimeState.Exited) {
+			throw new Error(`Session ${this.metadata.sessionId} exited during startup`);
+		}
+
+		if (startProcess) {
 			// If it's a new session and we got runtime info from starting it,
 			// we're ready to go.
 			if (runtimeInfo) {
 				this.markReady('new session');
 			}
-		} else if (this._activeSession?.status === Status.Busy) {
+		} else if (this._activeSession?.status === Status.Busy && this._pendingKernelState !== positron.RuntimeState.Idle) {
+			this._validatingStartup = false;
 			setTimeout(() => {
 				// On the next tick, if we're still in the starting state,
 				// notify the client that we're busy if we're not already in the
@@ -1627,20 +1667,14 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 
 			// Mark ready when the session becomes idle
 			this.waitForIdle().then(() => {
-				this.markReady('idle after busy reconnect');
+				if (this._runtimeState === positron.RuntimeState.Idle) {
+					this.markReady('idle after busy reconnect');
+				}
 			});
 		} else if (runtimeInfo) {
 			// If we got runtime info from the kernel when starting the
 			// session, we're ready to go.
 			this.markReady('reconnecting to idle session');
-		}
-
-		// If we don't have runtime info yet, or if we don't have a banner,
-		// get the full kernel info now. The startSession API may return
-		// status: 'ok' without the complete kernel_info_reply.
-		if (!runtimeInfo || !runtimeInfo.banner) {
-			runtimeInfo = await this.getKernelInfo();
-			this.markReady('idle after getting kernel info');
 		}
 
 		return runtimeInfo;
@@ -1738,6 +1772,7 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 	 * Fires the ready event.
 	 */
 	private markReady(reason: string) {
+		this._validatingStartup = false;
 		// Move into the ready state if we're not already there
 		if (this._runtimeState !== positron.RuntimeState.Ready) {
 			this.onStateChange(positron.RuntimeState.Ready, reason);
@@ -1750,7 +1785,7 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 	 *
 	 * @returns The websocket URI for the session.
 	 */
-	async getWebsocketUri(): Promise<string> {
+	async getWebsocketUri(timeoutMs?: number): Promise<string> {
 		// @ts-ignore
 		const basePath = this._api.basePath;
 		let wsUri: string;
@@ -1760,7 +1795,7 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 			this.log(
 				`Using Unix domain socket transport, getting socket path for session ${this.metadata.sessionId}`,
 				vscode.LogLevel.Debug);
-			const channelsResponse = await this._api.channelsUpgrade(this.metadata.sessionId);
+			const channelsResponse = await this._api.channelsUpgrade(this.metadata.sessionId, { timeout: timeoutMs });
 			const socketPath = channelsResponse.data;
 
 			// The socket path might be returned with or without the ws+unix:// prefix
@@ -1786,7 +1821,7 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 				`Using named pipe transport, getting pipe name for session ${this.metadata.sessionId}`,
 				vscode.LogLevel.Debug
 			);
-			const channelsResponse = await this._api.channelsUpgrade(this.metadata.sessionId);
+			const channelsResponse = await this._api.channelsUpgrade(this.metadata.sessionId, { timeout: timeoutMs });
 			const pipeName = channelsResponse.data;
 
 			// The pipe name might be returned with or without the ws+npipe:// prefix
@@ -1830,7 +1865,30 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 	 *
 	 * @returns A promise that resolves when the websocket is connected.
 	 */
-	async connect(): Promise<void> {
+	async connect(timeoutMs?: number): Promise<void> {
+		const operation = this._connecting ?? this.connectSocket(timeoutMs);
+		this._connecting = operation;
+		try {
+			await operation;
+		} finally {
+			if (this._connecting === operation) { this._connecting = undefined; }
+		}
+	}
+
+	/** Connection eligibility is local; kcserver's connected flag includes other clients. */
+	get connectionInfo() {
+		return {
+			clientState: this._runtimeState,
+			connected: !!this._socket && this._socket.ws.readyState === this._socket.ws.OPEN && this._connected.isOpen(),
+			reconnecting: !!this._connecting,
+			canReconnect: this._canConnect && !this._connecting && (
+				this._runtimeState === positron.RuntimeState.Ready || this._runtimeState === positron.RuntimeState.Idle ||
+				this._runtimeState === positron.RuntimeState.Busy || this._runtimeState === positron.RuntimeState.Offline),
+			canFocus: false,
+		};
+	}
+
+	private async connectSocket(timeoutMs?: number): Promise<void> {
 		// Ensure we are eligible for reconnection. We can't reconnect if
 		// another client is connected to the session as it would disconnect the
 		// other client.
@@ -1844,12 +1902,17 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 
 		// Get the WebSocket URI for the session. This will throw an error if
 		// the URI cannot be determined.
-		const wsUri = await this.getWebsocketUri();
+		const wsUri = await this.getWebsocketUri(timeoutMs);
+		if (!this._canConnect) { throw new Error('This session cannot be reconnected.'); }
 
-		return new Promise((resolve, reject) => {
+		return new Promise<void>((resolve, reject) => {
 			// Ensure websocket is closed if it's open
-			if (this._socket) {
-				this._socket.close();
+			const previousSocket = this._socket;
+			this._socket = undefined;
+			this.closeConnectedBarrier();
+			if (previousSocket) {
+				this._disposables = this._disposables.filter(disposable => disposable !== previousSocket);
+				previousSocket.close();
 			}
 
 			this.log(`Connecting to session WebSocket via ${wsUri}`, vscode.LogLevel.Info);
@@ -1861,18 +1924,27 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 				this.log(`Warning: No Bearer token found for WebSocket authentication`, vscode.LogLevel.Warning);
 			}
 
-			this._socket = new SocketSession(wsUri, this.metadata.sessionId, this._consoleChannel, headers);
-			this._disposables.push(this._socket);
+			const socket = new SocketSession(wsUri, this.metadata.sessionId, this._consoleChannel, headers, timeoutMs);
+			this._socket = socket;
+			this._disposables.push(socket);
+			let opened = false;
 
 			// Handle websocket events
-			this._socket.ws.onopen = () => {
+			socket.ws.onopen = () => {
+				if (this._socket !== socket || !this._canConnect) {
+					reject(new Error('Session connection was cancelled'));
+					socket.close();
+					return;
+				}
+				opened = true;
 				this.log(`Connected to websocket ${wsUri}.`, vscode.LogLevel.Debug);
 				// Open the connected barrier so that we can start sending messages
 				this._connected.open();
 				resolve();
 			};
 
-			this._socket.ws.onerror = (err: any) => {
+			socket.ws.onerror = (err: any) => {
+				if (this._socket !== socket) { reject(err); return; }
 				this.log(`Websocket error: ${formatErrorForLogging(err)}`, vscode.LogLevel.Error);
 				if (this._connected.isOpen()) {
 					// If the error happened after the connection was established,
@@ -1887,12 +1959,20 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 				}
 			};
 
-			this._socket.ws.onclose = (evt: any) => {
+			socket.ws.onclose = (evt: any) => {
+				// A replaced socket must not clear or reconnect its successor.
+				if (this._socket !== socket) {
+					if (!opened) { reject(new Error('Session connection was cancelled')); }
+					return;
+				}
 				this.log(`Websocket closed with kernel in status ${this._runtimeState}: ${JSON.stringify(evt)}`, vscode.LogLevel.Info);
+				this.closeConnectedBarrier();
+				this._socket = undefined;
+				if (!opened) { reject(new Error('Session WebSocket closed before connecting')); }
 
 				// Only fire the disconnected event if we are eligible to
 				// reconnect
-				if (this._canConnect) {
+				if (this._canConnect && opened) {
 					const disconnectEvent: DisconnectedEvent = {
 						reason: this._runtimeState === positron.RuntimeState.Exited ?
 							DisconnectReason.Exit : DisconnectReason.Unknown,
@@ -1900,15 +1980,11 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 					};
 					this.disconnected.fire(disconnectEvent);
 				}
-
-				// When the socket is closed, reset the connected barrier and
-				// clear the websocket instance.
-				this.closeConnectedBarrier();
-				this._socket = undefined;
 			};
 
 			// Main handler for incoming messages
-			this._socket.ws.onmessage = (msg: any) => {
+			socket.ws.onmessage = (msg: any) => {
+				if (this._socket !== socket) { return; }
 				try {
 					const data = JSON.parse(msg.data.toString());
 					this.handleMessage(data);
@@ -1956,6 +2032,11 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 	 * the events and update our state.
 	 */
 	async restart(workingDirectory?: string): Promise<void> {
+		const remote = (await this._api.getSession(this.metadata.sessionId, { timeout: this._getStartupTimeoutMs() })).data;
+		if (remote.status === Status.Exited || remote.status === Status.Uninitialized) {
+			await this.start();
+			return;
+		}
 		// Remember that we're restarting so that when the exit event arrives,
 		// we can label it as such
 		this._exitReason = positron.RuntimeExitReason.Restart;
@@ -1976,11 +2057,25 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 				// environment contributions can be respected.
 				env: await this.buildEnvVarActions(true),
 			};
-			await this._api.restartSession(this.metadata.sessionId, restart);
-
-			// Mark ready after a successful restart
+			this._runtimeInfo = undefined;
+			this._validatingStartup = true;
+			this._pendingKernelState = undefined;
+			await this._withStartupTimeout(
+				this._api.restartSession(this.metadata.sessionId, restart, { timeout: this._getStartupTimeoutMs() }),
+				'startSession', 'restarting the kernel');
+			await this._connectWithStartupRetry('connecting to the restarted kernel');
+			await this._withStartupTimeout(this.getKernelInfo(), 'startSession', 'requesting restarted kernel information');
+			const live = (await this._api.getSession(this.metadata.sessionId, { timeout: this._getStartupTimeoutMs() })).data;
+			if (live.status === Status.Exited || live.status === Status.Offline || live.status === Status.Uninitialized) {
+				throw new Error(`Session ${this.metadata.sessionId} is ${live.status} after restarting`);
+			}
+			this._processId = live.process_id;
 			this.markReady('restart complete');
 		} catch (err) {
+			this._restarting = false;
+			this._validatingStartup = false;
+			this._exitReason = positron.RuntimeExitReason.Unknown;
+			this.onStateChange(positron.RuntimeState.Offline, 'restart validation failed');
 			if (isAxiosError(err)) {
 				throw new Error(summarizeAxiosError(err));
 			} else {
@@ -2173,6 +2268,11 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 					this.log(`Ignoring 'ready' state message; already in state '${this._runtimeState}'`, vscode.LogLevel.Trace);
 					return;
 				}
+				if (this._validatingStartup && (
+					status === positron.RuntimeState.Ready || status === positron.RuntimeState.Idle || status === positron.RuntimeState.Busy)) {
+					this._pendingKernelState = status;
+					return;
+				}
 				this.onStateChange(status, data.status.reason);
 			} else {
 				this.log(`Unknown state: ${status}`, vscode.LogLevel.Warning);
@@ -2312,6 +2412,18 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 		this._exitReason = reason;
 		this.onStateChange(positron.RuntimeState.Exited, 'kernel exited with code ' + exitCode);
 		this.onExited(exitCode);
+	}
+
+	/** Tag server-driven exits before shutdown can emit kernel notifications. */
+	prepareForSupervisorShutdown(): () => void {
+		const previousReason = this._exitReason;
+		this._exitReason = positron.RuntimeExitReason.Shutdown;
+		return () => {
+			if (this._runtimeState !== positron.RuntimeState.Exited &&
+				this._exitReason === positron.RuntimeExitReason.Shutdown) {
+				this._exitReason = previousReason;
+			}
+		};
 	}
 
 	/**

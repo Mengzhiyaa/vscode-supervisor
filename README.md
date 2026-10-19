@@ -101,6 +101,56 @@ profile connections; legacy handles retain their additional `dispose()` cleanup.
 `webview/` is also source-owned here now, so the supervisor UI can be rebuilt
 inside this repo without relying on parent-workspace artifacts.
 
+## Kernel Supervisor Manager
+
+Run **Supervisor: Open Kernel Supervisor Manager** from the Command Palette,
+or use the server icon in the Runtime Sessions view toolbar. The editor shows
+running instances recorded by this extension on the extension host, including version,
+PID, executable and log paths, uptime, sessions, and MCP workspaces and agents.
+It schedules another refresh five seconds after each check while visible.
+Like the upstream running-supervisors command, both the page and the command
+prune records that fail the process/socket liveness checks before probing HTTP
+status. A surviving process with an HTTP timeout or authentication failure stays
+listed as unavailable. Unchanged registries are not rewritten on every refresh.
+This list is not a system-wide process scan; remote windows inspect their remote
+extension host.
+
+The session section counts connected, disconnected, and locally managed
+sessions. Expand a row for its owner, start time, working directory, notebook,
+client state and resource samples. **Reconnect** re-establishes the connection
+to a running session already managed by this window without restarting its
+kernel; **Open Console** focuses its existing console. Sessions transferred to
+another client or not registered in this window cannot be adopted through this
+page. Open their owning workspace to use its normal session restoration flow.
+
+Use the page to open logs or a recorded workspace, restart this window's
+supervisor, or shut down a reachable instance. Restart and shutdown end all
+sessions in that instance and require confirmation. A later interpreter session
+request can start a new supervisor after shutdown.
+
+Running configuration edits apply temporarily to the selected server and all
+its sessions. Use **Saved Settings** for persistent `kernelSupervisor` options;
+settings changes or server restarts can override temporary values. CPU and
+memory figures describe kernel sessions, not the kcserver process. Management
+operations require a trusted workspace; credentials and session environment
+variables are not sent to the management Webview.
+
+Kernel processes survive window reloads independently of the optional log
+terminal. Closing that terminal only closes the display. With
+`kernelSupervisor.shutdownTimeout: "immediately"`, closing the window releases
+its process lease and allows 60 seconds for reconnection before the supervisor
+and its kernels are stopped. VS Code's public extension API does not distinguish
+reload from window close, so this grace period also applies to ordinary closes.
+Other shutdown policies retain their configured idle behavior. `when idle`
+allows ongoing work to finish but is not a reconnect target after an application
+restart; fixed-hour policies and `indefinitely` are reconnect targets.
+
+An unexpected kernel exit follows `supervisor.interpreters.restartOnCrash`.
+Reconnection preserves a running kernel's variables; crash recovery starts a new
+kernel and cannot recover its in-memory data. Supervisors started by older
+extension versions retain their original terminal behavior until explicitly
+restarted. A supervisor restart ends its sessions.
+
 ## CI And Release
 
 - `npm run install:binaries` installs the target-platform `kallichore` binary into `resources/kallichore/`.

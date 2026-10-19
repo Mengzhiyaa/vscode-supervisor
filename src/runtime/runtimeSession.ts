@@ -32,6 +32,7 @@ import {
     UiFrontendEvent,
 } from './comms/positronUiComm';
 import { LocalSupervisorApi } from './localSupervisor';
+import type { KallichoreServerState } from '../supervisor/ServerState';
 import type { ILanguageRuntimeGlobalEvent } from './runtimeEvents';
 import { RuntimeSession, type RuntimeSessionProvisioningOptions } from './session';
 import { createJupyterKernelExtra } from './startup';
@@ -1293,6 +1294,34 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
         this._localSupervisor?.showLog();
     }
 
+    getSupervisorState(): KallichoreServerState | undefined {
+        return this._localSupervisor?.getServerState();
+    }
+
+    async restartSupervisor(): Promise<void> {
+        await this._requireLocalSupervisor().restartSupervisor();
+    }
+
+    async shutdownSupervisor(): Promise<void> {
+        await this._requireLocalSupervisor().shutdownSupervisor();
+    }
+
+    getSupervisorSessionConnection(sessionId: string) {
+        const session = this._sessions.get(sessionId);
+        const connection = this._localSupervisor?.getSessionConnectionInfo(sessionId);
+        if (!session || !connection) { return undefined; }
+        return {
+            ...connection,
+            canFocus: session.sessionMetadata.sessionMode === LanguageRuntimeSessionMode.Console &&
+                session.state !== RuntimeState.Exited,
+        };
+    }
+
+    async reconnectSupervisorSession(sessionId: string): Promise<void> {
+        if (!this._sessions.has(sessionId)) { throw new Error('Session is not managed by this window'); }
+        await this._requireLocalSupervisor().reconnectSession(sessionId);
+    }
+
     getSessions(): Array<{
         id: string;
         name: string;
@@ -1525,7 +1554,7 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
             // its eventual rejection so it cannot become unhandled.
             void readyPromise.catch(() => undefined);
 
-            if (this._isSessionUsable(session)) {
+            if (this._isSessionReadyTimeout(error) && this._isSessionUsable(session)) {
                 await finalizeStart();
                 return;
             }

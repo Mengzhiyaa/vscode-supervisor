@@ -523,6 +523,26 @@ suite('[Unit] runtime session start semantics', () => {
         service.dispose();
     });
 
+    test('a rejected startup cannot succeed just because an early usable state was observed', async () => {
+        const service = new RuntimeSessionService(makeContext(), makeNoopLogChannel());
+        const { session, fireRuntimeState, dispose } = makeAttachableConsoleSession(makeRuntimeMetadata(), 'failed-validation');
+        session.state = RuntimeState.Starting;
+        session.start = async () => {
+            fireRuntimeState(RuntimeState.Ready);
+            throw new Error('kernel validation failed');
+        };
+        const started: string[] = [];
+        const failed: string[] = [];
+        service.onDidStartRuntime(value => started.push(value.sessionId));
+        service.onDidFailStartRuntime(value => failed.push(value.sessionId));
+        try {
+            await assert.rejects((service as any).doStartRuntimeSession(session, RuntimeStartMode.Starting, true, true),
+                /kernel validation failed/);
+            assert.deepStrictEqual(started, []);
+            assert.deepStrictEqual(failed, [session.sessionId]);
+        } finally { dispose(); service.dispose(); }
+    });
+
     test('finalizes a late-ready console and delegates LSP activation to the language contribution', async () => {
         const service = new RuntimeSessionService(makeContext(), makeNoopLogChannel());
         const runtimeMetadata = makeRuntimeMetadata();

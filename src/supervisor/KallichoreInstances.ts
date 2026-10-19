@@ -19,7 +19,7 @@ import { formatRawSupervisorLine } from '../logging/logSinks';
 /**
  * Snapshot of a running Kallichore supervisor persisted in global storage.
  */
-interface StoredKallichoreInstance {
+export interface StoredKallichoreInstance {
 	workspaceName?: string;
 	workspaceUri?: string;
 	state: KallichoreServerState;
@@ -59,6 +59,7 @@ export class KallichoreInstances {
 	private static readonly STORAGE_KEY = 'positron-supervisor.running-supervisors';
 	private static context: vscode.ExtensionContext | undefined;
 	private static log: vscode.OutputChannel | undefined;
+	private static registryUpdate: Promise<void> = Promise.resolve();
 
 	/**
 	 * Initializes the global instance lifecycle tracker.
@@ -80,11 +81,12 @@ export class KallichoreInstances {
 	 * @returns A promise that resolves after the registry has been updated.
 	 */
 	public static async recordSupervisor(workspaceName: string | undefined, state: KallichoreServerState): Promise<void> {
-		const instances = await this.getStoredInstances();
-		const filtered = instances.filter(instance => !this.matchesInstance(instance.state, state));
-		const workspaceUri = this.resolveWorkspaceUri(workspaceName);
-		filtered.push({ workspaceName, workspaceUri: workspaceUri?.toString(), state, lastSeen: Date.now() });
-		await this.saveInstances(filtered);
+		await this.updateInstances(instances => {
+			const filtered = instances.filter(instance => !this.matchesInstance(instance.state, state));
+			const workspaceUri = this.resolveWorkspaceUri(workspaceName);
+			filtered.push({ workspaceName, workspaceUri: workspaceUri?.toString(), state, lastSeen: Date.now() });
+			return filtered;
+		});
 	}
 
 	/**
@@ -95,11 +97,33 @@ export class KallichoreInstances {
 	 * @returns A promise that resolves after the registry has been updated.
 	 */
 	public static async removeByPid(pid: number): Promise<void> {
-		const instances = await this.getStoredInstances();
-		const filtered = instances.filter(instance => instance.state.server_pid !== pid);
-		if (filtered.length !== instances.length) {
-			await this.saveInstances(filtered);
-		}
+		await this.updateInstances(instances => {
+			const filtered = instances.filter(instance => instance.state.server_pid !== pid);
+			return filtered.length === instances.length ? instances : filtered;
+		});
+	}
+
+	/**
+	 * Reconcile the registry using the upstream process/socket liveness policy.
+	 * HTTP failures never participate in pruning: a live server can be unresponsive.
+	 */
+	public static async getRunningSupervisors(signal?: AbortSignal): Promise<StoredKallichoreInstance[]> {
+		if (!this.context) { return []; }
+		return this.updateInstances(instances => {
+			if (signal?.aborted) { throw new vscode.CancellationError(); }
+			const survivors = instances.filter(record => {
+				if (this.isSupervisorAlive(record.state.server_pid, record.state.socket_path)) {
+					return true;
+				}
+				this.log?.appendLine(formatRawSupervisorLine(
+					`Pruned exited supervisor PID ${record.state.server_pid}`,
+					vscode.LogLevel.Debug,
+				));
+				return false;
+			});
+			// Frequent management refreshes should not rewrite unchanged storage.
+			return survivors.length === instances.length ? instances : survivors;
+		});
 	}
 
 	/**
@@ -108,17 +132,16 @@ export class KallichoreInstances {
 	 * @returns A promise that resolves after the inspection UI has been dismissed.
 	 */
 	public static async showRunningSupervisors(): Promise<void> {
-		const stored = await this.getStoredInstances();
 		const results = await vscode.window.withProgress<SupervisorInspectionResult[]>({
 			location: vscode.ProgressLocation.Notification,
 			title: vscode.l10n.t("Checking running kernel supervisors…"),
 			cancellable: false
 		}, async progress => {
+			const stored = await this.getRunningSupervisors();
 			if (stored.length === 0) {
 				return [];
 			}
 
-			const survivors: StoredKallichoreInstance[] = [];
 			const liveResults: SupervisorInspectionResult[] = [];
 			const increment = 100 / stored.length;
 
@@ -126,25 +149,13 @@ export class KallichoreInstances {
 				// Update the toast so users see which entry is under inspection.
 				progress.report({ message: record.workspaceName ?? vscode.l10n.t("Empty Workspace") });
 
-				if (!this.isSupervisorAlive(record.state.server_pid, record.state.socket_path)) {
-					// Mark work complete for the progress UI even though we prune this entry.
-					progress.report({ increment, message: record.workspaceName ?? vscode.l10n.t("Empty Workspace") });
-					this.log?.appendLine(formatRawSupervisorLine(
-						`Pruned exited supervisor PID ${record.state.server_pid}`,
-						vscode.LogLevel.Debug,
-					));
-					continue;
-				}
-
-				// Track instances we confirmed are still alive so the registry
-				// only retains valid entries.
+				// Enrich the display snapshot without persisting it after slow HTTP probes.
 				const refreshedRecord: StoredKallichoreInstance = {
 					workspaceName: record.workspaceName,
 					workspaceUri: record.workspaceUri ?? this.resolveWorkspaceUri(record.workspaceName)?.toString(),
 					state: record.state,
 					lastSeen: Date.now()
 				};
-				survivors.push(refreshedRecord);
 
 				const inspection: SupervisorInspectionResult = { record: refreshedRecord };
 				try {
@@ -165,7 +176,6 @@ export class KallichoreInstances {
 				progress.report({ increment, message: record.workspaceName ?? vscode.l10n.t("Empty Workspace") });
 			}
 
-			await this.saveInstances(survivors);
 			return liveResults;
 		});
 
@@ -489,7 +499,12 @@ export class KallichoreInstances {
 	private static async getStoredInstances(): Promise<StoredKallichoreInstance[]> {
 		const context = this.getContext();
 		const instances = context.globalState.get<StoredKallichoreInstance[]>(this.STORAGE_KEY) ?? [];
-		return instances.map(instance => ({ ...instance }));
+		return instances.map(instance => ({ ...instance, state: { ...instance.state } }));
+	}
+
+	/** Host-only registry access. Inspection must not prune or rewrite these records. */
+	public static async getRecordedSupervisors(): Promise<StoredKallichoreInstance[]> {
+		return this.context ? this.getStoredInstances() : [];
 	}
 
 	/**
@@ -501,6 +516,20 @@ export class KallichoreInstances {
 	private static async saveInstances(instances: StoredKallichoreInstance[]): Promise<void> {
 		const context = this.getContext();
 		await context.globalState.update(this.STORAGE_KEY, instances);
+	}
+
+	/** Serialize this host's registry updates; do not hold snapshots across HTTP probes. */
+	private static updateInstances(
+		update: (instances: StoredKallichoreInstance[]) => StoredKallichoreInstance[],
+	): Promise<StoredKallichoreInstance[]> {
+		const operation = this.registryUpdate.then(async () => {
+			const instances = await this.getStoredInstances();
+			const updated = update(instances);
+			if (updated !== instances) { await this.saveInstances(updated); }
+			return updated.map(instance => ({ ...instance, state: { ...instance.state } }));
+		});
+		this.registryUpdate = operation.then(() => undefined, () => undefined);
+		return operation;
 	}
 
 	/**
@@ -549,7 +578,7 @@ export class KallichoreInstances {
 	}
 
 	/** Reject stale sockets and Linux PIDs recycled by another process or thread. */
-	private static isSupervisorAlive(pid: number, socketPath?: string): boolean {
+	public static isSupervisorAlive(pid: number, socketPath?: string): boolean {
 		if (!this.isProcessAlive(pid) || (socketPath && !fs.existsSync(socketPath))) {
 			return false;
 		}

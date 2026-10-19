@@ -53,7 +53,8 @@
     "check:webview": "npm --prefix webview run check",
     "copy:duckdb": "node scripts/copy-duckdb-assets.mjs",
     "build": "npm run check:webview && npm run build:webview && npm run copy:duckdb && npm run compile",
-    "test:prepare": "npm run compile-tests && npm run build",
+    "test:supervisor-process": "node --test scripts/supervisor-launcher.test.mjs",
+    "test:prepare": "npm run compile-tests && npm run test:supervisor-process && npm run build",
     "test": "npm run test:prepare && node scripts/run-vscode-tests.mjs --label all",
     "test:unit:ext": "npm run test:prepare && node scripts/run-vscode-tests.mjs --label unit",
     "lint": "eslint src && cd webview && npm run check",
@@ -140,190 +141,196 @@
     ],
     "commands": [
       {
+        "command": "supervisor.openSupervisorManager",
+        "title": "%supervisor.openSupervisorManager.title%",
+        "category": "Supervisor",
+        "icon": "$(server-process)"
+      },
+      {
         "command": "supervisor.newSession",
         "title": "Start New Interpreter Session",
-        "category": "Ark",
+        "category": "Supervisor",
         "icon": "$(add)"
       },
       {
         "command": "supervisor.duplicateSession",
         "title": "Duplicate Active Interpreter Session",
-        "category": "Ark",
+        "category": "Supervisor",
         "icon": "$(add)"
       },
       {
         "command": "supervisor.quickLaunchSession",
         "title": "Quick Launch Interpreter Session",
-        "category": "Ark",
+        "category": "Supervisor",
         "icon": "$(chevron-down)"
       },
       {
         "command": "supervisor.interruptExecution",
         "title": "Interrupt Execution",
-        "category": "Ark",
+        "category": "Supervisor",
         "icon": "$(debug-stop)"
       },
       {
         "command": "supervisor.clearOutput",
         "title": "Clear Console Output",
-        "category": "Ark",
+        "category": "Supervisor",
         "icon": "$(clear-all)"
       },
       {
         "command": "supervisor.showSupervisorLog",
         "title": "Show Kernel Supervisor Log",
-        "category": "Ark"
+        "category": "Supervisor"
       },
       {
         "command": "supervisor.runtimeSessions.refresh",
         "title": "Refresh Runtime Sessions",
-        "category": "Ark",
+        "category": "Supervisor",
         "icon": "$(refresh)"
       },
       {
         "command": "positron.supervisor.showRunningSupervisors",
         "title": "Show Running Supervisors",
-        "category": "Ark"
+        "category": "Supervisor"
       },
       {
         "command": "positron.supervisor.restartSupervisor",
         "title": "Restart Kernel Supervisor",
-        "category": "Ark"
+        "category": "Supervisor"
       },
       {
         "command": "positron.supervisor.showKernelSupervisorLog",
         "title": "Show Kernel Supervisor Log (Legacy)",
-        "category": "Ark"
+        "category": "Supervisor"
       },
       {
         "command": "supervisor.openPlotsGallery",
         "title": "Open Plots Gallery",
-        "category": "Ark",
+        "category": "Supervisor",
         "icon": "$(preview)"
       },
       {
         "command": "supervisor.openPlotInEditor",
         "title": "Open Plot in Editor",
-        "category": "Ark",
+        "category": "Supervisor",
         "icon": "$(go-to-file)"
       },
       {
         "command": "supervisor.closeAuxiliaryPlotsPanel",
         "title": "Close Auxiliary Plots Panel",
-        "category": "Ark"
+        "category": "Supervisor"
       },
       {
         "command": "supervisor.packages.refresh",
         "title": "Refresh Packages",
-        "category": "Ark Packages",
+        "category": "Supervisor Packages",
         "icon": "$(refresh)"
       },
       {
         "command": "supervisor.packages.updateAll",
         "title": "Update All Packages",
-        "category": "Ark Packages",
+        "category": "Supervisor Packages",
         "icon": "$(cloud-download)"
       },
       {
         "command": "supervisor.console.executeCode",
         "title": "Execute Code in Console",
-        "category": "Ark Console"
+        "category": "Supervisor Console"
       },
       {
         "command": "supervisor.console.executeCodeWithoutAdvancing",
         "title": "Execute Code (Keep Cursor)",
-        "category": "Ark Console"
+        "category": "Supervisor Console"
       },
       {
         "command": "supervisor.console.clearConsole",
         "title": "Clear Console",
-        "category": "Ark Console"
+        "category": "Supervisor Console"
       },
       {
         "command": "supervisor.console.focusConsole",
         "title": "Focus Console Input",
-        "category": "Ark Console"
+        "category": "Supervisor Console"
       },
       {
         "command": "supervisor.console.clearInputHistory",
         "title": "Clear Input History",
-        "category": "Ark Console"
+        "category": "Supervisor Console"
       },
       {
         "command": "supervisor.console.executeCodeBeforeCursor",
         "title": "Execute Code Before Cursor",
-        "category": "Ark Console"
+        "category": "Supervisor Console"
       },
       {
         "command": "supervisor.console.executeCodeAfterCursor",
         "title": "Execute Code After Cursor",
-        "category": "Ark Console"
+        "category": "Supervisor Console"
       },
       {
         "command": "supervisor.console.navigateInputHistoryUp",
         "title": "Navigate Input History Up",
-        "category": "Ark Console"
+        "category": "Supervisor Console"
       },
       {
         "command": "supervisor.console.navigateInputHistoryDown",
         "title": "Navigate Input History Down",
-        "category": "Ark Console"
+        "category": "Supervisor Console"
       },
       {
         "command": "supervisor.console.navigateInputHistoryUpPrefixMatch",
         "title": "Navigate Input History Up (Prefix Match)",
-        "category": "Ark Console"
+        "category": "Supervisor Console"
       },
       {
         "command": "supervisor.console.find",
         "title": "Console: Find",
-        "category": "Ark Console"
+        "category": "Supervisor Console"
       },
       {
         "command": "supervisor.console.findNext",
         "title": "Console: Find Next",
-        "category": "Ark Console",
+        "category": "Supervisor Console",
         "enablement": "supervisor.consoleFindVisible"
       },
       {
         "command": "supervisor.console.findPrevious",
         "title": "Console: Find Previous",
-        "category": "Ark Console",
+        "category": "Supervisor Console",
         "enablement": "supervisor.consoleFindVisible"
       },
       {
         "command": "supervisor.console.findClose",
         "title": "Console: Close Find",
-        "category": "Ark Console",
+        "category": "Supervisor Console",
         "enablement": "supervisor.consoleFindVisible"
       },
       {
         "command": "supervisor.variables.focus",
         "title": "Variables: Focus",
-        "category": "Ark Variables"
+        "category": "Supervisor Variables"
       },
       {
         "command": "supervisor.variables.expand",
         "title": "Variables: Expand Selected",
-        "category": "Ark Variables",
+        "category": "Supervisor Variables",
         "enablement": "supervisor.variablesHasSelection"
       },
       {
         "command": "supervisor.variables.collapse",
         "title": "Variables: Collapse Selected",
-        "category": "Ark Variables",
+        "category": "Supervisor Variables",
         "enablement": "supervisor.variablesHasSelection"
       },
       {
         "command": "supervisor.variables.copyAsText",
         "title": "Variables: Copy as Text",
-        "category": "Ark Variables",
+        "category": "Supervisor Variables",
         "enablement": "supervisor.variablesHasSelection"
       },
       {
         "command": "supervisor.variables.copyAsHtml",
         "title": "Variables: Copy as HTML",
-        "category": "Ark Variables",
+        "category": "Supervisor Variables",
         "enablement": "supervisor.variablesHasSelection"
       },
       {
@@ -466,54 +473,54 @@
       {
         "command": "supervisor.connections.refresh",
         "title": "Refresh Connections",
-        "category": "Ark Connections",
+        "category": "Supervisor Connections",
         "icon": "$(refresh)"
       },
       {
         "command": "supervisor.connections.new",
         "title": "New Connection",
-        "category": "Ark Connections",
+        "category": "Supervisor Connections",
         "icon": "$(add)"
       },
       {
         "command": "supervisor.connections.connect",
         "title": "%supervisor.connections.connect.title%",
-        "category": "Ark Connections",
+        "category": "Supervisor Connections",
         "icon": "$(plug)"
       },
       {
         "command": "supervisor.connections.disconnect",
         "title": "Disconnect",
-        "category": "Ark Connections",
+        "category": "Supervisor Connections",
         "icon": "$(debug-disconnect)"
       },
       {
         "command": "supervisor.connections.preview",
         "title": "Preview Data",
-        "category": "Ark Connections",
+        "category": "Supervisor Connections",
         "icon": "$(preview)"
       },
       {
         "command": "supervisor.viewer.find",
         "title": "Find in Viewer",
-        "category": "Ark Viewer",
+        "category": "Supervisor Viewer",
         "icon": "$(search)"
       },
       {
         "command": "supervisor.viewer.focusContent",
         "title": "Focus Viewer Content",
-        "category": "Ark Viewer"
+        "category": "Supervisor Viewer"
       },
       {
         "command": "supervisor.help.find",
         "title": "Find in Help",
-        "category": "Ark Help",
+        "category": "Supervisor Help",
         "icon": "$(search)"
       },
       {
         "command": "supervisor.help.focusContent",
         "title": "Focus Help Content",
-        "category": "Ark Help"
+        "category": "Supervisor Help"
       }
     ],
     "keybindings": [
@@ -659,6 +666,11 @@
           "command": "supervisor.runtimeSessions.refresh",
           "when": "view == supervisor.runtimeSessions",
           "group": "navigation@1"
+        },
+        {
+          "command": "supervisor.openSupervisorManager",
+          "when": "view == supervisor.runtimeSessions",
+          "group": "navigation@2"
         },
         {
           "command": "supervisor.connections.new",
@@ -988,7 +1000,7 @@
       }
     ],
     "configuration": {
-      "title": "Ark",
+      "title": "Supervisor",
       "properties": {
         "kernelSupervisor.mcp.enabled": {
           "type": "boolean",
@@ -1097,7 +1109,7 @@
             "indefinitely"
           ],
           "enumDescriptions": [
-            "Shut down immediately when the window closes",
+            "%kernelSupervisor.shutdownTimeout.immediately%",
             "Shut down after 30 seconds of idle time",
             "Shut down after 1 hour of idle time",
             "Shut down after 2 hours of idle time",
@@ -1108,7 +1120,7 @@
             "Never shut down automatically"
           ],
           "default": "immediately",
-          "description": "Controls how long the kernel supervisor keeps sessions alive after the window closes. Non-immediate values enable session persistence across window restarts."
+          "description": "%kernelSupervisor.shutdownTimeout.description%"
         },
         "kernelSupervisor.attachOnStartup": {
           "type": "boolean",

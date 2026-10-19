@@ -1,5 +1,6 @@
 import type { Page } from '@playwright/test';
 import { MockWebviewBackend } from './mockWebviewBackend';
+import { registerSupervisorManagerMock } from './supervisorManager';
 
 export const TEST_BASE_URL = 'http://127.0.0.1:4173';
 
@@ -12,6 +13,7 @@ export async function openWebviewPage(
         | 'viewer'
         | 'help'
         | 'packages'
+        | 'supervisorManager'
         | 'dataExplorer'
         | 'plotEditor',
     options: {
@@ -20,6 +22,9 @@ export async function openWebviewPage(
     } = {},
 ): Promise<MockWebviewBackend> {
     const backend = await MockWebviewBackend.attach(page, options.initialState);
+    if (domain === 'supervisorManager') {
+        registerSupervisorManagerMock(backend);
+    }
     if (domain === 'viewer') {
         backend.onRequest('viewer/getDefaultOpenTarget', () => ({ target: 'browser' }));
         backend.onRequest('viewer/open', () => ({ success: true }));

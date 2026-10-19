@@ -27,6 +27,8 @@ import {
     type LanguageRuntimeMetadata,
 } from './api';
 import { WebviewManager } from './webview/manager';
+import { SupervisorManagerProvider } from './webview/supervisorManagerProvider';
+import { SupervisorManagerService } from './supervisor/SupervisorManagerService';
 import { PositronNewFolderService } from './newFolder/positronNewFolderService';
 import { RuntimeManager } from './runtime/manager';
 import { RuntimeSession } from './runtime/session';
@@ -207,6 +209,7 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
     // Editor providers for plots
     private readonly _plotEditorProvider: PlotEditorProvider;
     private readonly _plotsGalleryEditorProvider: PlotsGalleryEditorProvider;
+    private readonly _supervisorManagerProvider: SupervisorManagerProvider;
 
     // Data Explorer service (1:1 Positron pattern)
     private readonly _positronDataExplorerService: PositronDataExplorerService;
@@ -492,6 +495,23 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
             editorWindowMover,
         );
         this._disposables.push(this._plotsGalleryEditorProvider);
+
+        this._supervisorManagerProvider = new SupervisorManagerProvider(
+            this._context.extensionUri,
+            this._outputChannel,
+            new SupervisorManagerService(this._context, {
+                getState: () => this._sessionManager.getSupervisorState(),
+                restart: () => this._sessionManager.restartSupervisor(),
+                shutdown: () => this._sessionManager.shutdownSupervisor(),
+                getSessionConnection: sessionId => this._sessionManager.getSupervisorSessionConnection(sessionId),
+                reconnectSession: sessionId => this._sessionManager.reconnectSupervisorSession(sessionId),
+                focusSession: async sessionId => {
+                    await this._sessionManager.focusSession(sessionId);
+                    await this._consoleService.focusConsole();
+                },
+            }),
+        );
+        this._disposables.push(this._supervisorManagerProvider);
 
         // Registry is disposed last so providers/services can release leases first.
         this._disposables.push(this._surfaceLifecycle);
@@ -1323,6 +1343,8 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
      * Registers extension commands
      */
     private _registerCommands(): void {
+        this._disposables.push(vscode.commands.registerCommand(CoreCommandIds.openSupervisorManager,
+            () => this._supervisorManagerProvider.open()));
         this._disposables.push(this._dataImporters,
             vscode.commands.registerCommand(CoreCommandIds.dataExplorerImport, async (
                 uri?: vscode.Uri, options: IDataImportOptions = {}, currentView?: IDataImportView,

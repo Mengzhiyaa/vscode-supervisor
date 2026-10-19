@@ -1246,7 +1246,12 @@ export class RuntimeSession implements vscode.Disposable {
         }
 
         await this._deactivateServices('restarting session');
-        await this._kernel.restart(workingDirectory ?? this._workingDirectory);
+        try {
+            await this._kernel.restart(workingDirectory ?? this._workingDirectory);
+        } catch (error) {
+            this._startupFailureEmitter.fire(toLanguageRuntimeStartupFailure(error));
+            throw error;
+        }
         this._unconfirmedShutdown = false;
 
         // Match startup behavior so UI can show "restarted" completion feedback.
