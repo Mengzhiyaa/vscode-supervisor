@@ -4,6 +4,61 @@
 
 import { NotificationType, RequestType, RequestType0 } from 'vscode-jsonrpc/node';
 
+export interface ConsoleInputDraft {
+    clientId: string;
+    version: number;
+    code: string;
+}
+
+export namespace GetInputDraftRequest {
+
+    export interface Params {
+        sessionId: string;
+    }
+
+    export interface Result {
+        draft?: ConsoleInputDraft;
+    }
+
+    export const type = new RequestType<Params, Result, void>('console/getInputDraft');
+}
+
+export namespace ApplyInputEditRequest {
+
+    export interface Params {
+        sessionId: string;
+        code?: string;
+        expectedDraft?: ConsoleInputDraft;
+    }
+
+    export interface Result {
+        draft?: ConsoleInputDraft;
+    }
+
+    export const type = new RequestType<Params, Result, void>('console/applyInputEdit');
+}
+
+export namespace InputDraftChangedNotification {
+
+    export interface Params {
+        sessionId: string;
+        draft: ConsoleInputDraft;
+    }
+
+    export const type = new NotificationType<Params>('console/inputDraftChanged');
+}
+
+export namespace SubmissionStateChangedNotification {
+
+    export interface Params {
+        sessionId: string;
+        submitting: boolean;
+        version?: number;
+    }
+
+    export const type = new NotificationType<Params>('console/submissionStateChanged');
+}
+
 export interface CompletionItem {
     label: string;
     kind?: string;
@@ -354,6 +409,7 @@ export namespace SetPendingCodeNotification {
     export interface Params {
         sessionId: string;
         code?: string;
+        expectedDraft?: ConsoleInputDraft;
     }
 
     export const type = new NotificationType<Params>('console/setPendingCode');
@@ -466,6 +522,8 @@ export namespace RuntimeStartupPhaseNotification {
 }
 
 export interface SerializedConsoleState {
+    codeSubmissionInProgress?: boolean;
+    submissionStateVersion?: number;
     version: number;
     generation?: string;
     revision?: number;

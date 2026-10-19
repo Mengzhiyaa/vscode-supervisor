@@ -22,6 +22,8 @@
         thumbnail?: string;
         cachedThumbnail?: string;
         renderVersion?: number;
+        state?: import("@shared/plots").PlotClientState;
+        renderEstimateMs?: number;
         initialData?: string;
         initialRenderSettings?: {
             width: number;
@@ -246,9 +248,10 @@
                         {darkFilterMode}
                         latestUri={selectedPlot.thumbnail ||
                             selectedPlot.cachedThumbnail}
+                        hostState={selectedPlot.state}
+                        hostRenderEstimateMs={selectedPlot.renderEstimateMs}
                         renderVersion={selectedPlot.renderVersion}
                         initialData={selectedPlot.initialData}
-                        initialRenderSettings={selectedPlot.initialRenderSettings}
                         onrendered={onplotRendered}
                     />
                 {/if}

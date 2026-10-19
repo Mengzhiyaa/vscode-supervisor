@@ -43,7 +43,7 @@ export class PositronPlotCommClass extends PositronBaseComm {
 
         // Create event emitters for plot events
         this.onDidUpdate = this.createEventEmitter<UpdateEvent>('update', ['pre_render']);
-        this.onDidShow = this.createEventEmitter<ShowEvent>('show', []);
+        this.onDidShow = this.createEventEmitter<ShowEvent>('show', ['pre_render']);
     }
 
     /**

@@ -58,6 +58,7 @@
 
     // ConsoleInputProps interface (Positron pattern)
     interface ConsoleInputProps {
+        readonly hostSubmitting?: boolean;
         readonly width: number;
         readonly hidden: boolean;
         readonly active: boolean;
@@ -95,6 +96,7 @@
     }
 
     let {
+        hostSubmitting = false,
         width,
         hidden,
         active = true,
@@ -153,7 +155,7 @@
 
     function updateInterruptContext(): void {
         interruptContext?.set(
-            stateRef.current === "busy" || submissionInFlightRef.current,
+            stateRef.current === "busy" || submissionInFlightRef.current || hostSubmitting,
         );
     }
 
@@ -172,6 +174,12 @@
         monaco,
         getConnection: () => connection,
         lspClientManager: getContext<LspClientManager | undefined>(lspClientManagerContext),
+        onDidEditInput: editedSessionId => {
+            if (committedSessionId === editedSessionId && codeEditorWidget) {
+                updateCodeEditorWidgetPosition(Position.Last, Position.Last);
+                void maybeExecuteDeferredCode();
+            }
+        },
     });
 
     // Ref object to hold current active state (solves closure capture issue)
@@ -454,6 +462,10 @@
     }
 
     // Sync refs when props change
+    $effect(() => {
+        void hostSubmitting;
+        updateInterruptContext();
+    });
     $effect(() => {
         activeRef.current = active;
     });
@@ -848,14 +860,7 @@
                 cancelCodeSubmission();
                 break;
             case "setPendingCode":
-                if (codeEditorWidget) {
-                    codeEditorWidget.setValue(command.code || "");
-                    updateCodeEditorWidgetPosition(
-                        Position.Last,
-                        Position.Last,
-                    );
-                    void maybeExecuteDeferredCode();
-                }
+                sessionModelManager.applyInputEdit(currentSessionId(), command);
                 break;
             case "historyAdd":
                 addHistoryEntry(command.input, command.when);

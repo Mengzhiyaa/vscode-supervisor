@@ -7,15 +7,17 @@
 
     import { onMount } from "svelte";
     import { copyImageToClipboard } from "$lib/imageClipboard";
-    import { getRpcConnection } from "$lib/rpc/client";
+    import { getRpcConnection, setVsCodeState } from "$lib/rpc/client";
     import type { MessageConnection } from "vscode-jsonrpc/browser";
     import PanZoomImage from "../plots/PanZoomImage.svelte";
-    import { ZoomLevel } from "../plots/types";
+    import { ZoomLevel, PlotClientState } from "../plots/types";
     import DynamicActionBar from "../shared/DynamicActionBar.svelte";
     import ActionBarButton from "../shared/ActionBarButton.svelte";
     import ActionBarMenuButton from "../shared/ActionBarMenuButton.svelte";
     import { localize } from "$lib/localization";
     import type { SizingPolicyInfo } from "@shared/plots";
+    import PlotProgressBar from "../plots/PlotProgressBar.svelte";
+    import type { PlotEditorStateNotification } from "../../../src/rpc/webview/plotEditor";
     import type { PlotEditorSetContentNotification } from "../../../src/rpc/webview/plotEditor";
 
     // JSON-RPC connection
@@ -33,6 +35,9 @@
     type EditorZoomLevel = (typeof ZOOM_LEVELS)[number]["value"];
 
     // State
+    let renderVersion = 0;
+    let renderState = $state<string>(PlotClientState.Unrendered);
+    let renderEstimateMs = $state(0);
     let imageUri = $state("");
     let contentKind = $state<"image" | "html">("image");
     let htmlUri = $state("");
@@ -90,6 +95,7 @@
     // --- Zoom ---
     function selectZoom(value: EditorZoomLevel) {
         zoom = value;
+        connection?.sendNotification("plotEditor/selectZoom", { zoomLevel: value });
     }
 
     async function selectSizingPolicy(policyId: string) {
@@ -168,9 +174,26 @@
     onMount(() => {
         connection = getRpcConnection();
         const subscriptions = [
+            connection.onNotification("plotEditor/state", (params: PlotEditorStateNotification.Params) => {
+                if (typeof params.zoomLevel === "number" && ZOOM_LEVELS.some(level => level.value === params.zoomLevel)) {
+                    zoom = params.zoomLevel as EditorZoomLevel;
+                }
+                if (params.state) { renderState = params.state; }
+                if (typeof params.renderEstimateMs === "number") { renderEstimateMs = params.renderEstimateMs; }
+                if (params.sizingPolicies) { sizingPolicies = params.sizingPolicies.map(policy => ({
+                    ...policy, name: localize(`plots.sizing.${policy.id}`, policy.name),
+                })); }
+                if (params.selectedSizingPolicyId && params.selectedSizingPolicyId !== selectedSizingPolicyId) {
+                    selectedSizingPolicyId = params.selectedSizingPolicyId;
+                    lastRenderKey = "";
+                    scheduleRender();
+                }
+            }),
             connection.onNotification(
                 "plotEditor/renderResult",
-                (params: { data: string; mimeType: string }) => {
+                (params: { data: string; mimeType: string; renderVersion?: number }) => {
+                    if (params.renderVersion !== undefined && params.renderVersion < renderVersion) { return; }
+                    renderVersion = params.renderVersion ?? renderVersion;
                     if (typeof params?.data === "string" && params.data.length > 0) {
                         imageUri = params.data;
                     }
@@ -191,6 +214,14 @@
             connection.onNotification(
                 "plotEditor/setContent",
                 (params: PlotEditorSetContentNotification.Params) => {
+                    if (params.renderVersion !== undefined && params.renderVersion < renderVersion) { return; }
+                    renderVersion = params.renderVersion ?? renderVersion;
+                    if (params.plotId && params.sessionId) {
+                        setVsCodeState({ version: 1, plotId: params.plotId, sessionId: params.sessionId, staticSnapshot: params.staticSnapshot });
+                    }
+                    if (typeof params.zoomLevel === "number" && ZOOM_LEVELS.some(level => level.value === params.zoomLevel)) {
+                        zoom = params.zoomLevel as EditorZoomLevel;
+                    }
                     contentKind = params.kind;
                     sizingPolicies = (params.sizingPolicies ?? []).map(policy => ({
                         ...policy,
@@ -202,8 +233,8 @@
                         htmlTitle = params.title || localize("plotEditor.interactivePlot", "Interactive plot");
                         imageUri = "";
                         lastRenderKey = "";
-                    } else if (params.kind === "image" && params.data) {
-                        imageUri = params.data;
+                    } else if (params.kind === "image") {
+                        imageUri = params.data ?? "";
                         htmlUri = "";
                         lastRenderKey = "";
                         scheduleRender();
@@ -347,6 +378,9 @@
     bind:clientWidth={containerWidth}
     bind:clientHeight={containerHeight}
 >
+    {#if renderState === PlotClientState.Rendering}
+        <PlotProgressBar infinite={renderEstimateMs === 0} total={renderEstimateMs} done={false} />
+    {/if}
     {#if contentKind === "html" && htmlUri}
         <iframe
             class="html-plot-frame"

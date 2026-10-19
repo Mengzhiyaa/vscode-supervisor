@@ -1,6 +1,6 @@
 /*---------------------------------------------------------------------------------------------
  *  Console Actions
- *  1:1 replication of Positron's console actions for editor integration
+ *  Positron-compatible console actions through the public VS Code API
  *--------------------------------------------------------------------------------------------*/
 
 import { getErrorMessage } from '../../shared/errors';
@@ -8,6 +8,7 @@ import * as vscode from 'vscode';
 import type { Utf8Location } from '../../api';
 import { CoreCommandIds, InternalCommandIds } from '../../coreCommandIds';
 import { PositronConsoleService } from './consoleService';
+import { EditorCodeSubmissionService } from './editorCodeSubmission';
 import {
     COMPLETENESS_VERIFIED_METADATA_KEY,
     IConsoleCodeAttribution,
@@ -27,29 +28,15 @@ export interface ConsoleExecutionCommandOptions {
 }
 
 interface ResolvedExecutionTarget {
-    editor: vscode.TextEditor;
-    position?: vscode.Position;
+    document: vscode.TextDocument;
+    editor?: vscode.TextEditor;
+    position: vscode.Position;
 }
 
 /**
  * Trims newlines from the start and end of a string (Positron pattern).
  */
 const trimNewlines = (str: string): string => str.replace(/^\n+|\n+$/g, '');
-
-/**
- * Normalize code returned by a statement range provider before sending it to
- * an interactive runtime. Python compound statements need a terminating
- * newline so that the REPL can recognize the dedent and execute the block.
- * Positron's Python statement-range provider returns normalized code with this
- * newline already present; Supervisor providers may return only the document
- * range, whose end position excludes it.
- */
-function normalizeStatementCode(document: vscode.TextDocument, code: string): string {
-    if (document.languageId === 'python' && code.includes('\n') && !code.endsWith('\n')) {
-        return `${code}\n`;
-    }
-    return code;
-}
 
 function toUtf8Character(document: vscode.TextDocument, position: vscode.Position): number {
     return Buffer.byteLength(
@@ -83,7 +70,6 @@ async function executeEditorCode(
     languageId: string,
     code: string,
     attribution: IConsoleCodeAttribution,
-    codeRange: vscode.Range,
     options: ConsoleExecutionCommandOptions,
     outputChannel: vscode.LogOutputChannel,
 ): Promise<boolean> {
@@ -115,19 +101,15 @@ async function resolveExecutionTarget(
     }
     if (!options.uri) {
         const editor = vscode.window.activeTextEditor;
-        return editor ? { editor } : undefined;
+        if (!editor || isNotebookCell(editor.document)) { return undefined; }
+        return { document: editor.document, editor, position: editor.selection.active };
     }
 
     const uri = typeof options.uri === 'string'
         ? vscode.Uri.parse(options.uri)
         : options.uri;
     const document = await vscode.workspace.openTextDocument(uri);
-    const editor = vscode.window.visibleTextEditors.find(
-        candidate => candidate.document.uri.toString() === uri.toString(),
-    ) ?? await vscode.window.showTextDocument(document, {
-        preview: true,
-        preserveFocus: true,
-    });
+    if (isNotebookCell(document)) { return undefined; }
     const supplied = options.position;
     const requested = supplied instanceof vscode.Position
         ? supplied
@@ -138,7 +120,13 @@ async function resolveExecutionTarget(
     const position = document.validatePosition(
         new vscode.Position(line, Math.max(0, requested.character)),
     );
-    return { editor, position };
+    return { document, position };
+}
+
+function isNotebookCell(document: vscode.TextDocument): boolean {
+    return document.uri.scheme === 'vscode-notebook-cell' ||
+        vscode.workspace.notebookDocuments.some(notebook =>
+            notebook.getCells().some(cell => cell.document.uri.toString() === document.uri.toString()));
 }
 
 async function synchronizeDirtyFileBreakpoints(
@@ -158,8 +146,9 @@ async function synchronizeDirtyFileBreakpoints(
     }
 
     // The public VS Code API does not expose IDebugService.sendBreakpoints().
-    // Re-registering the same SourceBreakpoint objects is the supported
-    // extension-host operation that forces DAP setBreakpoints for dirty text.
+    // Re-registering requests an update through the public API. This is best
+    // effort: the API does not expose the adapter's setBreakpoints response,
+    // so it cannot provide Positron's awaited synchronization barrier.
     try {
         vscode.debug.removeBreakpoints(breakpoints);
         vscode.debug.addBreakpoints(breakpoints);
@@ -209,26 +198,24 @@ function isStatementRangeRejection(
 }
 
 async function notifyStatementRangeSyntaxRejection(
-    editor: vscode.TextEditor,
+    document: vscode.TextDocument,
     line: number | undefined,
 ): Promise<void> {
-    const jumpToLineAction = 'Jump to line';
+    const jumpToLineAction = vscode.l10n.t('Jump to line');
     const message =
         line === undefined
-            ? "Can't execute code due to a syntax error."
-            : `Can't execute code due to a syntax error near line ${line + 1}.`;
+            ? vscode.l10n.t("Can't execute code due to a syntax error.")
+            : vscode.l10n.t("Can't execute code due to a syntax error near line {0}.", line + 1);
 
     const selection = line === undefined
         ? await vscode.window.showInformationMessage(message)
         : await vscode.window.showInformationMessage(message, jumpToLineAction);
 
     if (selection === jumpToLineAction && line !== undefined) {
-        const position = new vscode.Position(line, 0);
-        editor.selection = new vscode.Selection(position, position);
-        editor.revealRange(
-            new vscode.Range(position, position),
-            vscode.TextEditorRevealType.InCenterIfOutsideViewport,
-        );
+        const position = document.validatePosition(new vscode.Position(line, 0));
+        await vscode.window.showTextDocument(document, {
+            selection: new vscode.Range(position, position),
+        });
     }
 }
 
@@ -240,26 +227,33 @@ export function registerConsoleActions(
     consoleService: PositronConsoleService,
     outputChannel: vscode.LogOutputChannel
 ): vscode.Disposable[] {
-    const disposables: vscode.Disposable[] = [];
+    const submissions = new EditorCodeSubmissionService();
+    const disposables: vscode.Disposable[] = [submissions];
+    disposables.push(
+        vscode.commands.registerCommand(CoreCommandIds.consoleCancelCodeSubmission, () => submissions.cancel()),
+        vscode.commands.registerCommand(CoreCommandIds.consoleRunCodeAsIs, () => submissions.runAsIs()),
+    );
 
-    // Execute Code (Ctrl+Enter) - executes current line or selection with cursor advancement
+    const execute = async (options: ConsoleExecutionCommandOptions) => {
+        submissions.cancel();
+        const target = await resolveExecutionTarget(options);
+        if (!target) { return; }
+        try {
+            return await executeCodeWithAdvancement(
+                target, consoleService, outputChannel, submissions, options.advance ?? true, options,
+            );
+        } catch (error) {
+            if (error instanceof vscode.CancellationError) { return undefined; }
+            throw error;
+        }
+    };
+
+    // Execute the selection, or the current statement with optional advancement.
     disposables.push(
         vscode.commands.registerCommand(CoreCommandIds.consoleExecuteCode, async (
             options: ConsoleExecutionCommandOptions = {},
         ) => {
-            const target = await resolveExecutionTarget(options);
-            if (!target) {
-                return;
-            }
-
-            return executeCodeWithAdvancement(
-                target.editor,
-                consoleService,
-                outputChannel,
-                options.advance ?? true,
-                options,
-                target.position,
-            );
+            return execute(options);
         })
     );
 
@@ -268,19 +262,7 @@ export function registerConsoleActions(
         vscode.commands.registerCommand(CoreCommandIds.consoleExecuteCodeWithoutAdvancing, async (
             options: ConsoleExecutionCommandOptions = {},
         ) => {
-            const target = await resolveExecutionTarget(options);
-            if (!target) {
-                return;
-            }
-
-            return executeCodeWithAdvancement(
-                target.editor,
-                consoleService,
-                outputChannel,
-                false,
-                { ...options, advance: false },
-                target.position,
-            );
+            return execute({ ...options, advance: false });
         })
     );
 
@@ -344,14 +326,13 @@ export function registerConsoleActions(
         vscode.commands.registerCommand(CoreCommandIds.consoleExecuteCodeBeforeCursor, async (
             options: ConsoleExecutionCommandOptions = {},
         ) => {
+            submissions.cancel();
             const target = await resolveExecutionTarget(options);
             if (!target) {
                 return;
             }
 
-            const { editor } = target;
-            const document = editor.document;
-            const position = target.position ?? editor.selection.active;
+            const { document, position } = target;
 
             // Get all text from start of document to end of current line (Positron pattern)
             const range = new vscode.Range(
@@ -367,9 +348,9 @@ export function registerConsoleActions(
 
             const attribution: IConsoleCodeAttribution = {
                 source: 'editor',
-                fileUri: editor.document.uri,
+                fileUri: document.uri,
                 lineNumber: 1,
-                codeLocation: createCodeLocation(editor.document, range),
+                codeLocation: createCodeLocation(document, range),
             };
 
             outputChannel.debug(`[ConsoleActions] Executing code before cursor`);
@@ -380,7 +361,6 @@ export function registerConsoleActions(
                 document.languageId,
                 code,
                 attribution,
-                range,
                 options,
                 outputChannel,
             );
@@ -392,14 +372,13 @@ export function registerConsoleActions(
         vscode.commands.registerCommand(CoreCommandIds.consoleExecuteCodeAfterCursor, async (
             options: ConsoleExecutionCommandOptions = {},
         ) => {
+            submissions.cancel();
             const target = await resolveExecutionTarget(options);
             if (!target) {
                 return;
             }
 
-            const { editor } = target;
-            const document = editor.document;
-            const position = target.position ?? editor.selection.active;
+            const { document, position } = target;
 
             // Get all text from start of current line to end of document (Positron pattern)
             const range = new vscode.Range(
@@ -415,9 +394,9 @@ export function registerConsoleActions(
 
             const attribution: IConsoleCodeAttribution = {
                 source: 'editor',
-                fileUri: editor.document.uri,
+                fileUri: document.uri,
                 lineNumber: position.line + 1,
-                codeLocation: createCodeLocation(editor.document, range),
+                codeLocation: createCodeLocation(document, range),
             };
 
             outputChannel.debug(`[ConsoleActions] Executing code after cursor`);
@@ -428,7 +407,6 @@ export function registerConsoleActions(
                 document.languageId,
                 code,
                 attribution,
-                range,
                 options,
                 outputChannel,
             );
@@ -487,7 +465,7 @@ export function registerConsoleActions(
 }
 
 /**
- * Executes code with optional cursor advancement (1:1 Positron pattern).
+ * Executes code with optional cursor advancement.
  * This is the core execution logic that handles:
  * 1. Selection-based execution
  * 2. Statement range detection (via LSP)
@@ -495,19 +473,15 @@ export function registerConsoleActions(
  * 4. Cursor advancement to next statement/line
  */
 async function executeCodeWithAdvancement(
-    editor: vscode.TextEditor,
+    target: ResolvedExecutionTarget,
     consoleService: PositronConsoleService,
     outputChannel: vscode.LogOutputChannel,
+    submissions: EditorCodeSubmissionService,
     advance: boolean,
     options: ConsoleExecutionCommandOptions = {},
-    explicitPosition?: vscode.Position,
 ): Promise<vscode.Position | undefined> {
-    const document = editor.document;
-    const position = explicitPosition ?? editor.selection.active;
-    const selection = explicitPosition
-        ? new vscode.Selection(position, position)
-        : editor.selection;
-    const shouldAdvanceEditor = advance && explicitPosition === undefined;
+    const { document, editor, position } = target;
+    const selection = editor?.selection;
     let nextPosition: vscode.Position | undefined;
 
     let code: string | undefined;
@@ -515,7 +489,7 @@ async function executeCodeWithAdvancement(
     let completenessVerified = options.completenessVerified === true;
 
     // If we have a selection and it isn't empty, use its contents (Positron pattern)
-    if (!selection.isEmpty) {
+    if (selection && !selection.isEmpty) {
         code = document.getText(selection);
         codeRange = new vscode.Range(selection.start, selection.end);
 
@@ -527,35 +501,30 @@ async function executeCodeWithAdvancement(
             }
         }
 
-        if (shouldAdvanceEditor) {
-            await advanceSelection(editor, selection);
-        }
+        // Keep an explicit selection intact so it can be submitted again.
     }
 
     // If no selection, try to get statement range from LSP (Positron pattern)
     if (code === undefined) {
-        const statementRange = await getStatementRangeAtPosition(document, position, outputChannel);
+        const statementRange = await getStatementRangeAtPosition(document, position, outputChannel, submissions);
 
         if (statementRange) {
             if (isStatementRangeRejection(statementRange)) {
-                await notifyStatementRangeSyntaxRejection(editor, statementRange.line);
+                await notifyStatementRangeSyntaxRejection(document, statementRange.line);
                 return undefined;
             }
 
-            code = normalizeStatementCode(
-                document,
-                statementRange.code ?? document.getText(statementRange.range),
-            );
+            // Language providers own normalization, including REPL newlines.
+            code = statementRange.code ?? document.getText(statementRange.range);
             codeRange = statementRange.range;
             // A successful statement-range provider has already identified one
             // executable statement. Do not ask the runtime to re-check the raw
             // editor slice, which may omit the REPL's terminating blank line.
             completenessVerified = true;
 
-            if (shouldAdvanceEditor) {
-                await advanceStatement(editor, statementRange, outputChannel);
+            if (advance) {
+                nextPosition = await nextStatementPosition(target, statementRange, outputChannel, submissions);
             }
-            nextPosition = nextPositionAfterRange(document, statementRange.range);
         }
     }
 
@@ -574,29 +543,27 @@ async function executeCodeWithAdvancement(
             }
         }
 
-        if (shouldAdvanceEditor && code !== undefined) {
-            await advanceLine(editor, position, lineNumber);
-        }
-        if (code !== undefined) {
-            nextPosition = nextPositionAfterRange(document, codeRange ?? document.lineAt(lineNumber).range);
+        if (advance && code !== undefined) {
+            nextPosition = await nextLinePosition(target, lineNumber);
         }
 
         // If we're at the end and still no code, handle empty document end (Positron pattern)
-        if (code === undefined && lineNumber >= document.lineCount - 1) {
-            await amendNewlineToEnd(editor);
-
-            const newPosition = new vscode.Position(lineNumber, 0);
-            editor.selection = new vscode.Selection(newPosition, newPosition);
-            editor.revealRange(
-                new vscode.Range(newPosition, newPosition),
-                vscode.TextEditorRevealType.InCenterIfOutsideViewport,
-            );
+        if (advance && code === undefined && lineNumber >= document.lineCount - 1) {
+            if (await amendNewlineToEnd(target)) {
+                // Keep the cursor on the original empty line.
+                nextPosition = new vscode.Position(lineNumber, 0);
+            }
         }
 
         // If still no code, execute empty string (Positron pattern)
         if (code === undefined) {
             code = '';
         }
+    }
+
+    if (editor && nextPosition) {
+        editor.selection = new vscode.Selection(nextPosition, nextPosition);
+        editor.revealRange(new vscode.Range(nextPosition, nextPosition), vscode.TextEditorRevealType.InCenterIfOutsideViewport);
     }
 
     // Execute the code
@@ -621,44 +588,11 @@ async function executeCodeWithAdvancement(
             document.languageId,
             code,
             attribution,
-            codeRange ?? new vscode.Range(position, position),
             { ...options, advance },
             outputChannel,
         );
     }
-    return explicitPosition ? nextPosition : editor.selection.active;
-}
-
-function nextPositionAfterRange(
-    document: vscode.TextDocument,
-    range: vscode.Range,
-): vscode.Position {
-    const nextLine = Math.min(range.end.line + 1, document.lineCount - 1);
-    return new vscode.Position(nextLine, 0);
-}
-
-async function advanceSelection(
-    editor: vscode.TextEditor,
-    selection: vscode.Selection,
-): Promise<void> {
-    const document = editor.document;
-    const lastSelectedLine =
-        selection.end.character === 0 && selection.end.line > selection.start.line
-            ? selection.end.line - 1
-            : selection.end.line;
-
-    let nextLine = lastSelectedLine + 1;
-    if (nextLine >= document.lineCount) {
-        await amendNewlineToEnd(editor);
-        nextLine = editor.document.lineCount - 1;
-    }
-
-    const newPosition = new vscode.Position(nextLine, 0);
-    editor.selection = new vscode.Selection(newPosition, newPosition);
-    editor.revealRange(
-        new vscode.Range(newPosition, newPosition),
-        vscode.TextEditorRevealType.InCenterIfOutsideViewport,
-    );
+    return nextPosition;
 }
 
 /**
@@ -668,16 +602,23 @@ async function advanceSelection(
 async function getStatementRangeAtPosition(
     document: vscode.TextDocument,
     position: vscode.Position,
-    outputChannel: vscode.LogOutputChannel
+    outputChannel: vscode.LogOutputChannel,
+    submissions: EditorCodeSubmissionService,
 ): Promise<StatementRange | StatementRangeRejection | undefined> {
+    const detection = submissions.begin(document, position.line);
     try {
         // Try to get statement range from language server via custom LSP request
         // This mirrors Positron's statementRangeProvider.provideStatementRange
-        const result = await vscode.commands.executeCommand<StatementRangeCommandResult | undefined>(
+        const outcome = await detection.wait(vscode.commands.executeCommand<StatementRangeCommandResult | undefined>(
             InternalCommandIds.lspGetStatementRange,
             document.uri.toString(),
-            { line: position.line, character: position.character }
-        );
+            { line: position.line, character: position.character },
+            detection.token,
+        ));
+        if (outcome.kind === 'cancel') { throw new vscode.CancellationError(); }
+        if (outcome.kind === 'runAsIs') { return undefined; }
+        if (outcome.kind === 'error') { throw outcome.error; }
+        const result = outcome.value;
 
         if (!result) {
             return undefined;
@@ -697,23 +638,27 @@ async function getStatementRangeAtPosition(
             };
         }
     } catch (err) {
+        if (err instanceof vscode.CancellationError) { throw err; }
         // Statement range provider not available or threw error
         outputChannel.debug(`[ConsoleActions] Failed to get statement range: ${getErrorMessage(err)}`);
+    } finally {
+        detection.dispose();
     }
 
     return undefined;
 }
 
 /**
- * Advances the cursor to the next statement (Positron pattern).
+ * Computes the next statement position, including for documents without an editor.
  * Uses the statement range provider to find the next statement boundary.
  */
-async function advanceStatement(
-    editor: vscode.TextEditor,
+async function nextStatementPosition(
+    target: ResolvedExecutionTarget,
     executedRange: StatementRange,
-    outputChannel: vscode.LogOutputChannel
-): Promise<void> {
-    const document = editor.document;
+    outputChannel: vscode.LogOutputChannel,
+    submissions: EditorCodeSubmissionService,
+): Promise<vscode.Position | undefined> {
+    const { document } = target;
 
     // Calculate the next position by creating a position on the line
     // following the statement (Positron pattern)
@@ -725,17 +670,17 @@ async function advanceStatement(
         // add a newline unless it already ends with an empty line (Positron pattern)
         const lastLine = document.lineAt(document.lineCount - 1);
         if (lastLine.text.trim().length > 0) {
-            await amendNewlineToEnd(editor);
+            if (!await amendNewlineToEnd(target)) { return undefined; }
         }
-        // Use editor.document to get the updated line count after edit
-        newLineNumber = editor.document.lineCount - 1;
+        newLineNumber = document.lineCount - 1;
         newColumn = 0;
     } else {
         // Try to find the next statement to position cursor at its start (Positron pattern)
         const nextStatementRange = await getStatementRangeAtPosition(
             document,
             new vscode.Position(newLineNumber, 0),
-            outputChannel
+            outputChannel,
+            submissions,
         );
 
         if (nextStatementRange) {
@@ -760,22 +705,18 @@ async function advanceStatement(
         }
     }
 
-    // Move cursor (Positron pattern)
-    const newPosition = new vscode.Position(newLineNumber, newColumn);
-    editor.selection = new vscode.Selection(newPosition, newPosition);
-    editor.revealRange(new vscode.Range(newPosition, newPosition), vscode.TextEditorRevealType.InCenterIfOutsideViewport);
+    return new vscode.Position(newLineNumber, newColumn);
 }
 
 /**
- * Advances the cursor to the next non-empty line (Positron pattern).
+ * Computes the next non-empty line without moving a visible editor.
  * Fallback when no statement range provider is available.
  */
-async function advanceLine(
-    editor: vscode.TextEditor,
-    position: vscode.Position,
+async function nextLinePosition(
+    target: ResolvedExecutionTarget,
     lineNumber: number,
-): Promise<void> {
-    const document = editor.document;
+): Promise<vscode.Position | undefined> {
+    const { document } = target;
     let onlyEmptyLines = true;
 
     // Find the next non-empty line (Positron pattern)
@@ -793,28 +734,25 @@ async function advanceLine(
 
         if (lineNumber >= document.lineCount) {
             // Past end of document, add newline and move to it (Positron pattern)
-            await amendNewlineToEnd(editor);
+            if (!await amendNewlineToEnd(target)) { return undefined; }
         }
     }
 
-    // Move cursor (Positron pattern)
-    const newPosition = position.with(lineNumber, 0);
-    editor.selection = new vscode.Selection(newPosition, newPosition);
-    editor.revealRange(new vscode.Range(newPosition, newPosition), vscode.TextEditorRevealType.InCenterIfOutsideViewport);
+    return new vscode.Position(lineNumber, 0);
 }
 
 /**
  * Appends a newline to the end of the document (Positron pattern).
  * Used when cursor is at the end and we need to create space for continued editing.
- * @returns true if the edit was successful, false otherwise
  */
-async function amendNewlineToEnd(editor: vscode.TextEditor): Promise<boolean> {
-    const document = editor.document;
+async function amendNewlineToEnd(target: ResolvedExecutionTarget): Promise<boolean> {
+    const { document, editor } = target;
     const lastLine = document.lineAt(document.lineCount - 1);
-
-    const success = await editor.edit(editBuilder => {
-        editBuilder.insert(lastLine.range.end, '\n');
-    });
-
-    return success;
+    const newline = document.eol === vscode.EndOfLine.CRLF ? '\r\n' : '\n';
+    if (editor) {
+        return editor.edit(editBuilder => editBuilder.insert(lastLine.range.end, newline));
+    }
+    const edit = new vscode.WorkspaceEdit();
+    edit.insert(document.uri, lastLine.range.end, newline);
+    return vscode.workspace.applyEdit(edit);
 }

@@ -29,6 +29,8 @@
         thumbnail?: string;
         cachedThumbnail?: string;
         renderVersion?: number;
+        state?: import("@shared/plots").PlotClientState;
+        renderEstimateMs?: number;
         /** Initial image data to display without a render request */
         initialData?: string;
         initialRenderSettings?: {
@@ -964,6 +966,12 @@
             },
         );
 
+        connection.onNotification("plots/plotStateChanged", (params: {
+            plotId: string; state: import("@shared/plots").PlotClientState; renderEstimateMs: number;
+        }) => {
+            patchPlot(params.plotId, { state: params.state, renderEstimateMs: params.renderEstimateMs });
+        });
+
         // Listen for render completion and keep thumbnail list in sync.
         connection.onNotification(
             "plots/renderCompleted",
@@ -1273,7 +1281,8 @@
     }) {
         if (!connection) return;
         try {
-            await connection.sendRequest("plots/runCodeAgain", data);
+            const plot = plots.find(plot => plot.code === data.code && plot.sessionId === data.sessionId);
+            await connection.sendRequest("plots/runCodeAgain", { ...data, plotId: plot?.id });
         } catch (e) {
             console.error("Failed to run plot code again:", e);
         }

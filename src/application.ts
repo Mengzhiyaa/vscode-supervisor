@@ -375,7 +375,9 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
             editorWindowMover,
             uri => this._previewService.retainProxyUri(uri),
             uri => this._previewService.keepProxyForExternalWindow(uri),
+            this._context.storageUri ?? this._context.globalStorageUri,
         );
+        this._plotEditorProvider.registerSerializer();
         this._disposables.push(this._plotEditorProvider);
 
         // Initialize Data Explorer service and editor provider
@@ -1437,8 +1439,10 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
                 InternalCommandIds.lspGetStatementRange,
                 async (
                     documentUri: string,
-                    position: { line: number; character: number }
+                    position: { line: number; character: number },
+                    token?: vscode.CancellationToken,
                 ) => {
+                    if (token?.isCancellationRequested) { throw new vscode.CancellationError(); }
                     const document = await vscode.workspace.openTextDocument(vscode.Uri.parse(documentUri));
                     const session = this._sessionManager.getConsoleSessionForLanguage(document.languageId);
                     if (!session) {
@@ -1453,17 +1457,21 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
                         session,
                         this._outputChannel,
                     );
+                    if (token?.isCancellationRequested) { throw new vscode.CancellationError(); }
                     if (!provider) {
                         return undefined;
                     }
 
                     const tokenSource = new vscode.CancellationTokenSource();
+                    const cancellation = token?.onCancellationRequested(() => tokenSource.cancel());
                     try {
+                        if (token?.isCancellationRequested) { throw new vscode.CancellationError(); }
                         const statementRange = await provider.provideStatementRange(
                             document,
                             new vscode.Position(position.line, position.character),
                             tokenSource.token
                         );
+                        if (token?.isCancellationRequested) { throw new vscode.CancellationError(); }
                         if (!statementRange) {
                             return undefined;
                         }
@@ -1483,6 +1491,9 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
                             code: statementRange.code,
                         };
                     } catch (error) {
+                        if (token?.isCancellationRequested || error instanceof vscode.CancellationError) {
+                            throw new vscode.CancellationError();
+                        }
                         if (isStatementRangeSyntaxError(error)) {
                             return {
                                 kind: 'rejection' as const,
@@ -1493,6 +1504,7 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
                         this._outputChannel.debug(`[LspBridge] Failed to resolve statement range: ${getErrorMessage(error)}`);
                         return undefined;
                     } finally {
+                        cancellation?.dispose();
                         tokenSource.dispose();
                     }
                 }
@@ -1979,6 +1991,9 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
             }
         };
 
+        await runStep('prepare plot editors', () => this._plotEditorProvider.prepareForShutdown());
+        await runStep('prepare plots', () => this._plotsService.prepareForShutdown());
+        await runStep('save plot editors', () => this._plotEditorProvider.flushPersistedState());
         await runStep('save Console state', () => this._consoleService.flushPersistedState());
         await runStep('save runtime sessions', () => this._runtimeStartupService.prepareForExtensionHostShutdown());
         await runStep('detach runtime sessions', () => this._sessionManager.detachForExtensionHostShutdown());

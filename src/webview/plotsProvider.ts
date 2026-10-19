@@ -343,6 +343,7 @@ export class PlotsViewProvider extends BaseWebviewProvider {
      */
     private _subscribeToPlotsServiceEvents(): void {
         this._disposables.push(
+            this._plotsService.onDidRequestShowPlot(() => { void this._revealPlotsIfHidden(true); }),
             this._plotsService.onDidEmitPlot((plot) => {
                 this._handlePlotAddedFromService(plot);
             }),
@@ -893,7 +894,7 @@ export class PlotsViewProvider extends BaseWebviewProvider {
                 }
                 : undefined,
             name: metadata.name,
-            code: metadata.code,
+            code: metadata.code_is_truncated ? undefined : metadata.code,
             suggestedFileName: metadata.suggested_file_name,
             created,
             parentId: metadata.execution_id,
@@ -931,6 +932,13 @@ export class PlotsViewProvider extends BaseWebviewProvider {
             plotClient.onDidShowPlot(showPlot),
             plotClient.onDidRenderPlot((rendered: RenderedPlot) => {
                 this._applyRenderedPlot(plotClient.id, rendered);
+            }),
+            plotClient.onDidChangeState((state) => {
+                this._notifyConnections(PlotsProtocol.PlotStateChangedNotification.type, {
+                    plotId: plotClient.id,
+                    state: state as PlotsProtocol.PlotClientState,
+                    renderEstimateMs: plotClient.renderEstimateMs,
+                }, candidate => candidate.selectedPlotId === plotClient.id);
             }),
             plotClient.onDidCompleteRender((rendered) => {
                 const plot = this._applyRenderedPlot(plotClient.id, rendered);
@@ -1072,7 +1080,8 @@ export class PlotsViewProvider extends BaseWebviewProvider {
                 const plot = this._plots.get(plotClient.id);
                 if (plot) {
                     plot.name = metadata.name;
-                    plot.code = metadata.code;
+                    plot.parentId = metadata.execution_id;
+                    plot.code = metadata.code_is_truncated ? undefined : metadata.code;
                     plot.suggestedFileName = metadata.suggested_file_name;
                     plot.languageId = metadata.language;
                     plot.originUri = metadata.origin?.uri;
@@ -1090,7 +1099,7 @@ export class PlotsViewProvider extends BaseWebviewProvider {
                         {
                             plotId: plotClient.id,
                             name: metadata.name,
-                            code: metadata.code,
+                            code: plot.code,
                             parentId: metadata.execution_id,
                             languageId: metadata.language,
                             originUri: metadata.origin?.uri,
@@ -1210,6 +1219,56 @@ export class PlotsViewProvider extends BaseWebviewProvider {
         });
     }
 
+    /** Resolve the connection's sizing policy once for snapshots and actual renders. */
+    private async _resolvePlotRenderSettings(
+        state: PlotsConnectionState,
+        plotClient: PlotClientInstance,
+        params: PlotsProtocol.RenderPlotRequest.Params,
+        resolveIntrinsicSize = true,
+    ): Promise<{ size: IPlotSize | undefined; pixel_ratio: number; format: PlotRenderFormat; requiresIntrinsicSize?: boolean }> {
+        const pixelRatio = params.pixelRatio ?? 2;
+        const format = params.format === 'svg' ? PlotRenderFormat.Svg : PlotRenderFormat.Png;
+        const storedPlot = this._plots.get(params.plotId);
+        let policy = state.selectedPlotId === params.plotId
+            ? this._getSizingPolicyForConnection(state)
+            : storedPlot?.sizingPolicyId === 'custom' && storedPlot.customSize
+                ? new PlotSizingPolicyCustom(storedPlot.customSize)
+                : this._plotsService.sizingPolicies.find(p => p.id === storedPlot?.sizingPolicyId)
+                    ?? plotClient.sizingPolicy;
+        if (policy instanceof PlotSizingPolicyIntrinsic && !resolveIntrinsicSize &&
+            (!plotClient.receivedIntrinsicSize || !plotClient.intrinsicSize)) {
+            // A cache snapshot must not wait behind a kernel query. The actual
+            // render request will resolve intrinsic support and its fallback.
+            return { size: undefined, pixel_ratio: pixelRatio, format, requiresIntrinsicSize: true };
+        }
+        const requestedPolicy = policy;
+        if (resolveIntrinsicSize) { policy = await plotClient.resolveSizingPolicy(policy); }
+        if (requestedPolicy instanceof PlotSizingPolicyIntrinsic && policy instanceof PlotSizingPolicyAuto) {
+            // Re-check selection and policy after the async lookup.
+            // Never apply an old plot's fallback to the foreground plot.
+            if (state.selectedPlotId === params.plotId && state.selectedSizingPolicyId === PlotSizingPolicyIntrinsic.ID) {
+                state.selectedSizingPolicyId = PlotSizingPolicyAuto.ID;
+                state.customSize = undefined;
+                state.lastRenderSettingsKey = undefined;
+                this._storeSizingForPlotId(params.plotId, policy.id, undefined);
+                if (this._plotsService.selectedPlotId === params.plotId && plotClient.sizingPolicy.id === PlotSizingPolicyIntrinsic.ID) {
+                    plotClient.sizingPolicy = policy;
+                }
+                this._notifySelectedSizingChanged(state);
+                this._sendPlotsRenderSettings(state);
+            }
+        }
+        const plotSize = policy.getPlotSize({
+            height: params.height,
+            width: params.width
+        });
+        return {
+            size: plotSize && { width: Math.floor(plotSize.width), height: Math.floor(plotSize.height) },
+            pixel_ratio: pixelRatio,
+            format,
+        };
+    }
+
     private _registerRenderingHandlers(connection: MessageConnection): void {
 
         // Track viewport size changes from the webview for pre-render settings.
@@ -1236,6 +1295,38 @@ export class PlotsViewProvider extends BaseWebviewProvider {
             }
         );
 
+        // Fetch only the requested plot's cached image; history/list sync stays metadata-only.
+        connection.onRequest(PlotsProtocol.GetCachedRenderRequest.type, async (params) => {
+            const plotClient = this._plotClients.get(params.plotId);
+            if (!plotClient?.lastRender) { return { matchesTarget: false }; }
+            const state = this._getStateForConnection(connection);
+            const settings = await this._resolvePlotRenderSettings(state, plotClient, params, false);
+            if (this._plotClients.get(params.plotId) !== plotClient) { return { matchesTarget: false }; }
+            const cached = plotClient.getCachedRender(settings.size, settings.pixel_ratio, settings.format);
+            if (!cached) { return { matchesTarget: false }; }
+            connection.sendNotification(PlotsProtocol.PlotStateChangedNotification.type, {
+                plotId: plotClient.id,
+                state: plotClient.state as PlotsProtocol.PlotClientState,
+                renderEstimateMs: plotClient.renderEstimateMs,
+            });
+            // Discovery must still happen when the snapshot avoids the normal render RPC.
+            void plotClient.getIntrinsicSize().catch(error => {
+                this.log(`Failed to discover intrinsic plot size: ${getErrorMessage(error)}`, vscode.LogLevel.Debug);
+            });
+            const { rendered, matchesTarget } = cached;
+            const plot = this._applyRenderedPlot(params.plotId, rendered);
+            return {
+                render: {
+                    uri: rendered.uri,
+                    size: rendered.size,
+                    pixelRatio: rendered.pixel_ratio,
+                    format: rendered.format ?? PlotRenderFormat.Png,
+                    renderVersion: plot?.renderVersion ?? 0,
+                },
+                matchesTarget: matchesTarget && !settings.requiresIntrinsicSize,
+            };
+        });
+
         // Handle render plot request
         connection.onRequest(PlotsProtocol.RenderPlotRequest.type, async (params) => {
             this.log(`Render plot ${params.plotId} at ${params.width}x${params.height}`, vscode.LogLevel.Debug);
@@ -1246,42 +1337,14 @@ export class PlotsViewProvider extends BaseWebviewProvider {
                 // First check if we have a PlotClientInstance (for dynamic re-rendering)
                 const plotClient = this._plotClients.get(params.plotId);
                 if (plotClient) {
-                    const storedPlot = this._plots.get(params.plotId);
-                    let policy = state.selectedPlotId === params.plotId
-                        ? this._getSizingPolicyForConnection(state)
-                        : storedPlot?.sizingPolicyId === 'custom' && storedPlot.customSize
-                            ? new PlotSizingPolicyCustom(storedPlot.customSize)
-                            : this._plotsService.sizingPolicies.find(p => p.id === storedPlot?.sizingPolicyId)
-                                ?? plotClient.sizingPolicy;
-                    if (policy instanceof PlotSizingPolicyIntrinsic && !(await plotClient.getIntrinsicSize())) {
-                        policy = new PlotSizingPolicyAuto();
-                        // Re-check selection and policy after the async lookup.
-                        // Never apply an old plot's fallback to the foreground plot.
-                        if (state.selectedPlotId === params.plotId && state.selectedSizingPolicyId === PlotSizingPolicyIntrinsic.ID) {
-                            state.selectedSizingPolicyId = PlotSizingPolicyAuto.ID;
-                            state.customSize = undefined;
-                            state.lastRenderSettingsKey = undefined;
-                            this._storeSizingForPlotId(params.plotId, policy.id, undefined);
-                            if (this._plotsService.selectedPlotId === params.plotId && plotClient.sizingPolicy.id === PlotSizingPolicyIntrinsic.ID) {
-                                plotClient.sizingPolicy = policy;
-                            }
-                            this._notifySelectedSizingChanged(state);
-                            this._sendPlotsRenderSettings(state);
-                        }
-                    }
-                    const plotSize = policy.getPlotSize({
-                        height: params.height,
-                        width: params.width
-                    });
-                    const pixelRatio = params.pixelRatio ?? 2;
-                    const format = params.format === 'svg' ? PlotRenderFormat.Svg : PlotRenderFormat.Png;
+                    const settings = await this._resolvePlotRenderSettings(state, plotClient, params);
 
                     // The connection's policy has already resolved the size. Applying
                     // the client's policy again would override auxiliary-view sizes.
                     const rendered = await plotClient.renderPlot(
-                        plotSize,
-                        pixelRatio,
-                        format,
+                        settings.size,
+                        settings.pixel_ratio,
+                        settings.format,
                         true  // Suppress completeRenderEmitter — RPC response already carries the data URI
                     );
 
@@ -1425,7 +1488,7 @@ export class PlotsViewProvider extends BaseWebviewProvider {
             }
 
             try {
-                const uri = await savePlotImage(plot.data, `plot-${params.plotId}`, plot.suggestedFileName);
+                const uri = await this._plotsService.exportPlot(params.plotId);
                 if (uri) {
                     this.log(`Saved plot ${params.plotId} to ${uri.fsPath}`, vscode.LogLevel.Debug);
                     vscode.window.showInformationMessage(`Plot saved to ${uri.fsPath}`);
@@ -1826,12 +1889,15 @@ export class PlotsViewProvider extends BaseWebviewProvider {
             }
         });
 
-        connection.onRequest('plots/runCodeAgain', async (params: { code: string; sessionId: string; languageId: string }) => {
+        connection.onRequest(PlotsProtocol.RunCodeAgainRequest.type, async (params) => {
             try {
+                const plot = params.plotId ? this._plotsService.positronPlotInstances.find(plot => plot.id === params.plotId) : undefined;
+                if (params.plotId && (!plot || plot.metadata.session_id !== params.sessionId)) { throw new Error('Plot not found'); }
+                if (plot?.metadata.code_is_truncated) { throw new Error('The complete source code is unavailable.'); }
                 await this._consoleService.executeCode(
                     params.languageId,
                     params.sessionId,
-                    params.code,
+                    plot?.metadata.code ?? params.code,
                     { source: 'plot' },
                     true,
                 );
@@ -2030,7 +2096,6 @@ export class PlotsViewProvider extends BaseWebviewProvider {
 
         const serialized = this._serializePlot(plot);
 
-        void this._revealPlotsIfHidden(true);
         this._notifyConnections(
             PlotsProtocol.PlotAddedNotification.type,
             toPlotAddedParams(serialized),

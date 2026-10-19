@@ -202,6 +202,7 @@ export function registerConsoleDefaults(
     }));
     backend.onRequest(SessionMethods.showOutputChannel, () => undefined);
     backend.onRequest(ConsoleMethods.isComplete, () => ({ status: 'complete' }));
+    backend.onNotification(ConsoleMethods.inputDraftChanged, () => undefined);
     backend.onRequest(ConsoleMethods.submitCode, () => ({ status: 'executed' }));
     backend.onRequest(ConsoleMethods.cancelCompletenessCheck, () => undefined);
     backend.onRequest(ConsoleMethods.cancelSubmission, () => undefined);
@@ -285,6 +286,7 @@ export function registerPlotsDefaults(
         nextCursor: plots.length,
         hasMore: false,
     }));
+    backend.onRequest(PlotsMethods.getCachedRender, () => ({ matchesTarget: false }));
     backend.onRequest(PlotsMethods.render, () => ({
         data: SMALL_PNG_DATA_URI,
         mimeType: 'image/png',

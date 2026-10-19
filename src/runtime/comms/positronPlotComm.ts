@@ -113,7 +113,8 @@ export interface UpdateEvent {
  * Matches Positron's ShowEvent interface.
  */
 export interface ShowEvent {
-    // Empty interface per Positron spec
+    /** Optional pre-rendering data for immediate display */
+    pre_render?: PlotResult;
 }
 
 /**

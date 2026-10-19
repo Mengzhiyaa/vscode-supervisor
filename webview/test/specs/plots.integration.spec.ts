@@ -189,6 +189,7 @@ test('plots sends save, editor, gallery, and code action requests', async ({ pag
     await page.getByLabel('Plot code actions').click();
     await page.getByText('Run Code Again').click();
     await expect.poll(async () => (await runCodeAgainRequest).params).toEqual({
+        plotId: 'plot-1',
         code: 'plot(cars)',
         sessionId: 'session-1',
         languageId: 'r',
@@ -943,6 +944,7 @@ test('plots routes code actions to the correct session for cross-session plots',
     await page.getByLabel('Plot code actions').click();
     await page.getByText('Run Code Again').click();
     expect((await runCodeAgain).params).toEqual({
+        plotId: 'plot-s2',
         code: 'plot(mtcars)',
         sessionId: 'session-2',
         languageId: 'r',

@@ -31,6 +31,7 @@
         type ConsoleSessionInfo as SessionInfo,
     } from "./models/consoleInstance";
     import type { ConsoleInputCommand } from "./services/sessionModelManager";
+    import type { ConsoleInputEdit } from "@shared/consoleInputState";
     import {
         promptInputControllersContext,
         type PromptInputController,
@@ -156,6 +157,19 @@
     let inputAnchorVersion = $state(0);
     const scrollLockedBySession = new SvelteMap<string, boolean>();
     const submittingBySession = new SvelteMap<string, boolean>();
+    const hostSubmittingBySession = new SvelteMap<string, boolean>();
+    const hostSubmissionVersions = new Map<string, number>();
+
+    function updateHostSubmission(sessionId: string, submitting: boolean, version?: number): void {
+        const previous = hostSubmissionVersions.get(sessionId);
+        if (previous !== undefined && (version === undefined || version < previous)) { return; }
+        if (version !== undefined) { hostSubmissionVersions.set(sessionId, version); }
+        hostSubmittingBySession.set(sessionId, submitting);
+    }
+
+    function isSubmitting(sessionId: string): boolean {
+        return hostSubmittingBySession.get(sessionId) === true || submittingBySession.get(sessionId) === true;
+    }
     let sessionSwitchNonce = 0;
     let revealRequest = $state<
         { sessionId: string; executionId: string; nonce: number } | undefined
@@ -386,6 +400,12 @@
         for (const sessionId of [...submittingBySession.keys()]) {
             if (!remainingSessionIds.has(sessionId)) {
                 submittingBySession.delete(sessionId);
+            }
+        }
+        for (const sessionId of [...hostSubmittingBySession.keys()]) {
+            if (!remainingSessionIds.has(sessionId)) {
+                hostSubmittingBySession.delete(sessionId);
+                hostSubmissionVersions.delete(sessionId);
             }
         }
         if (
@@ -1534,13 +1554,14 @@
 
     function restoreConsoleState(
         sessionId: string,
-        state: SerializedConsoleState,
+        state: SerializedConsoleState & { codeSubmissionInProgress?: boolean; submissionStateVersion?: number },
     ): void {
         if (!state || (state.version !== 1 && state.version !== 2 && state.version !== 3)) {
             return;
         }
 
         ensureSessionData(sessionId);
+        updateHostSubmission(sessionId, state.codeSubmissionInProgress === true, state.submissionStateVersion);
         const data = getSessionData(sessionId);
 
         const runtimeItems: RuntimeItem[] = [];
@@ -1845,13 +1866,18 @@
 
         connection.onNotification(
             "console/setPendingCode",
-            (params: { sessionId: string; code?: string }) => {
+            (params: { sessionId: string } & ConsoleInputEdit) => {
                 emitInputCommand(params.sessionId, {
                     kind: "setPendingCode",
                     code: params.code,
+                    expectedDraft: params.expectedDraft,
                 });
             },
         );
+
+        connection.onNotification('console/submissionStateChanged', (params: { sessionId: string; submitting: boolean; version?: number }) => {
+            updateHostSubmission(params.sessionId, params.submitting, params.version);
+        });
 
         connection.onNotification(
             "console/pendingInputChanged",
@@ -2135,8 +2161,8 @@
     async function handleInterrupt(sessionId?: string) {
         const targetSessionId = sessionId || activeConsoleSessionId;
         if (!targetSessionId) return;
-        if (submittingBySession.get(targetSessionId)) {
-            emitInputCommand(targetSessionId, { kind: "cancelSubmission" });
+        if (isSubmitting(targetSessionId)) {
+            cancelSubmission(targetSessionId);
             return;
         }
         if (!connection) return;
@@ -2389,7 +2415,7 @@
                 stateLabel={stateLabelForSession(activeSession)}
                 interruptible={activeSession?.state === "busy"}
                 submitting={activeConsoleSessionId
-                    ? (submittingBySession.get(activeConsoleSessionId) ?? false)
+                    ? isSubmitting(activeConsoleSessionId)
                     : false}
                 interrupting={activeSession?.state === "interrupting"}
                 restarting={
@@ -2456,9 +2482,7 @@
                             {consoleInstance}
                             active={consoleInstance.sessionId === activeConsoleSessionId}
                             width={visibleConsolePaneWidth}
-                            submitting={submittingBySession.get(
-                                consoleInstance.sessionId,
-                            ) ?? false}
+                            submitting={isSubmitting(consoleInstance.sessionId)}
                             {languageAssetsVersion}
                             {charWidth}
                             {revealRequest}
@@ -2483,6 +2507,7 @@
 
                     <SharedConsoleInputHost
                         activeConsoleInstance={activeConsoleInstance}
+                        hostSubmitting={activeConsoleSessionId ? hostSubmittingBySession.get(activeConsoleSessionId) === true : false}
                         width={visibleConsolePaneWidth}
                         {languageAssetsVersion}
                         {connection}

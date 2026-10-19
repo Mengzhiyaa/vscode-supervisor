@@ -59,6 +59,6 @@ export function imageFileName(mimeType: string, fallback: string, suggested?: st
     const name = (suggested || fallback).split(/[\\/]/).pop()!
         .replace(/[<>:"|?*\x00-\x1f]/g, '_')
         .replace(/[. ]+$/, '');
-    const stem = name.replace(/\.(png|jpe?g|svg|gif|webp|avif|bmp|ico|tiff?)$/i, '') || 'plot';
+    const stem = name.replace(/\.(png|jpe?g|svg|gif|webp|avif|bmp|ico|tiff?|pdf)$/i, '') || 'plot';
     return `${stem}.${extension}`;
 }

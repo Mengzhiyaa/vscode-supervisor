@@ -7,16 +7,20 @@
 
 import { getErrorMessage } from '../shared/errors';
 import * as vscode from 'vscode';
+import { createHash } from 'crypto';
 import { createMessageConnection, type MessageConnection } from 'vscode-jsonrpc/node';
-import { PlotClientInstance } from '../runtime/PlotClientInstance';
+import { PlotClientInstance, ZoomLevel, type PlotMetadata } from '../runtime/PlotClientInstance';
 import { savePlotImage } from '../runtime/plotImageExport';
 import { PlotRenderFormat } from '../runtime/comms/positronPlotComm';
 import { PositronPlotsService } from '../runtime/positronPlotsService';
 import * as RpcProtocol from '../rpc/webview/plotEditor';
 import { WebviewMessageReader, WebviewMessageWriter } from '../rpc/webview/transport';
 import { StaticPlotClient } from '../runtime/staticPlotClient';
+import { HtmlPlotClient } from '../runtime/htmlPlotClient';
+import { isZoomablePlotClient, type IPositronPlotClient } from '../runtime/positronPlots';
 import {
     decodeImageDataUrl,
+    mimeTypeFromDataUrl,
     extensionForMimeType,
 } from '../runtime/imageDataUrl';
 import {
@@ -84,6 +88,12 @@ export class PlotEditorProvider implements vscode.Disposable {
     private readonly _newWindowPanelGroups = new Map<string, vscode.TabGroup>();
     private readonly _proxyLeases = new Map<string, vscode.Disposable>();
     private readonly _disposables: vscode.Disposable[] = [];
+    private readonly _modelSubscriptions = new Map<string, vscode.Disposable[]>();
+    private readonly _renderVersions = new Map<string, number>();
+    private readonly _renderSerials = new Map<string, number>();
+    private readonly _restoreWaiters = new Set<() => void>();
+    private _shuttingDown = false;
+    private readonly _snapshotWrites = new Map<string, Promise<void>>();
 
     constructor(
         private readonly _extensionUri: vscode.Uri,
@@ -93,6 +103,7 @@ export class PlotEditorProvider implements vscode.Disposable {
         private readonly _editorWindowMover: EditorWindowMover = new EditorWindowMover(),
         private readonly _retainProxyUri?: (uri: vscode.Uri) => vscode.Disposable,
         private readonly _keepProxyForExternalWindow?: (uri: vscode.Uri) => void,
+        private readonly _storageUri?: vscode.Uri,
     ) {
         this._disposables.push(vscode.window.tabGroups.onDidChangeTabGroups(event => {
             for (const [plotId, group] of this._newWindowPanelGroups) {
@@ -112,6 +123,37 @@ export class PlotEditorProvider implements vscode.Disposable {
         }));
     }
 
+    registerSerializer(): void {
+        this._disposables.push(vscode.window.registerWebviewPanelSerializer('positronPlotEditor', {
+            deserializeWebviewPanel: async (panel, state: unknown) => {
+                const saved = state as { version?: number; plotId?: string; sessionId?: string; staticSnapshot?: boolean } | undefined;
+                if (saved?.version !== 1 || typeof saved.plotId !== 'string' || typeof saved.sessionId !== 'string') {
+                    panel.dispose();
+                    return;
+                }
+                let closed = false;
+                const closeListener = panel.onDidDispose(() => { closed = true; });
+                try {
+                    const plot = saved.staticSnapshot
+                        ? await this._restoreStaticSnapshot(saved.plotId, saved.sessionId)
+                        : await this._waitForEditorInstance(saved.plotId, saved.sessionId, panel);
+                    if (closed || this._shuttingDown) { throw new vscode.CancellationError(); }
+                    const content: PlotEditorContent = plot instanceof HtmlPlotClient
+                        ? { kind: 'html', uri: plot.uri.toString(true), title: plot.metadata.name }
+                        : { kind: 'image', data: plot instanceof StaticPlotClient ? plot.uri : plot instanceof PlotClientInstance ? plot.lastRender?.uri ?? '' : '' };
+                    this.openPlotInEditor(saved.plotId, content, panel.title, panel.viewColumn, false, panel);
+                } catch (error) {
+                    if (!this._shuttingDown && !(error instanceof vscode.CancellationError)) {
+                        void vscode.window.showWarningMessage(vscode.l10n.t('The plot session could not be restored.'));
+                    }
+                    panel.dispose();
+                } finally {
+                    closeListener.dispose();
+                }
+            },
+        }));
+    }
+
     /**
      * Opens a plot in a new editor tab.
      * @param plotId The unique identifier for the plot
@@ -124,6 +166,7 @@ export class PlotEditorProvider implements vscode.Disposable {
         title?: string,
         viewColumn: vscode.ViewColumn = vscode.ViewColumn.Active,
         revealExisting = true,
+        restoredPanel?: vscode.WebviewPanel,
     ): void {
         const content = typeof plotContent === 'string'
             ? { kind: 'image' as const, data: plotContent }
@@ -139,7 +182,7 @@ export class PlotEditorProvider implements vscode.Disposable {
             return;
         }
 
-        const panel = vscode.window.createWebviewPanel(
+        const panel = restoredPanel ?? vscode.window.createWebviewPanel(
             'positronPlotEditor',
             title || `Plot: ${plotId.substring(0, 8)}`,
             viewColumn,
@@ -152,6 +195,11 @@ export class PlotEditorProvider implements vscode.Disposable {
             }
         );
 
+        panel.webview.options = {
+            enableScripts: true,
+            localResourceRoots: [vscode.Uri.joinPath(this._extensionUri, 'webview', 'dist')],
+        };
+        this._panels.set(plotId, panel);
         const connection = this._setupRpcConnection(panel.webview);
         const surfaceAttachment = this._surfaceLifecycle
             ?.findModelByResource(SurfaceModelKind.Plot, plotId);
@@ -165,12 +213,28 @@ export class PlotEditorProvider implements vscode.Disposable {
             : undefined;
         this._connections.set(plotId, connection);
         this._registerRpcHandlers(plotId, panel, connection);
+        this._bindPlotClient(plotId, panel);
         connection.listen();
 
         panel.webview.html = this._getEditorHtml(panel.webview);
         this._sendContent(plotId, content);
 
         panel.onDidDispose(() => {
+            if (this._panels.get(plotId) !== panel) { return; }
+            this._modelSubscriptions.get(plotId)?.forEach(subscription => subscription.dispose());
+            this._modelSubscriptions.delete(plotId);
+            if (!this._shuttingDown) {
+                const sessionId = this._plotsService?.getEditorInstance(plotId)?.metadata.session_id;
+                this._plotsService?.removeEditorPlot(plotId);
+                const file = sessionId ? this._snapshotUri(plotId, sessionId) : undefined;
+                if (file) {
+                    void (this._snapshotWrites.get(plotId) ?? Promise.resolve()).then(async () => {
+                        if (!this._panels.has(plotId)) { await vscode.workspace.fs.delete(file); }
+                    }).catch(() => undefined);
+                }
+            }
+            this._renderVersions.delete(plotId);
+            this._renderSerials.delete(plotId);
             this._proxyLeases.get(plotId)?.dispose();
             this._proxyLeases.delete(plotId);
             attachmentLease?.dispose();
@@ -228,6 +292,121 @@ export class PlotEditorProvider implements vscode.Disposable {
         this._outputChannel.debug(`Plot editor ${plotId} moved to new window`);
     }
 
+    private _snapshotUri(plotId: string, sessionId: string): vscode.Uri | undefined {
+        return this._storageUri && vscode.Uri.joinPath(this._storageUri, 'plot-editors',
+            `${createHash('sha256').update(JSON.stringify([sessionId, plotId])).digest('hex')}.json`);
+    }
+
+    private _persistStaticSnapshot(plotId: string): void {
+        const plot = this._plotsService?.getEditorInstance(plotId);
+        if (!(plot instanceof StaticPlotClient)) { return; }
+        const file = this._snapshotUri(plotId, plot.metadata.session_id);
+        if (!file) { return; }
+        const bytes = Buffer.from(JSON.stringify({ metadata: plot.metadata, mimeType: plot.mimeType, data: plot.data }));
+        if (bytes.byteLength > MaxHtmlExportBytes) { return; }
+        const previous = this._snapshotWrites.get(plotId) ?? Promise.resolve();
+        const write = previous.catch(() => undefined).then(async () => {
+            await vscode.workspace.fs.createDirectory(vscode.Uri.joinPath(this._storageUri!, 'plot-editors'));
+            await vscode.workspace.fs.writeFile(file, bytes);
+        }).catch(error => this._outputChannel.warn(`Failed to preserve plot editor: ${getErrorMessage(error)}`));
+        this._snapshotWrites.set(plotId, write);
+    }
+
+    private async _restoreStaticSnapshot(plotId: string, sessionId: string): Promise<StaticPlotClient> {
+        const file = this._snapshotUri(plotId, sessionId);
+        if (!file || !this._plotsService || (await vscode.workspace.fs.stat(file)).size > MaxHtmlExportBytes) {
+            throw new Error('Static plot snapshot is unavailable');
+        }
+        const snapshot = JSON.parse(Buffer.from(await vscode.workspace.fs.readFile(file)).toString('utf8')) as {
+            metadata?: PlotMetadata; mimeType?: string; data?: string;
+        };
+        if (snapshot.metadata?.id !== plotId || snapshot.metadata.session_id !== sessionId ||
+            typeof snapshot.mimeType !== 'string' || !snapshot.mimeType.startsWith('image/') || typeof snapshot.data !== 'string') {
+            throw new Error('Invalid static plot snapshot');
+        }
+        return this._plotsService.restoreStaticEditorInstance(snapshot.metadata, snapshot.mimeType, snapshot.data);
+    }
+
+    async flushPersistedState(): Promise<void> {
+        await Promise.all(this._snapshotWrites.values());
+    }
+
+    private _waitForEditorInstance(plotId: string, sessionId: string, panel: vscode.WebviewPanel): Promise<IPositronPlotClient> {
+        const getPlot = () => {
+            const plot = this._plotsService?.getEditorInstance(plotId) ?? this._plotsService?.getOrCreateEditorInstance(plotId);
+            return plot?.metadata.session_id === sessionId ? plot : undefined;
+        };
+        const existing = getPlot();
+        if (existing) { return Promise.resolve(existing); }
+        return new Promise((resolve, reject) => {
+            const subscriptions: vscode.Disposable[] = [];
+            let settled = false;
+            const cancel = () => finish(undefined, new vscode.CancellationError());
+            const finish = (plot?: IPositronPlotClient, error?: Error) => {
+                if (settled) { return; }
+                settled = true;
+                clearTimeout(timer);
+                subscriptions.forEach(subscription => subscription.dispose());
+                this._restoreWaiters.delete(cancel);
+                if (plot) { resolve(plot); } else { reject(error); }
+            };
+            const timer = setTimeout(() => finish(undefined, new Error('Plot session did not reconnect')), 30_000);
+            this._restoreWaiters.add(cancel);
+            subscriptions.push(panel.onDidDispose(cancel));
+            if (this._plotsService) {
+                subscriptions.push(this._plotsService.onDidCreateEditorPlot(plot => {
+                    if (plot.id === plotId && plot.metadata.session_id === sessionId) { finish(plot); }
+                }));
+                subscriptions.push(this._plotsService.onDidEmitPlot(() => {
+                    const plot = getPlot();
+                    if (plot) { finish(plot); }
+                }));
+            }
+        });
+    }
+
+    private _bindPlotClient(plotId: string, panel: vscode.WebviewPanel): void {
+        this._modelSubscriptions.get(plotId)?.forEach(subscription => subscription.dispose());
+        const plot = this._plotsService?.getEditorInstance(plotId);
+        const subscriptions: vscode.Disposable[] = [];
+        this._modelSubscriptions.set(plotId, subscriptions);
+        if (!plot) { return; }
+        this._persistStaticSnapshot(plotId);
+        const sendState = () => {
+            this._persistStaticSnapshot(plotId);
+            this._connections.get(plotId)?.sendNotification(RpcProtocol.PlotEditorStateNotification.type, {
+                ...this._getSizingState(plotId),
+                zoomLevel: isZoomablePlotClient(plot) ? plot.zoomLevel : undefined,
+                state: plot instanceof PlotClientInstance ? plot.state : undefined,
+                renderEstimateMs: plot instanceof PlotClientInstance ? plot.renderEstimateMs : undefined,
+            });
+        };
+        if (isZoomablePlotClient(plot)) { subscriptions.push(plot.onDidChangeZoomLevel(sendState)); }
+        if (plot instanceof PlotClientInstance) {
+            subscriptions.push(
+                plot.onDidCompleteRender(rendered => {
+                    this._renderSerials.set(plotId, (this._renderSerials.get(plotId) ?? 0) + 1);
+                    this._deliverImage(plotId, rendered.uri, mimeTypeFromDataUrl(rendered.uri));
+                }),
+                plot.onDidChangeSizingPolicy(sendState),
+                plot.onDidSetIntrinsicSize(sendState),
+                plot.onDidChangeState(sendState),
+                plot.onDidClose(() => { if (!this._shuttingDown) { panel.dispose(); } }),
+            );
+            void plot.getIntrinsicSize().catch(error => this._outputChannel.debug(getErrorMessage(error)));
+        }
+    }
+
+    private _deliverImage(plotId: string, data: string, mimeType: string): void {
+        const previous = this._currentPlotContent.get(plotId);
+        const version = (this._renderVersions.get(plotId) ?? 0) + (previous?.kind === 'image' && previous.data === data ? 0 : 1);
+        this._renderVersions.set(plotId, version);
+        this._currentPlotContent.set(plotId, { kind: 'image', data, mimeType });
+        this._connections.get(plotId)?.sendNotification(RpcProtocol.PlotEditorRenderResultNotification.type, {
+            data, mimeType, renderVersion: version,
+        });
+    }
+
     private _setupRpcConnection(webview: vscode.Webview): MessageConnection {
         const reader = new WebviewMessageReader(webview);
         const writer = new WebviewMessageWriter(webview);
@@ -243,6 +422,13 @@ export class PlotEditorProvider implements vscode.Disposable {
             const content = this._currentPlotContent.get(plotId);
             if (content) {
                 this._sendContent(plotId, content);
+                const plot = this._plotsService?.getEditorInstance(plotId);
+                if (plot instanceof PlotClientInstance) {
+                    connection.sendNotification(RpcProtocol.PlotEditorStateNotification.type, {
+                        state: plot.state,
+                        renderEstimateMs: plot.renderEstimateMs,
+                    });
+                }
             }
         });
 
@@ -264,6 +450,13 @@ export class PlotEditorProvider implements vscode.Disposable {
 
         connection.onNotification(RpcProtocol.PlotEditorCloseNotification.type, () => {
             panel.dispose();
+        });
+
+        connection.onNotification(RpcProtocol.PlotEditorSelectZoomNotification.type, ({ zoomLevel }) => {
+            const plot = this._plotsService?.getEditorInstance(plotId);
+            if (isZoomablePlotClient(plot) && [0, 0.5, 0.75, 1, 2].includes(zoomLevel)) {
+                plot.zoomLevel = zoomLevel as ZoomLevel;
+            }
         });
 
         connection.onNotification(RpcProtocol.PlotEditorRenderNotification.type, (params) => {
@@ -314,6 +507,11 @@ export class PlotEditorProvider implements vscode.Disposable {
         }
         connection.sendNotification(RpcProtocol.PlotEditorSetContentNotification.type, {
             ...content,
+            plotId,
+            sessionId: this._plotsService?.getEditorInstance(plotId)?.metadata.session_id,
+            zoomLevel: (() => { const plot = this._plotsService?.getEditorInstance(plotId); return isZoomablePlotClient(plot) ? plot.zoomLevel : undefined; })(),
+            renderVersion: this._renderVersions.get(plotId) ?? 0,
+            staticSnapshot: this._plotsService?.getEditorInstance(plotId) instanceof StaticPlotClient && !!this._storageUri,
             ...(content.kind === 'image' ? this._getSizingState(plotId) : {}),
         });
     }
@@ -332,21 +530,15 @@ export class PlotEditorProvider implements vscode.Disposable {
         const pixelRatio = Number.isFinite(message.pixelRatio) && message.pixelRatio > 0 ? message.pixelRatio : 1;
         const format = message.format === 'svg' ? PlotRenderFormat.Svg : PlotRenderFormat.Png;
 
+        const serial = (this._renderSerials.get(plotId) ?? 0) + 1;
+        this._renderSerials.set(plotId, serial);
         try {
             const rendered = await this._renderPlot(plotId, width, height, pixelRatio, format);
-            if (!rendered?.data || this._connections.get(plotId) !== connection) {
+            if (!rendered?.data || this._connections.get(plotId) !== connection || this._renderSerials.get(plotId) !== serial) {
                 return;
             }
 
-            this._currentPlotContent.set(plotId, {
-                kind: 'image',
-                data: rendered.data,
-                mimeType: rendered.mimeType,
-            });
-            connection.sendNotification(RpcProtocol.PlotEditorRenderResultNotification.type, {
-                data: rendered.data,
-                mimeType: rendered.mimeType,
-            });
+            this._deliverImage(plotId, rendered.data, rendered.mimeType);
         } catch (error) {
             this._outputChannel.warn(`Failed to re-render plot ${plotId} in editor: ${getErrorMessage(error)}`);
         }
@@ -402,7 +594,9 @@ export class PlotEditorProvider implements vscode.Disposable {
         try {
             const plot = this._plotsService?.getEditorInstance(plotId) ??
                 this._plotsService?.positronPlotInstances.find(candidate => candidate.id === plotId);
-            const uri = content.kind === 'image'
+            const uri = plot instanceof PlotClientInstance
+                ? await this._plotsService!.exportPlot(plotId, true)
+                : content.kind === 'image'
                 ? await savePlotImage(content.data, `plot-${plotId}`, plot?.metadata.suggested_file_name)
                 : await vscode.window.showSaveDialog({
                     defaultUri: vscode.Uri.file(`plot-${plotId.substring(0, 8)}.html`),
@@ -540,9 +734,21 @@ export class PlotEditorProvider implements vscode.Disposable {
         return text;
     }
 
+    prepareForShutdown(): void {
+        this._shuttingDown = true;
+        for (const cancel of this._restoreWaiters) { cancel(); }
+    }
+
     dispose(): void {
+        for (const lease of this._proxyLeases.values()) { lease.dispose(); }
+        this._proxyLeases.clear();
+        for (const subscriptions of this._modelSubscriptions.values()) {
+            subscriptions.forEach(subscription => subscription.dispose());
+        }
+        this._modelSubscriptions.clear();
+        for (const cancel of this._restoreWaiters) { cancel(); }
         for (const panel of this._panels.values()) {
-            panel.dispose();
+            if (!this._shuttingDown) { panel.dispose(); }
         }
         this._panels.clear();
 

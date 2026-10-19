@@ -73,6 +73,11 @@ export namespace PlotEditorSetContentNotification {
         title?: string;
         sizingPolicies?: { id: string; name: string }[];
         selectedSizingPolicyId?: string;
+        plotId?: string;
+        sessionId?: string;
+        zoomLevel?: number;
+        renderVersion?: number;
+        staticSnapshot?: boolean;
     }
 
     export const type = new NotificationType<Params>('plotEditor/setContent');
@@ -93,7 +98,30 @@ export namespace PlotEditorRenderResultNotification {
     export interface Params {
         data: string;
         mimeType: string;
+        renderVersion?: number;
     }
 
     export const type = new NotificationType<Params>('plotEditor/renderResult');
+}
+
+export namespace PlotEditorSelectZoomNotification {
+
+    export interface Params {
+        zoomLevel: number;
+    }
+
+    export const type = new NotificationType<Params>('plotEditor/selectZoom');
+}
+
+export namespace PlotEditorStateNotification {
+
+    export interface Params {
+        zoomLevel?: number;
+        sizingPolicies?: { id: string; name: string }[];
+        selectedSizingPolicyId?: string;
+        state?: string;
+        renderEstimateMs?: number;
+    }
+
+    export const type = new NotificationType<Params>('plotEditor/state');
 }

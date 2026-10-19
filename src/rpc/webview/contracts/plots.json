@@ -4,6 +4,58 @@
   "declarations": [
     {
       "kind": "interface",
+      "name": "CachedPlotRender",
+      "fields": [
+        {
+          "name": "uri",
+          "type": "string"
+        },
+        {
+          "name": "size",
+          "optional": true,
+          "type": "{ width: number; height: number; }"
+        },
+        {
+          "name": "pixelRatio",
+          "type": "number"
+        },
+        {
+          "name": "format",
+          "type": "'png' | 'svg' | 'jpeg' | 'pdf' | 'tiff'"
+        },
+        {
+          "name": "renderVersion",
+          "type": "number"
+        }
+      ]
+    },
+    {
+      "kind": "request",
+      "name": "GetCachedRenderRequest",
+      "method": "plots/getCachedRender",
+      "paramsType": "RenderPlotRequest.Params",
+      "resultType": "Result",
+      "errorType": "void",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Result",
+          "fields": [
+            {
+              "name": "render",
+              "optional": true,
+              "type": "CachedPlotRender"
+            },
+            {
+              "name": "matchesTarget",
+              "type": "boolean"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "interface",
       "name": "PlotData",
       "fields": [
         {
@@ -771,6 +823,11 @@
             {
               "name": "state",
               "type": "PlotClientState"
+            },
+            {
+              "name": "renderEstimateMs",
+              "type": "number",
+              "optional": true
             }
           ]
         }
@@ -882,8 +939,14 @@
           "kind": "interface",
           "name": "Params",
           "fields": [
-            { "name": "plotId", "type": "string" },
-            { "name": "active", "type": "boolean" }
+            {
+              "name": "plotId",
+              "type": "string"
+            },
+            {
+              "name": "active",
+              "type": "boolean"
+            }
           ]
         }
       ]
@@ -1010,6 +1073,54 @@
             {
               "name": "plotId",
               "type": "string"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "request",
+      "name": "RunCodeAgainRequest",
+      "method": "plots/runCodeAgain",
+      "paramsType": "Params",
+      "resultType": "Result",
+      "errorType": "void",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "plotId",
+              "type": "string",
+              "optional": true
+            },
+            {
+              "name": "code",
+              "type": "string"
+            },
+            {
+              "name": "sessionId",
+              "type": "string"
+            },
+            {
+              "name": "languageId",
+              "type": "string"
+            }
+          ]
+        },
+        {
+          "kind": "interface",
+          "name": "Result",
+          "fields": [
+            {
+              "name": "success",
+              "type": "boolean"
+            },
+            {
+              "name": "error",
+              "type": "string",
+              "optional": true
             }
           ]
         }

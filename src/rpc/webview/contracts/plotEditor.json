@@ -152,6 +152,31 @@
               "name": "selectedSizingPolicyId",
               "optional": true,
               "type": "string"
+            },
+            {
+              "name": "plotId",
+              "type": "string",
+              "optional": true
+            },
+            {
+              "name": "sessionId",
+              "type": "string",
+              "optional": true
+            },
+            {
+              "name": "zoomLevel",
+              "type": "number",
+              "optional": true
+            },
+            {
+              "name": "renderVersion",
+              "type": "number",
+              "optional": true
+            },
+            {
+              "name": "staticSnapshot",
+              "type": "boolean",
+              "optional": true
             }
           ]
         }
@@ -196,6 +221,68 @@
             {
               "name": "mimeType",
               "type": "string"
+            },
+            {
+              "name": "renderVersion",
+              "type": "number",
+              "optional": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "PlotEditorSelectZoomNotification",
+      "method": "plotEditor/selectZoom",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "zoomLevel",
+              "type": "number"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "PlotEditorStateNotification",
+      "method": "plotEditor/state",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "zoomLevel",
+              "type": "number",
+              "optional": true
+            },
+            {
+              "name": "sizingPolicies",
+              "type": "{ id: string; name: string }[]",
+              "optional": true
+            },
+            {
+              "name": "selectedSizingPolicyId",
+              "type": "string",
+              "optional": true
+            },
+            {
+              "name": "state",
+              "type": "string",
+              "optional": true
+            },
+            {
+              "name": "renderEstimateMs",
+              "type": "number",
+              "optional": true
             }
           ]
         }

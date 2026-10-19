@@ -71,6 +71,8 @@ export class HtmlPlotClient implements IPositronPlotClient, vscode.Disposable {
         client.metadata.name = metadata.name;
         client.metadata.execution_id = metadata.execution_id;
         client.metadata.code = metadata.code ?? '';
+        client.metadata.code_is_truncated = metadata.code_is_truncated;
+        client.metadata.origin = metadata.origin;
         client.metadata.session_id = metadata.session_id;
         client.metadata.output_id = metadata.output_id;
         client.metadata.suggested_file_name = metadata.suggested_file_name;

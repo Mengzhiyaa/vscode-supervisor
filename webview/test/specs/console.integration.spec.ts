@@ -1,5 +1,6 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import type * as Monaco from 'monaco-editor/editor';
+import type { ConsoleInputDraft } from '../../../src/shared/consoleInputState';
 import { ConsoleMethods, SessionMethods, createSession, registerConsoleDefaults } from '../harness/domains';
 import { openWebviewPage } from '../harness/page';
 
@@ -1924,78 +1925,46 @@ test('console respects host-owned submission results for incomplete, executed, a
     await expect(monacoInput).toHaveCount(1);
     await monacoInput.focus();
 
-    const initialExecuteCount = backend.requestCount(ConsoleMethods.submitCode);
-
-    await backend.notify(ConsoleMethods.setPendingCode, {
-        sessionId: 'session-1',
-        code: 'needs-more',
+    const getEditorValue = () => page.evaluate(() => {
+        const monaco = (globalThis as typeof globalThis & { monaco: typeof Monaco }).monaco;
+        return monaco.editor.getEditors().find(editor =>
+            editor.getDomNode()?.closest('.console-input'),
+        )?.getValue();
     });
-    await page.waitForTimeout(200);
-    await monacoInput.press('Enter');
-    await page.waitForTimeout(200);
-    expect(backend.requestCount(ConsoleMethods.submitCode)).toBe(initialExecuteCount + 1);
+    const getInputDraft = () => backend.notifications(ConsoleMethods.inputDraftChanged)
+        .map(notification => notification.params as { sessionId: string; draft: ConsoleInputDraft })
+        .filter(params => params.sessionId === 'session-1')
+        .at(-1)?.draft;
+    await expect.poll(getEditorValue).toBe('');
+    let executeCount = backend.requestCount(ConsoleMethods.submitCode);
 
-    await backend.notify(ConsoleMethods.setPendingCode, {
-        sessionId: 'session-1',
-        code: 'invalid-fragment',
-    });
-    await page.waitForTimeout(200);
-    const invalidExecute = backend.waitForNextRequest(ConsoleMethods.submitCode);
-    await monacoInput.press('Enter');
-    await expect.poll(async () => (await invalidExecute).params).toEqual(
-        expect.objectContaining({
-            sessionId: 'session-1',
-            code: 'invalid-fragment',
-        }),
-    );
-    expect((await invalidExecute).params).not.toHaveProperty('allowIncomplete');
-
-    await backend.notify(ConsoleMethods.setPendingCode, {
-        sessionId: 'session-1',
-        code: 'unknown-fragment',
-    });
-    await page.waitForTimeout(200);
-    const unknownExecute = backend.waitForNextRequest(ConsoleMethods.submitCode);
-    await monacoInput.press('Enter');
-    await expect.poll(async () => (await unknownExecute).params).toEqual(
-        expect.objectContaining({
-            sessionId: 'session-1',
-            code: 'unknown-fragment',
-        }),
-    );
-
-    const executedAfterUnknown = backend.requestCount(ConsoleMethods.submitCode);
-    await backend.notify(ConsoleMethods.setPendingCode, {
-        sessionId: 'session-1',
-        code: 'failing-fragment',
-    });
-    await page.waitForTimeout(200);
-    await monacoInput.press('Enter');
-    await page.waitForTimeout(200);
-    expect(backend.requestCount(ConsoleMethods.submitCode)).toBe(executedAfterUnknown + 1);
-
-    const getEditorValue = () =>
-        page.evaluate(() => {
-            const editors = (globalThis as any).monaco?.editor?.getEditors?.();
-            if (editors && editors.length > 0) {
-                return editors[0].getValue();
-            }
-            return null;
+    for (const { code, expectedInput } of [
+        { code: 'needs-more', expectedInput: 'needs-more\n' },
+        { code: 'invalid-fragment', expectedInput: '' },
+        { code: 'unknown-fragment', expectedInput: '' },
+        { code: 'failing-fragment', expectedInput: 'failing-fragment' },
+        { code: 'rejected-fragment', expectedInput: 'rejected-fragment' },
+    ]) {
+        // Match the Host's versioned edit so a nonempty draft can be replaced
+        // without bypassing protection for newer user edits.
+        const currentCode = await getEditorValue();
+        await expect.poll(() => getInputDraft()?.code).toBe(currentCode);
+        const expectedDraft = getInputDraft();
+        expect(expectedDraft).toBeDefined();
+        await backend.notify(ConsoleMethods.setPendingCode, {
+            sessionId: 'session-1', code, expectedDraft,
         });
+        await expect.poll(getEditorValue).toBe(code);
 
-    await backend.notify(ConsoleMethods.setPendingCode, {
-        sessionId: 'session-1',
-        code: 'rejected-fragment',
-    });
-    await page.waitForTimeout(200);
-    const executeCountBeforeRejection =
-        backend.requestCount(ConsoleMethods.submitCode);
-    await monacoInput.press('Enter');
-
-    await expect
-        .poll(() => backend.requestCount(ConsoleMethods.submitCode))
-        .toBe(executeCountBeforeRejection + 1);
-    await expect.poll(getEditorValue).toBe('rejected-fragment');
+        const execute = backend.waitForNextRequest(ConsoleMethods.submitCode);
+        await monacoInput.press('Enter');
+        expect((await execute).params).toEqual({
+            sessionId: 'session-1', code, checkCompleteness: true,
+        });
+        await expect.poll(getEditorValue).toBe(expectedInput);
+        executeCount += 1;
+        expect(backend.requestCount(ConsoleMethods.submitCode)).toBe(executeCount);
+    }
 });
 
 test('console preserves type-ahead and shows delayed submission feedback with a transcript placeholder', async ({ page }) => {

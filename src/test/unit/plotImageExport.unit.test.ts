@@ -7,6 +7,10 @@ import { PlotClientInstance } from '../../runtime/PlotClientInstance';
 import { PositronPlotsService } from '../../runtime/positronPlotsService';
 import { PlotEditorProvider } from '../../editor/PlotEditorProvider';
 import { PlotsViewProvider } from '../../webview/plotsProvider';
+import { PlotRenderFormat } from '../../runtime/comms/positronPlotComm';
+import type { PositronPlotCommProxy } from '../../runtime/comms/positronPlotCommProxy';
+import type { DeferredRender } from '../../runtime/positronPlotRenderQueue';
+import { LanguageRuntimeMessageType, RuntimeClientType } from '../../internal/runtimeTypes';
 
 const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="24"><text>中文 + 50%</text></svg>';
 const svgUri = `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
@@ -66,13 +70,17 @@ suite('[Unit] Plot image export routes', () => {
         info: vscode.window.showInformationMessage,
         error: vscode.window.showErrorMessage,
         warning: vscode.window.showWarningMessage,
+        quickPick: vscode.window.showQuickPick,
+        input: vscode.window.showInputBox,
     };
     const target = vscode.Uri.parse('plot-export-test:/figure.svg');
+    const writeFailureMessage = 'Plot export test: write denied';
     let fileSystem: vscode.Disposable;
     let denyWrites = false;
     let dialogs: vscode.SaveDialogOptions[];
     let writes: { uri: string; bytes: Buffer }[];
     let errors: string[];
+    let formatPrompts: number;
 
     suiteSetup(() => {
         fileSystem = vscode.workspace.registerFileSystemProvider('plot-export-test', {
@@ -83,7 +91,7 @@ suite('[Unit] Plot image export routes', () => {
             createDirectory: () => undefined,
             readFile: () => writes.at(-1)?.bytes ?? new Uint8Array(),
             writeFile: async (uri, bytes) => {
-                if (denyWrites) { throw vscode.FileSystemError.NoPermissions(uri); }
+                if (denyWrites) { throw vscode.FileSystemError.NoPermissions(writeFailureMessage); }
                 writes.push({ uri: uri.toString(), bytes: Buffer.from(bytes) });
             },
             delete: () => undefined,
@@ -92,29 +100,63 @@ suite('[Unit] Plot image export routes', () => {
     });
     suiteTeardown(() => fileSystem.dispose());
     setup(() => {
-        dialogs = []; writes = []; errors = []; denyWrites = false;
+        dialogs = []; writes = []; errors = []; denyWrites = false; formatPrompts = 0;
         vscode.window.showSaveDialog = async options => { dialogs.push(options!); return target; };
         vscode.window.showInformationMessage = async () => undefined;
         vscode.window.showErrorMessage = async (message: string) => { errors.push(message); return undefined; };
         vscode.window.showWarningMessage = async () => undefined;
+        vscode.window.showQuickPick = (async (items: readonly vscode.QuickPickItem[] | Thenable<readonly vscode.QuickPickItem[]>) => {
+            formatPrompts += 1;
+            const selected = (await items).find(item =>
+                (item as vscode.QuickPickItem & { format?: PlotRenderFormat }).format === PlotRenderFormat.Svg);
+            assert.ok(selected, 'expected the export format picker');
+            return selected;
+        }) as unknown as typeof vscode.window.showQuickPick;
+        vscode.window.showInputBox = async options => {
+            if (options?.prompt === vscode.l10n.t('Width x height in logical pixels')) { return '640 x 480'; }
+            assert.strictEqual(options?.prompt, vscode.l10n.t('Pixel ratio (1 is standard resolution)'));
+            return '2';
+        };
     });
     teardown(() => {
         vscode.window.showSaveDialog = originals.dialog;
         vscode.window.showInformationMessage = originals.info;
         vscode.window.showErrorMessage = originals.error;
         vscode.window.showWarningMessage = originals.warning;
+        vscode.window.showQuickPick = originals.quickPick;
+        vscode.window.showInputBox = originals.input;
     });
 
     // Exercise the real handlers without creating visible Webviews or live comms.
-    async function saveVia(route: string, dynamic = false): Promise<void> {
+    async function saveVia(route: string, dynamic = false) {
         const plot = StaticPlotClient.fromMessage('session', 'plot', '2026-09-22T00:00:00Z', 'image/svg+xml', svg);
-        plot.metadata.suggested_file_name = 'figure.png';
-        const client = dynamic ? Object.assign(Object.create(PlotClientInstance.prototype), {
-            _lastRender: { uri: svgUri }, metadata: plot.metadata,
-        }) : plot;
+        const renderRequests: DeferredRender[] = [];
+        const subscribe = () => new vscode.Disposable(() => undefined);
+        const proxy = {
+            onDidClose: subscribe, onDidRenderUpdate: subscribe,
+            onDidShowPlot: subscribe, onDidSetIntrinsicSize: subscribe,
+            getIntrinsicSize: async () => undefined,
+            render: (request: DeferredRender) => {
+                renderRequests.push(request);
+                request.complete({ ...request.renderRequest, uri: svgUri, renderTimeMs: 1 });
+            },
+        } as unknown as PositronPlotCommProxy;
+        const client = dynamic ? new PlotClientInstance({
+            id: 'plot', comm_id: 'plot', target_name: RuntimeClientType.Plot,
+            type: LanguageRuntimeMessageType.CommOpen,
+            data: { pre_render: {
+                data: 'Y2FjaGVk', mime_type: 'image/png',
+                settings: { size: { width: 320, height: 240 }, pixel_ratio: 1, format: PlotRenderFormat.Png },
+            } },
+            event_clock: 0, parent_id: '', when: new Date().toISOString(),
+        }, () => undefined, () => undefined, 'session', undefined, proxy) : plot;
+        client.metadata.suggested_file_name = 'figure.png';
+        const displayedRender = client instanceof PlotClientInstance ? client.lastRender : undefined;
+        const displayPolicy = client instanceof PlotClientInstance ? client.sizingPolicy : undefined;
         const service: PositronPlotsService = Object.assign(Object.create(PositronPlotsService.prototype), {
             _plots: [client], _selectedPlotId: 'plot', _editorPlotClients: new Map([['plot', client]]),
         });
+        let panelResult: { success: boolean; error?: string } | undefined;
         try {
             if (route === 'service-view') { await service.saveViewPlot(); }
             if (route === 'service-editor') { await service.saveEditorPlot('plot'); }
@@ -125,33 +167,66 @@ suite('[Unit] Plot image export routes', () => {
                     _currentPlotContent: Map<string, { kind: 'image'; data: string }>;
                     _saveCurrentPlot(id: string): Promise<void>;
                 };
-                internal._currentPlotContent.set('plot', { kind: 'image', data: svgUri });
-                await internal._saveCurrentPlot('plot');
-                editor.dispose();
-                log.dispose();
+                try {
+                    internal._currentPlotContent.set('plot', { kind: 'image', data: svgUri });
+                    await internal._saveCurrentPlot('plot');
+                } finally {
+                    editor.dispose();
+                    log.dispose();
+                }
             }
             if (route === 'panel') {
                 const requests = new Map<string, (params: { plotId: string }) => Promise<unknown>>();
                 const panel = Object.assign(Object.create(PlotsViewProvider.prototype), {
+                    _plotsService: service,
                     _plots: new Map([['plot', { kind: dynamic ? 'dynamic' : 'static', data: svgUri, suggestedFileName: 'figure.png' }]]),
                     log: () => undefined,
                 });
                 panel._registerPlotExportHandlers({ onRequest: (method: string, handler: (params: { plotId: string }) => Promise<unknown>) => requests.set(method, handler) });
-                await requests.get('plots/save')!({ plotId: 'plot' });
+                panelResult = await requests.get('plots/save')!({ plotId: 'plot' }) as typeof panelResult;
             }
-        } finally { plot.dispose(); }
+            if (client instanceof PlotClientInstance) {
+                assert.strictEqual(client.lastRender, displayedRender, 'export must preserve the displayed image');
+                assert.strictEqual(client.sizingPolicy, displayPolicy, 'export must preserve the display sizing policy');
+            }
+            return { renderRequests, panelResult };
+        } finally {
+            if (client !== plot) { client.dispose(); }
+            plot.dispose();
+        }
     }
 
     for (const route of ['panel', 'editor', 'service-view', 'service-editor']) {
         for (const dynamic of [false, true]) {
             test(`${route} saves ${dynamic ? 'dynamic' : 'static'} SVG bytes and a matching filename`, async () => {
-                await saveVia(route, dynamic);
+                const { renderRequests, panelResult } = await saveVia(route, dynamic);
                 assert.deepStrictEqual(errors, []);
+                assert.strictEqual(formatPrompts, dynamic ? 1 : 0);
+                assert.strictEqual(renderRequests.length, dynamic ? 1 : 0);
+                if (dynamic) {
+                    assert.deepStrictEqual(renderRequests[0].renderRequest, {
+                        size: { width: 640, height: 480 }, pixel_ratio: 2, format: PlotRenderFormat.Svg,
+                    });
+                    assert.strictEqual(renderRequests[0].options.preview, true);
+                }
+                if (route === 'panel') { assert.deepStrictEqual(panelResult, { success: true }); }
                 assert.deepStrictEqual(writes, [{ uri: target.toString(), bytes: Buffer.from(svg) }]);
                 assert.strictEqual(dialogs[0].defaultUri?.path, '/figure.svg');
                 assert.deepStrictEqual(dialogs[0].filters, { 'SVG Image': ['svg'] });
             });
         }
+
+        test(`${route} cancels dynamic export before rendering`, async () => {
+            vscode.window.showQuickPick = async () => undefined;
+            const { renderRequests, panelResult } = await saveVia(route, true);
+            assert.deepStrictEqual(renderRequests, []);
+            assert.deepStrictEqual(dialogs, []);
+            assert.deepStrictEqual(writes, []);
+            assert.deepStrictEqual(errors, []);
+            if (route === 'panel') {
+                assert.deepStrictEqual(panelResult, { success: false, error: 'Save cancelled' });
+            }
+        });
     }
 
     test('cancelled save writes nothing', async () => {
@@ -162,10 +237,22 @@ suite('[Unit] Plot image export routes', () => {
 
     test('filesystem failures reach the caller and panel displays an error', async () => {
         denyWrites = true;
-        await assert.rejects(savePlotImage(svgUri, 'plot'), /permission/i);
-        await saveVia('panel');
-        assert.strictEqual(errors.length, 1);
-        assert.match(errors[0], /export/i);
+        await assert.rejects(savePlotImage(svgUri, 'plot'), {
+            code: 'NoPermissions', message: writeFailureMessage,
+        });
+        const { panelResult } = await saveVia('panel');
+        assert.deepStrictEqual(writes, []);
+        assert.deepStrictEqual(errors, [vscode.l10n.t('Failed to export plot: {0}', writeFailureMessage)]);
+        assert.deepStrictEqual(panelResult, { success: false, error: writeFailureMessage });
+    });
+
+    test('dynamic export reports a filesystem failure instead of cancellation', async () => {
+        denyWrites = true;
+        const { renderRequests, panelResult } = await saveVia('panel', true);
+        assert.strictEqual(renderRequests.length, 1);
+        assert.deepStrictEqual(writes, []);
+        assert.deepStrictEqual(errors, [vscode.l10n.t('Failed to export plot: {0}', writeFailureMessage)]);
+        assert.deepStrictEqual(panelResult, { success: false, error: writeFailureMessage });
     });
 
     test('service clipboard fallback offers image export', async () => {

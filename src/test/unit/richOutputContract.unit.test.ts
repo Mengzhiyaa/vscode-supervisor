@@ -79,7 +79,7 @@ suite('[Unit] P0 rich output and compatibility contracts', () => {
                 const uri = vscode.Uri.parse('http://localhost/widget');
                 const router = new RichOutputRouter(
                     {} as any, {} as any,
-                    { addHtmlOutputPlot: () => { shown++; } } as any,
+                    { getPlotsPaneBehavior: () => ({ surface: true, raisePane: true }), addHtmlOutputPlot: () => { shown++; } } as any,
                     {
                         resolveRuntimeOutputHtmlUri: async () => uri,
                         showRuntimeOutputHtml: async () => { shown++; },
@@ -217,7 +217,7 @@ suite('[Unit] P0 rich output and compatibility contracts', () => {
         let disposals = 0;
         const router = new RichOutputRouter(
             {} as any, {} as any,
-            { addHtmlOutputPlot: (_sessionId: string, event: { uri: vscode.Uri }) => plots.push(event.uri.toString()) } as any,
+            { getPlotsPaneBehavior: () => ({ surface: true, raisePane: true }), addHtmlOutputPlot: (_sessionId: string, event: { uri: vscode.Uri }) => plots.push(event.uri.toString()) } as any,
             {} as any, makeNoopLogChannel(),
         );
         router.registerRenderer({
@@ -432,7 +432,7 @@ suite('[Unit] P0 rich output and compatibility contracts', () => {
                 onDidDeleteRuntimeSession: createEventStub(),
             } as any,
             {
-                addHtmlOutputPlot: (_sessionId: string, event: { uri: vscode.Uri }) => {
+                getPlotsPaneBehavior: () => ({ surface: true, raisePane: true }), addHtmlOutputPlot: (_sessionId: string, event: { uri: vscode.Uri }) => {
                     plots.push(event.uri.toString());
                 },
             } as any,
@@ -495,7 +495,7 @@ suite('[Unit] P0 rich output and compatibility contracts', () => {
                 onDidDeleteRuntimeSession: createEventStub(),
             } as any,
             {
-                addHtmlOutputPlot: (_sessionId: string, event: { uri: vscode.Uri }) => {
+                getPlotsPaneBehavior: () => ({ surface: true, raisePane: true }), addHtmlOutputPlot: (_sessionId: string, event: { uri: vscode.Uri }) => {
                     plots.push(event.uri.toString());
                 },
             } as any,
@@ -542,7 +542,7 @@ suite('[Unit] P0 rich output and compatibility contracts', () => {
                 onDidCreateSession: createEventStub(),
                 onDidDeleteRuntimeSession: createEventStub(),
             } as any,
-            { addHtmlOutputPlot: () => undefined } as any,
+            { getPlotsPaneBehavior: () => ({ surface: true, raisePane: true }), addHtmlOutputPlot: () => undefined } as any,
             {
                 showRuntimeOutputHtml: async (
                     _sessionId: string,

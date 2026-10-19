@@ -52,7 +52,13 @@ function makeEditor(lines: string[], selection: vscode.Selection): vscode.TextEd
     const document = {
         languageId: 'r',
         uri: vscode.Uri.parse('file:///workspace/test.R'),
-        lineCount: lines.length,
+        get lineCount() { return lines.length; },
+        eol: vscode.EndOfLine.LF,
+        version: 1,
+        validatePosition: (position: vscode.Position) => new vscode.Position(
+            Math.max(0, Math.min(position.line, lines.length - 1)),
+            Math.max(0, Math.min(position.character, lines[Math.max(0, Math.min(position.line, lines.length - 1))].length)),
+        ),
         getText: (range?: vscode.Range) => getTextInRange(range),
         lineAt: (line: number) => ({
             text: lines[line],
@@ -76,6 +82,9 @@ suite('[Unit] console actions', () => {
     const originalShowInformationMessage = vscode.window.showInformationMessage.bind(vscode.window);
     const originalShowErrorMessage = vscode.window.showErrorMessage.bind(vscode.window);
     const originalShowWarningMessage = vscode.window.showWarningMessage.bind(vscode.window);
+    const originalOpenTextDocument = vscode.workspace.openTextDocument;
+    const originalApplyEdit = vscode.workspace.applyEdit;
+    const originalShowTextDocument = vscode.window.showTextDocument;
     const originalActiveTextEditor = Object.getOwnPropertyDescriptor(vscode.window, 'activeTextEditor');
 
     function setActiveTextEditor(editor: vscode.TextEditor | undefined): void {
@@ -83,6 +92,30 @@ suite('[Unit] console actions', () => {
             configurable: true,
             get: () => editor,
         });
+    }
+
+    function executionFixture(
+        provider: (uri: string, position: { line: number; character: number }, token: vscode.CancellationToken) => unknown,
+    ) {
+        const commands = new Map<string, RegisteredCommandHandler>();
+        const calls: Array<{ code: string; attribution: any }> = [];
+        (vscode.commands as { registerCommand: typeof vscode.commands.registerCommand }).registerCommand = ((command: string, callback: RegisteredCommandHandler) => {
+            commands.set(command, callback);
+            return new vscode.Disposable(() => undefined);
+        }) as typeof vscode.commands.registerCommand;
+        (vscode.commands as { executeCommand: typeof vscode.commands.executeCommand }).executeCommand = (async (command: string, ...args: any[]) => {
+            if (command === 'supervisor.lsp.getStatementRange') {
+                return provider(args[0], args[1], args[2]);
+            }
+            return undefined;
+        }) as typeof vscode.commands.executeCommand;
+        const disposables = registerConsoleActions({
+            executeCode: async (_language: string, _session: string | undefined, code: string, attribution: any) => {
+                calls.push({ code, attribution });
+                return 'session-1';
+            },
+        } as any, makeNoopLogChannel());
+        return { commands, calls, dispose: () => disposables.forEach(disposable => disposable.dispose()) };
     }
 
     teardown(() => {
@@ -96,6 +129,9 @@ suite('[Unit] console actions', () => {
             originalShowErrorMessage;
         (vscode.window as { showWarningMessage: typeof vscode.window.showWarningMessage }).showWarningMessage =
             originalShowWarningMessage;
+        (vscode.workspace as { openTextDocument: typeof vscode.workspace.openTextDocument }).openTextDocument = originalOpenTextDocument;
+        (vscode.workspace as { applyEdit: typeof vscode.workspace.applyEdit }).applyEdit = originalApplyEdit;
+        (vscode.window as { showTextDocument: typeof vscode.window.showTextDocument }).showTextDocument = originalShowTextDocument;
 
         if (originalActiveTextEditor) {
             Object.defineProperty(vscode.window, 'activeTextEditor', originalActiveTextEditor);
@@ -104,7 +140,7 @@ suite('[Unit] console actions', () => {
         }
     });
 
-    test('ctrl+enter advances to the next line after executing a selection', async () => {
+    test('execute code preserves the selection for repeated execution', async () => {
         const registeredCommands = new Map<string, RegisteredCommandHandler>();
         const executionCalls: string[] = [];
 
@@ -136,11 +172,12 @@ suite('[Unit] console actions', () => {
             assert.ok(handler, 'expected execute command to be registered');
 
             await handler?.();
+            await handler?.();
 
-            assert.deepStrictEqual(executionCalls, ['x <- 1']);
-            assert.strictEqual(editor.selection.isEmpty, true);
-            assert.strictEqual(editor.selection.active.line, 1);
-            assert.strictEqual(editor.selection.active.character, 0);
+            assert.deepStrictEqual(executionCalls, ['x <- 1', 'x <- 1']);
+            assert.strictEqual(editor.selection.isEmpty, false);
+            assert.strictEqual(editor.selection.active.line, 0);
+            assert.strictEqual(editor.selection.active.character, 6);
         } finally {
             disposables.forEach((disposable) => disposable.dispose());
         }
@@ -182,7 +219,7 @@ suite('[Unit] console actions', () => {
         }
     });
 
-    test('ctrl+enter treats a full-line selection ending at column 0 as advancing to that line', async () => {
+    test('execute code preserves a full-line selection ending at column zero', async () => {
         const registeredCommands = new Map<string, RegisteredCommandHandler>();
 
         (vscode.commands as { registerCommand: typeof vscode.commands.registerCommand }).registerCommand =
@@ -213,6 +250,8 @@ suite('[Unit] console actions', () => {
 
             assert.strictEqual(editor.selection.active.line, 1);
             assert.strictEqual(editor.selection.active.character, 0);
+            assert.strictEqual(editor.selection.isEmpty, false);
+            assert.strictEqual(editor.selection.start.line, 0);
         } finally {
             disposables.forEach((disposable) => disposable.dispose());
         }
@@ -509,6 +548,198 @@ suite('[Unit] console actions', () => {
             ]);
         } finally {
             disposables.forEach((disposable) => disposable.dispose());
+        }
+    });
+
+    test('explicit URI execution advances past EOF without opening an editor and respects advance false', async () => {
+        for (const advance of [true, false]) {
+            const lines = ['print(1)'];
+            const editor = makeEditor(lines, new vscode.Selection(0, 0, 0, 0));
+            setActiveTextEditor(editor);
+            const fixture = executionFixture(() => ({
+                kind: 'success',
+                range: { start: { line: 0, character: 0 }, end: { line: 0, character: 8 } },
+                code: 'print(1)',
+            }));
+            let edits = 0;
+            (vscode.workspace as { openTextDocument: typeof vscode.workspace.openTextDocument }).openTextDocument = (async () => editor.document) as typeof vscode.workspace.openTextDocument;
+            (vscode.window as { showTextDocument: typeof vscode.window.showTextDocument }).showTextDocument = (async () => {
+                throw new Error('Explicit URI execution must not open an editor');
+            }) as typeof vscode.window.showTextDocument;
+            (vscode.workspace as { applyEdit: typeof vscode.workspace.applyEdit }).applyEdit = async edit => {
+                const changes = edit.get(editor.document.uri);
+                assert.strictEqual(changes.length, 1);
+                assert.strictEqual(changes[0].newText, '\n');
+                lines.push('');
+                edits += 1;
+                return true;
+            };
+            try {
+                const next = await fixture.commands.get(CoreCommandIds.consoleExecuteCode)?.({
+                    uri: editor.document.uri, position: new vscode.Position(0, 0), advance,
+                });
+                assert.deepStrictEqual(next, advance ? new vscode.Position(1, 0) : undefined);
+                assert.strictEqual(edits, advance ? 1 : 0);
+                assert.deepStrictEqual(fixture.calls.map(call => call.code), ['print(1)']);
+                assert.strictEqual(editor.selection.active.line, 0);
+            } finally {
+                fixture.dispose();
+            }
+        }
+    });
+
+    test('explicit URI advancement uses the next statement boundary including enclosing scopes', async () => {
+        for (const enclosingScope of [false, true]) {
+            const editor = makeEditor(['{', '  x <- 1', '# gap', '}', '', 'next <- 2'], new vscode.Selection(1, 2, 1, 2));
+            const positions: Array<{ line: number; character: number }> = [];
+            const fixture = executionFixture((_uri, position) => {
+                positions.push(position);
+                return {
+                    kind: 'success',
+                    range: positions.length === 1
+                        ? { start: { line: 1, character: 2 }, end: { line: 1, character: 8 } }
+                        : enclosingScope
+                            ? { start: { line: 0, character: 0 }, end: { line: 3, character: 1 } }
+                            : { start: { line: 5, character: 0 }, end: { line: 5, character: 9 } },
+                    code: 'x <- 1',
+                };
+            });
+            (vscode.workspace as { openTextDocument: typeof vscode.workspace.openTextDocument }).openTextDocument = (async () => editor.document) as typeof vscode.workspace.openTextDocument;
+            try {
+                const next = await fixture.commands.get(CoreCommandIds.consoleExecuteCode)?.({
+                    uri: editor.document.uri, position: { line: 1, character: 2 },
+                });
+                assert.deepStrictEqual(next, enclosingScope ? new vscode.Position(3, 1) : new vscode.Position(5, 0));
+                assert.deepStrictEqual(positions, [{ line: 1, character: 2 }, { line: 2, character: 0 }]);
+            } finally {
+                fixture.dispose();
+            }
+        }
+    });
+
+    test('provider Python code is sent unchanged with completeness verified', async () => {
+        const code = 'for i in range(3):\n    print(i)';
+        const editor = makeEditor(code.split('\n'), new vscode.Selection(0, 0, 0, 0));
+        Object.defineProperty(editor.document, 'languageId', { value: 'python' });
+        setActiveTextEditor(editor);
+        const fixture = executionFixture(() => ({
+            kind: 'success',
+            range: { start: { line: 0, character: 0 }, end: { line: 1, character: 12 } },
+            code,
+        }));
+        try {
+            const next = await fixture.commands.get(CoreCommandIds.consoleExecuteCodeWithoutAdvancing)?.();
+            assert.strictEqual(next, undefined);
+            assert.strictEqual(fixture.calls[0].code, code);
+            assert.strictEqual(fixture.calls[0].attribution.metadata.completenessVerified, true);
+        } finally {
+            fixture.dispose();
+        }
+    });
+
+    test('generic editor commands reject notebook cells before selecting a console', async () => {
+        const editor = makeEditor(['x <- 1'], new vscode.Selection(0, 0, 0, 6));
+        Object.defineProperty(editor.document, 'uri', { value: vscode.Uri.parse('vscode-notebook-cell:///test.ipynb#cell') });
+        setActiveTextEditor(editor);
+        let providerCalls = 0;
+        const fixture = executionFixture(() => { providerCalls += 1; });
+        (vscode.workspace as { openTextDocument: typeof vscode.workspace.openTextDocument }).openTextDocument = (async () => editor.document) as typeof vscode.workspace.openTextDocument;
+        try {
+            for (const command of [CoreCommandIds.consoleExecuteCode, CoreCommandIds.consoleExecuteCodeWithoutAdvancing,
+                CoreCommandIds.consoleExecuteCodeBeforeCursor, CoreCommandIds.consoleExecuteCodeAfterCursor]) {
+                await fixture.commands.get(command)?.();
+                await fixture.commands.get(command)?.({ uri: editor.document.uri, position: { line: 0, character: 0 } });
+            }
+            assert.strictEqual(providerCalls, 0);
+            assert.strictEqual(fixture.calls.length, 0);
+        } finally {
+            fixture.dispose();
+        }
+    });
+
+    test('cancel and run as is settle an unresponsive provider and ignore its late result', async () => {
+        for (const runAsIs of [false, true]) {
+            const editor = makeEditor(['x <- 1', 'next <- 2'], new vscode.Selection(0, 0, 0, 0));
+            setActiveTextEditor(editor);
+            let started!: () => void;
+            const providerStarted = new Promise<void>(resolve => { started = resolve; });
+            let complete!: (value: unknown) => void;
+            let token: vscode.CancellationToken | undefined;
+            const work = new Promise(resolve => { complete = resolve; });
+            const fixture = executionFixture((_uri, _position, source) => {
+                token = source;
+                started();
+                return work;
+            });
+            try {
+                const submission = fixture.commands.get(CoreCommandIds.consoleExecuteCode)?.();
+                await providerStarted;
+                await fixture.commands.get(runAsIs ? CoreCommandIds.consoleRunCodeAsIs : CoreCommandIds.consoleCancelCodeSubmission)?.();
+                await submission;
+                assert.strictEqual(token?.isCancellationRequested, true);
+                assert.deepStrictEqual(fixture.calls.map(call => call.code), runAsIs ? ['x <- 1'] : []);
+                if (runAsIs) { assert.strictEqual(fixture.calls[0].attribution.metadata, undefined); }
+                complete({
+                    kind: 'success',
+                    range: { start: { line: 0, character: 0 }, end: { line: 1, character: 9 } },
+                    code: 'late code',
+                });
+                await work;
+                await Promise.resolve();
+                assert.strictEqual(fixture.calls.length, runAsIs ? 1 : 0);
+                assert.strictEqual(editor.selection.active.line, runAsIs ? 1 : 0);
+            } finally {
+                fixture.dispose();
+            }
+        }
+    });
+
+    test('cancelling next-statement detection also prevents the original statement from executing', async () => {
+        const editor = makeEditor(['x <- 1', 'next <- 2'], new vscode.Selection(0, 0, 0, 0));
+        setActiveTextEditor(editor);
+        let queryCount = 0;
+        let started!: () => void;
+        const advancing = new Promise<void>(resolve => { started = resolve; });
+        const fixture = executionFixture(() => {
+            if (++queryCount === 1) {
+                return { kind: 'success', range: { start: { line: 0, character: 0 }, end: { line: 0, character: 6 } } };
+            }
+            started();
+            return new Promise(() => undefined);
+        });
+        try {
+            const submission = fixture.commands.get(CoreCommandIds.consoleExecuteCode)?.();
+            await advancing;
+            await fixture.commands.get(CoreCommandIds.consoleCancelCodeSubmission)?.();
+            await submission;
+            assert.strictEqual(fixture.calls.length, 0);
+            assert.strictEqual(editor.selection.active.line, 0);
+        } finally {
+            fixture.dispose();
+        }
+    });
+
+    test('a new selection execution supersedes a pending detection even if the old provider rejects late', async () => {
+        const editor = makeEditor(['x <- 1', 'next <- 2'], new vscode.Selection(0, 0, 0, 0));
+        setActiveTextEditor(editor);
+        let started!: () => void;
+        const providerStarted = new Promise<void>(resolve => { started = resolve; });
+        let reject!: (error: Error) => void;
+        const work = new Promise((_resolve, rejectWork) => { reject = rejectWork; });
+        const fixture = executionFixture(() => { started(); return work; });
+        try {
+            const first = fixture.commands.get(CoreCommandIds.consoleExecuteCode)?.();
+            await providerStarted;
+            editor.selection = new vscode.Selection(1, 0, 1, 9);
+            await fixture.commands.get(CoreCommandIds.consoleExecuteCode)?.();
+            await first;
+            reject(new Error('Late provider failure'));
+            await work.catch(() => undefined);
+            await Promise.resolve();
+            assert.deepStrictEqual(fixture.calls.map(call => call.code), ['next <- 2']);
+            assert.strictEqual(editor.selection.isEmpty, false);
+        } finally {
+            fixture.dispose();
         }
     });
 

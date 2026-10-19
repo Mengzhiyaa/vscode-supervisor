@@ -4,7 +4,7 @@ import { PlotClientInstance, PlotClientState } from '../../runtime/PlotClientIns
 import { PositronPlotsService } from '../../runtime/positronPlotsService';
 import { DeferredRender, type IRenderedPlot } from '../../runtime/positronPlotRenderQueue';
 import { PositronPlotCommProxy, type UpdateEvent } from '../../runtime/comms/positronPlotCommProxy';
-import { PlotRenderFormat, PlotUnit, type IntrinsicSize } from '../../runtime/comms/positronPlotComm';
+import { PlotRenderFormat, PlotUnit, type IntrinsicSize, type ShowEvent } from '../../runtime/comms/positronPlotComm';
 import { LanguageRuntimeMessageType, RuntimeClientType } from '../../internal/runtimeTypes';
 import { HtmlPlotClient } from '../../runtime/htmlPlotClient';
 import { RuntimeClientInstance } from '../../runtime/RuntimeClientInstance';
@@ -20,13 +20,15 @@ import * as PlotEditorRpc from '../../rpc/webview/plotEditor';
 function fixture() {
     const close = new vscode.EventEmitter<void>();
     const update = new vscode.EventEmitter<UpdateEvent>();
-    const show = new vscode.EventEmitter<void>();
+    const show = new vscode.EventEmitter<ShowEvent>();
     const intrinsic = new vscode.EventEmitter<IntrinsicSize | undefined>();
     const requests: DeferredRender[] = [];
+    const dispatched = new vscode.EventEmitter<DeferredRender>();
     const proxy = {
         onDidClose: close.event, onDidRenderUpdate: update.event,
         onDidShowPlot: show.event, onDidSetIntrinsicSize: intrinsic.event,
-        render: (request: DeferredRender) => requests.push(request),
+        getIntrinsicSize: async () => undefined,
+        render: (request: DeferredRender) => { requests.push(request); dispatched.fire(request); },
     } as unknown as PositronPlotCommProxy;
     const clients: PlotClientInstance[] = [];
     const create = (id = 'plot') => {
@@ -41,8 +43,21 @@ function fixture() {
     function finish(request: DeferredRender, uri = 'data:image/png;base64,eA==') {
         request.complete({ ...request.renderRequest, uri, renderTimeMs: 1 });
     }
-    return { create, requests, close, update, show, intrinsic, proxy, finish,
-        dispose: () => { clients.forEach(client => client.dispose()); close.dispose(); update.dispose(); show.dispose(); intrinsic.dispose(); } };
+    async function startRender<T>(operation: () => Promise<T>) {
+        let subscription: vscode.Disposable;
+        const nextRequest = new Promise<DeferredRender>(resolve => {
+            subscription = dispatched.event(resolve);
+        });
+        try {
+            const pending = operation();
+            const request = await Promise.race([nextRequest, pending.then(() => {
+                throw new Error('Rendering completed without dispatching a render request');
+            })]);
+            return { request, pending };
+        } finally { subscription!.dispose(); }
+    }
+    return { create, requests, close, update, show, intrinsic, proxy, finish, startRender,
+        dispose: () => { clients.forEach(client => client.dispose()); close.dispose(); update.dispose(); show.dispose(); intrinsic.dispose(); dispatched.dispose(); } };
 }
 
 suite('[Unit] Plot render parity', () => {
@@ -61,9 +76,9 @@ suite('[Unit] Plot render parity', () => {
                 assert.deepStrictEqual(plot.metadata.sizing_policy, { id: 'custom', size });
                 assert.strictEqual(service.sizingPolicies.filter(policy => policy.id === 'custom').length, 1);
                 assert.strictEqual(service.selectedSizingPolicy.getName(plot), `${size.width}×${size.height} (custom)`);
-                const pending = plot.renderWithSizingPolicy({ width: 800, height: 600 }, 1);
-                assert.deepStrictEqual(f.requests.at(-1)!.renderRequest.size, size);
-                f.finish(f.requests.at(-1)!);
+                const { pending, request } = await f.startRender(() => plot.renderWithSizingPolicy({ width: 800, height: 600 }, 1));
+                assert.deepStrictEqual(request.renderRequest.size, size);
+                f.finish(request);
                 await pending;
             }
         } finally { service.dispose(); }
@@ -92,10 +107,10 @@ suite('[Unit] Plot render parity', () => {
         provider._registerRenderingHandlers(connection);
         for (const size of [{ width: 900, height: 600 }, { width: 1400, height: 400 }]) {
             state.customSize = size;
-            const pending = requests.get('plots/render')!({ plotId: 'plot', width: 800, height: 600, pixelRatio: 2, format: 'png' });
-            assert.deepStrictEqual(f.requests.at(-1)!.renderRequest.size, size);
-            assert.strictEqual(f.requests.at(-1)!.renderRequest.pixel_ratio, 2);
-            f.finish(f.requests.at(-1)!);
+            const { pending, request } = await f.startRender(() => requests.get('plots/render')!({ plotId: 'plot', width: 800, height: 600, pixelRatio: 2, format: 'png' }));
+            assert.deepStrictEqual(request.renderRequest.size, size);
+            assert.strictEqual(request.renderRequest.pixel_ratio, 2);
+            f.finish(request);
             await pending;
             assert.deepStrictEqual(plot.metadata.sizing_policy?.size, { width: 640, height: 480 });
         }
@@ -207,10 +222,9 @@ suite('[Unit] Plot render parity', () => {
                 ['auto', { width: 970, height: 600 }],
             ] as const) {
                 assert.deepStrictEqual(select({ policyId }), { policyId });
-                const pending = access._handleRenderRequest(connection, 'plot', {
+                const { pending, request } = await f.startRender(() => access._handleRenderRequest(connection, 'plot', {
                     width: 1200, height: 600, pixelRatio: 2, format: 'png',
-                });
-                const request = f.requests.at(-1)!;
+                }));
                 assert.deepStrictEqual(request.renderRequest.size, expectedSize);
                 assert.strictEqual(request.renderRequest.pixel_ratio, 2);
                 f.finish(request);
@@ -222,12 +236,12 @@ suite('[Unit] Plot render parity', () => {
             }
 
             // Closing the editor while rendering must not resurrect its content.
-            const pending = access._handleRenderRequest(connection, 'plot', {
+            const { pending, request } = await f.startRender(() => access._handleRenderRequest(connection, 'plot', {
                 width: 600, height: 600, pixelRatio: 1, format: 'png',
-            });
+            }));
             const count = sent.length;
             access._connections.delete('plot');
-            f.finish(f.requests.at(-1)!);
+            f.finish(request);
             await pending;
             assert.strictEqual(sent.length, count);
 
@@ -322,7 +336,7 @@ suite('[Unit] Plot render parity', () => {
         plot.dispose();
         await rejected;
         plot.dispose();
-        f.show.fire();
+        f.show.fire({});
         f.update.fire({});
         f.close.fire();
         assert.strictEqual(closed, 1);

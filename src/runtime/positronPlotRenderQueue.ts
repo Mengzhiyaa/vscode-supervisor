@@ -48,6 +48,8 @@ export interface IRenderedPlot {
  * Matches Positron's PlotOperationRequest interface.
  */
 export interface PlotOperationRequest {
+    /** Export requests are not superseded by viewport renders. */
+    preview?: boolean;
     /**
      * The type of operation to perform.
      */
@@ -186,7 +188,7 @@ export class DeferredPlotOperation {
 export class DeferredRender {
     private readonly deferred: DeferredPromise<IRenderedPlot>;
 
-    constructor(public readonly renderRequest: RenderRequest) {
+    constructor(public readonly renderRequest: RenderRequest, public readonly options: { preview?: boolean; onStart?: () => void } = {}) {
         this.deferred = new DeferredPromise<IRenderedPlot>();
     }
 
@@ -246,7 +248,8 @@ export interface IPlotComm {
 export class QueuedOperation {
     constructor(
         public readonly operation: DeferredPlotOperation,
-        public readonly comm: IPlotComm) {
+        public readonly comm: IPlotComm,
+        public readonly onStart?: () => void) {
     }
 }
 
@@ -370,13 +373,13 @@ export class PositronPlotRenderQueue implements vscode.Disposable {
      * @param request The operation request to queue
      * @param comm The comm to use for the operation
      */
-    public queueOperation(request: PlotOperationRequest, comm: IPlotComm): DeferredPlotOperation {
+    public queueOperation(request: PlotOperationRequest, comm: IPlotComm, onStart?: () => void): DeferredPlotOperation {
         const deferredOperation = new DeferredPlotOperation(request);
         if (this._disposed) {
             deferredOperation.cancel();
             return deferredOperation;
         }
-        this._queue.push(new QueuedOperation(deferredOperation, comm));
+        this._queue.push(new QueuedOperation(deferredOperation, comm, onStart));
 
         // Ensure we have a close listener for this comm
         this.ensureCommCloseListener(comm);
@@ -402,17 +405,18 @@ export class PositronPlotRenderQueue implements vscode.Disposable {
      */
     public queue(deferredRender: DeferredRender, comm: IPlotComm): DeferredRender {
         // Cancel and remove any existing render operations for the same plot
-        this.cancelExistingOperations(comm, OperationType.Render);
+        if (!deferredRender.options.preview) { this.cancelExistingOperations(comm, OperationType.Render); }
 
         // Convert render request to operation request for unified handling
         const operationRequest: PlotOperationRequest = {
             type: OperationType.Render,
+            preview: deferredRender.options.preview,
             size: deferredRender.renderRequest.size,
             pixel_ratio: deferredRender.renderRequest.pixel_ratio,
             format: deferredRender.renderRequest.format
         };
 
-        const deferredOperation = this.queueOperation(operationRequest, comm);
+        const deferredOperation = this.queueOperation(operationRequest, comm, deferredRender.options.onStart);
 
         // Bridge the operation result to the render result
         deferredOperation.promise.then((result) => {
@@ -492,6 +496,7 @@ export class PositronPlotRenderQueue implements vscode.Disposable {
 
             // Check if this is the same plot and operation type
             if (queuedOperation.comm.clientId === comm.clientId &&
+                !queuedOperation.operation.operationRequest.preview &&
                 queuedOperation.operation.operationRequest.type === operationType) {
 
                 // Cancel the operation
@@ -514,16 +519,15 @@ export class PositronPlotRenderQueue implements vscode.Disposable {
             return;
         }
 
+        // The active operation is outside _queue. An empty queue must not
+        // release the session lock while that operation is still running.
+        if (this._isProcessing) { return; }
+
         // Nothing to do if the queue is empty.
         if (this._queue.length === 0) {
             this._isProcessing = false;
             // Clean up any unused close listeners when queue is empty
             this.cleanupUnusedCloseListeners();
-            return;
-        }
-
-        // Don't allow re-entrant processing.
-        if (this._isProcessing) {
             return;
         }
 
@@ -539,6 +543,7 @@ export class PositronPlotRenderQueue implements vscode.Disposable {
             return;
         }
         this._activeOperation = queuedOperation;
+        queuedOperation.onStart?.();
 
         this.trace(`Processing ${queuedOperation.operation.operationRequest.type} request: ` +
             `${JSON.stringify(queuedOperation.operation.operationRequest)} ` +

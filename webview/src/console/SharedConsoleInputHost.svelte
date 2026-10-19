@@ -17,6 +17,7 @@
     }
 
     interface ConsoleInputMountProps {
+        hostSubmitting: boolean;
         width: number;
         hidden: boolean;
         active: boolean;
@@ -49,6 +50,7 @@
 
     let {
         activeConsoleInstance,
+        hostSubmitting = false,
         width = 0,
         anchorVersion = 0,
         languageAssetsVersion = 0,
@@ -70,6 +72,7 @@
         getAnchor,
     }: {
         activeConsoleInstance: ConsoleInstanceModel | undefined;
+        hostSubmitting?: boolean;
         width: number;
         anchorVersion?: number;
         languageAssetsVersion?: number;
@@ -110,6 +113,7 @@
         activeConsoleInstance: ConsoleInstanceModel,
     ): ConsoleInputMountProps {
         return {
+            hostSubmitting,
             width,
             hidden:
                 activeConsoleInstance.promptActive ||
@@ -149,6 +153,7 @@
         }
 
         mountedProps.width = width;
+        mountedProps.hostSubmitting = hostSubmitting;
         mountedProps.hidden =
             activeConsoleInstance.promptActive ||
             !activeConsoleInstance.runtimeAttached ||

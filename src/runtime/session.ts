@@ -160,6 +160,7 @@ export class RuntimeSession implements vscode.Disposable {
     private readonly _exitEmitter = new vscode.EventEmitter<LanguageRuntimeExit>();
     private readonly _cancelExecutionEmitter = new vscode.EventEmitter<string>();
     private readonly _pendingExecutionIds = new Set<string>();
+    private readonly _executionCodeLocations = new Map<string, Utf8Location>();
     private readonly _startupCompleteEmitter = new vscode.EventEmitter<LanguageRuntimeInfo>();
     private readonly _startupFailureEmitter = new vscode.EventEmitter<LanguageRuntimeStartupFailure>();
     private readonly _workingDirectoryEmitter = new vscode.EventEmitter<string>();
@@ -893,6 +894,13 @@ export class RuntimeSession implements vscode.Disposable {
                 ...(attribution ? { attributionSource: attribution.source } : {}),
             }
             : undefined;
+        const codeLocation = this._toCodeLocation(attribution);
+        if (codeLocation) {
+            this._executionCodeLocations.set(id, codeLocation);
+            if (this._executionCodeLocations.size > 200) {
+                this._executionCodeLocations.delete(this._executionCodeLocations.keys().next().value!);
+            }
+        }
         this._pendingExecutionIds.add(id);
         try {
             return Promise.resolve(this._kernel.execute(
@@ -900,7 +908,7 @@ export class RuntimeSession implements vscode.Disposable {
                 id,
                 mode,
                 errorBehavior,
-                this._toCodeLocation(attribution),
+                codeLocation,
                 kernelExecutionMetadata,
             )).catch(error => {
                 this.cancelExecutions([id]);
@@ -910,6 +918,10 @@ export class RuntimeSession implements vscode.Disposable {
             this.cancelExecutions([id]);
             throw error;
         }
+    }
+
+    getExecutionCodeLocation(executionId: string): Utf8Location | undefined {
+        return this._executionCodeLocations.get(executionId);
     }
 
     private _toCodeLocation(attribution?: ICodeExecutionAttribution): Utf8Location | undefined {
@@ -1795,6 +1807,7 @@ export class RuntimeSession implements vscode.Disposable {
         }
         this._disposed = true;
         this.cancelExecutions([...this._pendingExecutionIds]);
+        this._executionCodeLocations.clear();
         this._consoleLspConfigurationEmitter.dispose();
 
         if (this._eventQueueTimer) {

@@ -191,6 +191,10 @@ export const SessionMethods = {
 } as const;
 
 export const ConsoleMethods = {
+    getInputDraft: 'console/getInputDraft',
+    applyInputEdit: 'console/applyInputEdit',
+    inputDraftChanged: 'console/inputDraftChanged',
+    submissionStateChanged: 'console/submissionStateChanged',
     isComplete: 'console/isComplete',
     submitCode: 'console/submitCode',
     cancelCompletenessCheck: 'console/cancelCompletenessCheck',
@@ -266,6 +270,7 @@ export const PlotsMethods = {
     ready: 'plots/ready',
     list: 'plots/list',
     render: 'plots/render',
+    getCachedRender: 'plots/getCachedRender',
     claimHtmlPlot: 'plots/claimHtmlPlot',
     releaseHtmlPlot: 'plots/releaseHtmlPlot',
     layoutHtmlPlot: 'plots/layoutHtmlPlot',
@@ -403,4 +408,6 @@ export const PlotEditorMethods = {
     close: 'plotEditor/close',
     setImage: 'plotEditor/setImage',
     renderResult: 'plotEditor/renderResult',
+    state: 'plotEditor/state',
+    selectZoom: 'plotEditor/selectZoom',
 } as const;

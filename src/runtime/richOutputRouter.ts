@@ -421,6 +421,9 @@ export class RichOutputRouter implements vscode.Disposable {
         message: RichOutputMessage,
         signal: AbortSignal = new AbortController().signal,
     ): Promise<void> {
+        if (message.kind === RuntimeOutputKind.PlotWidget && !this._plotsService.getPlotsPaneBehavior(session.sessionId).surface) {
+            return; // A plain notebook owns this output inline.
+        }
         if (!this._isRouteCurrent(signal) || await this._routeWithRegisteredRenderer(session, message, signal)) {
             return;
         }

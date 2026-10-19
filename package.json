@@ -25,7 +25,8 @@
   "displayName": "Supervisor",
   "description": "Multi-language kernel management framework for VS Code",
   "activationEvents": [
-    "onStartupFinished"
+    "onStartupFinished",
+    "onWebviewPanel:positronPlotEditor"
   ],
   "main": "./dist/extension.js",
   "l10n": "./l10n",
@@ -234,12 +235,26 @@
       {
         "command": "supervisor.console.executeCode",
         "title": "Execute Code in Console",
-        "category": "Supervisor Console"
+        "category": "Supervisor Console",
+        "enablement": "editorLangId && !notebookEditorFocused && !notebookCellEditorFocused"
       },
       {
         "command": "supervisor.console.executeCodeWithoutAdvancing",
         "title": "Execute Code (Keep Cursor)",
-        "category": "Supervisor Console"
+        "category": "Supervisor Console",
+        "enablement": "editorLangId && !notebookEditorFocused && !notebookCellEditorFocused"
+      },
+      {
+        "command": "supervisor.console.cancelCodeSubmission",
+        "title": "%supervisor.console.cancelCodeSubmission.title%",
+        "category": "Supervisor Console",
+        "enablement": "supervisor.editorCodeSubmissionPending"
+      },
+      {
+        "command": "supervisor.console.runCodeAsIs",
+        "title": "%supervisor.console.runCodeAsIs.title%",
+        "category": "Supervisor Console",
+        "enablement": "supervisor.editorCodeSubmissionPending"
       },
       {
         "command": "supervisor.console.clearConsole",
@@ -259,12 +274,14 @@
       {
         "command": "supervisor.console.executeCodeBeforeCursor",
         "title": "Execute Code Before Cursor",
-        "category": "Supervisor Console"
+        "category": "Supervisor Console",
+        "enablement": "editorLangId && !notebookEditorFocused && !notebookCellEditorFocused"
       },
       {
         "command": "supervisor.console.executeCodeAfterCursor",
         "title": "Execute Code After Cursor",
-        "category": "Supervisor Console"
+        "category": "Supervisor Console",
+        "enablement": "editorLangId && !notebookEditorFocused && !notebookCellEditorFocused"
       },
       {
         "command": "supervisor.console.navigateInputHistoryUp",
@@ -788,6 +805,14 @@
         }
       ],
       "commandPalette": [
+        {
+          "command": "supervisor.console.cancelCodeSubmission",
+          "when": "supervisor.editorCodeSubmissionPending"
+        },
+        {
+          "command": "supervisor.console.runCodeAsIs",
+          "when": "supervisor.editorCodeSubmissionPending"
+        },
         {
           "command": "supervisor.dataExplorer.importFromView",
           "when": "supervisor.dataExplorerEditorActive && supervisor.dataExplorerHasBackingFile"

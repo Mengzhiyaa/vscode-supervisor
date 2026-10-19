@@ -7,6 +7,7 @@ import { getErrorMessage } from '../../shared/errors';
 import * as vscode from 'vscode';
 import { randomUUID } from 'crypto';
 import { codeFragmentsFromBoundaries, type IInputBoundaryFragments, type IInputBoundaryFragment } from './inputBoundaries';
+import type { ConsoleInputDraft, ConsoleInputEdit } from '../../shared/consoleInputState';
 import { deserializePromptState } from '../../shared/console';
 import type {
     SerializedActivityItem,
@@ -176,9 +177,13 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
     private _runtimeItemPendingInput: RuntimeItemPendingInput | undefined;
     private _runtimeItemSubmittingInput: RuntimeItemPendingInput | undefined;
     private _submissionGeneration = 0;
-    private _cancelActiveSubmission: ((interruptRuntime?: boolean) => void) | undefined;
+    private _cancelSubmissionHandler: ((interruptRuntime?: boolean) => void) | undefined;
     private _enqueueCheckInProgress = false;
-    private _pendingBusyExecutionId: string | undefined;
+    private _pendingBusyId: string | undefined;
+    private _pendingBusyIsInteractive = true;
+    private _submissionStateVersion = 0;
+    private _inputDraft: ConsoleInputDraft | undefined;
+    private _inputDraftReader: ((token: vscode.CancellationToken) => Promise<ConsoleInputDraft | undefined>) | undefined;
     private _submissionTokenSource: vscode.CancellationTokenSource | undefined;
     private _submissionAtSupervisor = false;
     private _lastPastedText = '';
@@ -209,6 +214,8 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
     private readonly _onDidAttachSessionEmitter = new vscode.EventEmitter<RuntimeSession | undefined>();
     private readonly _onDidChangeInputStateEmitter = new vscode.EventEmitter<{ executionId: string; state: 'busy' | 'idle' }>();
     private readonly _onDidSetPendingCodeEmitter = new vscode.EventEmitter<string | undefined>();
+    private readonly _onDidRequestInputEditEmitter = new vscode.EventEmitter<ConsoleInputEdit>();
+    private readonly _onDidChangeCodeSubmissionInProgressEmitter = new vscode.EventEmitter<boolean>();
     private readonly _onDidChangePendingInputEmitter = new vscode.EventEmitter<{ code?: string; inputPrompt: string }>();
     private readonly _onDidChangePromptEmitter = new vscode.EventEmitter<void>();
     private readonly _onDidChangeWorkingDirectoryEmitter = new vscode.EventEmitter<string | undefined>();
@@ -251,7 +258,57 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
     get inputPrompt(): string { return this._inputPrompt; }
     get continuationPrompt(): string { return this._continuationPrompt; }
     get codeSubmissionInProgress(): boolean {
-        return this._cancelActiveSubmission !== undefined || this._pendingBusyExecutionId !== undefined;
+        return this._cancelActiveSubmission !== undefined ||
+            (this._pendingBusyId !== undefined && this._pendingBusyIsInteractive);
+    }
+    get submissionStateVersion(): number { return this._submissionStateVersion; }
+
+    private get _cancelActiveSubmission() { return this._cancelSubmissionHandler; }
+    private set _cancelActiveSubmission(value: ((interruptRuntime?: boolean) => void) | undefined) {
+        const previous = this.codeSubmissionInProgress;
+        this._cancelSubmissionHandler = value;
+        if (previous !== this.codeSubmissionInProgress) {
+            this._submissionStateVersion += 1;
+            this._onDidChangeCodeSubmissionInProgressEmitter.fire(this.codeSubmissionInProgress);
+        }
+    }
+
+    private get _pendingBusyExecutionId() { return this._pendingBusyId; }
+    private set _pendingBusyExecutionId(value: string | undefined) {
+        const previous = this.codeSubmissionInProgress;
+        this._pendingBusyId = value;
+        if (value !== undefined) { this._pendingBusyIsInteractive = true; }
+        if (previous !== this.codeSubmissionInProgress) {
+            this._submissionStateVersion += 1;
+            this._onDidChangeCodeSubmissionInProgressEmitter.fire(this.codeSubmissionInProgress);
+        }
+    }
+
+    private _trackPendingDispatch(id: string, mode: RuntimeCodeExecutionMode): void {
+        const previous = this.codeSubmissionInProgress;
+        this._pendingBusyId = id;
+        this._pendingBusyIsInteractive = mode === RuntimeCodeExecutionMode.Interactive;
+        if (previous !== this.codeSubmissionInProgress) {
+            this._submissionStateVersion += 1;
+            this._onDidChangeCodeSubmissionInProgressEmitter.fire(this.codeSubmissionInProgress);
+        }
+    }
+
+    updateInputDraft(draft: ConsoleInputDraft): void {
+        if (!draft || typeof draft.clientId !== 'string' || typeof draft.code !== 'string' ||
+            !Number.isSafeInteger(draft.version) || draft.version < 1) { return; }
+        if (this._inputDraft?.clientId === draft.clientId && this._inputDraft.version > draft.version) { return; }
+        this._inputDraft = { ...draft };
+    }
+
+    setInputDraftReader(reader: (token: vscode.CancellationToken) => Promise<ConsoleInputDraft | undefined>): vscode.Disposable {
+        this._inputDraftReader = reader;
+        return new vscode.Disposable(() => {
+            if (this._inputDraftReader === reader) {
+                this._inputDraftReader = undefined;
+                this._inputDraft = undefined;
+            }
+        });
     }
 
     private get _alignConsoleSubmission(): boolean {
@@ -278,6 +335,8 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
     readonly onDidAttachSession = this._onDidAttachSessionEmitter.event;
     readonly onDidChangeInputState = this._onDidChangeInputStateEmitter.event;
     readonly onDidSetPendingCode = this._onDidSetPendingCodeEmitter.event;
+    readonly onDidRequestInputEdit = this._onDidRequestInputEditEmitter.event;
+    readonly onDidChangeCodeSubmissionInProgress = this._onDidChangeCodeSubmissionInProgressEmitter.event;
     readonly onDidChangePendingInput = this._onDidChangePendingInputEmitter.event;
     readonly onDidChangePrompt = this._onDidChangePromptEmitter.event;
     readonly onDidChangeWorkingDirectory = this._onDidChangeWorkingDirectoryEmitter.event;
@@ -736,7 +795,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
         }
 
         this.clearPendingInput();
-        this.setPendingCode();
+        this.setPendingCode(undefined, undefined, this._inputDraft);
 
         if (
             this._session &&
@@ -794,7 +853,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
         }
 
         if (this._alignConsoleSubmission &&
-            (this.codeSubmissionInProgress || this._enqueueCheckInProgress || this._pendingInputState === 'Processing')) {
+            (this.codeSubmissionInProgress || this._pendingBusyId || this._enqueueCheckInProgress || this._pendingInputState === 'Processing')) {
             this.addPendingInput(code, attribution, executionId, mode, errorBehavior, executionMetadata,
                 allowIncomplete || isCompletenessVerified(attribution));
             return;
@@ -803,18 +862,36 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
         const session = this._session;
         if (!session || this._isDisposed) { return; }
         const align = this._alignConsoleSubmission;
+        const ownSubmission = align && mode === RuntimeCodeExecutionMode.Interactive;
         const generation = this._submissionGeneration;
         const tokenSource = new vscode.CancellationTokenSource();
         let cancelCheck!: () => void;
         const cancelled = new Promise<undefined>(resolve => {
             cancelCheck = () => { tokenSource.cancel(); resolve(undefined); };
         });
-        this._enqueueCheckInProgress = align;
-        if (align) { this._cancelActiveSubmission = cancelCheck; }
+        if (ownSubmission) {
+            this._enqueueCheckInProgress = true;
+            this._cancelActiveSubmission = cancelCheck;
+        }
         let submittingItem: RuntimeItemPendingInput | undefined;
-        const originalPendingCode = this._pendingCode;
-        const mergedPendingCode = mode === RuntimeCodeExecutionMode.Interactive && !!originalPendingCode;
         try {
+            let expectedDraft = this._inputDraft;
+            if (ownSubmission && this._inputDraftReader) {
+                const beforeRead = this._inputDraft;
+                const draft = await Promise.race([this._inputDraftReader(tokenSource.token), cancelled]);
+                if (tokenSource.token.isCancellationRequested || this._session !== session || this._isDisposed ||
+                    generation !== this._submissionGeneration) { return; }
+                if (draft) {
+                    if (this._inputDraft !== beforeRead && this._inputDraft?.clientId !== draft.clientId) { return; }
+                    this.updateInputDraft(draft);
+                    expectedDraft = this._inputDraft;
+                } else {
+                    // An old browser model's mirror is not a current snapshot.
+                    expectedDraft = undefined;
+                }
+            }
+            const originalPendingCode = expectedDraft?.code ?? this._pendingCode;
+            const mergedPendingCode = mode === RuntimeCodeExecutionMode.Interactive && !!originalPendingCode;
             if (mergedPendingCode) {
                 executionId ??= this._pendingExecutionIds.get(code);
                 code = originalPendingCode + '\n' + code;
@@ -830,18 +907,23 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
             const boundaries = align && mode === RuntimeCodeExecutionMode.Interactive && !bypassCheck
                 ? await Promise.race([this._getInputBoundaryFragments(code, tokenSource.token), cancelled])
                 : undefined;
+            if (this._session !== session || this._isDisposed || tokenSource.token.isCancellationRequested ||
+                (ownSubmission && generation !== this._submissionGeneration)) { return; }
             const status = bypassCheck || boundaries
                 ? boundaries?.incomplete ? RuntimeCodeFragmentStatus.Incomplete : RuntimeCodeFragmentStatus.Complete
                 : align ? await this._checkCodeFragmentCompleteness(code, cancelled, session)
                     : await session.isCodeFragmentComplete(code);
             if (this._session !== session || this._isDisposed || tokenSource.token.isCancellationRequested ||
-                generation !== this._submissionGeneration || status === undefined) { return; }
+                (ownSubmission && generation !== this._submissionGeneration) || status === undefined) { return; }
             const complete = status === RuntimeCodeFragmentStatus.Complete;
             if (!complete) {
-                this.setPendingCode(code, executionId);
+                // Background checks must never replace an interactive draft.
+                if (mode === RuntimeCodeExecutionMode.Interactive) {
+                    this.setPendingCode(code, executionId, expectedDraft);
+                }
                 return;
             }
-            if (mergedPendingCode && this._pendingCode === originalPendingCode) { this.setPendingCode(); }
+            if (mergedPendingCode) { this.setPendingCode(undefined, undefined, expectedDraft); }
             if (boundaries && !boundaries.invalid && boundaries.fragments.length > 0) {
                 const [first, ...rest] = boundaries.fragments;
                 // Queue the remainder before dispatch: a synchronous Idle event must not reorder it.
@@ -865,7 +947,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
             }
             if (this._cancelActiveSubmission === cancelCheck) { this._cancelActiveSubmission = undefined; }
             tokenSource.dispose();
-            this._enqueueCheckInProgress = false;
+            if (ownSubmission) { this._enqueueCheckInProgress = false; }
             this._drainPendingInputIfIdle();
         }
     }
@@ -881,14 +963,16 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
         executionId?: string,
         executionMetadata?: Record<string, unknown>,
     ): void {
-        if (this._alignConsoleSubmission && (this.codeSubmissionInProgress || this._enqueueCheckInProgress ||
+        if (this._alignConsoleSubmission && (this.codeSubmissionInProgress || this._pendingBusyId || this._enqueueCheckInProgress ||
             this._runtimeItemPendingInput || this._pendingInputState === 'Processing' ||
             (this._session && this._session.state !== RuntimeState.Ready && this._session.state !== RuntimeState.Idle))) {
             this.addPendingInput(code.replace(/\r\n?/g, '\n'), attribution, executionId,
                 mode, errorBehavior, executionMetadata, true);
             return;
         }
-        this.setPendingCode();
+        // Browser submissions have already cleared their own model. Preserve
+        // any type-ahead that arrived before this request reached the Host.
+        this.clearPendingCodeState();
         this.doExecuteCode(code, attribution, mode, errorBehavior, executionId, executionMetadata);
     }
 
@@ -899,7 +983,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
     ): Promise<import('./interfaces/consoleService').ConsoleSubmissionResult> {
         if (this._alignConsoleSubmission) {
             code = code.replace(/\r\n?/g, '\n');
-            if (this.codeSubmissionInProgress || this._enqueueCheckInProgress ||
+            if (this.codeSubmissionInProgress || this._pendingBusyId || this._enqueueCheckInProgress ||
                 this._runtimeItemPendingInput || this._pendingInputState === 'Processing' ||
                 (this._session && this._session.state !== RuntimeState.Ready && this._session.state !== RuntimeState.Idle)) {
                 this.addPendingInput(code, attribution, undefined, RuntimeCodeExecutionMode.Interactive,
@@ -1092,7 +1176,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
 
     cancelCodeSubmission(interruptRuntime = true): void {
         const cancelActiveSubmission = this._cancelActiveSubmission;
-        const pendingExecutionId = this._pendingBusyExecutionId;
+        const pendingExecutionId = this._pendingBusyIsInteractive ? this._pendingBusyExecutionId : undefined;
         if (!cancelActiveSubmission && !this._runtimeItemSubmittingInput && !pendingExecutionId) {
             return;
         }
@@ -1122,7 +1206,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
 
     private _drainPendingInputIfIdle(): void {
         if (!this._alignConsoleSubmission || this._isDisposed || !this._session ||
-            this.codeSubmissionInProgress || this._enqueueCheckInProgress ||
+            this.codeSubmissionInProgress || this._pendingBusyId || this._enqueueCheckInProgress ||
             (this._session.state !== RuntimeState.Ready && this._session.state !== RuntimeState.Idle)) {
             return;
         }
@@ -1275,7 +1359,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
             }
         }
 
-        if (this._alignConsoleSubmission && !executionAccepted) { this._pendingBusyExecutionId = execId; }
+        if (this._alignConsoleSubmission && !executionAccepted) { this._trackPendingDispatch(execId, mode); }
         const rejected = (error: unknown) => {
             if (this._pendingBusyExecutionId === execId) { this._pendingBusyExecutionId = undefined; }
             this._outputChannel.error(`[ConsoleInstance] Execution was not accepted: ${getErrorMessage(error)}`);
@@ -1313,7 +1397,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
         });
     }
 
-    private setPendingCode(pendingCode?: string, executionId?: string): void {
+    private setPendingCode(pendingCode?: string, executionId?: string, expectedDraft?: ConsoleInputDraft): void {
         if (pendingCode && executionId) {
             this._pendingCode = pendingCode;
             this._pendingExecutionIds.set(pendingCode, executionId);
@@ -1324,6 +1408,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
         }
 
         this._onDidSetPendingCodeEmitter.fire(pendingCode);
+        this._onDidRequestInputEditEmitter.fire({ code: pendingCode, expectedDraft });
     }
 
     private clearPendingCodeState(): void {
@@ -1414,7 +1499,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
         if (this._pendingInputState !== 'Idle') {
             return;
         }
-        if (this._alignConsoleSubmission && (this.codeSubmissionInProgress || this._enqueueCheckInProgress)) {
+        if (this._alignConsoleSubmission && (this.codeSubmissionInProgress || this._pendingBusyId || this._enqueueCheckInProgress)) {
             return;
         }
 
@@ -1436,6 +1521,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
 
         const session = this._session;
         const pendingItem = this._pendingCodeQueue[0];
+        const expectedDraft = this._inputDraft ? { ...this._inputDraft, code: '' } : undefined;
         const checked = await this._checkPendingCode(pendingItem, session);
 
         if (this._pendingInputState === 'Interrupted' || this._isDisposed || this._session !== session ||
@@ -1451,8 +1537,11 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
         if (codeFragmentStatus !== RuntimeCodeFragmentStatus.Complete) {
             this._pendingCodeQueue.shift();
             this._syncPendingInputRuntimeItem();
-            this.setPendingCode(pendingItem.code, pendingItem.executionId);
-            return false;
+            if (pendingItem.mode === RuntimeCodeExecutionMode.Interactive) {
+                this.setPendingCode(pendingItem.code, pendingItem.executionId, expectedDraft);
+                return false;
+            }
+            return true;
         }
 
         // The code is complete, so execute it (Positron inline pattern).
@@ -1490,7 +1579,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
             pendingItem.code,
             pendingItem.attribution,
         );
-        if (this._alignConsoleSubmission) { this._pendingBusyExecutionId = id; }
+        if (this._alignConsoleSubmission) { this._trackPendingDispatch(id, pendingItem.mode); }
         try {
             await session.execute(
                 pendingItem.code,
@@ -1537,7 +1626,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
         if (item.completenessVerified || isCompletenessVerified(item.attribution)) {
             return { status: RuntimeCodeFragmentStatus.Complete };
         }
-        if (!this._alignConsoleSubmission) {
+        if (!this._alignConsoleSubmission || item.mode !== RuntimeCodeExecutionMode.Interactive) {
             return { status: await session.isCodeFragmentComplete(item.code) };
         }
         const source = new vscode.CancellationTokenSource();
@@ -2467,6 +2556,8 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
         this._onDidAttachSessionEmitter.dispose();
         this._onDidChangeInputStateEmitter.dispose();
         this._onDidSetPendingCodeEmitter.dispose();
+        this._onDidRequestInputEditEmitter.dispose();
+        this._onDidChangeCodeSubmissionInProgressEmitter.dispose();
         this._onDidChangePendingInputEmitter.dispose();
         this._onDidChangePromptEmitter.dispose();
         this._onDidChangeWorkingDirectoryEmitter.dispose();

@@ -16,6 +16,8 @@ export const CoreCommandIds = {
     packagesUpdateAll: 'supervisor.packages.updateAll',
     consoleExecuteCode: 'supervisor.console.executeCode',
     consoleExecuteCodeWithoutAdvancing: 'supervisor.console.executeCodeWithoutAdvancing',
+    consoleCancelCodeSubmission: 'supervisor.console.cancelCodeSubmission',
+    consoleRunCodeAsIs: 'supervisor.console.runCodeAsIs',
     consoleClearConsole: 'supervisor.console.clearConsole',
     consoleFocusConsole: 'supervisor.console.focusConsole',
     consoleClearInputHistory: 'supervisor.console.clearInputHistory',

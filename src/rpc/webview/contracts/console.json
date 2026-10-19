@@ -4,6 +4,64 @@
   "declarations": [
     {
       "kind": "interface",
+      "name": "ConsoleInputDraft",
+      "fields": [
+        { "name": "clientId", "type": "string" },
+        { "name": "version", "type": "number" },
+        { "name": "code", "type": "string" }
+      ]
+    },
+    {
+      "kind": "request",
+      "name": "GetInputDraftRequest",
+      "method": "console/getInputDraft",
+      "paramsType": "Params",
+      "resultType": "Result",
+      "errorType": "void",
+      "declarations": [
+        { "kind": "interface", "name": "Params", "fields": [{ "name": "sessionId", "type": "string" }] },
+        { "kind": "interface", "name": "Result", "fields": [{ "name": "draft", "optional": true, "type": "ConsoleInputDraft" }] }
+      ]
+    },
+    {
+      "kind": "request",
+      "name": "ApplyInputEditRequest",
+      "method": "console/applyInputEdit",
+      "paramsType": "Params",
+      "resultType": "Result",
+      "errorType": "void",
+      "declarations": [
+        { "kind": "interface", "name": "Params", "fields": [
+          { "name": "sessionId", "type": "string" },
+          { "name": "code", "optional": true, "type": "string" },
+          { "name": "expectedDraft", "optional": true, "type": "ConsoleInputDraft" }
+        ] },
+        { "kind": "interface", "name": "Result", "fields": [{ "name": "draft", "optional": true, "type": "ConsoleInputDraft" }] }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "InputDraftChangedNotification",
+      "method": "console/inputDraftChanged",
+      "paramsType": "Params",
+      "declarations": [{ "kind": "interface", "name": "Params", "fields": [
+        { "name": "sessionId", "type": "string" },
+        { "name": "draft", "type": "ConsoleInputDraft" }
+      ] }]
+    },
+    {
+      "kind": "notification",
+      "name": "SubmissionStateChangedNotification",
+      "method": "console/submissionStateChanged",
+      "paramsType": "Params",
+      "declarations": [{ "kind": "interface", "name": "Params", "fields": [
+        { "name": "sessionId", "type": "string" },
+        { "name": "submitting", "type": "boolean" },
+        { "name": "version", "optional": true, "type": "number" }
+      ] }]
+    },
+    {
+      "kind": "interface",
       "name": "CompletionItem",
       "fields": [
         {
@@ -850,6 +908,11 @@
               "name": "code",
               "optional": true,
               "type": "string"
+            },
+            {
+              "name": "expectedDraft",
+              "optional": true,
+              "type": "ConsoleInputDraft"
             }
           ]
         }
@@ -1103,6 +1166,8 @@
       "kind": "interface",
       "name": "SerializedConsoleState",
       "fields": [
+        { "name": "codeSubmissionInProgress", "optional": true, "type": "boolean" },
+        { "name": "submissionStateVersion", "optional": true, "type": "number" },
         {
           "name": "version",
           "type": "number"

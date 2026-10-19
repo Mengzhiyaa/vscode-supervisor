@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
+import type { ConsoleInputDraft, ConsoleInputEdit } from '../../../shared/consoleInputState';
 import { RuntimeItem } from '../classes/runtimeItem';
 import { RuntimeSession } from '../../../runtime/session';
 import {
@@ -249,6 +250,10 @@ export interface IPositronConsoleInstance extends vscode.Disposable {
     readonly onDidNavigateInputHistoryDown: vscode.Event<DidNavigateInputHistoryEventArgs>;
     readonly onDidClearInputHistory: vscode.Event<void>;
     readonly onDidSetPendingCode: vscode.Event<string | undefined>;
+    readonly onDidRequestInputEdit: vscode.Event<ConsoleInputEdit>;
+    readonly onDidChangeCodeSubmissionInProgress: vscode.Event<boolean>;
+    updateInputDraft(draft: ConsoleInputDraft): void;
+    setInputDraftReader(reader: (token: vscode.CancellationToken) => Promise<ConsoleInputDraft | undefined>): vscode.Disposable;
 
     // Reveal execution event (1:1 Positron)
     readonly onDidRevealExecution: vscode.Event<string>;
@@ -282,6 +287,7 @@ export interface IPositronConsoleInstance extends vscode.Disposable {
         executionMetadata?: Record<string, unknown>,
     ): void;
     readonly codeSubmissionInProgress: boolean;
+    readonly submissionStateVersion: number;
     /** Apply the effective host-side scrollback retention. */
     setScrollbackSize(scrollbackSize: number): void;
     submitCode(

@@ -5,7 +5,7 @@
 
 import * as vscode from 'vscode';
 import type { IPlotSize } from '../sizingPolicy';
-import type { IntrinsicSize, PlotMetadata } from './positronPlotComm';
+import type { IntrinsicSize, PlotMetadata, ShowEvent } from './positronPlotComm';
 import { PlotRenderFormat } from './positronPlotComm';
 import {
     DeferredRender,
@@ -82,8 +82,8 @@ export class PositronPlotCommProxy implements vscode.Disposable {
     /**
      * Event that fires when the plot wants to display itself.
      */
-    readonly onDidShowPlot: vscode.Event<void>;
-    private readonly _didShowPlotEmitter = new vscode.EventEmitter<void>();
+    readonly onDidShowPlot: vscode.Event<ShowEvent>;
+    private readonly _didShowPlotEmitter = new vscode.EventEmitter<ShowEvent>();
 
     /**
      * Event that fires when the intrinsic size of the plot is set.
@@ -166,8 +166,8 @@ export class PositronPlotCommProxy implements vscode.Disposable {
 
         // Listen for show events from the comm class
         this._disposables.push(
-            this._comm.onDidShow(() => {
-                this._didShowPlotEmitter.fire();
+            this._comm.onDidShow((evt) => {
+                this._didShowPlotEmitter.fire(evt);
             })
         );
     }

@@ -142,6 +142,82 @@ function createRuntimeSession(
 }
 
 suite('[Unit] console execution alignment', () => {
+    test('editor execution merges the current draft snapshot instead of a stale pending fragment', async () => {
+        const calls: unknown[][] = [];
+        const instance = createConsoleInstance();
+        instance.attachRuntimeSession(createRuntimeSession(calls), SessionAttachMode.Connected);
+        const edits: any[] = [];
+        instance.onDidRequestInputEdit(edit => edits.push(edit));
+        try {
+            await instance.enqueueCode(')', { source: 'editor' });
+            instance.updateInputDraft({ clientId: 'model-1', version: 1, code: ')' });
+            instance.setInputDraftReader(async () => ({ clientId: 'model-1', version: 2, code: 'x <-' }));
+            await instance.enqueueCode('1', { source: 'editor', metadata: { completenessVerified: true } });
+            assert.strictEqual(calls.length, 1);
+            assert.strictEqual(calls[0][0], 'x <-\n1');
+            assert.deepStrictEqual(edits.at(-1), {
+                code: undefined, expectedDraft: { clientId: 'model-1', version: 2, code: 'x <-' },
+            });
+        } finally {
+            instance.dispose();
+        }
+    });
+
+    test('cancelling boundary detection publishes completion without starting a fallback kernel check', async () => {
+        const calls: unknown[][] = [];
+        const instance = createConsoleInstance();
+        const session = createRuntimeSession(calls);
+        let checks = 0;
+        session.isCodeFragmentComplete = async () => { checks += 1; return RuntimeCodeFragmentStatus.Complete; };
+        instance.attachRuntimeSession(session, SessionAttachMode.Connected);
+        const states: boolean[] = [];
+        instance.onDidChangeCodeSubmissionInProgress(value => states.push(value));
+        let started!: () => void;
+        const waiting = new Promise<void>(resolve => { started = resolve; });
+        (instance as any)._getInputBoundaryFragments = () => { started(); return new Promise(() => undefined); };
+        try {
+            const submission = instance.enqueueCode('1', { source: 'editor' });
+            await waiting;
+            instance.cancelCodeSubmission();
+            await submission;
+            assert.strictEqual(checks, 0);
+            assert.strictEqual(calls.length, 0);
+            assert.deepStrictEqual(states, [true, false]);
+            assert.strictEqual(instance.submissionStateVersion, 2);
+        } finally {
+            instance.dispose();
+        }
+    });
+
+    test('a silent completeness check does not acquire or cancel interactive submission state', async () => {
+        const calls: unknown[][] = [];
+        const instance = createConsoleInstance();
+        const session = createRuntimeSession(calls);
+        let finish!: (status: RuntimeCodeFragmentStatus) => void;
+        let started!: () => void;
+        const waiting = new Promise<void>(resolve => { started = resolve; });
+        session.isCodeFragmentComplete = () => {
+            started();
+            return new Promise<RuntimeCodeFragmentStatus>(resolve => { finish = resolve; });
+        };
+        instance.attachRuntimeSession(session, SessionAttachMode.Connected);
+        const states: boolean[] = [];
+        instance.onDidChangeCodeSubmissionInProgress(value => states.push(value));
+        try {
+            const background = instance.enqueueCode('1', { source: 'extension' }, false, RuntimeCodeExecutionMode.Silent);
+            await waiting;
+            assert.strictEqual(instance.codeSubmissionInProgress, false);
+            instance.cancelCodeSubmission();
+            finish(RuntimeCodeFragmentStatus.Complete);
+            await background;
+            assert.strictEqual(calls.length, 1);
+            assert.strictEqual(calls[0][2], RuntimeCodeExecutionMode.Silent);
+            assert.deepStrictEqual(states, []);
+        } finally {
+            instance.dispose();
+        }
+    });
+
     test('direct console execution clears an invalid pending editor fragment', async () => {
         const executeCalls: unknown[][] = [];
         const pendingCodeChanges: Array<string | undefined> = [];
@@ -173,7 +249,8 @@ suite('[Unit] console execution alignment', () => {
             { requestId: 'request-direct' },
         );
 
-        assert.deepStrictEqual(pendingCodeChanges, [')', undefined]);
+        // Clear the Host mirror without erasing browser type-ahead.
+        assert.deepStrictEqual(pendingCodeChanges, [')']);
         assert.deepStrictEqual(executeCalls, [[
             ')',
             'console-execution',

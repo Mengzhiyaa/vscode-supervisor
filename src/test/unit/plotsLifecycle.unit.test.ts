@@ -8,6 +8,7 @@ import {
 import { PlotClientInstance, shouldFreezeSlowPlot } from '../../runtime/PlotClientInstance';
 import {
     type IntrinsicSize,
+    type ShowEvent,
     PlotUnit,
 } from '../../runtime/comms/positronPlotComm';
 import {
@@ -88,7 +89,7 @@ suite('[Unit] Plot resource and sizing lifecycle', () => {
         };
         const closeEmitter = new vscode.EventEmitter<void>();
         const renderUpdateEmitter = new vscode.EventEmitter<UpdateEvent>();
-        const showPlotEmitter = new vscode.EventEmitter<void>();
+        const showPlotEmitter = new vscode.EventEmitter<ShowEvent>();
         const intrinsicSizeEmitter = new vscode.EventEmitter<IntrinsicSize | undefined>();
         let requestCount = 0;
         const commProxy = {

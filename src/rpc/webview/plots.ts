@@ -4,6 +4,24 @@
 
 import { NotificationType, RequestType, RequestType0 } from 'vscode-jsonrpc/node';
 
+export interface CachedPlotRender {
+    uri: string;
+    size?: { width: number; height: number; };
+    pixelRatio: number;
+    format: 'png' | 'svg' | 'jpeg' | 'pdf' | 'tiff';
+    renderVersion: number;
+}
+
+export namespace GetCachedRenderRequest {
+
+    export interface Result {
+        render?: CachedPlotRender;
+        matchesTarget: boolean;
+    }
+
+    export const type = new RequestType<RenderPlotRequest.Params, Result, void>('plots/getCachedRender');
+}
+
 export interface PlotData {
     data: string;
     mimeType: string;
@@ -299,6 +317,7 @@ export namespace PlotStateChangedNotification {
     export interface Params {
         plotId: string;
         state: PlotClientState;
+        renderEstimateMs?: number;
     }
 
     export const type = new NotificationType<Params>('plots/plotStateChanged');
@@ -400,4 +419,21 @@ export namespace RemovePlotRequest {
     }
 
     export const type = new RequestType<Params, void, void>('plots/remove');
+}
+
+export namespace RunCodeAgainRequest {
+
+    export interface Params {
+        plotId?: string;
+        code: string;
+        sessionId: string;
+        languageId: string;
+    }
+
+    export interface Result {
+        success: boolean;
+        error?: string;
+    }
+
+    export const type = new RequestType<Params, Result, void>('plots/runCodeAgain');
 }

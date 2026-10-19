@@ -15,6 +15,7 @@
 
     import { onMount, onDestroy } from "svelte";
     import type { MessageConnection } from "vscode-jsonrpc/browser";
+    import type { GetCachedRenderRequest } from "../../../src/rpc/webview/plots";
     import PanZoomImage from "./PanZoomImage.svelte";
     import PlotProgressBar from "./PlotProgressBar.svelte";
     import {
@@ -33,12 +34,9 @@
         darkFilterMode?: "off" | "auto" | "on";
         latestUri?: string;
         renderVersion?: number;
+        hostState?: PlotClientState;
+        hostRenderEstimateMs?: number;
         initialData?: string;
-        initialRenderSettings?: {
-            width: number;
-            height: number;
-            pixelRatio: number;
-        };
         onrendered?: (payload: {
             plotId: string;
             uri: string;
@@ -57,8 +55,9 @@
         darkFilterMode = "auto",
         latestUri,
         renderVersion = 0,
+        hostState,
+        hostRenderEstimateMs,
         initialData,
-        initialRenderSettings,
         onrendered,
     }: Props = $props();
 
@@ -72,7 +71,7 @@
     let lastSizingPolicyId = $state<string | undefined>(undefined);
     let pendingRenderKey: string | undefined;
     let pendingRenderConnection: MessageConnection | undefined;
-    let initialRenderSettingsChecked = false;
+    let snapshotConnection: MessageConnection | undefined;
     let latestAppliedRenderVersion = $state(0);
     let renderRequestSerial = 0;
     let destroyed = false;
@@ -85,22 +84,6 @@
         sizingPolicyId === "custom" && customSize ? customSize.height : height,
     );
 
-    function hasMatchingInitialRenderSettings(): boolean {
-        if (!initialRenderSettings || !initialData || uri !== initialData) {
-            return false;
-        }
-
-        const targetWidth = Math.floor(renderWidth);
-        const targetHeight = Math.floor(renderHeight);
-        const targetPixelRatio = window.devicePixelRatio || 1;
-
-        return (
-            targetWidth === initialRenderSettings.width &&
-            targetHeight === initialRenderSettings.height &&
-            Math.abs(targetPixelRatio - initialRenderSettings.pixelRatio) < 0.01
-        );
-    }
-
     function getRenderRequestKey(): string {
         const targetWidth = Math.floor(renderWidth);
         const targetHeight = Math.floor(renderHeight);
@@ -108,7 +91,7 @@
         return `${plotId}:${targetWidth}x${targetHeight}@${ratio}:${sizingPolicyId ?? ""}`;
     }
 
-    async function render(requestedKey: string, requestSerial: number) {
+    async function render(requestedKey: string, requestSerial: number, fetchSnapshot = false) {
         const requestedPlotId = plotId;
         const requestedWidth = renderWidth;
         const requestedHeight = renderHeight;
@@ -125,21 +108,54 @@
                 return;
             }
 
-            plotState = PlotClientState.Rendering;
-            progressBarDone = false;
-
-            const startTime = Date.now();
             const ratio = window.devicePixelRatio || 1;
-
-            // The host resolves intrinsic fallback for this plot ID. An old
-            // component must not mutate the newly selected plot's policy.
-            const result = (await requestedConnection.sendRequest("plots/render", {
+            const params = {
                 plotId: requestedPlotId,
                 width: requestedWidth,
                 height: requestedHeight,
-                format: "png",
+                format: "png" as const,
                 pixelRatio: ratio,
-            })) as { data: string; mimeType: string; renderVersion: number };
+            };
+
+            if (fetchSnapshot) {
+                // The host applies the sizing policy and compares size, ratio and format.
+                // Never infer a cache hit from the raw viewport dimensions here.
+                let snapshot: GetCachedRenderRequest.Result | undefined;
+                try {
+                    snapshot = await requestedConnection.sendRequest<GetCachedRenderRequest.Result>("plots/getCachedRender", params);
+                } catch {
+                    // A missing snapshot can always fall back to a normal render request.
+                }
+                if (!isCurrent()) { return; }
+                const cached = snapshot?.render;
+                if (cached && cached.renderVersion >= latestAppliedRenderVersion) {
+                    latestAppliedRenderVersion = cached.renderVersion;
+                    uri = cached.uri;
+                    error = "";
+                    onrendered?.({
+                        plotId: requestedPlotId,
+                        uri: cached.uri,
+                        renderVersion: cached.renderVersion,
+                    });
+                    if (snapshot?.matchesTarget) {
+                        sharedCompletedRendersByPlotId.set(requestedPlotId, {
+                            key: requestedKey,
+                            renderVersion: cached.renderVersion,
+                        });
+                        return;
+                    }
+                }
+            }
+
+            if (!hostState) { plotState = PlotClientState.RenderPending; }
+            progressBarDone = false;
+            const startTime = Date.now();
+
+            // The host resolves intrinsic fallback for this plot ID. An old
+            // component must not mutate the newly selected plot's policy.
+            const result = (await requestedConnection.sendRequest("plots/render", params)) as {
+                data: string; mimeType: string; renderVersion: number;
+            };
 
             if (!isCurrent()) {
                 return;
@@ -183,7 +199,7 @@
                 pendingRenderKey = undefined;
                 pendingRenderConnection = undefined;
                 if (!destroyed) {
-                    plotState = PlotClientState.Rendered;
+                    if (!hostState) { plotState = PlotClientState.Rendered; }
                     progressBarDone = true;
                 }
             }
@@ -199,6 +215,12 @@
         const requestSerial = ++renderRequestSerial;
         pendingRenderKey = key;
         pendingRenderConnection = connection;
+        if (snapshotConnection !== connection) {
+            snapshotConnection = connection;
+            resizeTimeout = null;
+            void render(key, requestSerial, true);
+            return;
+        }
         resizeTimeout = setTimeout(() => {
             resizeTimeout = null;
             void render(key, requestSerial);
@@ -211,8 +233,6 @@
         }
 
         const key = getRenderRequestKey();
-        const canUseInitialRender = !initialRenderSettingsChecked;
-        initialRenderSettingsChecked = true;
         if (!force && pendingRenderKey === key && pendingRenderConnection === connection) {
             return;
         }
@@ -220,19 +240,11 @@
         const completedRender = sharedCompletedRendersByPlotId.get(plotId);
         if (!force && !pendingRenderKey) {
             if (
+                snapshotConnection === connection &&
                 completedRender?.key === key &&
                 Boolean(uri) &&
                 completedRender.renderVersion === latestAppliedRenderVersion
             ) {
-                return;
-            }
-            // The initial settings describe the startup image, not later
-            // images that may contain the same pixels at a different size.
-            if (canUseInitialRender && !completedRender && hasMatchingInitialRenderSettings()) {
-                sharedCompletedRendersByPlotId.set(plotId, {
-                    key,
-                    renderVersion: latestAppliedRenderVersion,
-                });
                 return;
             }
         }
@@ -275,6 +287,14 @@
     });
 
     $effect(() => {
+        if (hostState) {
+            plotState = hostState;
+            renderEstimateMs = hostRenderEstimateMs ?? 0;
+            progressBarDone = hostState === PlotClientState.Rendered;
+        }
+    });
+
+    $effect(() => {
         if (!latestUri) {
             return;
         }
@@ -293,8 +313,8 @@
         error = "";
 
         if (plotState !== PlotClientState.Rendering) {
-            plotState = PlotClientState.Rendered;
-            progressBarDone = true;
+            plotState = hostState ?? PlotClientState.Rendered;
+            progressBarDone = !hostState || hostState === PlotClientState.Rendered;
         }
     });
 
@@ -302,8 +322,8 @@
         if (latestUri || initialData) {
             uri = latestUri || initialData || "";
             error = "";
-            plotState = PlotClientState.Rendered;
-            progressBarDone = true;
+            plotState = hostState ?? PlotClientState.Rendered;
+            progressBarDone = !hostState || hostState === PlotClientState.Rendered;
             latestAppliedRenderVersion = renderVersion;
         }
 

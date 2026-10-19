@@ -1,4 +1,6 @@
 {
+  "supervisor.console.cancelCodeSubmission.title": "Cancel Code Submission",
+  "supervisor.console.runCodeAsIs.title": "Run Code as Is",
   "kernelSupervisor.shutdownTimeout.immediately": "Shut down after the window closes, allowing 60 seconds for reconnection",
   "kernelSupervisor.shutdownTimeout.description": "Controls how long the kernel supervisor keeps sessions alive after the window closes. The default allows a 60-second reconnection grace period for window reloads. Non-immediate values keep sessions alive according to the idle timeout; fixed-hour values and indefinitely also enable reconnection after application restarts.",
   "supervisor.openSupervisorManager.title": "Open Kernel Supervisor Manager",

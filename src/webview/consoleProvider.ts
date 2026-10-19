@@ -363,6 +363,9 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
         // Webview was (re)created — all sessions need restore state on reconnect.
         this._initializedSessions.clear();
         this._publishedSessionIconHashes.clear();
+        connection.onNotification(ConsoleProtocol.InputDraftChangedNotification.type, params => {
+            this._consoleService?.getConsoleInstance(params.sessionId)?.updateInputDraft(params.draft);
+        });
 
         // Deterministic readiness signal from webview.
         connection.onNotification(ConsoleProtocol.ConsoleReadyNotification.type, () => {
@@ -1220,10 +1223,6 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
         this._connection?.sendNotification(ConsoleProtocol.ClearInputHistoryNotification.type, { sessionId });
     }
 
-    private _sendPendingCode(sessionId: string, code?: string): void {
-        this._connection?.sendNotification(ConsoleProtocol.SetPendingCodeNotification.type, { sessionId, code });
-    }
-
     private _sendPendingInputChanged(sessionId: string, code: string | undefined, inputPrompt: string): void {
         this._connection?.sendNotification(ConsoleProtocol.PendingInputChangedNotification.type, {
             sessionId,
@@ -1510,8 +1509,32 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
             }
         }));
 
-        disposables.push(instance.onDidSetPendingCode(code => {
-            this._sendPendingCode(sessionId, code);
+        disposables.push(instance.setInputDraftReader(async token => {
+            const connection = this._connection;
+            if (!connection || !this._webviewReady) { return undefined; }
+            try {
+                return (await connection.sendRequest(ConsoleProtocol.GetInputDraftRequest.type, { sessionId }, token)).draft;
+            } catch (error) {
+                if (token.isCancellationRequested) { throw new vscode.CancellationError(); }
+                this.log(`Console draft unavailable: ${getErrorMessage(error)}`, vscode.LogLevel.Debug);
+                return undefined;
+            }
+        }));
+        disposables.push(instance.onDidRequestInputEdit(edit => {
+            const connection = this._connection;
+            if (!connection || !this._webviewReady) { return; }
+            void connection.sendRequest(ConsoleProtocol.ApplyInputEditRequest.type, { sessionId, ...edit })
+                .catch(error => {
+                    this.log(`Console input edit unavailable: ${getErrorMessage(error)}`, vscode.LogLevel.Debug);
+                    if (this._connection === connection) {
+                        connection.sendNotification(ConsoleProtocol.SetPendingCodeNotification.type, { sessionId, ...edit });
+                    }
+                });
+        }));
+        disposables.push(instance.onDidChangeCodeSubmissionInProgress(submitting => {
+            this._connection?.sendNotification(ConsoleProtocol.SubmissionStateChangedNotification.type, {
+                sessionId, submitting, version: instance.submissionStateVersion,
+            });
         }));
 
         disposables.push(instance.onDidChangePrompt(() => {
@@ -1697,6 +1720,8 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
 
         const state = {
             ...serializedState,
+            codeSubmissionInProgress: instance.codeSubmissionInProgress,
+            submissionStateVersion: instance.submissionStateVersion,
             inputPrompt: instance.inputPrompt,
             continuationPrompt: instance.continuationPrompt,
             workingDirectory: instance.workingDirectory ?? null,
