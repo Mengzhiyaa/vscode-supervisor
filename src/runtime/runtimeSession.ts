@@ -1065,8 +1065,14 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
             throw new Error(`Session ${sessionId} not found`);
         }
 
-        if (session.sessionMetadata.sessionMode !== LanguageRuntimeSessionMode.Console) {
-            throw new Error('Cannot focus a notebook or background session');
+        if (
+            session.sessionMetadata.sessionMode !== LanguageRuntimeSessionMode.Console &&
+            !(
+                session.sessionMetadata.sessionMode === LanguageRuntimeSessionMode.Notebook &&
+                this._activeSessionsBySessionId.get(sessionId)?.hasConsole
+            )
+        ) {
+            throw new Error('Cannot focus a session without a console');
         }
 
         await this._setForegroundSession(session.sessionId);
@@ -1598,6 +1604,8 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
     ): Promise<void> {
         this.prepareSessionStart(session, startMode, activate, hasConsole);
         const readyPromise = this._waitForSessionReady(session, 10000);
+        // Readiness can time out before start() settles; the later await still propagates it.
+        void readyPromise.catch(() => undefined);
         let finalized = false;
         let failed = false;
 
@@ -1658,10 +1666,6 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
             await readyPromise;
             await finalizeStart();
         } catch (error) {
-            // If start() failed before the readiness promise settled, consume
-            // its eventual rejection so it cannot become unhandled.
-            void readyPromise.catch(() => undefined);
-
             if (this._isSessionReadyTimeout(error) && this._isSessionUsable(session)) {
                 await finalizeStart();
                 return;
@@ -2496,7 +2500,10 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
             void activeSession.startUiClient().catch(() => undefined);
         }
 
+        // A new Console may already be selected while this runtime is still foreground.
+        // Its state updates must not reactivate the previous Console.
         if (
+            this._foregroundSessionId !== session.sessionId &&
             this._isUsableRuntimeState(state) &&
             session.sessionMetadata.sessionMode === LanguageRuntimeSessionMode.Console &&
             (!this.foregroundSession || session.isForeground)

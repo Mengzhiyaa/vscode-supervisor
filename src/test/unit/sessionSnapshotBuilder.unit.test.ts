@@ -147,7 +147,7 @@ suite('[Unit] session snapshot builder', () => {
         );
     });
 
-    test('buildSessionsWithConsoleOverlay excludes provisional console-only sessions until attached', () => {
+    test('buildSessionsWithConsoleOverlay includes provisional console-only sessions before attachment', () => {
         const provisional = createConsoleInstance(
             'session-restore-1',
             PositronConsoleState.Uninitialized,
@@ -170,15 +170,36 @@ suite('[Unit] session snapshot builder', () => {
         );
 
         const sessions = builder.buildSessionsWithConsoleOverlay();
-        assert.deepStrictEqual(sessions, []);
+        assert.deepStrictEqual(sessions, [
+            {
+                id: 'session-restore-1',
+                name: 'restored-r-session',
+                runtimeName: 'R',
+                sessionMode: 'console',
+                createdTimestamp: 1,
+                state: 'uninitialized',
+                runtimeState: 'uninitialized',
+                runtimePath: '/console/session-restore-1',
+                runtimeVersion: '4.4.1',
+                runtimeSource: 'configured',
+                base64EncodedIconSvg: 'console-icon',
+                promptActive: false,
+                runtimeAttached: false,
+                languageId: 'r',
+            },
+        ]);
 
         assert.strictEqual(
             builder.resolveForegroundConsoleSessionId(sessions, ['session-restore-1']),
+            'session-restore-1',
+        );
+        assert.strictEqual(
+            builder.resolveActiveSessionId(sessions, ['session-restore-1']),
             undefined,
         );
     });
 
-    test('resolveForegroundConsoleSessionId skips exited sessions and prefers attached healthy sessions', () => {
+    test('console selection preserves exited sessions while active selection prefers attached healthy sessions', () => {
         const builder = new SessionSnapshotBuilder();
         const sessions = [
             {
@@ -216,13 +237,13 @@ suite('[Unit] session snapshot builder', () => {
             },
         ];
 
-        assert.strictEqual(
-            builder.resolveForegroundConsoleSessionId(sessions, [
-                'session-failed',
-                'session-detached',
-                'session-healthy',
-            ]),
-            'session-healthy',
+        const candidateIds = ['session-failed', 'session-detached', 'session-healthy'];
+        assert.deepStrictEqual(
+            {
+                foreground: builder.resolveForegroundConsoleSessionId(sessions, candidateIds),
+                active: builder.resolveActiveSessionId(sessions, candidateIds),
+            },
+            { foreground: 'session-failed', active: 'session-healthy' },
         );
     });
 });

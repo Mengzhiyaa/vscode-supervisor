@@ -118,6 +118,7 @@
             let availableWidth =
                 Math.max(containerWidth - paddingLeft - paddingRight, 0) -
                 (reserveOverflowButton ? BUTTON_WIDTH : 0);
+            let overflowing = false;
 
             interface SideLayoutResult {
                 gridEntries: GridEntry[];
@@ -132,7 +133,13 @@
                 let appendSep = false;
                 let remainingWidth = Math.max(availableWidth, 0);
 
-                for (const action of actions) {
+                for (const [index, action] of actions.entries()) {
+                    // Preserve Positron's action order: after the first action that
+                    // cannot fit, the remaining actions belong in the overflow menu.
+                    if (overflowing) {
+                        hiddenActions.push(...actions.slice(index));
+                        break;
+                    }
                     const appliedSeparatorWidth = appendSep ? separatorWidth : 0;
                     const preferredWidth = getPreferredWidth(action);
                     const minWidth = Math.min(
@@ -164,8 +171,9 @@
                         );
 
                     if (requiredShrink > totalShrinkCapacity) {
-                        hiddenActions.push(action);
-                        continue;
+                        overflowing = true;
+                        hiddenActions.push(...actions.slice(index));
+                        break;
                     }
 
                     let nextWidth = preferredWidth;
@@ -432,7 +440,9 @@
                     onclick={handleOverflowClick}
                     onkeydown={handleOverflowKeyDown}
                 >
-                    <span class="codicon codicon-toolbar-more"></span>
+                    <div aria-hidden="true" class="action-bar-button-face">
+                        <span class="action-bar-button-icon codicon codicon-more"></span>
+                    </div>
                 </button>
             </div>
         {/if}

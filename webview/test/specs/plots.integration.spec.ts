@@ -139,7 +139,7 @@ test('plots requests initial preferences and uses the preferred editor target fr
     await expect(page.locator('.plots-container')).toHaveClass(/history-right/);
     await expect(page.locator('.plots-container')).toHaveClass(/dark-filter-off/);
 
-    await page.getByRole('button', { name: 'Open in...', exact: true }).click();
+    await page.getByRole('button', { name: 'Select where to open plot', exact: true }).click();
     const sideTarget = page.getByRole('menuitemcheckbox', {
         name: 'Open in editor tab to the Side',
         exact: true,
@@ -162,6 +162,94 @@ test('plots requests initial preferences and uses the preferred editor target fr
         plotId: 'plot-1',
         viewColumn: 'beside',
     });
+
+    const repeatOpenInEditor = backend.waitForNextRequest(PlotsMethods.openInEditor);
+    await page.getByRole('button', { name: 'Open in...', exact: true }).click();
+    expect((await repeatOpenInEditor).params).toEqual({
+        plotId: 'plot-1',
+        viewColumn: 'beside',
+    });
+    await expect(page.getByRole('menu')).toHaveCount(0);
+});
+
+test('plots keeps split controls on one row and moves overflowing actions into submenus', async ({
+    page,
+}) => {
+    const backend = await openWebviewPage(page, 'plots', {
+        configure: (mockBackend) => {
+            registerPlotsDefaults(mockBackend, {
+                plots: [
+                    {
+                        id: 'plot-1',
+                        sessionId: 'session-1',
+                        kind: 'static',
+                        initialData: SMALL_PNG_DATA_URI,
+                        name: 'Cars Plot',
+                    },
+                ],
+                selectedPlotId: 'plot-1',
+            });
+        },
+    });
+    await expect.poll(() => backend.notificationCount(PlotsMethods.ready)).toBeGreaterThan(0);
+
+    const split = page.locator('.menu-button-container.split');
+    await expect(split.getByRole('button')).toHaveCount(2);
+    await expect
+        .poll(() =>
+            split.evaluate((element) => {
+                const bounds = element.getBoundingClientRect();
+                const buttons = [...element.querySelectorAll('button')].map((button) =>
+                    button.getBoundingClientRect(),
+                );
+                return buttons.length === 2 &&
+                    Math.abs(buttons[0].top - buttons[1].top) <= 1 &&
+                    Math.abs(buttons[0].bottom - buttons[1].bottom) <= 1 &&
+                    buttons[0].right <= buttons[1].left + 1 &&
+                    buttons[1].right <= bounds.right + 1;
+            }),
+        )
+        .toBe(true);
+
+    // Keep the browser wide enough for menus while narrowing the panel itself.
+    const panel = page.locator('.positron-plots-container');
+    await panel.evaluate((element) => (element.style.width = '256px'));
+    const overflow = page.getByRole('button', { name: 'More actions', exact: true });
+    await expect(overflow).toBeVisible();
+    await expect
+        .poll(() =>
+            overflow.locator('.codicon').evaluate((icon) => getComputedStyle(icon, '::before').content),
+        )
+        .toBe('"\uea7c"');
+    await expect(page.getByRole('button', { name: 'Set the plot zoom', exact: true })).toHaveCount(0);
+    await expect(
+        page.getByRole('button', {
+            name: 'Set whether a dark filter is applied to plots.',
+            exact: true,
+        }),
+    ).toHaveCount(0);
+
+    await overflow.click();
+    await expect(page.getByRole('menuitem', { name: 'Dark Filter', exact: true })).toBeVisible();
+    await page.getByRole('menuitem', { name: 'Zoom', exact: true }).click();
+    const zoomRequest = backend.waitForNextRequest(PlotsMethods.selectZoom);
+    await page.getByRole('menuitemcheckbox', { name: '50%', exact: true }).click();
+    expect((await zoomRequest).params).toEqual({ plotId: 'plot-1', zoomLevel: 0.5 });
+
+    await panel.evaluate((element) => (element.style.width = '64px'));
+    await expect(page.getByRole('button', { name: 'Open in...', exact: true })).toHaveCount(0);
+    await overflow.click();
+    await page.getByRole('menuitem', { name: 'Open in...', exact: true }).click();
+    const openRequest = backend.waitForNextRequest(PlotsMethods.openInEditor);
+    await page
+        .getByRole('menuitemcheckbox', { name: 'Open in editor tab to the Side', exact: true })
+        .click();
+    expect((await openRequest).params).toEqual({ plotId: 'plot-1', viewColumn: 'beside' });
+
+    await panel.evaluate((element) => element.style.removeProperty('width'));
+    await expect(overflow).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Open in...', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Set the plot zoom', exact: true })).toBeVisible();
 });
 
 test('plots sends save, editor, gallery, and code action requests', async ({ page }) => {
@@ -196,7 +284,6 @@ test('plots sends save, editor, gallery, and code action requests', async ({ pag
 
     const openInEditorRequest = backend.waitForNextRequest(PlotsMethods.openInEditor);
     await page.getByRole('button', { name: 'Open in...', exact: true }).click();
-    await page.getByRole('menuitemcheckbox', { name: 'Open in editor tab', exact: true }).click();
     await expect
         .poll(async () => (await openInEditorRequest).params)
         .toEqual({
@@ -205,7 +292,7 @@ test('plots sends save, editor, gallery, and code action requests', async ({ pag
         });
 
     const openInNewWindowRequest = backend.waitForNextRequest(PlotsMethods.openInNewWindow);
-    await page.getByRole('button', { name: 'Open in...', exact: true }).click();
+    await page.getByRole('button', { name: 'Select where to open plot', exact: true }).click();
     await page.getByRole('menuitemcheckbox', { name: 'Open in new window', exact: true }).click();
     await expect
         .poll(async () => (await openInNewWindowRequest).params)
@@ -235,7 +322,7 @@ test('plots sends save, editor, gallery, and code action requests', async ({ pag
         });
 
     const galleryRequest = backend.waitForNextRequest(PlotsMethods.openGalleryInNewWindow);
-    await page.getByRole('button', { name: 'Open in...', exact: true }).click();
+    await page.getByRole('button', { name: 'Select where to open plot', exact: true }).click();
     await expect(
         page.getByRole('menuitemcheckbox', { name: 'Open in new window', exact: true }),
     ).toBeChecked();
@@ -244,7 +331,7 @@ test('plots sends save, editor, gallery, and code action requests', async ({ pag
         .click();
     await galleryRequest;
 
-    await page.getByRole('button', { name: 'Open in...', exact: true }).click();
+    await page.getByRole('button', { name: 'Select where to open plot', exact: true }).click();
     await expect(
         page.getByRole('menuitemcheckbox', {
             name: 'Open plots gallery in new window',
@@ -255,6 +342,11 @@ test('plots sends save, editor, gallery, and code action requests', async ({ pag
         page.getByRole('menuitemcheckbox', { name: 'Open in new window', exact: true }),
     ).not.toBeChecked();
     await page.keyboard.press('Escape');
+
+    const repeatGalleryRequest = backend.waitForNextRequest(PlotsMethods.openGalleryInNewWindow);
+    await page.getByRole('button', { name: 'Open in...', exact: true }).click();
+    await repeatGalleryRequest;
+    await expect(page.getByRole('menu')).toHaveCount(0);
 });
 
 test('plots releases html plot claims when switching away and applies sizing policy change notifications', async ({

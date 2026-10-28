@@ -25,6 +25,7 @@
     import { localize } from '../lib/localization';
 
     type OpenInEditorTarget = 'editorTab' | 'editorTabSide' | 'newWindow';
+    type PlotOpenTarget = EditorTarget | 'popout' | 'gallery';
 
     interface Props {
         plotCount: number;
@@ -111,8 +112,8 @@
     );
     const openInLabel = localize('plots.openIn', 'Open in...');
     const clearAllPlots = localize('plots.clearAll', 'Clear all plots');
-    const plotIconButtonWidth = 18;
-    const plotSeparatorWidth = 5;
+    const plotIconButtonWidth = 24;
+    const plotSeparatorWidth = 7;
 
     const isDynamicPlot = $derived(selectedPlotKind === 'dynamic');
     const isStaticPlot = $derived(selectedPlotKind === 'static');
@@ -207,10 +208,20 @@
         onOpenGalleryInNewWindow?.();
     }
 
-    // Remember the most recently selected destination, including the gallery.
-    let openTarget = $state<EditorTarget | 'gallery'>('activeGroup');
+    // Keep HTML popout separate from opening an image in a new editor window.
+    let openTarget = $state<PlotOpenTarget>('activeGroup');
     $effect(() => {
         openTarget = openInEditorDefaultTarget;
+    });
+
+    // Resolve a temporary fallback without replacing the remembered destination.
+    // Positron maps a remembered HTML popout to the active editor group for images.
+    const resolvedOpenTarget = $derived.by((): PlotOpenTarget => {
+        if (openTarget === 'gallery') return 'gallery';
+        if (enableEditorPlot) {
+            return openTarget === 'popout' ? 'activeGroup' : openTarget;
+        }
+        return enablePopoutPlot ? 'popout' : 'gallery';
     });
 
     const zoomMenu = $derived(zoomActions(zoomLevel, onZoomChange));
@@ -261,7 +272,7 @@
                 items.push({
                     id: target,
                     label,
-                    checked: openTarget === target,
+                    checked: resolvedOpenTarget === target,
                     onSelected: () => {
                         openTarget = target;
                         handleOpenInEditor(target);
@@ -269,11 +280,11 @@
                 });
         } else if (enablePopoutPlot) {
             items.push({
-                id: 'newWindow',
+                id: 'popout',
                 label: openPlotInNewWindow,
-                checked: openTarget !== 'gallery',
+                checked: resolvedOpenTarget === 'popout',
                 onSelected: () => {
-                    openTarget = 'newWindow';
+                    openTarget = 'popout';
                     handlePopoutPlot();
                 },
             });
@@ -282,7 +293,7 @@
         items.push({
             id: 'gallery',
             label: openPlotsGalleryInNewWindow,
-            checked: openTarget === 'gallery' || (!enableEditorPlot && !enablePopoutPlot),
+            checked: resolvedOpenTarget === 'gallery',
             onSelected: () => {
                 openTarget = 'gallery';
                 handleOpenGalleryInNewWindow();
@@ -323,7 +334,7 @@
             if (enableCopyPlot) {
                 actions.push({
                     fixedWidth: plotIconButtonWidth,
-                    separator: false,
+                    separator: enableZoomPlot,
                     component: copySnippet,
                     overflowMenuItem: {
                         label: copyPlotToClipboard,
@@ -334,9 +345,8 @@
             }
             if (enableZoomPlot) {
                 actions.push({
-                    fixedWidth: 32,
+                    fixedWidth: 36,
                     text: activeZoomLabel,
-                    minWidth: 48,
                     separator: false,
                     component: zoomSnippet,
                     overflowSubmenu: {
@@ -348,9 +358,8 @@
             }
             if (enableSizingPolicy && sizingPolicies.length > 0) {
                 actions.push({
-                    fixedWidth: 32,
+                    fixedWidth: 36,
                     text: activeSizingPolicyLabel,
-                    minWidth: 56,
                     separator: false,
                     component: sizingSnippet,
                     overflowSubmenu: {
@@ -423,7 +432,6 @@
 {#snippet prevSnippet()}
     <ActionBarButton
         icon="positron-left-arrow"
-        buttonClass="plot-action-icon-button"
         ariaLabel={showPreviousPlot}
         tooltip={showPreviousPlot}
         disabled={!hasPlots || currentIndex <= 0}
@@ -434,7 +442,6 @@
 {#snippet nextSnippet()}
     <ActionBarButton
         icon="positron-right-arrow"
-        buttonClass="plot-action-icon-button"
         ariaLabel={showNextPlot}
         tooltip={showNextPlot}
         disabled={!hasPlots || currentIndex >= plotCount - 1}
@@ -445,7 +452,6 @@
 {#snippet saveSnippet()}
     <ActionBarButton
         icon="positron-save"
-        buttonClass="plot-action-icon-button"
         ariaLabel={savePlot}
         tooltip={savePlot}
         onclick={handleSave}
@@ -455,7 +461,6 @@
 {#snippet copySnippet()}
     <ActionBarButton
         icon="copy"
-        buttonClass="plot-action-icon-button"
         ariaLabel={copyPlotToClipboard}
         tooltip={copyPlotToClipboard}
         onclick={handleCopy}
@@ -465,7 +470,6 @@
 {#snippet zoomSnippet()}
     <ActionBarMenuButton
         icon="positron-size-to-fit"
-        buttonClass="plot-compact-menu-button"
         label={activeZoomLabel}
         tooltip={localize('plots.zoomTooltip', 'Set the plot zoom')}
         ariaLabel={localize('plots.zoomTooltip', 'Set the plot zoom')}
@@ -476,7 +480,6 @@
 {#snippet sizingSnippet()}
     <ActionBarMenuButton
         icon="symbol-ruler"
-        buttonClass="plot-compact-menu-button"
         label={activeSizingPolicyLabel}
         tooltip={localize('plots.sizingPolicy', "Set how the plot's shape and size are determined")}
         ariaLabel={localize(
@@ -493,6 +496,9 @@
         align="right"
         tooltip={openInLabel}
         ariaLabel={openInLabel}
+        dropdownIndicator="enabled-split"
+        dropdownTooltip={localize('plots.selectWhereToOpen', 'Select where to open plot')}
+        dropdownAriaLabel={localize('plots.selectWhereToOpen', 'Select where to open plot')}
         actions={() => openMenu}
     />
 {/snippet}
@@ -521,7 +527,6 @@
 {#snippet clearAllSnippet()}
     <ActionBarButton
         icon="trash"
-        buttonClass="plot-action-icon-button"
         ariaLabel={clearAllPlots}
         tooltip={clearAllPlots}
         disabled={!hasPlots}
@@ -549,27 +554,4 @@
         rotate: 180deg;
     }
 
-    :global(.action-bar-button.plot-action-icon-button) {
-        width: 18px;
-        height: 22px;
-        border-radius: 3px;
-    }
-
-    :global(.action-bar-button.plot-action-icon-button .codicon) {
-        font-size: 14px;
-        padding: 0 1px;
-    }
-
-    :global(.action-bar-menu-button.plot-compact-menu-button) {
-        gap: 0;
-        padding: 0 2px;
-    }
-
-    :global(.action-bar-menu-button.plot-compact-menu-button .menu-label) {
-        letter-spacing: -0.1px;
-    }
-
-    :global(.action-bar-menu-button.plot-compact-menu-button .menu-chevron) {
-        font-size: 9px;
-    }
 </style>

@@ -376,26 +376,3 @@
     {/if}
 </div>
 
-<style>
-    .action-bar-context-menu {
-        position: fixed;
-    }
-
-    .submenu-arrow {
-        grid-column: end;
-        margin-left: 12px;
-    }
-
-    @media (forced-colors: active) {
-        .action-bar-context-menu {
-            border: 1px solid CanvasText;
-        }
-        .menu-item:focus {
-            outline: 1px solid Highlight;
-            outline-offset: -1px;
-        }
-        .menu-separator {
-            border-color: GrayText;
-        }
-    }
-</style>

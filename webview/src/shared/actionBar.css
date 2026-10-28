@@ -190,6 +190,39 @@ body.vscode-high-contrast-light .action-bar-button:hover:not(:disabled),
 /* ==============================
    ActionBarMenuButton
    ============================== */
+/* Host HTML loads common.css explicitly; shared component CSS chunks are not linked. */
+.menu-button-container {
+    display: inline-flex;
+    flex-flow: row nowrap;
+    align-items: center;
+    min-width: 0;
+    max-width: 100%;
+}
+
+.menu-button-container > .action-bar-menu-button {
+    margin: 0;
+}
+
+.menu-button-container.split {
+    width: var(--positron-action-bar-dropdown-button-width);
+    flex-shrink: 0;
+}
+
+.menu-button-container.split > button:first-child {
+    flex: 1 1 0;
+    border-radius: 4px 0 0 4px;
+}
+
+.menu-button-container.split > button:last-of-type {
+    flex: 0 0 12px;
+    justify-content: center;
+    border-radius: 0 4px 4px 0;
+}
+
+.menu-button-container.split .action-bar-button-drop-down-container {
+    padding: 0;
+}
+
 .action-bar-menu-button {
     min-width: 0;
     max-width: 100%;
@@ -468,6 +501,11 @@ body.vscode-high-contrast-light .action-bar-menu-button:hover:not(:disabled),
     grid-column: title / end;
 }
 
+.action-bar-context-menu .submenu-arrow {
+    grid-column: end;
+    margin-left: 12px;
+}
+
 .action-bar-context-menu .menu-separator {
     height: 1px;
     margin: 4px 0;
@@ -475,6 +513,21 @@ body.vscode-high-contrast-light .action-bar-menu-button:hover:not(:disabled),
         --vscode-positronContextMenu-separatorBackground,
         var(--vscode-menu-separatorBackground)
     );
+}
+
+@media (forced-colors: active) {
+    .action-bar-context-menu {
+        border: 1px solid CanvasText;
+    }
+
+    .action-bar-context-menu .menu-item:focus {
+        outline: 1px solid Highlight;
+        outline-offset: -1px;
+    }
+
+    .action-bar-context-menu .menu-separator {
+        border-color: GrayText;
+    }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -1369,7 +1369,13 @@ export class PositronPlotsService implements IPositronPlotsService, vscode.Dispo
             selectedTarget === 'newWindow',
         );
 
-        this.setPreferredEditorTarget(selectedTarget);
+        // HTML popout is distinct from the image editor's new-window target.
+        // Match Positron's active-group fallback when the next plot is an image.
+        this.setPreferredEditorTarget(
+            editorPlot instanceof HtmlPlotClient && moveToNewWindow
+                ? 'activeGroup'
+                : selectedTarget,
+        );
     }
 
     setPreferredEditorTarget(target: PreferredEditorTarget): void {
