@@ -25,6 +25,7 @@
     import { localize } from '../lib/localization';
 
     type OpenInEditorTarget = 'editorTab' | 'editorTabSide' | 'newWindow';
+    type PlotOpenTarget = EditorTarget | 'popout' | 'gallery';
 
     interface Props {
         plotCount: number;
@@ -207,10 +208,20 @@
         onOpenGalleryInNewWindow?.();
     }
 
-    // Remember the most recently selected destination, including the gallery.
-    let openTarget = $state<EditorTarget | 'gallery'>('activeGroup');
+    // Keep HTML popout separate from opening an image in a new editor window.
+    let openTarget = $state<PlotOpenTarget>('activeGroup');
     $effect(() => {
         openTarget = openInEditorDefaultTarget;
+    });
+
+    // Resolve a temporary fallback without replacing the remembered destination.
+    // Positron maps a remembered HTML popout to the active editor group for images.
+    const resolvedOpenTarget = $derived.by((): PlotOpenTarget => {
+        if (openTarget === 'gallery') return 'gallery';
+        if (enableEditorPlot) {
+            return openTarget === 'popout' ? 'activeGroup' : openTarget;
+        }
+        return enablePopoutPlot ? 'popout' : 'gallery';
     });
 
     const zoomMenu = $derived(zoomActions(zoomLevel, onZoomChange));
@@ -261,7 +272,7 @@
                 items.push({
                     id: target,
                     label,
-                    checked: openTarget === target,
+                    checked: resolvedOpenTarget === target,
                     onSelected: () => {
                         openTarget = target;
                         handleOpenInEditor(target);
@@ -269,11 +280,11 @@
                 });
         } else if (enablePopoutPlot) {
             items.push({
-                id: 'newWindow',
+                id: 'popout',
                 label: openPlotInNewWindow,
-                checked: openTarget !== 'gallery',
+                checked: resolvedOpenTarget === 'popout',
                 onSelected: () => {
-                    openTarget = 'newWindow';
+                    openTarget = 'popout';
                     handlePopoutPlot();
                 },
             });
@@ -282,7 +293,7 @@
         items.push({
             id: 'gallery',
             label: openPlotsGalleryInNewWindow,
-            checked: openTarget === 'gallery' || (!enableEditorPlot && !enablePopoutPlot),
+            checked: resolvedOpenTarget === 'gallery',
             onSelected: () => {
                 openTarget = 'gallery';
                 handleOpenGalleryInNewWindow();
@@ -493,6 +504,9 @@
         align="right"
         tooltip={openInLabel}
         ariaLabel={openInLabel}
+        dropdownIndicator="enabled-split"
+        dropdownTooltip={localize('plots.selectWhereToOpen', 'Select where to open plot')}
+        dropdownAriaLabel={localize('plots.selectWhereToOpen', 'Select where to open plot')}
         actions={() => openMenu}
     />
 {/snippet}

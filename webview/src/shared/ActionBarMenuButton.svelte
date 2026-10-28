@@ -21,6 +21,9 @@
         label?: string;
         tooltip?: string;
         ariaLabel?: string;
+        dropdownIndicator?: 'enabled' | 'enabled-split';
+        dropdownTooltip?: string;
+        dropdownAriaLabel?: string;
         disabled?: boolean;
         align?: 'left' | 'right';
         buttonClass?: string;
@@ -32,6 +35,9 @@
         label,
         tooltip,
         ariaLabel,
+        dropdownIndicator = 'enabled',
+        dropdownTooltip,
+        dropdownAriaLabel,
         disabled = false,
         align = 'left',
         buttonClass = '',
@@ -40,8 +46,25 @@
 
     let menuVisible = $state(false);
     let buttonEl = $state<HTMLButtonElement | null>(null);
+    let dropdownButtonEl = $state<HTMLButtonElement | null>(null);
     let suppressClick = $state(false);
     let initialFocus = $state<'first' | 'last'>('first');
+    const split = $derived(dropdownIndicator === 'enabled-split');
+    const menuAnchor = $derived(split ? dropdownButtonEl : buttonEl);
+
+    function runDefaultAction() {
+        if (disabled) return;
+
+        // Positron repeats the checked action, falling back to the first action.
+        const items = actions().filter((item) => !item.separator);
+        const item = items.find((item) => item.checked) ?? items[0];
+        if (item) selectItem(item);
+    }
+
+    function activate(primary: boolean) {
+        if (primary) runDefaultAction();
+        else toggleMenu();
+    }
 
     function buildMenuEntries(): ContextMenuEntry[] {
         return actions().map((item) =>
@@ -70,7 +93,7 @@
         menuVisible = !menuVisible;
     }
 
-    function handleMouseDown(event: MouseEvent) {
+    function handleMouseDown(event: MouseEvent, primary = false) {
         if (event.button !== 0) {
             return;
         }
@@ -78,10 +101,10 @@
         event.preventDefault();
         event.stopPropagation();
         suppressClick = true;
-        toggleMenu();
+        activate(primary);
     }
 
-    function handleClick(event: MouseEvent) {
+    function handleClick(event: MouseEvent, primary = false) {
         event.preventDefault();
         event.stopPropagation();
 
@@ -90,10 +113,10 @@
             return;
         }
 
-        toggleMenu();
+        activate(primary);
     }
 
-    function handleKeyDown(event: KeyboardEvent) {
+    function handleKeyDown(event: KeyboardEvent, primary = false) {
         switch (event.key) {
             case 'Enter':
             case ' ':
@@ -101,7 +124,9 @@
                 event.preventDefault();
                 event.stopPropagation();
                 suppressClick = true;
-                if (!menuVisible) {
+                if (primary && event.key !== 'ArrowDown') {
+                    runDefaultAction();
+                } else if (!menuVisible) {
                     toggleMenu('first');
                 }
                 break;
@@ -135,13 +160,24 @@
 
         if (options?.restoreFocus !== false) {
             queueMicrotask(() => {
-                buttonEl?.focus();
+                menuAnchor?.focus();
             });
         }
     }
 </script>
 
-<div class="menu-button-container">
+{#snippet dropdownFace()}
+    <span
+        aria-hidden="true"
+        class="action-bar-button-drop-down-container action-bar-menu-drop-down-container"
+    >
+        <span
+            class="action-bar-button-drop-down-arrow action-bar-menu-drop-down-arrow codicon codicon-positron-drop-down-arrow"
+        ></span>
+    </span>
+{/snippet}
+
+<div class="menu-button-container" class:split>
     <button
         bind:this={buttonEl}
         type="button"
@@ -150,11 +186,11 @@
         {disabled}
         title={tooltip || ariaLabel || label || ''}
         aria-label={ariaLabel || label || ''}
-        aria-expanded={menuVisible ? 'true' : undefined}
-        aria-haspopup="menu"
-        onmousedown={handleMouseDown}
-        onclick={handleClick}
-        onkeydown={handleKeyDown}
+        aria-expanded={!split && menuVisible ? 'true' : undefined}
+        aria-haspopup={split ? undefined : 'menu'}
+        onmousedown={(event) => handleMouseDown(event, split)}
+        onclick={(event) => handleClick(event, split)}
+        onkeydown={(event) => handleKeyDown(event, split)}
     >
         <div aria-hidden="true" class="action-bar-button-face">
             {#if icon}
@@ -169,18 +205,34 @@
                     {label}
                 </span>
             {/if}
-            <span class="action-bar-button-drop-down-container action-bar-menu-drop-down-container">
-                <span
-                    class="action-bar-button-drop-down-arrow action-bar-menu-drop-down-arrow codicon codicon-positron-drop-down-arrow"
-                ></span>
-            </span>
+            {#if !split}
+                {@render dropdownFace()}
+            {/if}
         </div>
     </button>
 
-    {#if menuVisible && buttonEl}
+    {#if split}
+        <button
+            bind:this={dropdownButtonEl}
+            type="button"
+            class={`action-bar-button action-bar-menu-button ${buttonClass}`.trim()}
+            {disabled}
+            title={dropdownTooltip || tooltip || ariaLabel || label || ''}
+            aria-label={dropdownAriaLabel || ariaLabel || label || ''}
+            aria-expanded={menuVisible ? 'true' : undefined}
+            aria-haspopup="menu"
+            onmousedown={(event) => handleMouseDown(event)}
+            onclick={(event) => handleClick(event)}
+            onkeydown={(event) => handleKeyDown(event)}
+        >
+            {@render dropdownFace()}
+        </button>
+    {/if}
+
+    {#if menuVisible && menuAnchor}
         <ContextMenu
             entries={buildMenuEntries()}
-            anchorEl={buttonEl}
+            anchorEl={menuAnchor}
             {align}
             {initialFocus}
             onclose={closeMenu}
@@ -192,5 +244,15 @@
     .menu-button-container {
         display: flex;
         min-width: 0;
+    }
+
+    .split > button:first-child {
+        margin-right: 0;
+        border-radius: 4px 0 0 4px;
+    }
+
+    .split > button:last-of-type {
+        margin-left: 0;
+        border-radius: 0 4px 4px 0;
     }
 </style>

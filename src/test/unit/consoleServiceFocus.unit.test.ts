@@ -507,7 +507,13 @@ suite('[Unit] console service focus preservation', () => {
     });
 
     test('revealExecution reveals the console without requesting focus', () => {
-        const service = new PositronConsoleService({} as any, makeNoopLogChannel());
+        const session = { sessionId: 'r-session' };
+        const sessionManager = {
+            foregroundSession: undefined as typeof session | undefined,
+            getSession: (sessionId: string) =>
+                sessionId === session.sessionId ? session : undefined,
+        };
+        const service = new PositronConsoleService(sessionManager as any, makeNoopLogChannel());
         const revealCalls: boolean[] = [];
 
         service.setConsoleViewProvider({
@@ -532,6 +538,8 @@ suite('[Unit] console service focus preservation', () => {
         service.revealExecution('r-session', 'exec-1');
 
         assert.deepStrictEqual(revealCalls, [true]);
+        assert.strictEqual(sessionManager.foregroundSession, session);
+        assert.strictEqual(service.activePositronConsoleInstance, instance);
 
         service.dispose();
     });

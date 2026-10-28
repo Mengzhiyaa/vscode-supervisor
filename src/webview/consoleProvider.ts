@@ -877,7 +877,12 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
                 this._warnMissingSession('switchSession');
                 return;
             }
-            await this._sessionManager.focusSession(params.sessionId);
+            if (this._sessionManager.getSession(params.sessionId)) {
+                await this._sessionManager.focusSession(params.sessionId);
+            } else if (!this._consoleService?.getConsoleInstance(params.sessionId)) {
+                throw new Error(`Session ${params.sessionId} not found`);
+            }
+            this._consoleService?.setActivePositronConsoleSession(params.sessionId);
             // Inactive sessions are intentionally not hydrated on Webview
             // startup. Pull the current bounded snapshot only when the user
             // actually switches to the session.

@@ -1933,13 +1933,21 @@ export class PlotsViewProvider extends BaseWebviewProvider {
     }
 
     private _registerSourceNavigationHandlers(connection: MessageConnection): void {
+        const activateConsoleSession = async (sessionId: string): Promise<void> => {
+            if (this._sessionManager?.getSession(sessionId)) {
+                await this._sessionManager.focusSession(sessionId);
+            }
+            this._consoleService.setActivePositronConsoleSession(sessionId);
+        };
+
         connection.onRequest(
             'plots/revealInConsole',
             async (params: { sessionId: string; executionId?: string }) => {
                 try {
-                    this._consoleService.setActivePositronConsoleSession(params.sessionId);
                     if (params.executionId) {
                         this._consoleService.revealExecution(params.sessionId, params.executionId);
+                    } else {
+                        await activateConsoleSession(params.sessionId);
                     }
                     return { success: true };
                 } catch (e) {
@@ -1956,7 +1964,7 @@ export class PlotsViewProvider extends BaseWebviewProvider {
             'plots/activateConsoleSession',
             async (params: { sessionId: string }) => {
                 try {
-                    this._consoleService.setActivePositronConsoleSession(params.sessionId);
+                    await activateConsoleSession(params.sessionId);
                     return { success: true };
                 } catch (e) {
                     this.log(

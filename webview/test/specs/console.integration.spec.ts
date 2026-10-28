@@ -18,6 +18,43 @@ function consoleEditorInput(page: Page): Locator {
     });
 }
 
+async function readConsoleEditorValue(input: Locator): Promise<string | undefined> {
+    return input.evaluate((element) => {
+        const monaco = (globalThis as typeof globalThis & { monaco?: typeof Monaco }).monaco;
+        return monaco?.editor
+            .getEditors()
+            .find((editor) => editor.getDomNode()?.contains(element))
+            ?.getValue();
+    });
+}
+
+async function pressConsoleKey(input: Locator, key: string, expectedCode?: string): Promise<void> {
+    // The input DOM exists before model activation and keybinding registration finish.
+    // Focus through Monaco so EditContext focus and action preconditions agree.
+    await expect
+        .poll(() =>
+            input.evaluate((element) => {
+                const monaco = (globalThis as typeof globalThis & { monaco?: typeof Monaco })
+                    .monaco;
+                const editor = monaco?.editor
+                    .getEditors()
+                    .find((candidate) => candidate.getDomNode()?.contains(element));
+                const submit = editor?.getAction('console.submit');
+                if (!editor?.getModel() || !submit) {
+                    return false;
+                }
+                editor.focus();
+                return editor.hasTextFocus() && submit.isSupported();
+            }),
+        )
+        .toBe(true);
+    if (expectedCode !== undefined) {
+        await expect.poll(() => readConsoleEditorValue(input)).toBe(expectedCode);
+    }
+    // Keep native keybinding dispatch, suggestion routing, and history handling under test.
+    await input.page().keyboard.press(key);
+}
+
 function createConsoleState(outputText: string) {
     return {
         version: 1 as const,
@@ -953,7 +990,7 @@ test('console restart repro keeps the prompt visible and defers execute until th
     await page.waitForTimeout(200);
 
     const executeCountBeforeReady = backend.requestCount(ConsoleMethods.submitCode);
-    await monacoInput.press('Enter');
+    await pressConsoleKey(monacoInput, 'Enter');
     await page.waitForTimeout(200);
     expect.soft(backend.requestCount(ConsoleMethods.submitCode)).toBe(executeCountBeforeReady);
 
@@ -1065,7 +1102,7 @@ test('console restart repro recovers after a detached runtime frame', async ({ p
     await page.waitForTimeout(200);
 
     const executeCountBeforeReady = backend.requestCount(ConsoleMethods.submitCode);
-    await monacoInput.press('Enter');
+    await pressConsoleKey(monacoInput, 'Enter');
     await page.waitForTimeout(200);
     expect.soft(backend.requestCount(ConsoleMethods.submitCode)).toBe(executeCountBeforeReady);
 
@@ -1340,7 +1377,7 @@ test('console stays unlocked after Enter before the first execution output arriv
 
     const executeRequest = backend.waitForNextRequest(ConsoleMethods.submitCode);
     await monacoInput.focus();
-    await monacoInput.press('Enter');
+    await pressConsoleKey(monacoInput, 'Enter', 'value <- 1');
     await expect
         .poll(async () => (await executeRequest).params)
         .toEqual(
@@ -1408,7 +1445,7 @@ test('console follows the first execution output while the user stays at the bot
 
     const executeRequest = backend.waitForNextRequest(ConsoleMethods.submitCode);
     await monacoInput.focus();
-    await monacoInput.press('Enter');
+    await pressConsoleKey(monacoInput, 'Enter', 'value <- 1');
     await expect
         .poll(async () => (await executeRequest).params)
         .toEqual(
@@ -1481,7 +1518,7 @@ test('console does not force execution output back into view after the user scro
 
     const executeRequest = backend.waitForNextRequest(ConsoleMethods.submitCode);
     await monacoInput.focus();
-    await monacoInput.press('Enter');
+    await pressConsoleKey(monacoInput, 'Enter', 'value <- 2');
     await expect
         .poll(async () => (await executeRequest).params)
         .toEqual(
@@ -1528,12 +1565,17 @@ test('console shows startup progress and can create a new session from the empty
             registerConsoleDefaults(mockBackend, {
                 sessions: [],
             });
-            mockBackend.onRequest(SessionMethods.create, () => ({
-                session: createSession({
+            mockBackend.onRequest(SessionMethods.create, async () => {
+                const session = createSession({
                     id: 'session-new',
                     name: 'Fresh Session',
-                }),
-            }));
+                });
+                await mockBackend.notify(SessionMethods.info, {
+                    sessions: [session],
+                    activeSessionId: session.id,
+                });
+                return { session };
+            });
         },
     });
 
@@ -1573,6 +1615,7 @@ test('console shows startup progress and can create a new session from the empty
     await page.getByText('Start Session').click();
     expect((await createRequest).params).toEqual({ showRuntimePicker: true });
     await expect(page.getByText('Start Session')).toHaveCount(0);
+    await expect(page.getByTestId('console-session-new')).toBeVisible();
 });
 
 test('console applies metadata updates and keeps rename and interrupt requests aligned with session tabs', async ({
@@ -1708,7 +1751,7 @@ test('console executes pending, pasted, and history-driven input and supports se
     await page.waitForTimeout(200);
 
     const executePendingCode = backend.waitForNextRequest(ConsoleMethods.submitCode);
-    await monacoInput.press('Enter');
+    await pressConsoleKey(monacoInput, 'Enter', '1 + 1');
     await expect
         .poll(async () => (await executePendingCode).params)
         .toEqual(
@@ -1724,7 +1767,7 @@ test('console executes pending, pasted, and history-driven input and supports se
     });
     await page.waitForTimeout(200);
     const executePastedCode = backend.waitForNextRequest(ConsoleMethods.submitCode);
-    await monacoInput.press('Enter');
+    await pressConsoleKey(monacoInput, 'Enter', '2 + 2');
     await expect
         .poll(async () => (await executePastedCode).params)
         .toEqual(
@@ -1760,7 +1803,7 @@ test('console executes pending, pasted, and history-driven input and supports se
     await page.waitForTimeout(200);
 
     const executeHistoryCode = backend.waitForNextRequest(ConsoleMethods.submitCode);
-    await monacoInput.press('Enter');
+    await pressConsoleKey(monacoInput, 'Enter', 'y <- 2');
     await expect
         .poll(async () => (await executeHistoryCode).params)
         .toEqual(
@@ -1771,7 +1814,7 @@ test('console executes pending, pasted, and history-driven input and supports se
         );
 
     const clearRequest = backend.waitForNextRequest(ConsoleMethods.clearConsole);
-    await monacoInput.press(process.platform === 'darwin' ? 'Meta+l' : 'Control+l');
+    await pressConsoleKey(monacoInput, process.platform === 'darwin' ? 'Meta+l' : 'Control+l');
     expect((await clearRequest).params).toEqual({ sessionId: 'session-1' });
 });
 
@@ -2061,7 +2104,7 @@ test('console respects host-owned submission results for incomplete, executed, a
         await expect.poll(getEditorValue).toBe(code);
 
         const execute = backend.waitForNextRequest(ConsoleMethods.submitCode);
-        await monacoInput.press('Enter');
+        await pressConsoleKey(monacoInput, 'Enter');
         expect((await execute).params).toEqual({
             sessionId: 'session-1',
             code,
@@ -2104,7 +2147,7 @@ test('console preserves type-ahead and shows delayed submission feedback with a 
         code: 'slow_call()',
     });
     const submissionRequest = backend.waitForNextRequest(ConsoleMethods.submitCode);
-    await input.press('Enter');
+    await pressConsoleKey(input, 'Enter', 'slow_call()');
     await submissionRequest;
     await backend.notify(ConsoleMethods.runtimeChanges, {
         sessionId: 'session-1',
@@ -2179,7 +2222,9 @@ test('console cancels a slow host submission and restores submitted code before 
         sessionId: 'session-1',
         code: 'slow_call()',
     });
-    await input.press('Enter');
+    const submissionRequest = backend.waitForNextRequest(ConsoleMethods.submitCode);
+    await pressConsoleKey(input, 'Enter', 'slow_call()');
+    await submissionRequest;
     await backend.notify(ConsoleMethods.setPendingCode, {
         sessionId: 'session-1',
         code: 'type_ahead <- 1',
@@ -2676,31 +2721,31 @@ test('console navigates input history with ArrowUp and ArrowDown keyboard events
         });
 
     // ArrowUp should show the most recent history entry (third_command)
-    await monacoInput.press('ArrowUp');
+    await pressConsoleKey(monacoInput, 'ArrowUp', '');
     await expect.poll(getEditorValue).toBe('third_command <- 3');
 
     // ArrowUp again should show the second most recent (second_command)
-    await monacoInput.press('ArrowUp');
+    await pressConsoleKey(monacoInput, 'ArrowUp');
     await expect.poll(getEditorValue).toBe('second_command <- 2');
 
     // ArrowUp again should show the oldest (first_command)
-    await monacoInput.press('ArrowUp');
+    await pressConsoleKey(monacoInput, 'ArrowUp');
     await expect.poll(getEditorValue).toBe('first_command <- 1');
 
     // ArrowUp at the oldest should stay at the oldest
-    await monacoInput.press('ArrowUp');
+    await pressConsoleKey(monacoInput, 'ArrowUp');
     await expect.poll(getEditorValue).toBe('first_command <- 1');
 
     // ArrowDown should go back to second_command
-    await monacoInput.press('ArrowDown');
+    await pressConsoleKey(monacoInput, 'ArrowDown');
     await expect.poll(getEditorValue).toBe('second_command <- 2');
 
     // ArrowDown should go back to third_command
-    await monacoInput.press('ArrowDown');
+    await pressConsoleKey(monacoInput, 'ArrowDown');
     await expect.poll(getEditorValue).toBe('third_command <- 3');
 
     // ArrowDown past the end should restore the empty input
-    await monacoInput.press('ArrowDown');
+    await pressConsoleKey(monacoInput, 'ArrowDown');
     await expect.poll(getEditorValue).toBe('');
 });
 
@@ -2749,11 +2794,11 @@ test('console navigates restored inputHistory entries with ArrowUp keyboard even
         });
 
     // ArrowUp should show the inputHistory entry '1 + 1' from createConsoleState
-    await monacoInput.press('ArrowUp');
+    await pressConsoleKey(monacoInput, 'ArrowUp', '');
     await expect.poll(getEditorValue).toBe('1 + 1');
 
     // ArrowDown past the end should restore the empty input
-    await monacoInput.press('ArrowDown');
+    await pressConsoleKey(monacoInput, 'ArrowDown');
     await expect.poll(getEditorValue).toBe('');
 });
 
@@ -2805,7 +2850,7 @@ test('console recalls executed code with ArrowUp after Enter execution', async (
     await page.waitForTimeout(200);
 
     const executeRequest = backend.waitForNextRequest(ConsoleMethods.submitCode);
-    await monacoInput.press('Enter');
+    await pressConsoleKey(monacoInput, 'Enter', 'print("hello")');
     await expect
         .poll(async () => (await executeRequest).params)
         .toEqual(
@@ -2823,11 +2868,11 @@ test('console recalls executed code with ArrowUp after Enter execution', async (
     });
 
     // ArrowUp should recall the executed code
-    await monacoInput.press('ArrowUp');
+    await pressConsoleKey(monacoInput, 'ArrowUp');
     await expect.poll(getEditorValue).toBe('print("hello")');
 
     // ArrowDown should go back to empty
-    await monacoInput.press('ArrowDown');
+    await pressConsoleKey(monacoInput, 'ArrowDown');
     await expect.poll(getEditorValue).toBe('');
 });
 
@@ -2995,15 +3040,15 @@ test('console input history is isolated between sessions', async ({ page }) => {
 
     // Session-1 is active: ArrowUp should yield session-1's history
     await monacoInput.focus();
-    await monacoInput.press('ArrowUp');
+    await pressConsoleKey(monacoInput, 'ArrowUp');
     await expect.poll(getEditorValue).toBe('session1_cmd_b');
 
-    await monacoInput.press('ArrowUp');
+    await pressConsoleKey(monacoInput, 'ArrowUp');
     await expect.poll(getEditorValue).toBe('session1_cmd_a');
 
     // Go back to empty
-    await monacoInput.press('ArrowDown');
-    await monacoInput.press('ArrowDown');
+    await pressConsoleKey(monacoInput, 'ArrowDown');
+    await pressConsoleKey(monacoInput, 'ArrowDown');
     await expect.poll(getEditorValue).toBe('');
 
     // Switch to session-2
@@ -3019,10 +3064,10 @@ test('console input history is isolated between sessions', async ({ page }) => {
     // Session-2 is now active: ArrowUp should yield session-2's history
     const monacoInput2 = consoleEditorInput(page);
     await monacoInput2.focus();
-    await monacoInput2.press('ArrowUp');
+    await pressConsoleKey(monacoInput2, 'ArrowUp');
     await expect.poll(getEditorValue).toBe('session2_cmd_y');
 
-    await monacoInput2.press('ArrowUp');
+    await pressConsoleKey(monacoInput2, 'ArrowUp');
     await expect.poll(getEditorValue).toBe('session2_cmd_x');
 });
 

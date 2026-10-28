@@ -160,6 +160,10 @@ export class PositronConsoleService implements IPositronConsoleService {
         // Listen for session starts BEFORE kernel starts (Positron pattern: onWillStartSession)
         this._disposables.push(
             this._sessionManager.onWillStartSession((e) => {
+                if (!e.hasConsole) {
+                    return;
+                }
+
                 this._outputChannel.debug(
                     `[PositronConsoleService] Session will start: ${e.session.sessionId}, mode: ${e.startMode}`,
                 );
@@ -249,6 +253,10 @@ export class PositronConsoleService implements IPositronConsoleService {
 
         // Create console instances for existing sessions
         for (const session of this._sessionManager.sessions) {
+            if (!this._sessionManager.getActiveSession(session.sessionId)?.hasConsole) {
+                continue;
+            }
+
             if (!this._consoleInstancesBySessionId.has(session.sessionId)) {
                 const activate = session.sessionId === this._sessionManager.activeSessionId;
                 const attachMode = this._sessionManager.wasSessionRestored(session.sessionId)
@@ -471,6 +479,10 @@ export class PositronConsoleService implements IPositronConsoleService {
         }
 
         void this.revealConsole(true);
+        const session = this._sessionManager.getSession(sessionId);
+        if (session) {
+            this._sessionManager.foregroundSession = session;
+        }
         this.setActivePositronConsoleSession(sessionId);
 
         if (!instance.revealExecution(executionId)) {

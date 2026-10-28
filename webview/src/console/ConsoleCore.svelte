@@ -508,25 +508,6 @@
         );
     }
 
-    function upsertSession(nextSession: SessionInfo): SessionInfo[] {
-        const existingIndex = sessions.findIndex((session) => session.id === nextSession.id);
-        const mergedSession = mergeIncomingSession(
-            nextSession,
-            existingIndex >= 0 ? sessions[existingIndex] : undefined,
-        );
-
-        if (existingIndex >= 0) {
-            sessions = sessions.map((session, index) =>
-                index === existingIndex ? mergedSession : session,
-            );
-            return sessions;
-        }
-
-        sessions = [...sessions, mergedSession];
-        updateLayout();
-        return sessions;
-    }
-
     function stateLabelForSession(session: SessionInfo | undefined): string {
         if (!session) {
             return '';
@@ -1266,8 +1247,10 @@
     ): void {
         ensureSessionData(sessionId);
         const data = getSessionData(sessionId);
+        // Submission placeholders keep their own identity for the Host's replacement event.
         const existingPendingItems = data.runtimeItems.filter(
-            (item): item is RuntimeItemPendingInput => item instanceof RuntimeItemPendingInput,
+            (item): item is RuntimeItemPendingInput =>
+                item instanceof RuntimeItemPendingInput && !item.submitting,
         );
         if (!code && existingPendingItems.length === 0) {
             return;
@@ -1275,7 +1258,7 @@
         const pendingId = existingPendingItems[0]?.id ?? generateId();
 
         data.runtimeItems = data.runtimeItems.filter(
-            (item) => !(item instanceof RuntimeItemPendingInput),
+            (item) => !(item instanceof RuntimeItemPendingInput) || item.submitting,
         );
 
         if (code) {
@@ -1998,15 +1981,9 @@
         }
 
         try {
-            const result = (await connection.sendRequest('session/create', {
+            await connection.sendRequest('session/create', {
                 showRuntimePicker: true,
-            })) as { session?: SessionInfo };
-
-            if (result.session) {
-                // The session/info notification may arrive before this response.
-                const mergedSessions = upsertSession(result.session);
-                syncForegroundConsoleSession(mergedSessions, result.session.id);
-            }
+            });
         } catch (error) {
             console.error('Failed to create session:', error);
         }

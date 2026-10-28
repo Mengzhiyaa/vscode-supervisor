@@ -31,31 +31,35 @@ export class SessionSnapshotBuilder {
 
     buildSessionsWithConsoleOverlay(): SessionProtocol.SessionInfo[] {
         const sessions = this.buildBaseSessions();
-        const sessionsById = new Map(sessions.map((session) => [session.id, session]));
-
         if (!this._consoleService) {
             return sessions;
         }
 
-        const overlaidSessions = sessions.map((session) => {
-            const instance = this._consoleService?.getConsoleInstance(session.id);
-            const overlaid = instance ? this._applyConsoleOverlay(session, instance) : session;
-            sessionsById.set(overlaid.id, overlaid);
-            return overlaid;
-        });
-
-        for (const instance of this._consoleService.positronConsoleInstances) {
-            if (sessionsById.has(instance.sessionId) || !instance.runtimeAttached) {
-                continue;
-            }
-
-            overlaidSessions.push(this._buildConsoleOnlySessionInfo(instance));
-        }
-
-        return overlaidSessions.sort(compareSessionCreationTime);
+        const sessionsById = new Map(sessions.map((session) => [session.id, session]));
+        return this._consoleService.positronConsoleInstances
+            .map((instance) => {
+                const session = sessionsById.get(instance.sessionId);
+                return session
+                    ? this._applyConsoleOverlay(session, instance)
+                    : this._buildConsoleOnlySessionInfo(instance);
+            })
+            .sort(compareSessionCreationTime);
     }
 
     resolveForegroundConsoleSessionId(
+        sessions: SessionProtocol.SessionInfo[],
+        candidateIds: Array<string | undefined>,
+    ): string | undefined {
+        // Console selection is independent of whether its runtime can execute code.
+        const sessionIds = new Set(sessions.map((session) => session.id));
+        return (
+            candidateIds.find(
+                (candidateId) => candidateId !== undefined && sessionIds.has(candidateId),
+            ) ?? this.resolveActiveSessionId(sessions, [])
+        );
+    }
+
+    resolveActiveSessionId(
         sessions: SessionProtocol.SessionInfo[],
         candidateIds: Array<string | undefined>,
     ): string | undefined {
@@ -82,13 +86,6 @@ export class SessionSnapshotBuilder {
             sessions.find(isPreferredForegroundConsoleSessionCandidate)?.id ??
             sessions.find(isForegroundConsoleSessionCandidate)?.id
         );
-    }
-
-    resolveActiveSessionId(
-        sessions: SessionProtocol.SessionInfo[],
-        candidateIds: Array<string | undefined>,
-    ): string | undefined {
-        return this.resolveForegroundConsoleSessionId(sessions, candidateIds);
     }
 
     private _buildBaseSessionInfo(session: RuntimeSession): SessionProtocol.SessionInfo {
