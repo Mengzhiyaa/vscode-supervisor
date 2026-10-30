@@ -117,6 +117,7 @@ export class PlotClientInstance extends RuntimeClientInstance {
 
     // The currently active render request, if any (for smart pre-render checking)
     private _currentRender?: DeferredRender;
+    private readonly _renderOwner = {};
 
     private readonly _plotSubscriptions: vscode.Disposable[] = [];
     private _disposedPlot = false;
@@ -277,8 +278,10 @@ export class PlotClientInstance extends RuntimeClientInstance {
 
         // Listen for show plot events from the comm proxy
         this._plotSubscriptions.push(
-            commProxy.onDidShowPlot((evt) => {
+            commProxy.onDidShowPlot(async (evt) => {
+                const desired = this._currentRender?.renderRequest ?? this._lastRender;
                 const rendered = this._preRenderToRenderedPlot(evt.pre_render);
+                let restoreSize = false;
                 if (rendered) {
                     if (rendered.uri !== this._lastRender?.uri) {
                         // A late RPC response must not replace the newly shown kernel image.
@@ -294,9 +297,27 @@ export class PlotClientInstance extends RuntimeClientInstance {
                         this._lastRender = rendered;
                         this._stateEmitter.fire(PlotClientState.Rendered);
                         this._completeRenderEmitter.fire(rendered);
+                        restoreSize = !!desired && !this._settingsEqual(rendered, desired);
                     }
                 }
                 this._showPlotEmitter.fire();
+                if (restoreSize) {
+                    try {
+                        await this._queuePlotUpdateRequest(desired);
+                    } catch (error) {
+                        if (
+                            this._disposedPlot ||
+                            (error instanceof Error && error.message === 'Canceled')
+                        ) {
+                            return;
+                        }
+                        logFrameworkDiagnostic(
+                            'PlotClientInstance',
+                            `Failed to restore shown plot size: ${getErrorMessage(error)}`,
+                        );
+                        this._onDidUpdatePlot.fire();
+                    }
+                }
             }),
         );
 
@@ -560,6 +581,7 @@ export class PlotClientInstance extends RuntimeClientInstance {
         }
         this._currentRender?.cancel();
         const request = new DeferredRender(settings, {
+            owner: this._renderOwner,
             onStart: () => {
                 if (!this._disposedPlot && this._currentRender === request) {
                     this._stateEmitter.fire(PlotClientState.Rendering);
@@ -621,6 +643,25 @@ export class PlotClientInstance extends RuntimeClientInstance {
      */
     get lastRender(): IRenderedPlot | undefined {
         return this._lastRender;
+    }
+
+    /** Creates an independently rendered projection without taking ownership of the kernel comm. */
+    createRenderClient(): PlotClientInstance {
+        const client = new PlotClientInstance(
+            this.message,
+            this.sender,
+            () => undefined,
+            this.metadata.session_id,
+            this._sizingPolicy,
+            this._commProxy,
+        );
+        client.metadata = { ...this.metadata };
+        client._lastRender = this._lastRender;
+        client._plotState = this._lastRender
+            ? PlotClientState.Rendered
+            : PlotClientState.Unrendered;
+        client._plotSubscriptions.push(this.onDidClose(() => client.dispose()));
+        return client;
     }
 
     /**

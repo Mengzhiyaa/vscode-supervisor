@@ -202,11 +202,13 @@ test('plots keeps split controls on one row and moves overflowing actions into s
                 const buttons = [...element.querySelectorAll('button')].map((button) =>
                     button.getBoundingClientRect(),
                 );
-                return buttons.length === 2 &&
+                return (
+                    buttons.length === 2 &&
                     Math.abs(buttons[0].top - buttons[1].top) <= 1 &&
                     Math.abs(buttons[0].bottom - buttons[1].bottom) <= 1 &&
                     buttons[0].right <= buttons[1].left + 1 &&
-                    buttons[1].right <= bounds.right + 1;
+                    buttons[1].right <= bounds.right + 1
+                );
             }),
         )
         .toBe(true);
@@ -218,10 +220,14 @@ test('plots keeps split controls on one row and moves overflowing actions into s
     await expect(overflow).toBeVisible();
     await expect
         .poll(() =>
-            overflow.locator('.codicon').evaluate((icon) => getComputedStyle(icon, '::before').content),
+            overflow
+                .locator('.codicon')
+                .evaluate((icon) => getComputedStyle(icon, '::before').content),
         )
         .toBe('"\uea7c"');
-    await expect(page.getByRole('button', { name: 'Set the plot zoom', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Set the plot zoom', exact: true })).toHaveCount(
+        0,
+    );
     await expect(
         page.getByRole('button', {
             name: 'Set whether a dark filter is applied to plots.',
@@ -249,7 +255,9 @@ test('plots keeps split controls on one row and moves overflowing actions into s
     await panel.evaluate((element) => element.style.removeProperty('width'));
     await expect(overflow).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Open in...', exact: true })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Set the plot zoom', exact: true })).toBeVisible();
+    await expect(
+        page.getByRole('button', { name: 'Set the plot zoom', exact: true }),
+    ).toBeVisible();
 });
 
 test('plots sends save, editor, gallery, and code action requests', async ({ page }) => {

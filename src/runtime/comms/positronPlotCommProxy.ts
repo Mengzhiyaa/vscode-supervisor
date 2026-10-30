@@ -45,9 +45,9 @@ export interface UpdateEvent {
 export class PositronPlotCommProxy implements vscode.Disposable {
     private _disposed = false;
     /**
-     * The currently active render request, if any.
+     * Pending renders from all surfaces sharing this comm.
      */
-    private _currentRender?: DeferredRender;
+    private readonly _pendingRenders = new Set<DeferredRender>();
 
     /**
      * The intrinsic size of the plot, if known.
@@ -134,7 +134,10 @@ export class PositronPlotCommProxy implements vscode.Disposable {
             this._comm.onDidClose(() => {
                 this._closeEmitter.fire();
                 // Silently cancel any pending render requests
-                this._currentRender?.cancel();
+                for (const request of this._pendingRenders) {
+                    request.cancel();
+                }
+                this._pendingRenders.clear();
             }),
         );
 
@@ -278,7 +281,13 @@ export class PositronPlotCommProxy implements vscode.Disposable {
      * @param request The render request to perform
      */
     public render(request: DeferredRender): void {
-        this._currentRender = request;
+        if (this._disposed || request.isComplete) {
+            request.cancel();
+            return;
+        }
+        this._pendingRenders.add(request);
+        const forgetRequest = () => this._pendingRenders.delete(request);
+        void request.promise.then(forgetRequest, forgetRequest);
 
         // The session render queue will handle scheduling and rendering
         this._sessionRenderQueue.queue(request, this._commAdapter);
@@ -318,7 +327,10 @@ export class PositronPlotCommProxy implements vscode.Disposable {
         // surface reference disposes this shared owner.
         this._client.dispose();
         // Cancel any pending render
-        this._currentRender?.cancel();
+        for (const request of this._pendingRenders) {
+            request.cancel();
+        }
+        this._pendingRenders.clear();
 
         // Dispose all disposables
         this._disposables.forEach((d) => d.dispose());

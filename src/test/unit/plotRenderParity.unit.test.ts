@@ -164,11 +164,14 @@ suite('[Unit] Plot render parity', () => {
             selectedPlotId: plot.id,
             selectedSizingPolicyId: 'custom',
             customSize: { width: 900, height: 600 },
+            isPrimaryConnection: false,
         };
         const provider = Object.assign(Object.create(PlotsViewProvider.prototype), {
             _plotClients: new Map([['plot', plot]]),
             _plots: new Map(),
             _renderRequestConnection: new Map(),
+            _auxPlotClients: new Map(),
+            _readyConnections: new Set<MessageConnection>(),
             _connectionStates: new Map([[connection, state]]),
             log: () => undefined,
         }) as { _registerRenderingHandlers(connection: MessageConnection): void };
@@ -192,6 +195,7 @@ suite('[Unit] Plot render parity', () => {
             f.finish(request);
             await pending;
             assert.deepStrictEqual(plot.metadata.sizing_policy?.size, { width: 640, height: 480 });
+            assert.strictEqual(plot.lastRender, undefined);
         }
     });
 
@@ -229,7 +233,11 @@ suite('[Unit] Plot render parity', () => {
                     handler: (params: PlotsRpc.RenderPlotRequest.Params) => Promise<unknown>,
                 ) => handlers.set(type.method, handler),
             } as unknown as MessageConnection;
-            const state = { selectedPlotId: plot.id, selectedSizingPolicyId: 'intrinsic' };
+            const state = {
+                selectedPlotId: plot.id,
+                selectedSizingPolicyId: 'intrinsic',
+                isPrimaryConnection: true,
+            };
             const notifiedPolicies: string[] = [];
             const renderConnections = new Map<string, MessageConnection>();
             const provider = Object.assign(Object.create(PlotsViewProvider.prototype), {
@@ -237,6 +245,7 @@ suite('[Unit] Plot render parity', () => {
                 _plotClients: new Map([[plot.id, plot]]),
                 _plots: new Map(),
                 _renderRequestConnection: renderConnections,
+                _auxPlotClients: new Map(),
                 _connectionStates: new Map([[connection, state]]),
                 _notifySelectedSizingChanged: () =>
                     notifiedPolicies.push(state.selectedSizingPolicyId),

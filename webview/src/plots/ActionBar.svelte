@@ -553,5 +553,4 @@
     :global(.vscode-dark .positron-plots-container .codicon-color-mode) {
         rotate: 180deg;
     }
-
 </style>

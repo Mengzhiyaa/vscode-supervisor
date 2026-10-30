@@ -48,6 +48,8 @@ export interface IRenderedPlot {
  * Matches Positron's PlotOperationRequest interface.
  */
 export interface PlotOperationRequest {
+    /** Identifies the display surface whose queued renders may be superseded. */
+    owner?: object;
     /** Export requests are not superseded by viewport renders. */
     preview?: boolean;
     /**
@@ -190,7 +192,7 @@ export class DeferredRender {
 
     constructor(
         public readonly renderRequest: RenderRequest,
-        public readonly options: { preview?: boolean; onStart?: () => void } = {},
+        public readonly options: { preview?: boolean; owner?: object; onStart?: () => void } = {},
     ) {
         this.deferred = new DeferredPromise<IRenderedPlot>();
     }
@@ -419,15 +421,16 @@ export class PositronPlotRenderQueue implements vscode.Disposable {
      * @param comm The comm to use for the operation
      */
     public queue(deferredRender: DeferredRender, comm: IPlotComm): DeferredRender {
-        // Cancel and remove any existing render operations for the same plot
+        // Supersede only renders belonging to this display surface.
         if (!deferredRender.options.preview) {
-            this.cancelExistingOperations(comm, OperationType.Render);
+            this.cancelExistingOperations(comm, OperationType.Render, deferredRender.options.owner);
         }
 
         // Convert render request to operation request for unified handling
         const operationRequest: PlotOperationRequest = {
             type: OperationType.Render,
             preview: deferredRender.options.preview,
+            owner: deferredRender.options.owner,
             size: deferredRender.renderRequest.size,
             pixel_ratio: deferredRender.renderRequest.pixel_ratio,
             format: deferredRender.renderRequest.format,
@@ -438,6 +441,14 @@ export class PositronPlotRenderQueue implements vscode.Disposable {
             comm,
             deferredRender.options.onStart,
         );
+
+        // A surface may close or accept a kernel pre-render before its queued RPC starts.
+        const cancelPendingOperation = () => {
+            if (!deferredOperation.isComplete) {
+                deferredOperation.cancel();
+            }
+        };
+        void deferredRender.promise.then(cancelPendingOperation, cancelPendingOperation);
 
         // Bridge the operation result to the render result
         deferredOperation.promise
@@ -513,8 +524,13 @@ export class PositronPlotRenderQueue implements vscode.Disposable {
      *
      * @param comm The comm to match against
      * @param operationType The type of operation to cancel
+     * @param owner The display surface owning render operations
      */
-    private cancelExistingOperations(comm: IPlotComm, operationType: OperationType): void {
+    private cancelExistingOperations(
+        comm: IPlotComm,
+        operationType: OperationType,
+        owner?: object,
+    ): void {
         // Iterate through the queue in reverse order to safely remove items
         for (let i = this._queue.length - 1; i >= 0; i--) {
             const queuedOperation = this._queue[i];
@@ -523,6 +539,8 @@ export class PositronPlotRenderQueue implements vscode.Disposable {
             if (
                 queuedOperation.comm.clientId === comm.clientId &&
                 !queuedOperation.operation.operationRequest.preview &&
+                (operationType !== OperationType.Render ||
+                    queuedOperation.operation.operationRequest.owner === owner) &&
                 queuedOperation.operation.operationRequest.type === operationType
             ) {
                 // Cancel the operation
@@ -567,9 +585,14 @@ export class PositronPlotRenderQueue implements vscode.Disposable {
         }
 
         this._isProcessing = true;
-        const queuedOperation = this._queue.shift();
+        let nextOperation = this._queue.shift();
+        while (nextOperation?.operation.isComplete) {
+            nextOperation = this._queue.shift();
+        }
+        const queuedOperation = nextOperation;
         if (!queuedOperation) {
             this._isProcessing = false;
+            this.cleanupUnusedCloseListeners();
             return;
         }
         this._activeOperation = queuedOperation;
