@@ -43,23 +43,6 @@
     const imageWidth = $derived(isFit ? '100%' : `${adjustedWidth}px`);
     const imageHeight = $derived(isFit ? '100%' : `${adjustedHeight}px`);
     const imageCursor = $derived(isFit ? 'default' : isPanning ? 'grabbing' : 'grab');
-    const imagePosition = $derived.by(() => {
-        const centeredHorizontally = adjustedWidth < width;
-        const centeredVertically = adjustedHeight < height;
-
-        return {
-            top: centeredVertically ? '50%' : '0',
-            left: centeredHorizontally ? '50%' : '0',
-            transform:
-                centeredHorizontally && centeredVertically
-                    ? 'translate(-50%, -50%)'
-                    : centeredHorizontally
-                      ? 'translate(-50%, 0)'
-                      : centeredVertically
-                        ? 'translate(0, -50%)'
-                        : 'none',
-        };
-    });
 
     // Handle image load to get natural dimensions
     function handleImageLoad(event: Event) {
@@ -128,10 +111,6 @@
             style:height={imageHeight}
             style:object-fit={isFit ? 'contain' : null}
             style:cursor={imageCursor}
-            style:position="relative"
-            style:top={imagePosition.top}
-            style:left={imagePosition.left}
-            style:transform={imagePosition.transform}
             draggable="false"
             src={imageUri}
             onload={handleImageLoad}
@@ -173,6 +152,7 @@
 
     img.plot {
         display: block;
+        flex-shrink: 0;
         user-select: none;
     }
 </style>

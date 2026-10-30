@@ -10,7 +10,7 @@
 
     import { getRpcConnection } from '$lib/rpc/client';
     import ActionBar from './ActionBar.svelte';
-    import PlotsContainer from './PlotsContainer.svelte';
+    import PlotsContainer, { PlotInfoHeaderPx, HistoryPx } from './PlotsContainer.svelte';
     import type { MessageConnection } from 'vscode-jsonrpc/browser';
     import {
         ZoomLevel,
@@ -249,10 +249,20 @@
 
     // Reference to history scroller for keyboard navigation
     let historyScrollerElement = $state<HTMLDivElement | undefined>(undefined);
-    let plotViewportWidth = $state(1);
-    let plotViewportHeight = $state(1);
-    let viewportUpdateTimeout: ReturnType<typeof setTimeout> | null = null;
+
+    // Use the final layout dimensions for both rendering and kernel pre-render settings.
+    // Reserve the header even before the first plot arrives.
+    const plotViewportWidth = $derived(
+        Math.max(0, containerWidth - (showHistory && !historyBottom ? HistoryPx : 0)),
+    );
+    const plotViewportHeight = $derived(
+        Math.max(
+            0,
+            containerHeight - PlotInfoHeaderPx - (showHistory && historyBottom ? HistoryPx : 0),
+        ),
+    );
     let lastViewportKey = '';
+    let lastViewportConnection: MessageConnection | undefined;
     const isGalleryEditor = Boolean(
         (window as Window & { __ARK_PLOTS_GALLERY_EDITOR__?: boolean })
             .__ARK_PLOTS_GALLERY_EDITOR__,
@@ -686,7 +696,6 @@
 
     onMount(() => {
         connection = getRpcConnection();
-        scheduleViewportUpdate();
 
         // Listen for new plots with sessionId
         connection.onNotification('plots/added', (params: PlotAddedParams) => {
@@ -920,12 +929,6 @@
                 // );
             },
         );
-
-        return () => {
-            if (viewportUpdateTimeout) {
-                clearTimeout(viewportUpdateTimeout);
-            }
-        };
     });
 
     function resolveActiveSessionId(
@@ -1004,8 +1007,8 @@
         }
 
         try {
-            const width = plotViewportElement?.clientWidth || 400;
-            const height = plotViewportElement?.clientHeight || 400;
+            const width = plotViewportWidth || 400;
+            const height = plotViewportHeight || 400;
             const pixelRatio = window.devicePixelRatio || 1;
             const result = (await copyConnection.sendRequest('plots/render', {
                 plotId,
@@ -1404,26 +1407,18 @@
         }
     }
 
-    function scheduleViewportUpdate() {
-        if (viewportUpdateTimeout) {
-            clearTimeout(viewportUpdateTimeout);
-        }
-        viewportUpdateTimeout = setTimeout(() => {
-            sendViewportUpdate();
-        }, 500);
-    }
-
     function sendViewportUpdate() {
-        if (!connection || !plotViewportElement) return;
-        const width = plotViewportElement.clientWidth;
-        const height = plotViewportElement.clientHeight;
+        if (!connection) return;
+        const width = plotViewportWidth;
+        const height = plotViewportHeight;
         if (width <= 0 || height <= 0) return;
         const pixelRatio = window.devicePixelRatio || 1;
         const key = `${width}x${height}@${pixelRatio}-${selectedPlotSizingPolicyId}`;
-        if (key === lastViewportKey) {
+        if (key === lastViewportKey && connection === lastViewportConnection) {
             return;
         }
         lastViewportKey = key;
+        lastViewportConnection = connection;
         connection.sendNotification('plots/viewportChanged', {
             width,
             height,
@@ -1431,6 +1426,11 @@
             format: 'png',
         });
     }
+
+    $effect(() => {
+        // Update the host's viewport immediately; it owns the kernel-settings debounce.
+        sendViewportUpdate();
+    });
 
     $effect(() => {
         void selectedPlotId;
@@ -1453,13 +1453,6 @@
     });
 
     $effect(() => {
-        void selectedPlotSizingPolicyId;
-        if (!connection || !plotViewportElement) return;
-        lastViewportKey = '';
-        scheduleViewportUpdate();
-    });
-
-    $effect(() => {
         void plots;
         if (plots.length === 0) {
             setSelectedPlotId(null);
@@ -1468,12 +1461,6 @@
         if (!selectedPlotId || !plots.some((p) => p.id === selectedPlotId)) {
             setSelectedPlotId(plots[plots.length - 1].id);
         }
-    });
-
-    $effect(() => {
-        void plotViewportWidth;
-        void plotViewportHeight;
-        scheduleViewportUpdate();
     });
 
     $effect(() => {
@@ -1577,8 +1564,8 @@
         bind:historyScrollerElement
         bind:containerWidth
         bind:containerHeight
-        bind:viewportWidth={plotViewportWidth}
-        bind:viewportHeight={plotViewportHeight}
+        viewportWidth={plotViewportWidth}
+        viewportHeight={plotViewportHeight}
         {connection}
         {plots}
         {selectedPlotId}

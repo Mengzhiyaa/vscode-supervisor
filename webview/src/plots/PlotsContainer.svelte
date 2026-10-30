@@ -1,3 +1,8 @@
+<script module lang="ts">
+    export const PlotInfoHeaderPx = 30;
+    export const HistoryPx = 110;
+</script>
+
 <script lang="ts">
     /**
      * PlotsContainer component.
@@ -68,8 +73,8 @@
         historyScrollerElement?: HTMLDivElement;
         containerWidth?: number;
         containerHeight?: number;
-        viewportWidth?: number;
-        viewportHeight?: number;
+        viewportWidth: number;
+        viewportHeight: number;
     }
 
     let {
@@ -100,10 +105,10 @@
         containerElement = $bindable(),
         plotViewportElement = $bindable(),
         historyScrollerElement = $bindable(),
-        containerWidth = $bindable(1),
-        containerHeight = $bindable(1),
-        viewportWidth = $bindable(1),
-        viewportHeight = $bindable(1),
+        containerWidth = $bindable(0),
+        containerHeight = $bindable(0),
+        viewportWidth,
+        viewportHeight,
     }: Props = $props();
 
     const selectedPlot = $derived(
@@ -120,7 +125,6 @@
             : `Plot ${selectedPlotPosition} of ${plots.length}${selectedPlot?.name ? `: ${selectedPlot.name}` : ''}`,
     );
 
-    const plotInfoHeaderPx = 30;
     const showOriginFile = $derived(
         !!selectedOriginFile && selectedOriginFile !== selectedSessionName,
     );
@@ -151,6 +155,8 @@
     bind:this={containerElement}
     bind:clientWidth={containerWidth}
     bind:clientHeight={containerHeight}
+    style:--plot-info-header-height="{PlotInfoHeaderPx}px"
+    style:--plot-history-size="{HistoryPx}px"
     class="plots-container dark-filter-{darkFilterMode}"
     class:history-bottom={historyBottom}
     class:history-right={!historyBottom}
@@ -164,8 +170,9 @@
         {plotStatus}
     </div>
     <div class="plot-content">
-        {#if selectedPlot}
-            <div class="plot-info-header" style="height: {plotInfoHeaderPx}px;">
+        <!-- Reserve the header before the first plot so pre-render dimensions stay stable. -->
+        <div class="plot-info-header">
+            {#if selectedPlot}
                 <span class="plot-info-text">
                     {#if selectedSessionName}
                         <button
@@ -194,14 +201,9 @@
                         <span>&nbsp;</span>
                     {/if}
                 </span>
-            </div>
-        {/if}
-        <div
-            class="selected-plot"
-            bind:this={plotViewportElement}
-            bind:clientWidth={viewportWidth}
-            bind:clientHeight={viewportHeight}
-        >
+            {/if}
+        </div>
+        <div class="selected-plot" bind:this={plotViewportElement}>
             {#key selectedPlot?.id}
                 {#if plots.length === 0}
                     <div class="plot-placeholder"></div>
@@ -332,14 +334,16 @@
         display: flex;
         flex-direction: column;
         flex: 1;
+        min-width: 0;
+        min-height: 0;
         overflow: hidden;
     }
 
     .plot-info-header {
         display: flex;
         align-items: center;
-        min-height: 30px;
-        max-height: 30px;
+        flex: 0 0 var(--plot-info-header-height);
+        height: var(--plot-info-header-height);
         padding: 0 4px;
         background: var(
             --vscode-positronPlots-background,
@@ -415,7 +419,8 @@
     .selected-plot {
         display: flex;
         flex-direction: column;
-        flex-grow: 1;
+        flex: 1;
+        min-width: 0;
         min-height: 0;
         overflow: hidden;
     }
@@ -441,9 +446,11 @@
     }
 
     .plot-history-scroller {
+        box-sizing: border-box;
         overflow: auto;
         display: flex;
         align-items: center;
+        flex: 0 0 var(--plot-history-size);
     }
 
     .plot-history {
@@ -453,7 +460,7 @@
     .history-right .plot-history-scroller {
         flex-direction: column;
         border-left: 1px solid var(--vscode-panel-border);
-        width: 110px;
+        width: var(--plot-history-size);
     }
 
     .history-right .plot-history {
@@ -471,7 +478,7 @@
     .history-bottom .plot-history-scroller {
         flex-direction: row;
         border-top: 1px solid var(--vscode-panel-border);
-        height: 110px;
+        height: var(--plot-history-size);
         min-width: 0;
     }
 

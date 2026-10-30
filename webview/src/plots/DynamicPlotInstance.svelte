@@ -60,6 +60,7 @@
     let renderEstimateMs = $state(0);
     let progressBarDone = $state(false);
     let hasMounted = $state(false);
+    let hasValidatedInitialRender = $state(false);
     let hasSeenSizingPolicy = $state(false);
     let lastSizingPolicyId = $state<string | undefined>(undefined);
     let pendingRenderKey: string | undefined;
@@ -132,22 +133,27 @@
                     return;
                 }
                 const cached = snapshot?.render;
-                if (cached && cached.renderVersion >= latestAppliedRenderVersion) {
+                // A new plot may have been pre-rendered before the history strip
+                // appeared. Do not flash that image at a different canvas size.
+                if (
+                    snapshot?.matchesTarget &&
+                    cached &&
+                    cached.renderVersion >= latestAppliedRenderVersion
+                ) {
                     latestAppliedRenderVersion = cached.renderVersion;
                     uri = cached.uri;
+                    hasValidatedInitialRender = true;
                     error = '';
                     onrendered?.({
                         plotId: requestedPlotId,
                         uri: cached.uri,
                         renderVersion: cached.renderVersion,
                     });
-                    if (snapshot?.matchesTarget) {
-                        sharedCompletedRendersByPlotId.set(requestedPlotId, {
-                            key: requestedKey,
-                            renderVersion: cached.renderVersion,
-                        });
-                        return;
-                    }
+                    sharedCompletedRendersByPlotId.set(requestedPlotId, {
+                        key: requestedKey,
+                        renderVersion: cached.renderVersion,
+                    });
+                    return;
                 }
             }
 
@@ -178,6 +184,7 @@
                 if (result.renderVersion >= latestAppliedRenderVersion) {
                     latestAppliedRenderVersion = result.renderVersion;
                     uri = renderedUri;
+                    hasValidatedInitialRender = true;
                     sharedCompletedRendersByPlotId.set(requestedPlotId, {
                         key: requestedKey,
                         renderVersion: result.renderVersion,
@@ -196,6 +203,11 @@
             }
             const err = e as Error;
             if (err.name === 'Canceled' || err.message === 'Canceled') {
+                // A kernel pre-render can supersede the first RPC while the history
+                // layout changes. Retry so the first validated image can still arrive.
+                if (!hasValidatedInitialRender) {
+                    queueRenderIfNeeded(true);
+                }
                 return;
             }
 
@@ -305,21 +317,24 @@
     });
 
     $effect(() => {
-        if (!latestUri) {
+        // Initial host images have not been checked against the current viewport.
+        // The snapshot/render path above owns the first image shown in this surface.
+        const incomingUri = latestUri || initialData;
+        if (!hasValidatedInitialRender || !incomingUri) {
             return;
         }
 
-        if (renderVersion < latestAppliedRenderVersion) {
+        if (renderVersion <= latestAppliedRenderVersion) {
             return;
         }
 
         latestAppliedRenderVersion = renderVersion;
 
-        if (latestUri === uri) {
+        if (incomingUri === uri) {
             return;
         }
 
-        uri = latestUri;
+        uri = incomingUri;
         error = '';
 
         if (plotState !== PlotClientState.Rendering) {
@@ -329,14 +344,7 @@
     });
 
     onMount(() => {
-        if (latestUri || initialData) {
-            uri = latestUri || initialData || '';
-            error = '';
-            plotState = hostState ?? PlotClientState.Rendered;
-            progressBarDone = !hostState || hostState === PlotClientState.Rendered;
-            latestAppliedRenderVersion = renderVersion;
-        }
-
+        latestAppliedRenderVersion = renderVersion;
         hasMounted = true;
     });
 
