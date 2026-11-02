@@ -143,7 +143,7 @@ function textSearchToSql(col: string, params: FilterTextSearch): string {
         case TextSearchType.EndsWith:
             return `${colExpr} LIKE ${escapeValue(`%${escapeLike(termLower)}`)} ESCAPE ${escapeValue('\\')}`;
         case TextSearchType.RegexMatch:
-            return `regexp_matches(${col}, ${escapeValue(term)})`;
+            return `regexp_matches(${col}, ${escapeValue(term)}${params.case_sensitive ? '' : ", 'i'"})`;
         default:
             return '';
     }

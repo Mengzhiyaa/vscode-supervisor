@@ -428,7 +428,8 @@ suite('[Unit] Data Explorer webview bridge P0 protocol', () => {
         fixture.bridge.dispose();
     });
 
-    test('coordinates latest viewport publication across surfaces for the same instance', async () => {
+    test('publishes viewports independently across surfaces for the same instance', async () => {
+        const firstStarted = deferred<void>();
         const firstResult = deferred<{ columns: Array<Array<number | string>> }>();
         let requestCount = 0;
         const fixture = createBridge({
@@ -436,9 +437,11 @@ suite('[Unit] Data Explorer webview bridge P0 protocol', () => {
             columns: 1,
             getDataValues: () => {
                 requestCount += 1;
-                return requestCount === 1
-                    ? firstResult.promise
-                    : Promise.resolve({ columns: [['latest-surface']] });
+                if (requestCount === 1) {
+                    firstStarted.resolve(undefined);
+                    return firstResult.promise;
+                }
+                return Promise.resolve({ columns: [['second-surface']] });
             },
         });
         const secondRpc = createConnection();
@@ -464,8 +467,7 @@ suite('[Unit] Data Explorer webview bridge P0 protocol', () => {
             requestId: 10,
             generation: 0,
         });
-        await Promise.resolve();
-        await Promise.resolve();
+        await firstStarted.promise;
         const second = secondRpc.handlers.get('dataExplorer/requestData')!({
             startRow: 50,
             endRow: 51,
@@ -473,22 +475,34 @@ suite('[Unit] Data Explorer webview bridge P0 protocol', () => {
             requestId: 11,
             generation: 0,
         });
-        firstResult.resolve({ columns: [['stale-surface']] });
-        await Promise.all([first, second]);
+        try {
+            await second;
+            assert.strictEqual(
+                fixture.notifications.filter(({ method }) => method === 'dataExplorer/data').length,
+                0,
+            );
+            assert.deepStrictEqual(
+                secondRpc.notifications
+                    .filter(({ method }) => method === 'dataExplorer/data')
+                    .map(({ params }) => (params as { requestId: number }).requestId),
+                [11],
+            );
 
-        assert.strictEqual(
-            fixture.notifications.filter(({ method }) => method === 'dataExplorer/data').length,
-            0,
-        );
-        assert.deepStrictEqual(
-            secondRpc.notifications
-                .filter(({ method }) => method === 'dataExplorer/data')
-                .map(({ params }) => (params as { requestId: number }).requestId),
-            [11],
-        );
-        assert.strictEqual(fixture.dataRequests, 2);
-        secondBridge.dispose();
-        fixture.bridge.dispose();
+            firstResult.resolve({ columns: [['first-surface']] });
+            await first;
+            assert.deepStrictEqual(
+                fixture.notifications
+                    .filter(({ method }) => method === 'dataExplorer/data')
+                    .map(({ params }) => (params as { requestId: number }).requestId),
+                [10],
+            );
+            assert.strictEqual(fixture.dataRequests, 2);
+        } finally {
+            firstResult.resolve({ columns: [['first-surface']] });
+            await first;
+            secondBridge.dispose();
+            fixture.bridge.dispose();
+        }
     });
 
     test('routes Open as Spreadsheet through the host surface action', async () => {

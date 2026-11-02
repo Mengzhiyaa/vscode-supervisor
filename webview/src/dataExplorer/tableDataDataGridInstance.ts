@@ -16,6 +16,7 @@ import {
     type ClipboardData,
     type ColumnDescriptor,
     type DataGridContextMenuItem,
+    type DataGridCellContent,
     type DataGridOptions,
     type IDataColumn,
     type IColumnSortKey,
@@ -30,6 +31,7 @@ import type { DataExplorerStores } from './stores';
 import type { ColumnValue, WebviewMessage } from './types';
 import { localize } from './nls';
 import { PositronDataExplorerColumn } from './positronDataExplorerColumn';
+import TableDataCellPlaceholder from './components/tableDataCellPlaceholder.svelte';
 import {
     InvalidateCacheFlags,
     TableDataCache,
@@ -112,10 +114,10 @@ function sortKeysSignature(sortKeys: Array<{ columnIndex: number; ascending: boo
  */
 export class TableDataDataGridInstance extends DataGridInstance {
     private readonly _tableDataCache: TableDataCache;
+    private readonly _columnWidthCache = new TableDataCache();
     private readonly _hoverManager = new SimpleHoverManager();
     private readonly _disposables: Array<{ dispose: () => void }> = [];
     private _widthCalculators: WidthCalculators | undefined;
-    private _autoSizingEnabled = true;
     private _visible = true;
     private _lastSortKeysSignature = '';
     private _dataGeneration = 0;
@@ -243,8 +245,19 @@ export class TableDataDataGridInstance extends DataGridInstance {
         if (!clipboardData) {
             return;
         }
-        this._lastSelectionSignature = JSON.stringify(selection);
-        this.restoreClipboardDataSelection(clipboardData);
+        const signature = JSON.stringify(this._buildSelectionMessage(clipboardData));
+        // Host echoes must not replace the cursor/anchor of a local selection.
+        if (signature === this._lastSelectionSignature) {
+            return;
+        }
+        this._lastSelectionSignature = signature;
+        const selectionSyncEnabled = this._selectionSyncEnabled;
+        this._selectionSyncEnabled = false;
+        try {
+            this.restoreClipboardDataSelection(clipboardData);
+        } finally {
+            this._selectionSyncEnabled = selectionSyncEnabled;
+        }
     }
 
     get columns(): number {
@@ -268,8 +281,17 @@ export class TableDataDataGridInstance extends DataGridInstance {
         return new PositronDataExplorerColumn(schemaColumn);
     }
 
-    cell(columnIndex: number, rowIndex: number): string | undefined {
-        return this.getCellData(rowIndex, columnIndex);
+    cell(columnIndex: number, rowIndex: number): DataGridCellContent | undefined {
+        const column = this.column(columnIndex);
+        const dataCell = this._tableDataCache.getDataCell(rowIndex, columnIndex);
+        if (!column || !dataCell) {
+            return {
+                kind: 'component',
+                component: TableDataCellPlaceholder,
+                props: { unavailable: this._tableDataCache.dataLoadFailed },
+            };
+        }
+        return dataCell.formatted;
     }
 
     override rowHeader(rowIndex: number): string {
@@ -323,6 +345,7 @@ export class TableDataDataGridInstance extends DataGridInstance {
         const previousRows = this.rows;
         const previousPinnedColumns = this.getPinnedColumnIndexes();
         const dimensionsChanged = this._tableDataCache.setDimensions(columns, rows, hasRowLabels);
+        this._columnWidthCache.setDimensions(columns, rows);
         if (!dimensionsChanged) {
             return;
         }
@@ -356,12 +379,13 @@ export class TableDataDataGridInstance extends DataGridInstance {
     }
 
     handleSchemaUpdate(schema: SchemaColumn[]): void {
+        this._columnWidthCache.setSchema(schema);
         if (!this._tableDataCache.setSchema(schema)) {
             return;
         }
 
         this.schemaStore.set(this._tableDataCache.getSchemaColumns());
-        this._applyAutoColumnWidths();
+        this.recalculateColumnWidths();
         this.fireOnDidUpdateEvent();
     }
 
@@ -395,8 +419,16 @@ export class TableDataDataGridInstance extends DataGridInstance {
             columnIndices: params.columnIndices,
             rowLabels: params.rowLabels,
         });
+        if (activeRequest.kind === 'columnWidths') {
+            this._columnWidthCache.applyDataUpdate({
+                startRow: params.startRow,
+                rowIndices: params.rowIndices,
+                columns: params.columns,
+                columnIndices: params.columnIndices,
+            });
+        }
 
-        this._applyAutoColumnWidths(params.columnIndices);
+        this.recalculateColumnWidths();
         this._activeRequest = undefined;
         this._updating = false;
 
@@ -429,10 +461,39 @@ export class TableDataDataGridInstance extends DataGridInstance {
 
         this._dataGeneration = generation;
         this._columnWidthsCalculatedGeneration = -1;
+        if (schemaChanged) {
+            this.softReset();
+        }
         this.clearPinnedRows();
         this.invalidateCache(schemaChanged ? InvalidateCacheFlags.All : InvalidateCacheFlags.Data);
         this._scheduleColumnWidthCalculation();
         this._updateVisibleDataCache();
+    }
+
+    handleDataError(requestId: number | undefined): void {
+        if (requestId === undefined || this._activeRequest?.requestId !== requestId) {
+            return;
+        }
+
+        this._columnWidthCalculationPending = false;
+        this._columnWidthCalculationColumnIndex = 0;
+        const pendingUpdateDescriptor = this._pendingUpdateDescriptor;
+        try {
+            this._tableDataCache.setDataLoadFailed(true);
+        } finally {
+            // Repainting the failed cells also publishes a viewport update.
+            // It must not become an automatic retry of the failed request.
+            this._activeRequest = undefined;
+            this._updating = false;
+            this._pendingUpdateDescriptor = undefined;
+        }
+
+        // Drain the latest viewport after a failure, just as TableDataCache.update
+        // does in Positron's finally block. With no pending viewport, wait for
+        // the next user request rather than immediately retrying a failed load.
+        if (pendingUpdateDescriptor && this._visible) {
+            this._updateCache(pendingUpdateDescriptor);
+        }
     }
 
     handleBackendStateChanged(
@@ -478,6 +539,7 @@ export class TableDataDataGridInstance extends DataGridInstance {
 
     clearSchema(): void {
         this._tableDataCache.clear(InvalidateCacheFlags.ColumnSchema);
+        this._columnWidthCache.clear(InvalidateCacheFlags.ColumnSchema);
         this.schemaStore.set([]);
     }
 
@@ -492,6 +554,7 @@ export class TableDataDataGridInstance extends DataGridInstance {
     invalidateCache(invalidateCache: InvalidateCacheFlags): void {
         this._clearTrimCacheTimeout();
         this._tableDataCache.clear(invalidateCache);
+        this._columnWidthCache.clear(invalidateCache);
         if (invalidateCache & InvalidateCacheFlags.ColumnSchema) {
             this.schemaStore.set([]);
         }
@@ -533,8 +596,9 @@ export class TableDataDataGridInstance extends DataGridInstance {
     setWidthCalculators(widthCalculators?: WidthCalculators): void {
         this._widthCalculators = widthCalculators;
         this._tableDataCache.setWidthCalculators(widthCalculators);
+        this._columnWidthCache.setWidthCalculators(widthCalculators);
         this._columnWidthsCalculatedGeneration = -1;
-        this._applyAutoColumnWidths();
+        this.recalculateColumnWidths();
         this._scheduleColumnWidthCalculation();
     }
 
@@ -566,18 +630,23 @@ export class TableDataDataGridInstance extends DataGridInstance {
     }
 
     setVisible(visible: boolean): void {
+        if (this._visible === visible) {
+            return;
+        }
         this._visible = visible;
         if (!visible) {
             this._clearTrimCacheTimeout();
+            // Hidden responses are intentionally dropped by the host. Release
+            // the corresponding local request so showing the editor can reload.
+            this._activeRequest = undefined;
+            this._updating = false;
+            this._pendingUpdateDescriptor = undefined;
+            this._columnWidthCalculationPending = false;
             return;
         }
 
         this._updateVisibleDataCache();
-    }
-
-    override async setColumnWidth(columnIndex: number, columnWidth: number): Promise<void> {
-        this._autoSizingEnabled = false;
-        await super.setColumnWidth(columnIndex, columnWidth);
+        this._scheduleColumnWidthCalculation();
     }
 
     copyClipboardData(clipboardData: ClipboardData): void {
@@ -965,6 +1034,7 @@ export class TableDataDataGridInstance extends DataGridInstance {
         }
         this._hoverManager.dispose();
         this._tableDataCache.dispose();
+        this._columnWidthCache.dispose();
         super.dispose();
     }
 
@@ -1003,6 +1073,7 @@ export class TableDataDataGridInstance extends DataGridInstance {
 
     private _updateCache(updateDescriptor: UpdateDescriptor): void {
         if (
+            !this._visible ||
             updateDescriptor.columnIndices.length === 0 ||
             (this.rows > 0 && updateDescriptor.rowIndices.length === 0)
         ) {
@@ -1073,7 +1144,7 @@ export class TableDataDataGridInstance extends DataGridInstance {
 
     private _scheduleColumnWidthCalculation(): void {
         if (
-            !this._autoSizingEnabled ||
+            !this._visible ||
             !this._widthCalculators ||
             this.columns === 0 ||
             this.columns > MAX_AUTO_SIZE_COLUMNS ||
@@ -1090,8 +1161,8 @@ export class TableDataDataGridInstance extends DataGridInstance {
 
     private _requestNextColumnWidthPage(): boolean {
         if (
+            !this._visible ||
             !this._columnWidthCalculationPending ||
-            !this._autoSizingEnabled ||
             !this._widthCalculators ||
             this.columns === 0 ||
             this.columns > MAX_AUTO_SIZE_COLUMNS ||
@@ -1276,33 +1347,23 @@ export class TableDataDataGridInstance extends DataGridInstance {
         return 0;
     }
 
-    private _applyAutoColumnWidths(columnIndices?: number[]): void {
-        if (!this._autoSizingEnabled || !this._widthCalculators) {
+    private recalculateColumnWidths(): void {
+        if (!this._widthCalculators || !this.columns || this.columns > MAX_AUTO_SIZE_COLUMNS) {
             return;
         }
 
-        const targetColumns =
-            columnIndices ??
-            this._tableDataCache
-                .getSchemaColumns()
-                .map((schemaColumn) => schemaColumn.column_index);
-
-        if (targetColumns.length === 0) {
-            return;
-        }
-
-        for (const columnIndex of targetColumns) {
-            const calculated = this._tableDataCache.getAutoColumnWidth(
-                columnIndex,
-                this.minimumColumnWidth,
-                this.maximumColumnWidth,
-            );
-            if (calculated === undefined) {
-                continue;
-            }
-            this._columnLayoutManager.setSizeOverride(columnIndex, calculated);
-        }
-
+        const columnWidths = Array.from(
+            { length: this.columns },
+            (_, columnIndex) =>
+                this._columnWidthCache.getAutoColumnWidth(
+                    columnIndex,
+                    this.minimumColumnWidth,
+                    this.maximumColumnWidth,
+                ) ?? this.defaultColumnWidth,
+        );
+        // Automatic widths are layout entries. Only user resizes belong in
+        // setSizeOverride, so resizing one column cannot disable sizing the rest.
+        this._columnLayoutManager.setEntries(this.columns, columnWidths);
         this.fireOnDidUpdateEvent();
     }
 
@@ -1311,43 +1372,52 @@ export class TableDataDataGridInstance extends DataGridInstance {
         if (!this._selectionSyncEnabled) {
             return;
         }
-        const clipboardData = this.getClipboardData();
-        let selection: WebviewMessage | undefined;
-        if (clipboardData instanceof ClipboardCell) {
-            selection = {
-                type: 'setSelection',
-                selectionType: 'cell',
-                columnIndex: clipboardData.columnIndex,
-                rowIndex: clipboardData.rowIndex,
-            };
-        } else if (clipboardData instanceof ClipboardCellIndexes) {
-            selection = {
-                type: 'setSelection',
-                selectionType: 'cells',
-                columnIndexes: clipboardData.columnIndexes,
-                rowIndexes: clipboardData.rowIndexes,
-            };
-        } else if (clipboardData instanceof ClipboardColumnIndexes) {
-            selection = {
-                type: 'setSelection',
-                selectionType: 'columns',
-                columnIndexes: clipboardData.indexes,
-            };
-        } else if (clipboardData instanceof ClipboardRowIndexes) {
-            selection = {
-                type: 'setSelection',
-                selectionType: 'rows',
-                rowIndexes: clipboardData.indexes,
-            };
-        }
-        if (!selection) {
+        const clipboardData =
+            this.getSelection() ??
+            (this.cursorColumnIndex >= 0 && this.cursorRowIndex >= 0
+                ? new ClipboardCell(this.cursorColumnIndex, this.cursorRowIndex)
+                : undefined);
+        if (!clipboardData) {
             return;
         }
+        const selection = this._buildSelectionMessage(clipboardData);
         const signature = JSON.stringify(selection);
         if (signature === this._lastSelectionSignature) {
             return;
         }
         this._lastSelectionSignature = signature;
         this._postMessage(selection);
+    }
+
+    private _buildSelectionMessage(
+        clipboardData: ClipboardData,
+    ): Extract<WebviewMessage, { type: 'setSelection' }> {
+        if (clipboardData instanceof ClipboardCell) {
+            return {
+                type: 'setSelection',
+                selectionType: 'cell',
+                columnIndex: clipboardData.columnIndex,
+                rowIndex: clipboardData.rowIndex,
+            };
+        } else if (clipboardData instanceof ClipboardCellIndexes) {
+            return {
+                type: 'setSelection',
+                selectionType: 'cells',
+                columnIndexes: clipboardData.columnIndexes,
+                rowIndexes: clipboardData.rowIndexes,
+            };
+        } else if (clipboardData instanceof ClipboardColumnIndexes) {
+            return {
+                type: 'setSelection',
+                selectionType: 'columns',
+                columnIndexes: clipboardData.indexes,
+            };
+        } else {
+            return {
+                type: 'setSelection',
+                selectionType: 'rows',
+                rowIndexes: clipboardData.indexes,
+            };
+        }
     }
 }

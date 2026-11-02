@@ -73,6 +73,7 @@ export type WebviewMessage =
           type: 'requestColumnProfiles';
           columnIndices: number[];
           expandedColumnIndices?: number[];
+          profiles?: Array<{ column_index: number; profiles: Array<{ profile_type: string }> }>;
           requestId: number;
           generation: number;
       }

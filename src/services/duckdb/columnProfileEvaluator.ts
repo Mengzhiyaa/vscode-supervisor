@@ -1,20 +1,15 @@
 /*---------------------------------------------------------------------------------------------
- *  Column Profile Evaluator
- *  Computes column statistics (null counts, summary stats, histograms, frequency tables)
- *  using DuckDB SQL queries.
- *
- *  Aligned with positron: zero-row handling, WHERE clause pass-through,
- *  FreedmanDiaconis/Sturges histogram methods, DECIMAL/TIMESTAMP support.
+ *  DuckDB column profile computations aligned with Positron's DuckDBTableView.
  *--------------------------------------------------------------------------------------------*/
 
 import { DuckDBInstance } from './duckdbInstance';
-import { escapeIdentifier } from './sqlBuilder';
+import { escapeIdentifier as quoteIdentifier } from './sqlBuilder';
+import { formatFloat, formatNumericStat } from './valueFormatting';
 import {
     ColumnSchema,
     ColumnDisplayType,
     ColumnProfileRequest,
     ColumnProfileResult,
-    ColumnProfileSpec,
     ColumnProfileType,
     ColumnSummaryStats,
     ColumnHistogram,
@@ -25,584 +20,378 @@ import {
     FormatOptions,
 } from '../../runtime/comms/positronDataExplorerComm';
 
-function getResultRowValue(
-    row: any,
-    result: any,
-    index: number,
-    preferredKeys: string[] = [],
-): unknown {
-    if (!row) {
-        return undefined;
-    }
-
-    for (const key of preferredKeys) {
-        const value = row[key];
-        if (value !== undefined) {
-            return value;
-        }
-    }
-
-    const fieldName = result?.schema?.fields?.[index]?.name;
-    if (fieldName) {
-        const value = row[fieldName];
-        if (value !== undefined) {
-            return value;
-        }
-    }
-
-    if (row[index] !== undefined) {
-        return row[index];
-    }
-
-    if (typeof row === 'object' && row !== null) {
-        const values = Object.values(row as Record<string, unknown>);
-        if (index < values.length) {
-            return values[index];
-        }
-    }
-
-    return undefined;
-}
-
-function getFirstResultValue(result: any, index: number, preferredKeys: string[] = []): unknown {
-    return getResultRowValue(result?.get?.(0), result, index, preferredKeys);
-}
-
-/**
- * Evaluates column profiles by generating and executing DuckDB SQL.
- */
+/** Keeps the extension's evaluator entry point while sharing Positron's calculations. */
 export class ColumnProfileEvaluator {
-    private readonly _duckdb: DuckDBInstance;
+    private readonly _duckdb = DuckDBInstance.getInstance();
 
-    constructor() {
-        this._duckdb = DuckDBInstance.getInstance();
-    }
-
-    /**
-     * Evaluate all requested column profiles.
-     * @param tableName The DuckDB table name
-     * @param schema Column schemas
-     * @param profiles Requested profile specs
-     * @param _formatOptions Format options (reserved for future use)
-     * @param whereClause Optional WHERE clause for filtered data
-     * @param filteredRowCount Current filtered row count (for zero-row optimization)
-     */
     async evaluateProfiles(
         tableName: string,
         schema: ColumnSchema[],
         profiles: ColumnProfileRequest[],
-        _formatOptions: FormatOptions,
-        whereClause: string = '',
+        formatOptions: FormatOptions,
+        whereClause = '',
         filteredRowCount?: number,
     ): Promise<ColumnProfileResult[]> {
-        // Zero-row optimization (aligned with positron)
-        if (filteredRowCount === 0) {
-            return profiles.map((request) => {
-                const colSchema = schema[request.column_index];
-                return this._createEmptyProfileResult(colSchema, request.profiles);
+        const relation = quoteIdentifier(tableName);
+        const runQuery = async (sql: string): Promise<Record<string, unknown>[]> => {
+            const result = await this._duckdb.query(sql);
+            return Array.from({ length: result.numRows }, (_, index) => {
+                const row = result.get(index);
+                return Object.fromEntries(
+                    result.schema.fields.map((field: { name: string }) => [
+                        field.name,
+                        row?.[field.name],
+                    ]),
+                );
             });
-        }
+        };
+        const filteredRows =
+            filteredRowCount ??
+            Number(
+                (await runQuery(`SELECT count(*) AS n FROM ${relation}${whereClause}`))[0]?.n ?? 0,
+            );
+        const evaluator = new DuckDBColumnProfiles({ runQuery }, relation, schema, whereClause);
+        return evaluator.computeColumnProfiles(profiles, filteredRows, formatOptions);
+    }
+}
 
-        const results: ColumnProfileResult[] = [];
+class DuckDBColumnProfiles {
+    constructor(
+        private readonly client: { runQuery(sql: string): Promise<Record<string, unknown>[]> },
+        private readonly relation: string,
+        private readonly schema: ColumnSchema[],
+        private readonly _whereClause: string,
+    ) {}
 
-        for (const request of profiles) {
-            const colSchema = schema[request.column_index];
-            if (!colSchema) {
-                results.push({});
-                continue;
-            }
-
-            const result: ColumnProfileResult = {};
-
-            for (const spec of request.profiles) {
-                await this._evaluateSingleProfile(tableName, colSchema, spec, result, whereClause);
-            }
-
-            results.push(result);
-        }
-
-        return results;
+    private async _relation(): Promise<string> {
+        return this.relation;
     }
 
-    /**
-     * Create empty profile results for zero-row case (aligned with positron).
-     */
-    private _createEmptyProfileResult(
-        colSchema: ColumnSchema | undefined,
-        specs: ColumnProfileSpec[],
-    ): ColumnProfileResult {
+    async computeColumnProfiles(
+        requests: ColumnProfileRequest[],
+        filteredRows: number,
+        formatOptions: FormatOptions,
+    ): Promise<ColumnProfileResult[]> {
+        const profiles: ColumnProfileResult[] = [];
+        for (const request of requests) {
+            if (!this.schema[request.column_index]) {
+                throw new Error(`Unknown profile column index: ${request.column_index}`);
+            }
+            profiles.push(
+                await this._computeOneColumnProfile(request, filteredRows, formatOptions),
+            );
+        }
+        return profiles;
+    }
+
+    private async _computeOneColumnProfile(
+        request: ColumnProfileRequest,
+        filteredRows: number,
+        formatOptions: FormatOptions,
+    ): Promise<ColumnProfileResult> {
+        const entry = this.schema[request.column_index];
+        const quotedName = quoteIdentifier(entry.column_name);
         const result: ColumnProfileResult = {};
 
-        for (const spec of specs) {
+        for (const spec of request.profiles) {
             switch (spec.profile_type) {
                 case ColumnProfileType.NullCount:
-                    result.null_count = 0;
+                    result.null_count = await this._nullCount(quotedName);
                     break;
-                case ColumnProfileType.SmallHistogram:
-                case ColumnProfileType.LargeHistogram:
-                    if (spec.profile_type === ColumnProfileType.SmallHistogram) {
-                        result.small_histogram = {
-                            bin_edges: ['NULL', 'NULL'],
-                            bin_counts: [0],
-                            quantiles: [],
-                        };
-                    } else {
-                        result.large_histogram = {
-                            bin_edges: ['NULL', 'NULL'],
-                            bin_counts: [0],
-                            quantiles: [],
-                        };
-                    }
+                case ColumnProfileType.SummaryStats:
+                    result.summary_stats =
+                        filteredRows === 0
+                            ? this._emptySummaryStats(entry)
+                            : await this._summaryStats(entry, quotedName, formatOptions);
                     break;
                 case ColumnProfileType.SmallFrequencyTable:
                 case ColumnProfileType.LargeFrequencyTable:
-                    if (spec.profile_type === ColumnProfileType.SmallFrequencyTable) {
-                        result.small_frequency_table = {
-                            values: [],
-                            counts: [],
-                            other_count: 0,
-                        };
-                    } else {
-                        result.large_frequency_table = {
-                            values: [],
-                            counts: [],
-                            other_count: 0,
-                        };
-                    }
+                    result[spec.profile_type] = await this._frequencyTable(
+                        quotedName,
+                        (spec.params as ColumnFrequencyTableParams).limit,
+                        filteredRows,
+                    );
                     break;
-                case ColumnProfileType.SummaryStats:
-                    if (colSchema) {
-                        result.summary_stats = this._createEmptySummaryStats(colSchema);
-                    }
+                case ColumnProfileType.SmallHistogram:
+                case ColumnProfileType.LargeHistogram:
+                    result[spec.profile_type] = await this._histogram(
+                        entry,
+                        quotedName,
+                        spec.params as ColumnHistogramParams,
+                        filteredRows,
+                    );
+                    break;
+                default:
                     break;
             }
         }
-
         return result;
     }
 
-    /**
-     * Create empty summary stats for zero-row case (aligned with positron).
-     */
-    private _createEmptySummaryStats(colSchema: ColumnSchema): ColumnSummaryStats {
-        const typeDisplay = colSchema.type_display;
-        const stats: ColumnSummaryStats = { type_display: typeDisplay };
-
-        if (this._isNumericType(typeDisplay)) {
-            stats.number_stats = {};
-        } else if (this._isStringType(typeDisplay)) {
-            stats.string_stats = { num_unique: 0, num_empty: 0 };
-        } else if (this._isBooleanType(typeDisplay)) {
-            stats.boolean_stats = { true_count: 0, false_count: 0 };
-        } else if (typeDisplay === ColumnDisplayType.Datetime) {
-            stats.datetime_stats = { num_unique: 0 };
-        } else if (typeDisplay === ColumnDisplayType.Date) {
-            stats.date_stats = { num_unique: 0 };
-        }
-
-        return stats;
+    private async _nullCount(quotedName: string): Promise<number> {
+        const rows = await this.client.runQuery(
+            `SELECT count(*) - count(${quotedName}) AS n FROM ${await this._relation()}${this._whereClause}`,
+        );
+        return Number(rows[0]?.n ?? 0);
     }
 
-    private async _evaluateSingleProfile(
-        tableName: string,
-        colSchema: ColumnSchema,
-        spec: ColumnProfileSpec,
-        result: ColumnProfileResult,
-        whereClause: string,
-    ): Promise<void> {
-        const col = escapeIdentifier(colSchema.column_name);
-        const table = escapeIdentifier(tableName);
-
-        try {
-            switch (spec.profile_type) {
-                case ColumnProfileType.NullCount: {
-                    const res = await this._duckdb.query(
-                        `SELECT COUNT(*) FILTER (WHERE ${col} IS NULL) AS null_count FROM ${table}${whereClause}`,
-                    );
-                    result.null_count = Number(getFirstResultValue(res, 0, ['null_count']) ?? 0);
-                    break;
-                }
-
-                case ColumnProfileType.SummaryStats: {
-                    result.summary_stats = await this._computeSummaryStats(
-                        tableName,
-                        colSchema,
-                        whereClause,
-                    );
-                    break;
-                }
-
-                case ColumnProfileType.SmallHistogram: {
-                    const params = spec.params as ColumnHistogramParams | undefined;
-                    result.small_histogram = await this._computeHistogram(
-                        tableName,
-                        colSchema,
-                        params?.num_bins ?? 80,
-                        params?.method,
-                        whereClause,
-                    );
-                    break;
-                }
-
-                case ColumnProfileType.LargeHistogram: {
-                    const params = spec.params as ColumnHistogramParams | undefined;
-                    result.large_histogram = await this._computeHistogram(
-                        tableName,
-                        colSchema,
-                        params?.num_bins ?? 100,
-                        params?.method,
-                        whereClause,
-                    );
-                    break;
-                }
-
-                case ColumnProfileType.SmallFrequencyTable: {
-                    const params = spec.params as ColumnFrequencyTableParams | undefined;
-                    result.small_frequency_table = await this._computeFrequencyTable(
-                        tableName,
-                        colSchema,
-                        params?.limit ?? 8,
-                        whereClause,
-                    );
-                    break;
-                }
-
-                case ColumnProfileType.LargeFrequencyTable: {
-                    const params = spec.params as ColumnFrequencyTableParams | undefined;
-                    result.large_frequency_table = await this._computeFrequencyTable(
-                        tableName,
-                        colSchema,
-                        params?.limit ?? 16,
-                        whereClause,
-                    );
-                    break;
-                }
-            }
-        } catch {
-            // Silently skip individual profile errors to avoid breaking the whole request
-        }
+    private _wherePlus(predicate: string): string {
+        return this._whereClause ? `${this._whereClause} AND ${predicate}` : `\nWHERE ${predicate}`;
     }
 
-    private async _computeSummaryStats(
-        tableName: string,
-        colSchema: ColumnSchema,
-        whereClause: string,
+    private async _summaryStats(
+        entry: ColumnSchema,
+        quotedName: string,
+        formatOptions: FormatOptions,
     ): Promise<ColumnSummaryStats> {
-        const col = escapeIdentifier(colSchema.column_name);
-        const table = escapeIdentifier(tableName);
-        const typeDisplay = colSchema.type_display;
-        const typeName = colSchema.type_name.toUpperCase();
-
-        const stats: ColumnSummaryStats = { type_display: typeDisplay };
-
-        // WHERE clause for non-null values
-        const notNullWhere = whereClause
-            ? `${whereClause} AND ${col} IS NOT NULL`
-            : ` WHERE ${col} IS NOT NULL`;
-
-        if (this._isNumericType(typeDisplay) || typeName.startsWith('DECIMAL')) {
-            // For DECIMAL types, cast min/max to VARCHAR but mean/stdev/median to DOUBLE
-            //  (aligned with positron's DECIMAL handling)
-            const isDecimal = typeName.startsWith('DECIMAL');
-            const castExpr = isDecimal ? `CAST(${col} AS DOUBLE)` : col;
-
-            const res = await this._duckdb.query(
-                `SELECT
-                    MIN(${col})::VARCHAR AS min_val,
-                    MAX(${col})::VARCHAR AS max_val,
-                    AVG(${castExpr})::VARCHAR AS mean_val,
-                    MEDIAN(${castExpr})::VARCHAR AS median_val,
-                    STDDEV_SAMP(${castExpr})::VARCHAR AS stdev_val
-                FROM ${table}${notNullWhere}`,
+        const display = entry.type_display;
+        const relation = await this._relation();
+        if (
+            display === ColumnDisplayType.Integer ||
+            display === ColumnDisplayType.Floating ||
+            display === ColumnDisplayType.Decimal
+        ) {
+            // One pass for the moment-based stats; a second query for the median.
+            const rows = await this.client.runQuery(
+                `SELECT count(${quotedName}) AS n, CAST(min(${quotedName}) AS VARCHAR) AS lo, CAST(max(${quotedName}) AS VARCHAR) AS hi, ` +
+                    `sum(CAST(${quotedName} AS DOUBLE)) AS s, sum(CAST(${quotedName} AS DOUBLE) * CAST(${quotedName} AS DOUBLE)) AS ss ` +
+                    `FROM ${relation}${this._whereClause}`,
             );
-            const row = res.get(0);
-            if (row) {
-                stats.number_stats = {
-                    min_value: String(getResultRowValue(row, res, 0, ['min_val']) ?? ''),
-                    max_value: String(getResultRowValue(row, res, 1, ['max_val']) ?? ''),
-                    mean: String(getResultRowValue(row, res, 2, ['mean_val']) ?? ''),
-                    median: String(getResultRowValue(row, res, 3, ['median_val']) ?? ''),
-                    stdev: String(getResultRowValue(row, res, 4, ['stdev_val']) ?? ''),
-                };
-            }
-
-            // Override type_display for DECIMAL
-            if (isDecimal) {
-                stats.type_display = ColumnDisplayType.Decimal;
-            }
-        } else if (this._isStringType(typeDisplay)) {
-            const res = await this._duckdb.query(
-                `SELECT
-                    COUNT(DISTINCT ${col}) AS num_unique,
-                    SUM(CASE WHEN ${col} = '' THEN 1 ELSE 0 END) AS num_empty
-                FROM ${table}${notNullWhere}`,
-            );
-            const row = res.get(0);
-            if (row) {
-                stats.string_stats = {
-                    num_unique: Number(getResultRowValue(row, res, 0, ['num_unique']) ?? 0),
-                    num_empty: Number(getResultRowValue(row, res, 1, ['num_empty']) ?? 0),
-                };
-            }
-        } else if (this._isBooleanType(typeDisplay)) {
-            const res = await this._duckdb.query(
-                `SELECT
-                    SUM(CASE WHEN ${col} THEN 1 ELSE 0 END) AS true_count,
-                    SUM(CASE WHEN NOT ${col} THEN 1 ELSE 0 END) AS false_count
-                FROM ${table}${notNullWhere}`,
-            );
-            const row = res.get(0);
-            if (row) {
-                stats.boolean_stats = {
-                    true_count: Number(getResultRowValue(row, res, 0, ['true_count']) ?? 0),
-                    false_count: Number(getResultRowValue(row, res, 1, ['false_count']) ?? 0),
-                };
-            }
-        } else if (typeDisplay === ColumnDisplayType.Datetime) {
-            // Aligned with positron: use epoch_ms for mean/median
-            const res = await this._duckdb.query(
-                `SELECT
-                    COUNT(DISTINCT ${col}) AS num_unique,
-                    MIN(${col})::VARCHAR AS min_date,
-                    MAX(${col})::VARCHAR AS max_date,
-                    strftime(MAKE_TIMESTAMP(CAST(AVG(epoch_ms(${col})) * 1000 AS BIGINT)), '%Y-%m-%d %H:%M:%S') AS mean_ts,
-                    strftime(MAKE_TIMESTAMP(CAST(MEDIAN(epoch_ms(${col})) * 1000 AS BIGINT)), '%Y-%m-%d %H:%M:%S') AS median_ts
-                FROM ${table}${notNullWhere}`,
-            );
-            const row = res.get(0);
-            if (row) {
-                stats.datetime_stats = {
-                    num_unique: Number(getResultRowValue(row, res, 0, ['num_unique']) ?? 0),
-                    min_date: String(getResultRowValue(row, res, 1, ['min_date']) ?? ''),
-                    max_date: String(getResultRowValue(row, res, 2, ['max_date']) ?? ''),
-                    mean_date: String(getResultRowValue(row, res, 3, ['mean_ts']) ?? ''),
-                    median_date: String(getResultRowValue(row, res, 4, ['median_ts']) ?? ''),
-                };
-            }
-        } else if (typeDisplay === ColumnDisplayType.Date) {
-            const res = await this._duckdb.query(
-                `SELECT
-                    COUNT(DISTINCT ${col}) AS num_unique,
-                    MIN(${col})::VARCHAR AS min_date,
-                    MAX(${col})::VARCHAR AS max_date
-                FROM ${table}${notNullWhere}`,
-            );
-            const row = res.get(0);
-            if (row) {
-                stats.date_stats = {
-                    num_unique: Number(getResultRowValue(row, res, 0, ['num_unique']) ?? 0),
-                    min_date: String(getResultRowValue(row, res, 1, ['min_date']) ?? ''),
-                    max_date: String(getResultRowValue(row, res, 2, ['max_date']) ?? ''),
-                };
-            }
-        } else {
-            // Other types — just count unique values
-            const res = await this._duckdb.query(
-                `SELECT COUNT(DISTINCT ${col}) AS num_unique FROM ${table}${notNullWhere}`,
-            );
-            const row = res.get(0);
-            if (row) {
-                stats.other_stats = {
-                    num_unique: Number(getResultRowValue(row, res, 0, ['num_unique']) ?? 0),
-                };
-            }
+            const n = Number(rows[0]?.n ?? 0);
+            const sum = Number(rows[0]?.s ?? 0);
+            const sumsq = Number(rows[0]?.ss ?? 0);
+            const mean = n > 0 ? sum / n : 0;
+            // Sample standard deviation from the sums of values and squares.
+            const variance = n > 1 ? Math.max(0, (sumsq - n * mean * mean) / (n - 1)) : 0;
+            const median = await this._quantile(quotedName, 0.5, n);
+            const fmt = (v: number) => formatFloat(v, formatOptions);
+            return {
+                type_display: display,
+                number_stats: {
+                    min_value:
+                        rows[0]?.lo === null || rows[0]?.lo === undefined
+                            ? undefined
+                            : String(rows[0].lo),
+                    max_value:
+                        rows[0]?.hi === null || rows[0]?.hi === undefined
+                            ? undefined
+                            : String(rows[0].hi),
+                    mean: n > 0 ? fmt(mean) : undefined,
+                    median: formatNumericStat(median, display, formatOptions),
+                    stdev: n > 1 ? fmt(Math.sqrt(variance)) : undefined,
+                },
+            };
         }
+        if (display === ColumnDisplayType.String) {
+            const rows = await this.client.runQuery(
+                `SELECT count(DISTINCT ${quotedName}) AS nunique, ` +
+                    `count(CASE WHEN ${quotedName} = '' THEN 1 END) AS nempty ` +
+                    `FROM ${relation}${this._whereClause}`,
+            );
+            return {
+                type_display: ColumnDisplayType.String,
+                string_stats: {
+                    num_unique: Number(rows[0]?.nunique ?? 0),
+                    num_empty: Number(rows[0]?.nempty ?? 0),
+                },
+            };
+        }
+        if (display === ColumnDisplayType.Boolean) {
+            // DuckDB has real booleans, so test the column directly rather than comparing to 0/1.
+            const rows = await this.client.runQuery(
+                `SELECT count(CASE WHEN ${quotedName} THEN 1 END) AS ntrue, ` +
+                    `count(CASE WHEN NOT ${quotedName} THEN 1 END) AS nfalse ` +
+                    `FROM ${relation}${this._whereClause}`,
+            );
+            return {
+                type_display: ColumnDisplayType.Boolean,
+                boolean_stats: {
+                    true_count: Number(rows[0]?.ntrue ?? 0),
+                    false_count: Number(rows[0]?.nfalse ?? 0),
+                },
+            };
+        }
+        if (display === ColumnDisplayType.Date || display === ColumnDisplayType.Datetime) {
+            const rows = await this.client.runQuery(
+                `SELECT CAST(min(${quotedName}) AS VARCHAR) AS lo, CAST(max(${quotedName}) AS VARCHAR) AS hi, count(DISTINCT ${quotedName}) AS nunique ` +
+                    `FROM ${relation}${this._whereClause}`,
+            );
+            const stats = {
+                num_unique: Number(rows[0]?.nunique ?? 0),
+                min_date:
+                    rows[0]?.lo === null || rows[0]?.lo === undefined
+                        ? undefined
+                        : String(rows[0].lo),
+                max_date:
+                    rows[0]?.hi === null || rows[0]?.hi === undefined
+                        ? undefined
+                        : String(rows[0].hi),
+            };
+            return display === ColumnDisplayType.Date
+                ? { type_display: display, date_stats: stats }
+                : { type_display: display, datetime_stats: stats };
+        }
+        const rows = await this.client.runQuery(
+            `SELECT count(DISTINCT ${quotedName}) AS nunique FROM ${relation}${this._whereClause}`,
+        );
+        return {
+            type_display: display,
+            other_stats: { num_unique: Number(rows[0]?.nunique ?? 0) },
+        };
+    }
 
-        return stats;
+    private _emptySummaryStats(entry: ColumnSchema): ColumnSummaryStats {
+        switch (entry.type_display) {
+            case ColumnDisplayType.Integer:
+            case ColumnDisplayType.Floating:
+            case ColumnDisplayType.Decimal:
+                return { type_display: entry.type_display, number_stats: {} };
+            case ColumnDisplayType.String:
+                return {
+                    type_display: ColumnDisplayType.String,
+                    string_stats: { num_unique: 0, num_empty: 0 },
+                };
+            case ColumnDisplayType.Boolean:
+                return {
+                    type_display: ColumnDisplayType.Boolean,
+                    boolean_stats: { true_count: 0, false_count: 0 },
+                };
+            case ColumnDisplayType.Date:
+                return { type_display: ColumnDisplayType.Date, date_stats: { num_unique: 0 } };
+            case ColumnDisplayType.Datetime:
+                return {
+                    type_display: ColumnDisplayType.Datetime,
+                    datetime_stats: { num_unique: 0 },
+                };
+            default:
+                return { type_display: entry.type_display, other_stats: { num_unique: 0 } };
+        }
     }
 
     /**
-     * Compute histogram with support for Fixed, FreedmanDiaconis, and Sturges methods.
-     * Aligned with positron: integer optimization when peak-to-peak <= numBins.
+     * Computes a quantile (0..1) by ordering the non-null values and reading the value at the
+     * corresponding offset. `n` is the count of non-null values.
+     *
+     * Returns the raw cell value rather than a JS number, because its callers want different things
+     * from it. The median is reported to the user, and a DECIMAL/NUMERIC median arrives as an exact
+     * digit string that a double cannot hold, so `formatNumericStat` formats it textually. The
+     * histogram's interquartile range is arithmetic on a bin width, which is approximate either way,
+     * so those callers coerce.
      */
-    private async _computeHistogram(
-        tableName: string,
-        colSchema: ColumnSchema,
-        numBins: number,
-        method?: ColumnHistogramParamsMethod,
-        whereClause: string = '',
+    private async _quantile(quotedName: string, q: number, n: number): Promise<unknown> {
+        if (n === 0) {
+            return undefined;
+        }
+        const offset = Math.min(n - 1, Math.max(0, Math.floor(q * (n - 1))));
+        const rows = await this.client.runQuery(
+            `SELECT CAST(${quotedName} AS VARCHAR) AS v FROM ${await this._relation()}${this._wherePlus(`${quotedName} IS NOT NULL`)} ` +
+                `ORDER BY ${quotedName} LIMIT 1 OFFSET ${offset}`,
+        );
+        const value = rows[0]?.v;
+        return value === null ? undefined : value;
+    }
+
+    private async _frequencyTable(
+        quotedName: string,
+        limit: number,
+        filteredRows: number,
+    ): Promise<ColumnFrequencyTable> {
+        const rows = await this.client.runQuery(
+            `SELECT CAST(${quotedName} AS VARCHAR) AS value, count(*) AS freq FROM ${await this._relation()}` +
+                `${this._wherePlus(`${quotedName} IS NOT NULL`)} GROUP BY ${quotedName} ` +
+                `ORDER BY freq DESC, ${quotedName} ASC LIMIT ${limit}`,
+        );
+        const values: string[] = [];
+        const counts: number[] = [];
+        let total = 0;
+        for (const row of rows) {
+            values.push(String(row.value));
+            const freq = Number(row.freq);
+            counts.push(freq);
+            total += freq;
+        }
+        const nullCount = await this._nullCount(quotedName);
+        return { values, counts, other_count: Math.max(0, filteredRows - total - nullCount) };
+    }
+
+    private async _histogram(
+        entry: ColumnSchema,
+        quotedName: string,
+        params: ColumnHistogramParams,
+        filteredRows: number,
     ): Promise<ColumnHistogram> {
-        const col = escapeIdentifier(colSchema.column_name);
-        const table = escapeIdentifier(tableName);
-        const typeName = colSchema.type_name.toUpperCase();
+        const nullCount = await this._nullCount(quotedName);
+        const nonNull = filteredRows - nullCount;
+        if (nonNull <= 0) {
+            return { bin_edges: ['NULL', 'NULL'], bin_counts: [nullCount], quantiles: [] };
+        }
 
-        const notNullWhere = whereClause
-            ? `${whereClause} AND ${col} IS NOT NULL`
-            : ` WHERE ${col} IS NOT NULL`;
+        const rows = await this.client.runQuery(
+            `SELECT CAST(min(${quotedName}) AS VARCHAR) AS lo, CAST(max(${quotedName}) AS VARCHAR) AS hi FROM ${await this._relation()}${this._whereClause}`,
+        );
+        const minValue = Number(rows[0]?.lo);
+        const maxValue = Number(rows[0]?.hi);
+        const peakToPeak = maxValue - minValue;
 
-        // Get min, max, count, and optionally IQR for FreedmanDiaconis
-        const statsQuery =
-            method === ColumnHistogramParamsMethod.FreedmanDiaconis
-                ? `SELECT
-                MIN(${col})::DOUBLE AS min_val,
-                MAX(${col})::DOUBLE AS max_val,
-                COUNT(*)::INTEGER AS total,
-                PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY ${col})::DOUBLE AS q1,
-                PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY ${col})::DOUBLE AS q3
-               FROM ${table}${notNullWhere}`
-                : `SELECT
-                MIN(${col})::DOUBLE AS min_val,
-                MAX(${col})::DOUBLE AS max_val,
-                COUNT(*)::INTEGER AS total
-               FROM ${table}${notNullWhere}`;
-
-        const rangeRes = await this._duckdb.query(statsQuery);
-        const rangeRow = rangeRes.get(0);
-        const minVal = Number(getResultRowValue(rangeRow, rangeRes, 0, ['min_val']) ?? 0);
-        const maxVal = Number(getResultRowValue(rangeRow, rangeRes, 1, ['max_val']) ?? 0);
-        const totalCount = Number(getResultRowValue(rangeRow, rangeRes, 2, ['total']) ?? 0);
-
-        if (totalCount === 0 || minVal === maxVal) {
-            const countValue = totalCount;
+        // A degenerate range (single distinct value) collapses to one bin.
+        if (!isFinite(peakToPeak) || peakToPeak === 0) {
             return {
-                bin_edges: [String(minVal), String(maxVal)],
-                bin_counts: [countValue],
+                bin_edges: [String(minValue), String(maxValue)],
+                bin_counts: [nonNull],
                 quantiles: [],
             };
         }
 
-        const peakToPeak = maxVal - minVal;
-
-        // Determine actual number of bins based on method
-        let actualBins = numBins;
-        const isInteger = typeName.includes('INT') || typeName === 'HUGEINT';
-
-        // Integer optimization: when peak-to-peak <= numBins, use exact bins
-        if (isInteger && peakToPeak <= numBins) {
-            actualBins = Math.round(peakToPeak);
-        } else if (method === ColumnHistogramParamsMethod.FreedmanDiaconis) {
-            const q1 = Number(getResultRowValue(rangeRow, rangeRes, 3, ['q1']) ?? 0);
-            const q3 = Number(getResultRowValue(rangeRow, rangeRes, 4, ['q3']) ?? 0);
-            const iqr = q3 - q1;
-            if (iqr > 0) {
-                const binWidth = 2 * iqr * Math.pow(totalCount, -1 / 3);
-                actualBins = Math.max(1, Math.ceil(peakToPeak / binWidth));
+        let binWidth = 0;
+        switch (params.method) {
+            case ColumnHistogramParamsMethod.Fixed:
+                binWidth = peakToPeak / params.num_bins;
+                break;
+            case ColumnHistogramParamsMethod.FreedmanDiaconis: {
+                const q1 = Number((await this._quantile(quotedName, 0.25, nonNull)) ?? 0);
+                const q3 = Number((await this._quantile(quotedName, 0.75, nonNull)) ?? 0);
+                const iqr = q3 - q1;
+                if (iqr > 0) {
+                    binWidth = 2 * iqr * Math.pow(nonNull, -1 / 3);
+                }
+                break;
             }
-        } else if (method === ColumnHistogramParamsMethod.Sturges) {
-            actualBins = Math.max(1, Math.ceil(Math.log2(totalCount) + 1));
+            case ColumnHistogramParamsMethod.Sturges:
+            case ColumnHistogramParamsMethod.Scott:
+            default:
+                binWidth = peakToPeak / (Math.log2(nonNull) + 1);
+                break;
         }
-        // else: Fixed or default — use numBins as-is
-
-        // Clamp bins to reasonable range
-        actualBins = Math.max(1, Math.min(actualBins, 1000));
-
-        const binWidth = peakToPeak / actualBins;
-        const binEdges: string[] = [];
-        for (let i = 0; i <= actualBins; i++) {
-            binEdges.push(String(minVal + i * binWidth));
+        if (binWidth <= 0) {
+            binWidth = peakToPeak / params.num_bins;
         }
 
-        // Use WIDTH_BUCKET to count bins
-        const histRes = await this._duckdb.query(
-            `SELECT WIDTH_BUCKET(${col}::DOUBLE, ${minVal}, ${maxVal + binWidth * 0.001}, ${actualBins}) AS bucket, COUNT(*) AS cnt
-             FROM ${table}${notNullWhere}
-             GROUP BY bucket
-             ORDER BY bucket`,
+        let numBins = Math.ceil(peakToPeak / binWidth);
+        if (numBins > params.num_bins) {
+            numBins = params.num_bins;
+            binWidth = peakToPeak / numBins;
+        }
+        if (entry.type_display === ColumnDisplayType.Integer && peakToPeak <= numBins) {
+            numBins = peakToPeak + 1;
+            binWidth = peakToPeak / numBins;
+        }
+
+        const binRows = await this.client.runQuery(
+            `SELECT CAST(FLOOR((${quotedName} * 1.0 - ${minValue}) / ${binWidth}) AS INTEGER) AS bin_id, count(*) AS bin_count ` +
+                `FROM ${await this._relation()}${this._wherePlus(`${quotedName} IS NOT NULL`)} GROUP BY bin_id`,
+        );
+        const histEntries = new Map<number, number>(
+            binRows.map((row) => [Number(row.bin_id), Number(row.bin_count)]),
         );
 
-        const binCounts = new Array(actualBins).fill(0);
-        for (let r = 0; r < histRes.numRows; r++) {
-            const row = histRes.get(r);
-            if (!row) {
-                continue;
-            }
-            const bucket = Number(getResultRowValue(row, histRes, 0, ['bucket']) ?? 0) - 1;
-            if (bucket >= 0 && bucket < actualBins) {
-                binCounts[bucket] = Number(getResultRowValue(row, histRes, 1, ['cnt']) ?? 0);
-            }
+        const histogram: ColumnHistogram = { bin_edges: [], bin_counts: [], quantiles: [] };
+        for (let i = 0; i < numBins; i++) {
+            histogram.bin_edges.push(String(minValue + binWidth * i));
+            histogram.bin_counts.push(histEntries.get(i) ?? 0);
         }
-
-        // Compute quantiles
-        const quantileRes = await this._duckdb.query(
-            `SELECT
-                PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY ${col})::VARCHAR AS q25,
-                PERCENTILE_CONT(0.50) WITHIN GROUP (ORDER BY ${col})::VARCHAR AS q50,
-                PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY ${col})::VARCHAR AS q75
-             FROM ${table}${notNullWhere}`,
-        );
-        const qRow = quantileRes.get(0);
-        const quantiles = [
-            {
-                q: 0.25,
-                value: String(getResultRowValue(qRow, quantileRes, 0, ['q25']) ?? ''),
-                exact: false,
-            },
-            {
-                q: 0.5,
-                value: String(getResultRowValue(qRow, quantileRes, 1, ['q50']) ?? ''),
-                exact: false,
-            },
-            {
-                q: 0.75,
-                value: String(getResultRowValue(qRow, quantileRes, 2, ['q75']) ?? ''),
-                exact: false,
-            },
-        ];
-
-        return { bin_edges: binEdges, bin_counts: binCounts, quantiles };
-    }
-
-    private async _computeFrequencyTable(
-        tableName: string,
-        colSchema: ColumnSchema,
-        limit: number,
-        whereClause: string = '',
-    ): Promise<ColumnFrequencyTable> {
-        const col = escapeIdentifier(colSchema.column_name);
-        const table = escapeIdentifier(tableName);
-
-        const notNullWhere = whereClause
-            ? `${whereClause} AND ${col} IS NOT NULL`
-            : ` WHERE ${col} IS NOT NULL`;
-
-        const res = await this._duckdb.query(
-            `SELECT ${col}::VARCHAR AS val, COUNT(*) AS cnt
-             FROM ${table}${notNullWhere}
-             GROUP BY ${col}
-             ORDER BY cnt DESC
-             LIMIT ${limit + 1}`,
-        );
-
-        const values: string[] = [];
-        const counts: number[] = [];
-        let otherCount: number | undefined;
-
-        for (let r = 0; r < Math.min(res.numRows, limit); r++) {
-            const row = res.get(r);
-            if (!row) {
-                continue;
-            }
-            values.push(String(getResultRowValue(row, res, 0, ['val']) ?? ''));
-            counts.push(Number(getResultRowValue(row, res, 1, ['cnt']) ?? 0));
-        }
-
-        // If there are more results than the limit, compute an "other" count
-        if (res.numRows > limit) {
-            const totalRes = await this._duckdb.query(
-                `SELECT COUNT(*) FROM ${table}${notNullWhere}`,
-            );
-            const total = Number(getFirstResultValue(totalRes, 0) ?? 0);
-            const counted = counts.reduce((a, b) => a + b, 0);
-            otherCount = total - counted;
-        }
-
-        return { values, counts, other_count: otherCount };
-    }
-
-    // Type helpers
-    private _isNumericType(t: ColumnDisplayType): boolean {
-        return (
-            t === ColumnDisplayType.Integer ||
-            t === ColumnDisplayType.Floating ||
-            t === ColumnDisplayType.Decimal
-        );
-    }
-
-    private _isStringType(t: ColumnDisplayType): boolean {
-        return t === ColumnDisplayType.String;
-    }
-
-    private _isBooleanType(t: ColumnDisplayType): boolean {
-        return t === ColumnDisplayType.Boolean;
+        // The final bin edge is exclusive, so fold the overflow bin into the last bin.
+        histogram.bin_counts[numBins - 1] += histEntries.get(numBins) ?? 0;
+        histogram.bin_edges.push(String(minValue + binWidth * numBins));
+        return histogram;
     }
 }

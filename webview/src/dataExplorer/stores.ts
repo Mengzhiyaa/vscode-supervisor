@@ -10,6 +10,7 @@ import {
 } from './types';
 import type { SchemaColumn } from '../dataGrid/types';
 import type { ColumnProfileViewResult } from './columnProfileTypes';
+import type { ColumnProfilesFailure } from './common/tableSummaryCache';
 
 /**
  * Create Data Explorer stores
@@ -29,9 +30,15 @@ export function createDataExplorerStores() {
 
     // Summary panel state
     const columnProfiles = writable(new Map<number, ColumnProfileViewResult>());
+    const columnProfilesState = writable<{
+        failure: ColumnProfilesFailure | undefined;
+        partial: boolean;
+        retrying: boolean;
+    }>({ failure: undefined, partial: false, retrying: false });
     const summarySearchText = writable('');
     const summarySortOrder = writable<SearchSchemaSortOrder>('original');
     const summaryExpandedColumns = writable(new Set<number>());
+    const surfaceVisible = writable(true);
     const pendingAddFilterRequest = writable({
         columnIndex: null as number | null,
         columnSchema: null as SchemaColumn | null,
@@ -69,9 +76,11 @@ export function createDataExplorerStores() {
         isLoading,
         errorMessage,
         columnProfiles,
+        columnProfilesState,
         summarySearchText,
         summarySortOrder,
         summaryExpandedColumns,
+        surfaceVisible,
         pendingAddFilterRequest,
     };
 }

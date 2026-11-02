@@ -149,7 +149,15 @@ export class DuckDBDataExplorerComm implements IDataExplorerComm {
         profiles: ColumnProfileRequest[],
         formatOptions: FormatOptions,
     ): Promise<void> {
-        // Compute profiles asynchronously, then fire the event
+        // Acknowledge the request separately from its asynchronous callback.
+        void this.computeColumnProfiles(callbackId, profiles, formatOptions);
+    }
+
+    private async computeColumnProfiles(
+        callbackId: string,
+        profiles: ColumnProfileRequest[],
+        formatOptions: FormatOptions,
+    ): Promise<void> {
         try {
             const results = await this._profileEvaluator.evaluateProfiles(
                 this._tableView.tableName,

@@ -66,6 +66,7 @@ export namespace DataExplorerRequestColumnProfilesNotification {
         expandedColumnIndices?: number[];
         requestId: number;
         generation: number;
+        profiles?: Array<{ column_index: number; profiles: Array<{ profile_type: string }> }>;
     }
 
     export const type = new NotificationType<Params>('dataExplorer/requestColumnProfiles');
@@ -456,4 +457,13 @@ export namespace DataExplorerErrorNotification {
     }
 
     export const type = new NotificationType<Params>('dataExplorer/error');
+}
+
+export namespace DataExplorerVisibilityChangedNotification {
+
+    export interface Params {
+        visible: boolean;
+    }
+
+    export const type = new NotificationType<Params>('dataExplorer/visibilityChanged');
 }

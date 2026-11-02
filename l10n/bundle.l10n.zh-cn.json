@@ -329,5 +329,14 @@
   "Executed by {0}": "由 {0} 执行",
   "{0} agents connected to this workspace": "{0} 个 Agent 已连接到此工作区",
   "Empty Workspace": "空工作区",
-  "Kallichore version {0} is unsupported (expected {1}). Executable or connection: {2}.": "Kallichore 版本 {0} 不受支持（预期为 {1}）。可执行文件或连接：{2}。"
+  "Value unavailable": "值不可用",
+  "Kallichore version {0} is unsupported (expected {1}). Executable or connection: {2}.": "Kallichore 版本 {0} 不受支持（预期为 {1}）。可执行文件或连接：{2}。",
+  "Calculating summaries...": "正在计算摘要…",
+  "Summaries paused.": "摘要计算已暂停。",
+  "Some summaries unavailable.": "部分摘要不可用。",
+  "Summaries unavailable.": "摘要不可用。",
+  "Continue": "继续",
+  "Retry": "重试",
+  "No viewable data frame was found at the cursor.": "光标处没有可查看的数据框。",
+  "An error occurred while opening the viewer. Try restarting your session.": "打开查看器时发生错误。请尝试重启会话。"
 }

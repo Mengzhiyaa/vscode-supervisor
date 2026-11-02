@@ -8,6 +8,7 @@
     import { getDataExplorerContext } from '../../../positronDataExplorerContext';
     import VerticalSplitter from '../../splitters/verticalSplitter.svelte';
     import SummaryRowActionBar from './summaryRowActionBar/summaryRowActionBar.svelte';
+    import SummaryProfilesNotice from '../../summaryProfilesNotice.svelte';
     import { PositronDataGrid } from '../../../../dataGrid';
     import { PositronDataExplorerLayout } from '../../../types';
     import type { WidthCalculators } from '../../../common/tableDataCache';
@@ -19,7 +20,7 @@
 
     const context = getDataExplorerContext();
     const { notifyFocusChanged, stores } = context;
-    const { state: explorerState } = stores;
+    const { state: explorerState, surfaceVisible } = stores;
     const layout = $derived($explorerState.layout ?? PositronDataExplorerLayout.SummaryOnLeft);
     const summaryWidth = $derived($explorerState.summaryWidth ?? DEFAULT_SUMMARY_WIDTH);
     const isSummaryCollapsed = $derived($explorerState.summaryCollapsed ?? false);
@@ -146,7 +147,7 @@
             return;
         }
 
-        void tableSchemaDataGridInstance.setVisible(!columnsCollapsed);
+        void tableSchemaDataGridInstance.setVisible($surfaceVisible && !columnsCollapsed);
     });
 
     const beginResizeHandler = () => ({
@@ -211,6 +212,7 @@
     >
         {#if layout === PositronDataExplorerLayout.SummaryOnLeft}
             <SummaryRowActionBar instance={tableSchemaDataGridInstance} />
+            <SummaryProfilesNotice />
         {/if}
         <div class="data-grid-container">
             {#if layout === PositronDataExplorerLayout.SummaryOnLeft}
@@ -265,6 +267,7 @@
     >
         {#if layout !== PositronDataExplorerLayout.SummaryOnLeft}
             <SummaryRowActionBar instance={tableSchemaDataGridInstance} />
+            <SummaryProfilesNotice />
         {/if}
         <div class="data-grid-container">
             {#if layout === PositronDataExplorerLayout.SummaryOnLeft}

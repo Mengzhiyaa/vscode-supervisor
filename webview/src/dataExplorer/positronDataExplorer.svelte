@@ -310,6 +310,13 @@
     onMount(() => {
         connection = getRpcConnection();
 
+        connection.onNotification(
+            'dataExplorer/visibilityChanged',
+            (params: { visible: boolean }) => {
+                instance.setVisible(params.visible);
+            },
+        );
+
         connection.onNotification('dataExplorer/copy', () => {
             tableDataDataGridInstance.copyCurrentSelection();
         });

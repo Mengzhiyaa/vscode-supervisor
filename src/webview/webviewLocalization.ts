@@ -339,6 +339,17 @@ export function createWebviewLocalizationMessages(): WebviewLocalizationMessages
         'positron.columnSummary.expand': vscode.l10n.t('Expand'),
         'positron.dataExplorer.codeSyntaxHeading': vscode.l10n.t('Select code syntax'),
         'positron.dataExplorer.computing': vscode.l10n.t('Computing'),
+        'positron.dataExplorer.summaryProfilesNotice.retrying': vscode.l10n.t(
+            'Calculating summaries...',
+        ),
+        'positron.dataExplorer.summaryProfilesPaused': vscode.l10n.t('Summaries paused.'),
+        'positron.dataExplorer.summaryProfilesFailed.partial': vscode.l10n.t(
+            'Some summaries unavailable.',
+        ),
+        'positron.dataExplorer.summaryProfilesFailed': vscode.l10n.t('Summaries unavailable.'),
+        'positron.dataExplorer.summaryProfilesPaused.continue': vscode.l10n.t('Continue'),
+        'positron.dataExplorer.summaryProfilesFailed.retry': vscode.l10n.t('Retry'),
+        'positron.dataExplorer.cellUnavailable': vscode.l10n.t('Value unavailable'),
         'positron.dataExplorer.convertToCode.empty': vscode.l10n.t(
             'No preview is available for the current selection.',
         ),

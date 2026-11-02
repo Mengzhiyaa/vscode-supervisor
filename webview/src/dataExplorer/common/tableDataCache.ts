@@ -101,6 +101,7 @@ export class TableDataCache {
     private _columns = 0;
     private _rows = 0;
     private _hasRowLabels = false;
+    private _dataLoadFailed = false;
     private _widthCalculators: WidthCalculators | undefined;
     private readonly _listeners = new Set<UpdateListener>();
     private readonly _columnSchemaCache = new Map<number, SchemaColumn>();
@@ -118,6 +119,18 @@ export class TableDataCache {
 
     get hasRowLabels(): boolean {
         return this._hasRowLabels;
+    }
+
+    get dataLoadFailed(): boolean {
+        return this._dataLoadFailed;
+    }
+
+    setDataLoadFailed(dataLoadFailed: boolean): void {
+        if (this._dataLoadFailed === dataLoadFailed) {
+            return;
+        }
+        this._dataLoadFailed = dataLoadFailed;
+        this._emitDidUpdate();
     }
 
     readonly onDidUpdate = (listener: UpdateListener) => {
@@ -264,7 +277,8 @@ export class TableDataCache {
         rowLabels?: string[];
     }): boolean {
         const { startRow, rowIndices, columns, columnIndices, rowLabels } = params;
-        let didChange = false;
+        let didChange = this._dataLoadFailed;
+        this._dataLoadFailed = false;
 
         if (columns.length > 0) {
             const targetColumns =
@@ -367,6 +381,7 @@ export class TableDataCache {
         }
 
         if (invalidateCache & InvalidateCacheFlags.Data) {
+            this._dataLoadFailed = false;
             this._rowLabelCache.clear();
             this._dataColumnCache.clear();
             this._columnValueLengths.clear();

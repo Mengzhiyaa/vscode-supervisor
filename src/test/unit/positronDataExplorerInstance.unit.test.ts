@@ -2,10 +2,12 @@ import * as assert from 'assert';
 import * as vscode from 'vscode';
 import type {
     BackendState,
+    ColumnProfileResult,
+    ColumnProfileSpec,
     ColumnSelection,
     TableData,
 } from '../../runtime/comms/positronDataExplorerComm';
-import { SupportStatus } from '../../runtime/comms/positronDataExplorerComm';
+import { ColumnProfileType, SupportStatus } from '../../runtime/comms/positronDataExplorerComm';
 import { PositronDataExplorerInstance } from '../../services/dataExplorer/positronDataExplorerInstance';
 import {
     DataExplorerClientStatus,
@@ -187,27 +189,59 @@ suite('[Unit] Positron Data Explorer model lifecycle', () => {
         assert.strictEqual(requests, 1);
     });
 
-    test('chunks profile fetches and serves them from the shared cache', async () => {
-        const chunkSizes: number[] = [];
-        const client = {
-            requestColumnProfiles: async (requests: Array<{ column_index: number }>) => {
-                chunkSizes.push(requests.length);
-                return requests.map((request) => ({ null_count: request.column_index }));
-            },
-        } as unknown as DataExplorerClientInstance;
-        const cache = new TableSummaryCache(client);
-        const requests = Array.from({ length: 17 }, (_, column_index) => ({
-            column_index,
+    for (const { name, profiles, createResult, chunkSizes: expectedChunkSizes } of [
+        {
+            name: 'chunks empty profile fetches',
             profiles: [],
-        }));
+            createResult: () => ({}),
+            chunkSizes: [8, 8, 1],
+        },
+        {
+            name: 'chunks detailed profile fetches',
+            profiles: [{ profile_type: ColumnProfileType.SummaryStats }],
+            createResult: (columnIndex: number) => ({
+                summary_stats: { other_stats: { num_unique: columnIndex } },
+            }),
+            chunkSizes: [8, 8, 1],
+        },
+        {
+            name: 'batches null-count-only profile fetches',
+            profiles: [{ profile_type: ColumnProfileType.NullCount }],
+            createResult: (columnIndex: number) => ({ null_count: columnIndex }),
+            chunkSizes: [17],
+        },
+    ] satisfies Array<{
+        name: string;
+        profiles: ColumnProfileSpec[];
+        createResult: (columnIndex: number) => ColumnProfileResult;
+        chunkSizes: number[];
+    }>) {
+        test(`${name} and serves them from the shared cache`, async () => {
+            const chunkSizes: number[] = [];
+            const client = {
+                requestColumnProfiles: async (requests: Array<{ column_index: number }>) => {
+                    chunkSizes.push(requests.length);
+                    return requests.map((request) => createResult(request.column_index));
+                },
+            } as unknown as DataExplorerClientInstance;
+            const cache = new TableSummaryCache(client);
+            const requests = Array.from({ length: 17 }, (_, column_index) => ({
+                column_index,
+                profiles,
+            }));
 
-        const first = await cache.requestColumnProfiles(requests, 0);
-        const second = await cache.requestColumnProfiles(requests, 0);
+            const first = await cache.requestColumnProfiles(requests, 0);
+            const second = await cache.requestColumnProfiles(requests, 0);
 
-        assert.deepStrictEqual(chunkSizes, [8, 8, 1]);
-        assert.strictEqual(first.length, 17);
-        assert.deepStrictEqual(second, first);
-    });
+            assert.deepStrictEqual(chunkSizes, expectedChunkSizes);
+            assert.deepStrictEqual(
+                first,
+                requests.map((request) => createResult(request.column_index)),
+            );
+            assert.deepStrictEqual(second, first);
+            cache.dispose();
+        });
+    }
 
     test('owns UI, visibility and foreground loading state', async () => {
         const fixture = createClient();

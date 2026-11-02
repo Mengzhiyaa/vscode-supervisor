@@ -100,5 +100,9 @@ export interface IPositronDataExplorerInstance extends vscode.Disposable {
         token?: vscode.CancellationToken,
         onProgress?: (completedRows: number, totalRows: number) => void,
     ): Promise<string>;
+    getTableDataTSV(
+        token?: vscode.CancellationToken,
+        onProgress?: (completedRows: number, totalRows: number) => void,
+    ): Promise<string>;
     setDatasetImportOptions(options: DatasetImportOptions): Promise<SetDatasetImportOptionsResult>;
 }

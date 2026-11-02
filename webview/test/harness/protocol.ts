@@ -357,6 +357,7 @@ export const HelpMethods = {
 
 export const DataExplorerMethods = {
     ready: 'dataExplorer/ready',
+    visibilityChanged: 'dataExplorer/visibilityChanged',
     initialize: 'dataExplorer/initialize',
     metadata: 'dataExplorer/metadata',
     schema: 'dataExplorer/schema',

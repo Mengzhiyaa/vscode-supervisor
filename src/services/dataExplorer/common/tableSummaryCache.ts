@@ -15,6 +15,8 @@ const PROFILE_TRIM_DELAY_MS = 3_000;
 export class TableSummaryCache {
     private readonly _profiles = new Map<string, ColumnProfileResult>();
     private readonly _pending = new Map<string, Promise<void>>();
+    private readonly _pendingOwners = new WeakMap<Promise<void>, Set<symbol>>();
+    private readonly _pendingTokens = new WeakMap<Promise<void>, vscode.CancellationTokenSource>();
     private readonly _retainedKeys = new Set<string>();
     private readonly _requestTokenSources = new Set<vscode.CancellationTokenSource>();
     private _trimTimer: ReturnType<typeof setTimeout> | undefined;
@@ -66,16 +68,22 @@ export class TableSummaryCache {
             }
         });
         if (pending.size > 0) {
-            await Promise.all(pending);
+            await this._waitForPending(pending, token);
         }
         if (generation !== this._generation || token?.isCancellationRequested) {
             return [];
         }
 
         const misses = requests.filter((_, index) => !this._profiles.has(keys[index]));
-        for (let offset = 0; offset < misses.length; offset += PROFILE_REQUEST_CHUNK_SIZE) {
-            const chunk = misses.slice(offset, offset + PROFILE_REQUEST_CHUNK_SIZE);
-            await this._requestChunk(chunk, generation);
+        const nullCountsOnly = misses.every(
+            (request) =>
+                request.profiles.length > 0 &&
+                request.profiles.every((profile) => profile.profile_type === 'null_count'),
+        );
+        const chunkSize = nullCountsOnly ? Math.max(1, misses.length) : PROFILE_REQUEST_CHUNK_SIZE;
+        for (let offset = 0; offset < misses.length; offset += chunkSize) {
+            const chunk = misses.slice(offset, offset + chunkSize);
+            await this._requestChunk(chunk, generation, token);
             if (generation !== this._generation || token?.isCancellationRequested) {
                 return [];
             }
@@ -88,6 +96,7 @@ export class TableSummaryCache {
     private async _requestChunk(
         requests: ColumnProfileRequest[],
         generation: number,
+        token?: vscode.CancellationToken,
     ): Promise<void> {
         const keys = requests.map((request) => JSON.stringify(request));
         const uncachedRequests: ColumnProfileRequest[] = [];
@@ -107,9 +116,13 @@ export class TableSummaryCache {
             }
         });
         if (pending.size > 0) {
-            await Promise.all(pending);
+            await this._waitForPending(pending, token);
         }
-        if (uncachedRequests.length === 0 || generation !== this._generation) {
+        if (
+            uncachedRequests.length === 0 ||
+            generation !== this._generation ||
+            token?.isCancellationRequested
+        ) {
             return;
         }
 
@@ -122,21 +135,77 @@ export class TableSummaryCache {
                     return;
                 }
                 uncachedKeys.forEach((key, index) => {
-                    this._profiles.set(key, results[index] ?? {});
+                    const result = results[index];
+                    if (
+                        result &&
+                        uncachedRequests[index].profiles.every(
+                            (profile) =>
+                                result[profile.profile_type as keyof ColumnProfileResult] !==
+                                undefined,
+                        )
+                    ) {
+                        this._profiles.set(key, result);
+                    }
                 });
+            })
+            .finally(() => {
+                uncachedKeys.forEach((key) => {
+                    if (this._pending.get(key) === request) {
+                        this._pending.delete(key);
+                    }
+                });
+                this._requestTokenSources.delete(tokenSource);
+                tokenSource.dispose();
             });
+        this._pendingTokens.set(request, tokenSource);
         uncachedKeys.forEach((key) => this._pending.set(key, request));
-        try {
-            await request;
-        } finally {
-            uncachedKeys.forEach((key) => {
-                if (this._pending.get(key) === request) {
-                    this._pending.delete(key);
-                }
-            });
-            this._requestTokenSources.delete(tokenSource);
-            tokenSource.dispose();
+        await this._waitForPending(new Set([request]), token);
+    }
+
+    private async _waitForPending(
+        pending: Set<Promise<void>>,
+        token?: vscode.CancellationToken,
+    ): Promise<void> {
+        const owner = Symbol('profile-consumer');
+        for (const request of pending) {
+            const owners = this._pendingOwners.get(request) ?? new Set<symbol>();
+            owners.add(owner);
+            this._pendingOwners.set(request, owners);
         }
+        await new Promise<void>((resolve, reject) => {
+            let completed = false;
+            let cancellation: vscode.Disposable | undefined;
+            const finish = (failed = false, error?: unknown) => {
+                if (completed) {
+                    return;
+                }
+                completed = true;
+                cancellation?.dispose();
+                for (const request of pending) {
+                    const owners = this._pendingOwners.get(request);
+                    owners?.delete(owner);
+                    const source = this._pendingTokens.get(request);
+                    // A split editor can share this request. Cancel its backend
+                    // wait only after the final interested surface leaves.
+                    if (owners?.size === 0 && source && this._requestTokenSources.has(source)) {
+                        source.cancel();
+                    }
+                }
+                if (failed) {
+                    reject(error);
+                } else {
+                    resolve();
+                }
+            };
+            cancellation = token?.onCancellationRequested(() => finish());
+            Promise.all(pending).then(
+                () => finish(),
+                (error) => finish(true, error),
+            );
+            if (token?.isCancellationRequested) {
+                finish();
+            }
+        });
     }
 
     private _scheduleTrim(): void {

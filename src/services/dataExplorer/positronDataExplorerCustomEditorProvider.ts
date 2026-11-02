@@ -18,7 +18,7 @@ import { getDataExplorerIdentifier } from './dataExplorerUri';
  * needs retainContextWhenHidden to provide the same lifecycle.
  */
 export const POSITRON_DATA_EXPLORER_CUSTOM_EDITOR_OPTIONS = {
-    supportsMultipleEditorsPerDocument: false,
+    supportsMultipleEditorsPerDocument: true,
     webviewOptions: {
         retainContextWhenHidden: true,
     },

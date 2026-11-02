@@ -397,7 +397,11 @@ export class DataExplorerClientInstance implements vscode.Disposable {
         profiles: ColumnProfileRequest[],
         token?: vscode.CancellationToken,
     ): Promise<ColumnProfileResult[]> {
-        if (profiles.length === 0) {
+        if (
+            profiles.length === 0 ||
+            this._disposed ||
+            this._status === DataExplorerClientStatus.Disconnected
+        ) {
             return [];
         }
         if (token?.isCancellationRequested) {
@@ -445,18 +449,21 @@ export class DataExplorerClientInstance implements vscode.Disposable {
         if (token?.isCancellationRequested) {
             return promise;
         }
-        try {
-            await this.getColumnProfiles(callbackId, profiles);
-        } catch (error) {
+        // The callback event owns completion. Waiting for the RPC acknowledgement
+        // first would prevent cancellation from releasing a slow backend wait.
+        void this.getColumnProfiles(callbackId, profiles).catch((error) => {
             const pendingTask = this._asyncTasks.get(callbackId);
             if (pendingTask) {
                 clearTimeout(pendingTask.timeoutHandle);
                 pendingTask.cancellationDisposable?.dispose();
                 this._asyncTasks.delete(callbackId);
+                pendingTask.reject(error instanceof Error ? error : new Error(String(error)));
             }
-            throw error;
-        }
-        return promise;
+        });
+        return this._runBackendTask(
+            () => promise,
+            () => [],
+        );
     }
 
     /**

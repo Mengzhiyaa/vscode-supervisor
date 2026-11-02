@@ -152,6 +152,11 @@
             {
               "name": "generation",
               "type": "number"
+            },
+            {
+              "name": "profiles",
+              "optional": true,
+              "type": "Array<{ column_index: number; profiles: Array<{ profile_type: string }> }>"
             }
           ]
         }
@@ -512,11 +517,30 @@
           "kind": "interface",
           "name": "Params",
           "fields": [
-            { "name": "selectionType", "type": "'cell' | 'cells' | 'columns' | 'rows'" },
-            { "name": "columnIndex", "optional": true, "type": "number" },
-            { "name": "rowIndex", "optional": true, "type": "number" },
-            { "name": "columnIndexes", "optional": true, "type": "number[]" },
-            { "name": "rowIndexes", "optional": true, "type": "number[]" }
+            {
+              "name": "selectionType",
+              "type": "'cell' | 'cells' | 'columns' | 'rows'"
+            },
+            {
+              "name": "columnIndex",
+              "optional": true,
+              "type": "number"
+            },
+            {
+              "name": "rowIndex",
+              "optional": true,
+              "type": "number"
+            },
+            {
+              "name": "columnIndexes",
+              "optional": true,
+              "type": "number[]"
+            },
+            {
+              "name": "rowIndexes",
+              "optional": true,
+              "type": "number[]"
+            }
           ]
         }
       ]
@@ -633,11 +657,30 @@
           "kind": "interface",
           "name": "Params",
           "fields": [
-            { "name": "selectionType", "type": "'cell' | 'cells' | 'columns' | 'rows'" },
-            { "name": "columnIndex", "optional": true, "type": "number" },
-            { "name": "rowIndex", "optional": true, "type": "number" },
-            { "name": "columnIndexes", "optional": true, "type": "number[]" },
-            { "name": "rowIndexes", "optional": true, "type": "number[]" }
+            {
+              "name": "selectionType",
+              "type": "'cell' | 'cells' | 'columns' | 'rows'"
+            },
+            {
+              "name": "columnIndex",
+              "optional": true,
+              "type": "number"
+            },
+            {
+              "name": "rowIndex",
+              "optional": true,
+              "type": "number"
+            },
+            {
+              "name": "columnIndexes",
+              "optional": true,
+              "type": "number[]"
+            },
+            {
+              "name": "rowIndexes",
+              "optional": true,
+              "type": "number[]"
+            }
           ]
         }
       ]
@@ -967,6 +1010,24 @@
               "name": "requestId",
               "optional": true,
               "type": "number"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "notification",
+      "name": "DataExplorerVisibilityChangedNotification",
+      "method": "dataExplorer/visibilityChanged",
+      "paramsType": "Params",
+      "declarations": [
+        {
+          "kind": "interface",
+          "name": "Params",
+          "fields": [
+            {
+              "name": "visible",
+              "type": "boolean"
             }
           ]
         }

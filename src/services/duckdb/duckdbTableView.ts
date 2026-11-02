@@ -11,7 +11,17 @@ import { getErrorMessage } from '../../shared/errors';
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { readImportFile, throwIfImportCancelled } from './fileImport';
+import { formatExport, stringifyExportCell } from './exportFormatting';
 import { DuckDBInstance } from './duckdbInstance';
+import {
+    formatDecimal,
+    formatFloat,
+    formatInteger,
+    isDecimalLiteral,
+    isIntegerLiteral,
+    truncate,
+} from './valueFormatting';
+import { createDuckDBReadPlan, type IDuckDBReadPlan } from './duckdbReadPlan';
 import { readXlsxWorksheetMetadata, type XlsxWorksheetMetadata } from './xlsxWorkbook';
 import { escapeIdentifier, escapeValue, buildWhereClause, buildCountQuery } from './sqlBuilder';
 import {
@@ -54,6 +64,48 @@ import {
     ColumnValue,
 } from '../../runtime/comms/positronDataExplorerComm';
 
+export function duckdbDisplayType(dataType: string): ColumnDisplayType {
+    const type = dataType.toUpperCase();
+
+    if (type.includes('BOOL')) {
+        return ColumnDisplayType.Boolean;
+    }
+    if (type.includes('TIMESTAMP') || type.includes('DATETIME')) {
+        return ColumnDisplayType.Datetime;
+    }
+    if (type.includes('INTERVAL')) {
+        return ColumnDisplayType.Interval;
+    }
+    if (type.includes('DATE')) {
+        return ColumnDisplayType.Date;
+    }
+    if (type.includes('TIME')) {
+        return ColumnDisplayType.Time;
+    }
+    if (type.includes('DECIMAL') || type.includes('NUMERIC')) {
+        return ColumnDisplayType.Decimal;
+    }
+    if (type.includes('INT')) {
+        return ColumnDisplayType.Integer;
+    }
+    if (type.includes('DOUBLE') || type.includes('FLOAT') || type.includes('REAL')) {
+        return ColumnDisplayType.Floating;
+    }
+    if (
+        type.includes('CHAR') ||
+        type.includes('TEXT') ||
+        type.includes('STRING') ||
+        type.includes('UUID')
+    ) {
+        return ColumnDisplayType.String;
+    }
+    if (type.includes('BLOB') || type.includes('BYTEA')) {
+        return ColumnDisplayType.Object;
+    }
+    // Anything else (JSON, nested types, etc.) renders as a string.
+    return ColumnDisplayType.String;
+}
+
 let _tableCounter = 0;
 
 // Sentinel values for special float representations (aligned with positron)
@@ -75,38 +127,6 @@ function isSelectionRange(spec: ArraySelection): spec is DataSelectionRange {
  */
 function quoteIdentifier(fieldName: string): string {
     return '"' + fieldName.replace(/"/g, '""') + '"';
-}
-
-function escapeDelimitedValue(value: string, delimiter: string): string {
-    if (
-        !value.includes(delimiter) &&
-        !value.includes('"') &&
-        !value.includes('\n') &&
-        !value.includes('\r')
-    ) {
-        return value;
-    }
-
-    return `"${value.replace(/"/g, '""')}"`;
-}
-
-function escapeHtmlCell(value: string): string {
-    return value.replace(/[&<>"']/g, (char) => {
-        switch (char) {
-            case '&':
-                return '&amp;';
-            case '<':
-                return '&lt;';
-            case '>':
-                return '&gt;';
-            case '"':
-                return '&quot;';
-            case "'":
-                return '&#39;';
-            default:
-                return char;
-        }
-    });
 }
 
 function getFirstRowValue(result: any, preferredKeys: string[] = []): unknown {
@@ -148,6 +168,7 @@ function getFirstRowValue(result: any, preferredKeys: string[] = []): unknown {
 export class DuckDBTableView {
     private readonly _duckdb: DuckDBInstance;
     private _tableName: string;
+    private readPlan: IDuckDBReadPlan | undefined;
     private readonly _uri: vscode.Uri;
     private readonly _importLifetime = new vscode.CancellationTokenSource();
     private _importQueue: Promise<void> = Promise.resolve();
@@ -257,7 +278,10 @@ export class DuckDBTableView {
                         const notifySkippedRecovery =
                             staged._xlsxRecoverySkipped && !this._xlsxRecoverySkipped;
                         const previousTable = this._tableName;
+                        const previousReadPlan = this.readPlan;
                         this._tableName = staged._tableName;
+                        this.readPlan = staged.readPlan;
+                        staged.readPlan = undefined;
                         this._fullSchema = staged._fullSchema;
                         this._availableSheets = staged._availableSheets;
                         this._hasHeaderRow = staged._hasHeaderRow;
@@ -290,6 +314,7 @@ export class DuckDBTableView {
                                 ),
                             );
                         }
+                        await previousReadPlan?.dispose();
                         await this._duckdb
                             .query(`DROP TABLE IF EXISTS ${escapeIdentifier(previousTable)}`)
                             .catch(() => undefined);
@@ -378,6 +403,7 @@ export class DuckDBTableView {
         // Retrieve schema
         throwIfImportCancelled(token);
         await this._loadSchema(token);
+        await this._relation(token);
 
         progress.report({ message: 'Reading table metadata…' });
         await this._updateRowCounts(token);
@@ -662,50 +688,22 @@ export class DuckDBTableView {
                 column_name: columnName,
                 column_index: i,
                 type_name: typeName,
-                type_display: this._mapDuckDBType(typeName),
+                type_display: duckdbDisplayType(typeName),
             });
         }
     }
 
-    private _mapDuckDBType(duckdbType: string): ColumnDisplayType {
-        const t = duckdbType.toUpperCase();
-        if (t.includes('INT') || t === 'HUGEINT' || t === 'UHUGEINT') {
-            return ColumnDisplayType.Integer;
-        }
-        if (
-            t.includes('FLOAT') ||
-            t.includes('DOUBLE') ||
-            t.includes('REAL') ||
-            t === 'DECIMAL' ||
-            t.startsWith('DECIMAL(')
-        ) {
-            return ColumnDisplayType.Floating;
-        }
-        if (t === 'BOOLEAN' || t === 'BOOL') {
-            return ColumnDisplayType.Boolean;
-        }
-        if (t === 'DATE') {
-            return ColumnDisplayType.Date;
-        }
-        if (t.includes('TIMESTAMP') || t.includes('DATETIME')) {
-            return ColumnDisplayType.Datetime;
-        }
-        if (t === 'TIME') {
-            return ColumnDisplayType.Time;
-        }
-        if (t === 'INTERVAL') {
-            return ColumnDisplayType.Interval;
-        }
-        if (t.includes('VARCHAR') || t === 'TEXT' || t === 'STRING' || t.includes('CHAR')) {
-            return ColumnDisplayType.String;
-        }
-        if (t === 'BLOB' || t.startsWith('LIST') || t.startsWith('MAP')) {
-            return ColumnDisplayType.Array;
-        }
-        if (t.startsWith('STRUCT')) {
-            return ColumnDisplayType.Struct;
-        }
-        return ColumnDisplayType.Unknown;
+    private _getReadPlan(): IDuckDBReadPlan {
+        return (this.readPlan ??= createDuckDBReadPlan(
+            this._duckdb,
+            escapeIdentifier(this._tableName),
+            'table',
+            this._fullSchema.map((column) => column.column_name),
+        ));
+    }
+
+    private _relation(token?: vscode.CancellationToken): Promise<string> {
+        return this._getReadPlan().relation(token);
     }
 
     private async _updateRowCounts(token?: vscode.CancellationToken): Promise<void> {
@@ -774,199 +772,126 @@ export class DuckDBTableView {
         columns: ColumnSelection[],
         formatOptions: FormatOptions,
     ): Promise<TableData> {
-        // Early return if table has 0 rows
-        if (this._filteredRowCount === 0) {
+        if (this._filteredRowCount === 0 || columns.length === 0) {
             return { columns: Array.from({ length: columns.length }, () => []) };
         }
-
-        // Compute the row range across all selections
         let lowerLimit = Infinity;
         let upperLimit = -Infinity;
-
-        const smallNumDigits = formatOptions.small_num_digits;
-        const largeNumDigits = formatOptions.large_num_digits;
-        const thousandsSep = formatOptions.thousands_sep;
-        const sciNotationLimit = '1' + '0'.repeat(formatOptions.max_integral_digits);
-        const varcharLimit = formatOptions.max_value_length;
-
-        // Build format strings
-        let smallFloatFormat: string, largeFloatFormat: string;
-        if (thousandsSep) {
-            largeFloatFormat = `'{:,.${largeNumDigits}f}'`;
-            smallFloatFormat = `'{:,.${smallNumDigits}f}'`;
-        } else {
-            largeFloatFormat = `'{:.${largeNumDigits}f}'`;
-            smallFloatFormat = `'{:.${smallNumDigits}f}'`;
-        }
-
-        const columnSelectors: string[] = [];
-        const selectedColumns: string[] = [];
-
         for (const column of columns) {
             if (isSelectionRange(column.spec)) {
                 lowerLimit = Math.min(lowerLimit, column.spec.first_index);
                 upperLimit = Math.max(upperLimit, column.spec.last_index);
             } else {
-                // DataSelectionIndices
-                const indices = (column.spec as DataSelectionIndices).indices;
-                lowerLimit = Math.min(lowerLimit, ...indices);
-                upperLimit = Math.max(upperLimit, ...indices);
-            }
-
-            const columnSchema = this._fullSchema[column.column_index];
-            if (!columnSchema) {
-                continue;
-            }
-            const quotedName = quoteIdentifier(columnSchema.column_name);
-            const typeName = columnSchema.type_name.toUpperCase();
-
-            const smallRounded = `ROUND(${quotedName}, ${smallNumDigits})`;
-            const largeRounded = `ROUND(${quotedName}, ${largeNumDigits})`;
-
-            let columnSelector: string;
-            switch (true) {
-                case typeName === 'TINYINT' ||
-                    typeName === 'SMALLINT' ||
-                    typeName === 'INTEGER' ||
-                    typeName === 'BIGINT' ||
-                    typeName === 'UTINYINT' ||
-                    typeName === 'USMALLINT' ||
-                    typeName === 'UINTEGER' ||
-                    typeName === 'UBIGINT':
-                    if (thousandsSep) {
-                        columnSelector = `FORMAT('{:,}', ${quotedName})`;
-                        if (thousandsSep !== ',') {
-                            columnSelector = `REPLACE(${columnSelector}, ',', '${thousandsSep}')`;
-                        }
-                    } else {
-                        columnSelector = `FORMAT('{:d}', ${quotedName})`;
-                    }
-                    break;
-
-                case typeName === 'FLOAT' || typeName === 'DOUBLE': {
-                    let largeFormatter = `FORMAT(${largeFloatFormat}, ${largeRounded})`;
-                    let smallFormatter = `FORMAT(${smallFloatFormat}, ${smallRounded})`;
-                    if (thousandsSep && thousandsSep !== ',') {
-                        largeFormatter = `REPLACE(${largeFormatter}, ',', '${thousandsSep}')`;
-                        smallFormatter = `REPLACE(${smallFormatter}, ',', '${thousandsSep}')`;
-                    }
-                    columnSelector = `CASE WHEN ${quotedName} IS NULL THEN 'NULL'
-WHEN isinf(${quotedName}) AND ${quotedName} > 0 THEN 'Inf'
-WHEN isinf(${quotedName}) AND ${quotedName} < 0 THEN '-Inf'
-WHEN isnan(${quotedName}) THEN 'NaN'
-WHEN abs(${quotedName}) >= ${sciNotationLimit} THEN FORMAT('{:.${largeNumDigits}e}', ${quotedName})
-WHEN abs(${quotedName}) < 1 AND abs(${quotedName}) > 0 THEN ${smallFormatter}
-ELSE ${largeFormatter}
-END`;
-                    break;
+                for (const index of column.spec.indices) {
+                    lowerLimit = Math.min(lowerLimit, index);
+                    upperLimit = Math.max(upperLimit, index);
                 }
-
-                case typeName === 'VARCHAR':
-                    columnSelector = `SUBSTRING(${quotedName}, 1, ${varcharLimit})`;
-                    break;
-
-                case typeName === 'TIMESTAMP' || typeName === 'TIMESTAMP_NS':
-                    columnSelector = `strftime(${quotedName} AT TIME ZONE 'UTC', '%Y-%m-%d %H:%M:%S')`;
-                    break;
-
-                case typeName === 'TIMESTAMP WITH TIME ZONE' ||
-                    typeName === 'TIMESTAMP_NS WITH TIME ZONE':
-                    columnSelector = `strftime(${quotedName}, '%Y-%m-%d %H:%M:%S%z')`;
-                    break;
-
-                default:
-                    columnSelector = `CAST(${quotedName} AS VARCHAR)`;
-                    break;
             }
-            selectedColumns.push(quotedName);
-            columnSelectors.push(`${columnSelector} AS formatted_${columnSelectors.length}`);
         }
-
-        if (columnSelectors.length === 0) {
-            return { columns: [] };
-        }
-
-        let numRows = 0;
-        if (isFinite(lowerLimit) && isFinite(upperLimit)) {
-            numRows = upperLimit - lowerLimit + 1;
-        }
-        if (numRows === 0) {
+        if (!isFinite(lowerLimit) || !isFinite(upperLimit)) {
             return { columns: Array.from({ length: columns.length }, () => []) };
         }
-
-        // Use positron's subquery optimization: sort/limit/offset in subquery, format in outer.
-        const query = `SELECT\n${columnSelectors.join(',\n    ')}
-FROM (
-    SELECT ${selectedColumns.join(', ')} FROM
-    ${escapeIdentifier(this._tableName)}${this._whereClause}${this._sortClause}
-    LIMIT ${numRows}
-    OFFSET ${lowerLimit}
-) t;`;
-
-        const queryResult = await this._duckdb.query(query);
-
+        const numRows = upperLimit - lowerLimit + 1;
+        const selectors = columns.map((column, i) => {
+            const schema = this._fullSchema[column.column_index];
+            const quotedName = quoteIdentifier(schema.column_name);
+            // Arrow's wide integer, decimal, and temporal representations are transport-specific.
+            // Keep exact digits and source date/time text at this boundary.
+            const text = [
+                ColumnDisplayType.Integer,
+                ColumnDisplayType.Decimal,
+                ColumnDisplayType.Date,
+                ColumnDisplayType.Datetime,
+                ColumnDisplayType.Time,
+                ColumnDisplayType.Interval,
+            ].includes(schema.type_display);
+            return `${text ? `CAST(${quotedName} AS VARCHAR)` : quotedName} AS c${i}`;
+        });
+        const query =
+            `SELECT ${selectors.join(', ')} FROM ${await this._relation()}` +
+            `${this._whereClause}${this._sortClause} LIMIT ${numRows} OFFSET ${lowerLimit}`;
+        const rows = await this._duckdb.query(query);
         const result: TableData = { columns: [] };
-
-        // Adapter for float columns — converts sentinel string values to numeric codes
-        const floatAdapter = (field: any, i: number): ColumnValue => {
-            const value: string = field.get(i - lowerLimit);
-            switch (value) {
-                case 'NaN':
-                    return SENTINEL_NAN;
-                case 'NULL':
-                    return SENTINEL_NULL;
-                case 'Inf':
-                    return SENTINEL_INF;
-                case '-Inf':
-                    return SENTINEL_NEGINF;
-                default:
-                    return value;
-            }
-        };
-
-        // Default adapter for non-float columns
-        const defaultAdapter = (field: any, i: number): ColumnValue => {
-            const relIndex = i - lowerLimit;
-            return field.isValid(relIndex) ? field.get(relIndex) : SENTINEL_NULL;
-        };
-
-        for (let i = 0; i < queryResult.numCols; i++) {
+        for (let i = 0; i < columns.length; i++) {
             const column = columns[i];
-            const spec = column.spec;
-            const field = queryResult.getChildAt(i);
-            if (!field) {
-                result.columns.push([]);
-                continue;
-            }
-
-            const columnSchema = this._fullSchema[column.column_index];
-            const isFloat =
-                columnSchema &&
-                (columnSchema.type_name.toUpperCase() === 'FLOAT' ||
-                    columnSchema.type_name.toUpperCase() === 'DOUBLE');
-            const adapter = isFloat ? floatAdapter : defaultAdapter;
-
-            const fetchValues = (): Array<string | number> => {
-                if (isSelectionRange(spec)) {
-                    const lastIndex = Math.min(
-                        spec.last_index,
-                        spec.first_index + queryResult.numRows - 1,
-                    );
-                    const columnValues: Array<string | number> = [];
-                    for (let j = spec.first_index; j <= lastIndex; ++j) {
-                        columnValues.push(adapter(field, j));
-                    }
-                    return columnValues;
-                } else {
-                    // DataSelectionIndices
-                    return (spec as DataSelectionIndices).indices.map((j) => adapter(field, j));
-                }
+            const displayType = this._fullSchema[column.column_index].type_display;
+            const field = rows.getChildAt(i);
+            const format = (absIndex: number): ColumnValue => {
+                const index = absIndex - lowerLimit;
+                return index < 0 || index >= rows.numRows || !field?.isValid(index)
+                    ? SENTINEL_NULL
+                    : this._formatValue(field.get(index), displayType, formatOptions);
             };
+            if (isSelectionRange(column.spec)) {
+                const values: ColumnValue[] = [];
+                const lastIndex = Math.min(column.spec.last_index, lowerLimit + rows.numRows - 1);
+                for (let index = column.spec.first_index; index <= lastIndex; index++) {
+                    values.push(format(index));
+                }
+                result.columns.push(values);
+            } else {
+                result.columns.push(column.spec.indices.map(format));
+            }
+        }
+        return result;
+    }
 
-            result.columns.push(fetchValues());
+    private _formatValue(
+        value: unknown,
+        displayType: ColumnDisplayType,
+        opts: FormatOptions,
+    ): ColumnValue {
+        if (value === null || value === undefined) {
+            return SENTINEL_NULL;
         }
 
-        return result;
+        switch (displayType) {
+            case ColumnDisplayType.Floating:
+            case ColumnDisplayType.Decimal: {
+                // `getRowObjectsJS` yields a JS number for DECIMAL columns, so a wide DECIMAL has already
+                // lost its precision by the time it reaches here and this guard does not fire. Recovering
+                // it means reading those columns as their exact text at the worker boundary, which is
+                // separable work (see #15366); the exact-string path is shared with the other drivers so
+                // it will simply start working once the values arrive intact.
+                if (displayType === ColumnDisplayType.Decimal && isDecimalLiteral(value)) {
+                    return formatDecimal(value, opts);
+                }
+                const num = typeof value === 'number' ? value : Number(value);
+                if (Number.isNaN(num)) {
+                    return SENTINEL_NAN;
+                }
+                if (num === Infinity) {
+                    return SENTINEL_INF;
+                }
+                if (num === -Infinity) {
+                    return SENTINEL_NEGINF;
+                }
+                return formatFloat(num, opts);
+            }
+            case ColumnDisplayType.Integer: {
+                // Both wide integer shapes reach the formatter without passing through a JS number, which
+                // would round anything beyond 2^53: a 64-bit integer arrives as a bigint, and a
+                // DECIMAL(n,0) as an exact digit string. Anything else -- a plain number, or a string that
+                // isn't a clean integer literal -- is coerced as before.
+                const num =
+                    typeof value === 'bigint' || isIntegerLiteral(value) ? value : Number(value);
+                return formatInteger(num, opts);
+            }
+            case ColumnDisplayType.Boolean:
+                return typeof value === 'boolean'
+                    ? value
+                        ? 'true'
+                        : 'false'
+                    : truncate(String(value), opts);
+            case ColumnDisplayType.Object:
+                // BLOB and other opaque values.
+                if (value instanceof Uint8Array) {
+                    return `[BLOB ${value.byteLength} bytes]`;
+                }
+                return truncate(String(value), opts);
+            default:
+                return truncate(String(value), opts);
+        }
     }
 
     async getRowLabels(
@@ -1010,7 +935,7 @@ FROM (
     }
 
     /**
-     * Set sort columns with rowid appended for stable sorting (aligned with positron).
+     * Set sort columns with the read plan's row order as a stable tiebreaker.
      */
     setSortColumns(sortKeys: ColumnSortKey[]): void {
         this._sortKeys = sortKeys;
@@ -1018,29 +943,29 @@ FROM (
     }
 
     private _rebuildSortClause(): void {
-        if (this._sortKeys.length === 0) {
-            this._sortClause = '';
-            return;
-        }
+        this._sortClause = this._buildSortClause(this._sortKeys, true);
+    }
 
-        const sortExprs: string[] = [];
-        for (const key of this._sortKeys) {
+    private _buildSortClause(sortKeys: ColumnSortKey[], includeTiebreaker: boolean): string {
+        const exprs: string[] = [];
+        for (const key of sortKeys) {
             const col = this._fullSchema[key.column_index];
             if (!col) {
                 continue;
             }
             const modifier = key.ascending ? '' : ' DESC';
-            sortExprs.push(`${quoteIdentifier(col.column_name)}${modifier}`);
+            exprs.push(`${quoteIdentifier(col.column_name)}${modifier}`);
         }
 
-        // Add rowid as the final sort key to ensure stable sorting (positron pattern)
-        sortExprs.push('rowid');
-
-        this._sortClause = `\nORDER BY ${sortExprs.join(', ')}`;
+        if (includeTiebreaker && exprs.length > 0) {
+            exprs.push(this._getReadPlan().rowOrder);
+        }
+        return exprs.length > 0 ? `\nORDER BY ${exprs.join(', ')}` : '';
     }
 
     setColumnFilters(filters: ColumnFilter[]): void {
-        this._columnFilters = filters;
+        void filters;
+        throw new Error('set_column_filters is not supported by the DuckDB backend');
     }
 
     searchSchema(filters: ColumnFilter[], sortOrder: SearchSchemaSortOrder): SearchSchemaResult {
@@ -1136,90 +1061,39 @@ FROM (
     ): Promise<ExportedData> {
         const kind = selection.kind;
 
-        // Helper to build column selectors with format-safe casting
-        const getColumnSelectors = (columns: ColumnSchema[]): string[] => {
-            return columns.map((col, idx) => {
-                const quotedName = quoteIdentifier(col.column_name);
-                const typeName = col.type_name.toUpperCase();
+        // Keep Arrow's exact integer, decimal, and temporal text at the transport boundary.
+        // Other values, including BLOBs, reach stringifyExportCell as raw values.
+        const selectorsFor = (columns: ColumnSchema[]): string =>
+            columns
+                .map((column, index) => {
+                    const quotedName = quoteIdentifier(column.column_name);
+                    const asText = [
+                        ColumnDisplayType.Integer,
+                        ColumnDisplayType.Decimal,
+                        ColumnDisplayType.Date,
+                        ColumnDisplayType.Datetime,
+                        ColumnDisplayType.Time,
+                        ColumnDisplayType.Interval,
+                    ].includes(column.type_display);
+                    return `${asText ? `CAST(${quotedName} AS VARCHAR)` : quotedName} AS c${index}`;
+                })
+                .join(', ');
 
-                let selector: string;
-                switch (typeName) {
-                    case 'FLOAT':
-                    case 'DOUBLE':
-                        selector = `CASE WHEN isinf(${quotedName}) AND ${quotedName} > 0 THEN 'Inf'
-WHEN isinf(${quotedName}) AND ${quotedName} < 0 THEN '-Inf'
-WHEN isnan(${quotedName}) THEN 'NaN'
-ELSE CAST(${quotedName} AS VARCHAR)
-END`;
-                        break;
-                    case 'TIMESTAMP':
-                    case 'TIMESTAMP_NS':
-                        selector = `strftime(${quotedName} AT TIME ZONE 'UTC', '%Y-%m-%d %H:%M:%S')`;
-                        break;
-                    case 'TIMESTAMP WITH TIME ZONE':
-                    case 'TIMESTAMP_NS WITH TIME ZONE':
-                        selector = `strftime(${quotedName}, '%Y-%m-%d %H:%M:%S%z')`;
-                        break;
-                    default:
-                        selector = `CAST(${quotedName} AS VARCHAR)`;
-                        break;
-                }
-                return `CASE WHEN ${quotedName} IS NULL THEN 'NULL' ELSE ${selector} END AS formatted_${idx}`;
-            });
-        };
-
-        // Helper to export query result
-        const exportQueryOutput = async (
-            query: string,
-            columns: ColumnSchema[],
-        ): Promise<ExportedData> => {
+        const runExport = async (query: string, columns: ColumnSchema[]): Promise<ExportedData> => {
             const queryResult = await this._duckdb.query(query);
-            const names = queryResult.schema.fields.map((f: any) => f.name);
-            const unboxed: string[][] = [
-                columns.map((s) => s.column_name),
-                ...Array.from({ length: queryResult.numRows }, (_, r) => {
-                    const row = queryResult.get(r);
-                    return row ? names.map((name: string) => String(row[name] ?? '')) : [];
+            const matrix = [
+                columns.map((column) => column.column_name),
+                ...Array.from({ length: queryResult.numRows }, (_, index) => {
+                    const row = queryResult.get(index);
+                    return columns.map((_, columnIndex) =>
+                        stringifyExportCell(row?.[`c${columnIndex}`]),
+                    );
                 }),
             ];
-
-            let data: string;
-            switch (format) {
-                case ExportFormat.Csv:
-                    data = unboxed
-                        .map((row) =>
-                            row.map((value) => escapeDelimitedValue(value, ',')).join(','),
-                        )
-                        .join('\n');
-                    break;
-                case ExportFormat.Tsv:
-                    data = unboxed
-                        .map((row) =>
-                            row.map((value) => escapeDelimitedValue(value, '\t')).join('\t'),
-                        )
-                        .join('\n');
-                    break;
-                case ExportFormat.Html:
-                    data = unboxed
-                        .map(
-                            (row) =>
-                                `<tr>${row.map((value) => `<td>${escapeHtmlCell(value)}</td>`).join('')}</tr>`,
-                        )
-                        .join('\n');
-                    break;
-                default:
-                    data = unboxed
-                        .map((row) =>
-                            row.map((value) => escapeDelimitedValue(value, ',')).join(','),
-                        )
-                        .join('\n');
-                    break;
-            }
-
-            return { data, format };
+            return { data: formatExport(matrix, format), format };
         };
 
-        const tableName = escapeIdentifier(this._tableName);
+        const tableName = await this._relation();
 
         switch (kind) {
             case TableSelectionKind.SingleCell: {
@@ -1228,12 +1102,12 @@ END`;
                 if (!col) {
                     return { data: '', format };
                 }
-                const selectors = getColumnSelectors([col]);
-                const query = `SELECT ${selectors[0]} FROM ${tableName}${this._whereClause}${this._sortClause} LIMIT 1 OFFSET ${sel.row_index};`;
+                const selectors = selectorsFor([col]);
+                const query = `SELECT ${selectors} FROM ${tableName}${this._whereClause}${this._sortClause} LIMIT 1 OFFSET ${sel.row_index};`;
                 const result = await this._duckdb.query(query);
                 const row = result.get(0);
                 return {
-                    data: row ? String(row[result.schema.fields[0].name] ?? '') : '',
+                    data: stringifyExportCell(row?.c0),
                     format,
                 };
             }
@@ -1243,22 +1117,22 @@ END`;
                     sel.first_column_index,
                     sel.last_column_index + 1,
                 );
-                const selectors = getColumnSelectors(columns);
-                const query = `SELECT ${selectors.join(',')} FROM ${tableName}${this._whereClause}${this._sortClause} LIMIT ${sel.last_row_index - sel.first_row_index + 1} OFFSET ${sel.first_row_index};`;
-                return await exportQueryOutput(query, columns);
+                const selectors = selectorsFor(columns);
+                const query = `SELECT ${selectors} FROM ${tableName}${this._whereClause}${this._sortClause} LIMIT ${sel.last_row_index - sel.first_row_index + 1} OFFSET ${sel.first_row_index};`;
+                return await runExport(query, columns);
             }
             case TableSelectionKind.RowRange: {
                 const sel = selection.selection as DataSelectionRange;
-                const selectors = getColumnSelectors(this._fullSchema);
-                const query = `SELECT ${selectors.join(',')} FROM ${tableName}${this._whereClause}${this._sortClause} LIMIT ${sel.last_index - sel.first_index + 1} OFFSET ${sel.first_index};`;
-                return await exportQueryOutput(query, this._fullSchema);
+                const selectors = selectorsFor(this._fullSchema);
+                const query = `SELECT ${selectors} FROM ${tableName}${this._whereClause}${this._sortClause} LIMIT ${sel.last_index - sel.first_index + 1} OFFSET ${sel.first_index};`;
+                return await runExport(query, this._fullSchema);
             }
             case TableSelectionKind.ColumnRange: {
                 const sel = selection.selection as DataSelectionRange;
                 const columns = this._fullSchema.slice(sel.first_index, sel.last_index + 1);
-                const selectors = getColumnSelectors(columns);
-                const query = `SELECT ${selectors.join(',')} FROM ${tableName}${this._whereClause}${this._sortClause}`;
-                return await exportQueryOutput(query, columns);
+                const selectors = selectorsFor(columns);
+                const query = `SELECT ${selectors} FROM ${tableName}${this._whereClause}${this._sortClause}`;
+                return await runExport(query, columns);
             }
             case TableSelectionKind.RowIndices: {
                 const sel = selection.selection as DataSelectionIndices;
@@ -1277,9 +1151,9 @@ END`;
             case TableSelectionKind.ColumnIndices: {
                 const sel = selection.selection as DataSelectionIndices;
                 const columns = sel.indices.map((i) => this._fullSchema[i]).filter(Boolean);
-                const selectors = getColumnSelectors(columns);
-                const query = `SELECT ${selectors.join(',')} FROM ${tableName}${this._whereClause}${this._sortClause}`;
-                return await exportQueryOutput(query, columns);
+                const selectors = selectorsFor(columns);
+                const query = `SELECT ${selectors} FROM ${tableName}${this._whereClause}${this._sortClause}`;
+                return await runExport(query, columns);
             }
             case TableSelectionKind.CellIndices: {
                 const sel = selection.selection as DataSelectionCellIndices;
@@ -1287,38 +1161,40 @@ END`;
                 if (sel.row_indices.length === 0 || columns.length === 0) {
                     return { data: '', format };
                 }
-                const selectors = getColumnSelectors(columns);
+                const selectors = selectorsFor(columns);
 
-                if (this._sortClause || this._whereClause) {
-                    // Aligned with positron: use ROW_NUMBER() for sort-aware cell selection
-                    const sortedTableQuery = `SELECT *, ROW_NUMBER() OVER(${this._sortClause || 'ORDER BY rowid'}) - 1 AS sorted_row_index
-FROM ${tableName}${this._whereClause}${this._sortClause}`;
-                    const orderValues = sel.row_indices
-                        .map((rowIdx, idx) => `(${rowIdx}, ${idx})`)
-                        .join(', ');
-                    const query = `SELECT ${selectors.join(',')}
-FROM (${sortedTableQuery}) sorted_table
-JOIN (VALUES ${orderValues}) AS row_order(sorted_row_index, selection_order) ON sorted_table.sorted_row_index = row_order.sorted_row_index
-ORDER BY row_order.selection_order`;
-                    return await exportQueryOutput(query, columns);
-                } else {
-                    const orderValues = sel.row_indices
-                        .map((rowId, idx) => `(${rowId}, ${idx})`)
-                        .join(', ');
-                    const query = `SELECT ${selectors.join(',')}
-FROM ${tableName}
-JOIN (VALUES ${orderValues}) AS row_order(rowid, sort_order) ON ${tableName}.rowid = row_order.rowid
-ORDER BY row_order.sort_order`;
-                    return await exportQueryOutput(query, columns);
-                }
+                const query = this._rowIndexQuery(tableName, selectors, sel.row_indices);
+                return await runExport(query, columns);
             }
             default: {
                 // Fallback: all data
-                const selectors = getColumnSelectors(this._fullSchema);
-                const query = `SELECT ${selectors.join(',')} FROM ${tableName}${this._whereClause}${this._sortClause}`;
-                return await exportQueryOutput(query, this._fullSchema);
+                const selectors = selectorsFor(this._fullSchema);
+                const query = `SELECT ${selectors} FROM ${tableName}${this._whereClause}${this._sortClause}`;
+                return await runExport(query, this._fullSchema);
             }
         }
+    }
+
+    /** Selects displayed row positions in the requested order, including pinned rows. */
+    private _rowIndexQuery(relation: string, selectors: string, rowIndices: number[]): string {
+        const ordering = this._sortClause
+            ? this._sortClause.replace(/^\n/, '')
+            : `ORDER BY ${this._getReadPlan().rowOrder}`;
+        const names = new Set(this._fullSchema.map((column) => column.column_name.toLowerCase()));
+        let rowIndexColumn = '__row_index';
+        while (names.has(rowIndexColumn.toLowerCase())) {
+            rowIndexColumn += '_';
+        }
+        const index = quoteIdentifier(rowIndexColumn);
+        const numbered =
+            `SELECT *, ROW_NUMBER() OVER (${ordering}) - 1 AS ${index} ` +
+            `FROM ${relation}${this._whereClause}`;
+        const order = rowIndices.map((rowIdx, i) => `WHEN ${rowIdx} THEN ${i}`).join(' ');
+        const inList = rowIndices.join(', ');
+        return (
+            `SELECT ${selectors} FROM (${numbered}) WHERE ${index} IN (${inList}) ` +
+            `ORDER BY CASE ${index} ${order} END`
+        );
     }
 
     /**
@@ -1388,6 +1264,8 @@ ORDER BY row_order.sort_order`;
         this._importLifetime.cancel();
         await this._importQueue;
         this._importLifetime.dispose();
+        await this.readPlan?.dispose();
+        this.readPlan = undefined;
         try {
             await this._duckdb.query(`DROP TABLE IF EXISTS ${escapeIdentifier(this._tableName)}`);
         } catch {
@@ -1415,21 +1293,12 @@ ORDER BY row_order.sort_order`;
                 ],
             },
             set_column_filters: {
-                support_status: SupportStatus.Supported,
-                supported_types: [
-                    {
-                        column_filter_type: ColumnFilterType.TextSearch,
-                        support_status: SupportStatus.Supported,
-                    },
-                    {
-                        column_filter_type: ColumnFilterType.MatchDataTypes,
-                        support_status: SupportStatus.Supported,
-                    },
-                ],
+                support_status: SupportStatus.Unsupported,
+                supported_types: [],
             },
             set_row_filters: {
                 support_status: SupportStatus.Supported,
-                supports_conditions: SupportStatus.Supported,
+                supports_conditions: SupportStatus.Unsupported,
                 supported_types: [
                     {
                         row_filter_type: RowFilterType.Between,

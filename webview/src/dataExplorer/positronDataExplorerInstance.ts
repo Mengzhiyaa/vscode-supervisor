@@ -104,6 +104,15 @@ export class PositronDataExplorerInstance {
         this.schemaClient.dispose();
     }
 
+    setVisible(visible: boolean): void {
+        this.stores.surfaceVisible.set(visible);
+        this.tableDataDataGridInstance.setVisible(visible);
+        void this.tableSchemaDataGridInstance.setVisible(visible && !this.isSummaryCollapsed);
+        if (!visible) {
+            this.schemaClient.invalidateSchema();
+        }
+    }
+
     invalidateTableData(): void {
         this.tableDataDataGridInstance.clearCache();
     }
@@ -222,18 +231,6 @@ export class PositronDataExplorerInstance {
             params.requestId,
             params.generation,
         );
-        if (params.error) {
-            this.stores.state.update((state) => ({
-                ...state,
-                error: {
-                    message: params.error ?? '',
-                    operation: 'requestColumnProfiles',
-                    severity: 'error',
-                    recoverable: true,
-                    requestId: params.requestId,
-                },
-            }));
-        }
     }
 
     handleData(params: {
@@ -297,6 +294,9 @@ export class PositronDataExplorerInstance {
         recoverable: boolean;
         requestId?: number;
     }): void {
+        if (params.operation === 'requestData') {
+            this.tableDataDataGridInstance.handleDataError(params.requestId);
+        }
         this.stores.state.update((state) => ({
             ...state,
             error: params,

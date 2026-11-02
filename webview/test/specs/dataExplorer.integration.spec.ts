@@ -1204,7 +1204,8 @@ test('data explorer bridges copy, open, and data-grid context menu notifications
     await page.getByText('Copy Row').click();
     expect((await copyRow).params).toEqual({
         type: 'copyToClipboard',
-        selectionType: 'rows',
+        selectionType: 'cells',
+        columnIndexes: [0, 1],
         rowIndexes: [0],
     });
 
@@ -1212,6 +1213,110 @@ test('data explorer bridges copy, open, and data-grid context menu notifications
     await page.getByText('Add Filter').click();
     await expect(page.getByRole('button', { name: 'Apply Filter' })).toBeVisible();
     await expect(page.locator('.drop-down-column-selector')).toContainText('id');
+});
+
+test('data explorer clears the old cursor and selection when the schema changes', async ({
+    page,
+}) => {
+    const backend = await openWebviewPage(page, 'dataExplorer');
+    await expect(page.locator('.positron-data-explorer')).toBeVisible({ timeout: 15_000 });
+    mirrorDataExplorerPanelState(backend);
+    await initializeExplorerFixture(backend, {
+        backendState: createDataExplorerBackendState({
+            table_shape: { num_rows: 3, num_columns: 2 },
+            table_unfiltered_shape: { num_rows: 3, num_columns: 2 },
+        }),
+    });
+    const table = page.locator('.data-grid[data-grid-role="table"]');
+    await table.locator('.data-grid-row-cell[data-column-index="1"][data-row-index="1"]').click();
+    await table
+        .locator('.data-grid-row-cell[data-column-index="1"][data-row-index="2"]')
+        .click({ modifiers: ['Shift'] });
+    await expect
+        .poll(() => backend.notifications(DataExplorerMethods.setSelection).at(-1)?.params)
+        .toMatchObject({ selectionType: 'cells', columnIndexes: [1], rowIndexes: [1, 2] });
+
+    await backend.notify(DataExplorerMethods.dataInvalidated, {
+        generation: 1,
+        schemaChanged: true,
+    });
+    await expect
+        .poll(() => backend.notifications(DataExplorerMethods.setSelection).at(-1)?.params)
+        .toMatchObject({ selectionType: 'cell', columnIndex: 0, rowIndex: 0 });
+    const copied = backend.waitForNextNotification(DataExplorerMethods.copyToClipboard);
+    await backend.notify(DataExplorerMethods.copy);
+    expect((await copied).params).toEqual({
+        type: 'copyToClipboard',
+        selectionType: 'cell',
+        columnIndex: 0,
+        rowIndex: 0,
+    });
+});
+
+test('data explorer replaces an in-flight summary retry after scrolling to new columns', async ({
+    page,
+}) => {
+    const backend = await openWebviewPage(page, 'dataExplorer');
+    await expect(page.locator('.positron-data-explorer')).toBeVisible({ timeout: 15_000 });
+    let fail = true;
+    backend.onNotification(DataExplorerMethods.requestColumnProfiles, async ({ params }) => {
+        if (!fail) {
+            return;
+        }
+        const request = params as { requestId: number; generation: number };
+        await backend.notify(DataExplorerMethods.columnProfiles, {
+            profiles: [],
+            error: 'Profile calculation failed.',
+            requestId: request.requestId,
+            generation: request.generation,
+        });
+    });
+    const columns = Array.from({ length: 120 }, (_, column_index) =>
+        createDataExplorerSchemaColumn({ column_index, column_name: `column_${column_index}` }),
+    );
+    await initializeExplorerFixture(backend, {
+        columns,
+        data: columns.map(() => ['0']),
+        backendState: createDataExplorerBackendState({
+            table_shape: { num_rows: 1, num_columns: columns.length },
+            table_unfiltered_shape: { num_rows: 1, num_columns: columns.length },
+            supported_features: {
+                ...createDataExplorerBackendState().supported_features,
+                get_column_profiles: {
+                    support_status: 'supported',
+                    supported_types: [{ profile_type: 'null_count', support_status: 'supported' }],
+                },
+            },
+        }),
+    });
+    await expect(page.getByRole('button', { name: 'Retry', exact: true })).toBeVisible();
+    fail = false;
+    const retryRequest = backend.waitForNextNotification(DataExplorerMethods.requestColumnProfiles);
+    await page.getByRole('button', { name: 'Retry', exact: true }).click();
+    const retry = (await retryRequest).params as { requestId: number; columnIndices: number[] };
+    const summary = page.locator('.data-grid[data-grid-role="summary"]');
+    await summary.hover();
+    await page.mouse.wheel(0, 3_000);
+    await expect
+        .poll(() =>
+            backend
+                .notifications(DataExplorerMethods.cancelColumnProfiles)
+                .some(({ params }) =>
+                    (params as { requestIds: number[] }).requestIds.includes(retry.requestId),
+                ),
+        )
+        .toBe(true);
+    await expect
+        .poll(() =>
+            backend.notifications(DataExplorerMethods.requestColumnProfiles).some(({ params }) => {
+                const request = params as { requestId: number; columnIndices: number[] };
+                return (
+                    request.requestId > retry.requestId &&
+                    request.columnIndices.some((column) => !retry.columnIndices.includes(column))
+                );
+            }),
+        )
+        .toBe(true);
 });
 
 test('data explorer requests summary schema and column profiles from summary interactions', async ({
@@ -1370,11 +1475,42 @@ test('data explorer requests summary schema and column profiles from summary int
         .toBe(requestCountAfterExpanded);
 });
 
-test('data explorer chunks visible profile requests into Positron-sized batches', async ({
+test('data explorer batches null counts and adapts detail profile requests like Positron', async ({
     page,
 }) => {
     const backend = await openWebviewPage(page, 'dataExplorer');
     await expect(page.locator('.positron-data-explorer')).toBeVisible({ timeout: 15_000 });
+    interface ColumnProfilesRequestParams {
+        columnIndices: number[];
+        profiles: Array<{
+            column_index: number;
+            profiles: Array<{ profile_type: string }>;
+        }>;
+        requestId: number;
+        generation: number;
+    }
+    // Leave the initial pass pending; invalidation must replace it with generation 1.
+    backend.onNotification(DataExplorerMethods.requestColumnProfiles, async (notification) => {
+        const params = notification.params as ColumnProfilesRequestParams;
+        if (params.generation !== 1) {
+            return;
+        }
+        await backend.notify(DataExplorerMethods.columnProfiles, {
+            profiles: params.profiles.map((request) => ({
+                columnIndex: request.column_index,
+                profile: Object.fromEntries(
+                    request.profiles.map(({ profile_type }) => [
+                        profile_type,
+                        profile_type === 'null_count'
+                            ? 0
+                            : { bin_edges: ['0', '1'], bin_counts: [1] },
+                    ]),
+                ),
+            })),
+            requestId: params.requestId,
+            generation: params.generation,
+        });
+    });
     const columns = Array.from({ length: 12 }, (_, columnIndex) =>
         createDataExplorerSchemaColumn({
             column_name: `column_${columnIndex}`,
@@ -1387,6 +1523,16 @@ test('data explorer chunks visible profile requests into Positron-sized batches'
         backendState: createDataExplorerBackendState({
             table_shape: { num_rows: 1, num_columns: columns.length },
             table_unfiltered_shape: { num_rows: 1, num_columns: columns.length },
+            supported_features: {
+                ...createDataExplorerBackendState().supported_features,
+                get_column_profiles: {
+                    support_status: 'supported',
+                    supported_types: [
+                        { profile_type: 'null_count', support_status: 'supported' },
+                        { profile_type: 'small_histogram', support_status: 'supported' },
+                    ],
+                },
+            },
         }),
         columns,
         data: columns.map((_, columnIndex) => [`${columnIndex}:0`]),
@@ -1399,47 +1545,56 @@ test('data explorer chunks visible profile requests into Positron-sized batches'
     await expect
         .poll(() => summaryGrid.locator('.data-grid-row').count())
         .toBeGreaterThanOrEqual(columns.length);
-    const profileCountBeforeInvalidation = backend.notificationCount(
-        DataExplorerMethods.requestColumnProfiles,
-    );
+    await expect
+        .poll(() => backend.notificationCount(DataExplorerMethods.requestColumnProfiles))
+        .toBeGreaterThan(0);
     await backend.notify(DataExplorerMethods.dataInvalidated, {
-        generation: 0,
+        generation: 1,
         schemaChanged: true,
     });
+    const profileRequests = () =>
+        backend
+            .notifications(DataExplorerMethods.requestColumnProfiles)
+            .map(({ params }) => params as ColumnProfilesRequestParams)
+            .filter((params) => params.generation === 1);
+    const detailRequests = () =>
+        profileRequests().filter((request) =>
+            request.profiles.some((column) =>
+                column.profiles.some(({ profile_type }) => profile_type === 'small_histogram'),
+            ),
+        );
     await expect
-        .poll(() => backend.notificationCount(DataExplorerMethods.requestColumnProfiles))
-        .toBeGreaterThan(profileCountBeforeInvalidation);
-    const firstRequest = backend.notifications(DataExplorerMethods.requestColumnProfiles).at(-1)!;
-    const firstRequestParams = firstRequest.params as {
-        columnIndices: number[];
-        requestId: number;
-        generation: number;
-    };
-    expect(firstRequestParams.columnIndices).toHaveLength(8);
-    await backend.notify(DataExplorerMethods.columnProfiles, {
-        profiles: firstRequestParams.columnIndices.map((columnIndex) => ({
-            columnIndex,
-            profile: { null_count: 0 },
-        })),
-        requestId: firstRequestParams.requestId,
-        generation: firstRequestParams.generation,
-    });
+        .poll(() => new Set(detailRequests().flatMap((request) => request.columnIndices)).size)
+        .toBe(columns.length);
 
-    await expect
-        .poll(() => backend.notificationCount(DataExplorerMethods.requestColumnProfiles))
-        .toBeGreaterThan(profileCountBeforeInvalidation + 1);
-    const requests = backend
-        .notifications(DataExplorerMethods.requestColumnProfiles)
-        .slice(profileCountBeforeInvalidation);
-    const requestedColumns = requests.flatMap(
-        (request) => (request.params as { columnIndices: number[] }).columnIndices,
+    const nullCountRequests = profileRequests().filter((request) =>
+        request.profiles.every((column) =>
+            column.profiles.every(({ profile_type }) => profile_type === 'null_count'),
+        ),
     );
-    for (const request of requests) {
-        expect(
-            (request.params as { columnIndices: number[] }).columnIndices.length,
-        ).toBeLessThanOrEqual(8);
+    expect(nullCountRequests).toHaveLength(1);
+    expect(nullCountRequests[0].columnIndices).toEqual(
+        columns.map((column) => column.column_index),
+    );
+    expect(nullCountRequests[0].profiles).toEqual(
+        columns.map(({ column_index }) => ({
+            column_index,
+            profiles: [{ profile_type: 'null_count' }],
+        })),
+    );
+    expect(profileRequests()[0]).toEqual(nullCountRequests[0]);
+    expect(detailRequests()[0].columnIndices).toHaveLength(1);
+    expect(detailRequests().some((request) => request.columnIndices.length > 1)).toBe(true);
+    for (const request of detailRequests()) {
+        expect(request.columnIndices.length).toBeGreaterThan(0);
+        expect(request.columnIndices.length).toBeLessThanOrEqual(8);
+        expect(request.profiles).toEqual(
+            request.columnIndices.map((column_index) => ({
+                column_index,
+                profiles: [{ profile_type: 'small_histogram' }],
+            })),
+        );
     }
-    expect(new Set(requestedColumns).size).toBe(12);
 });
 
 test('data explorer renders, searches, and selects columns in the row-filter selector', async ({

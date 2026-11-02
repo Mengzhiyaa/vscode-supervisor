@@ -184,7 +184,7 @@ export class TableDataCache {
         }
     }
 
-    async getTableDataTsv(
+    async getTableDataTSV(
         numRows: number,
         numColumns: number,
         generation: number,

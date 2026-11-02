@@ -20,8 +20,77 @@ export interface ViewDataFrameByVariableArgs {
     readonly variableId: string;
 }
 
-const QUARTO_FENCE_START = /^\s*```\s*\{?\s*(python|r)(?:[\s,}]|$)/i;
-const QUARTO_FENCE_END = /^\s*```\s*$/;
+export interface ViewDataFrameAtCursorArgs {
+    readonly documentUri: string;
+    readonly documentVersion: number;
+    readonly position: { readonly line: number; readonly character: number };
+}
+
+const QUARTO_FENCE_START = /^\s*(`{3,}|~{3,})(.*)$/;
+const QUARTO_FENCE_END = /^\s*(`{3,}|~{3,})\s*$/;
+const VARIABLES_LIST_READY_TIMEOUT_MS = 2_000;
+
+function* getDataExplorerCodeLines(document: vscode.TextDocument) {
+    let fence: { marker: string; length: number; languageId?: string } | undefined;
+    const documentLanguageId = document.languageId.toLowerCase();
+    for (let lineIndex = 0; lineIndex < document.lineCount; lineIndex++) {
+        const line = document.lineAt(lineIndex).text;
+        let languageId: string | undefined = documentLanguageId;
+        if (documentLanguageId === 'quarto') {
+            languageId = undefined;
+            if (!fence) {
+                const start = QUARTO_FENCE_START.exec(line);
+                if (start) {
+                    fence = {
+                        marker: start[1][0],
+                        length: start[1].length,
+                        languageId: /^\s*\{?\s*(python|r)(?:[\s,}]|$)/i
+                            .exec(start[2])?.[1]
+                            ?.toLowerCase(),
+                    };
+                }
+            } else {
+                const end = QUARTO_FENCE_END.exec(line);
+                if (end && end[1][0] === fence.marker && end[1].length >= fence.length) {
+                    fence = undefined;
+                } else {
+                    languageId = fence.languageId;
+                }
+            }
+        }
+        yield { lineIndex, line, languageId };
+    }
+}
+
+function getDataExplorerWordPattern(languageId: string): RegExp {
+    return languageId === 'r'
+        ? /(?:[_\p{ID_Start}]|\.(?!\p{N}))[_\p{ID_Continue}.]*/gu
+        : /[_\p{ID_Start}][_\p{ID_Continue}]*/gu;
+}
+
+export interface IDataFrameResolutionOptions {
+    readonly wait: boolean;
+}
+
+/** Interactive commands wait for the first variable list; background providers do not. */
+async function waitForVariables(instance: IPositronVariablesInstance): Promise<void> {
+    if (instance.variableItems.length > 0) {
+        return;
+    }
+    await new Promise<void>((resolve) => {
+        let listener: vscode.Disposable | undefined;
+        const finish = () => {
+            clearTimeout(timeout);
+            listener?.dispose();
+            resolve();
+        };
+        const timeout = setTimeout(finish, VARIABLES_LIST_READY_TIMEOUT_MS);
+        listener = instance.onDidChangeEntries(finish);
+        if (instance.variableItems.length > 0) {
+            finish();
+        }
+    });
+}
 
 /** Returns the embedded R/Python language at a Quarto position. */
 export function getDataExplorerLanguageIdAtPosition(
@@ -31,16 +100,12 @@ export function getDataExplorerLanguageIdAtPosition(
     if (document.languageId.toLowerCase() !== 'quarto') {
         return document.languageId.toLowerCase();
     }
-    let embeddedLanguageId: string | undefined;
-    for (let lineIndex = 0; lineIndex <= position.line; lineIndex++) {
-        const line = document.lineAt(lineIndex).text;
-        if (!embeddedLanguageId) {
-            embeddedLanguageId = QUARTO_FENCE_START.exec(line)?.[1]?.toLowerCase();
-        } else if (QUARTO_FENCE_END.test(line)) {
-            embeddedLanguageId = undefined;
+    for (const { lineIndex, languageId } of getDataExplorerCodeLines(document)) {
+        if (lineIndex === position.line) {
+            return languageId;
         }
     }
-    return embeddedLanguageId;
+    return undefined;
 }
 
 export function isDocumentLanguageCompatible(
@@ -58,7 +123,19 @@ function resolveVariablesInstance(
     variablesService: IPositronVariablesService,
     runtimeSessionService?: RuntimeSessionService,
     requestedSessionId?: string,
+    document?: vscode.TextDocument,
 ): IPositronVariablesInstance | undefined {
+    if (!requestedSessionId && document?.uri.scheme === 'vscode-notebook-cell') {
+        const notebook = vscode.workspace.notebookDocuments.find((candidate) =>
+            candidate
+                .getCells()
+                .some((cell) => cell.document.uri.toString() === document.uri.toString()),
+        );
+        const session =
+            notebook && runtimeSessionService?.getNotebookSessionForNotebookUri(notebook.uri);
+        // A notebook must never fall back to a console with the same language.
+        return session ? variablesService.getVariablesInstance(session.sessionId) : undefined;
+    }
     const sessionId =
         requestedSessionId ??
         runtimeSessionService?.getConsoleSessionForLanguage(languageId)?.sessionId ??
@@ -75,13 +152,21 @@ function resolveVariablesInstance(
             )
         );
     }
+    if (runtimeSessionService) {
+        return undefined;
+    }
     const activeInstance = variablesService.activePositronVariablesInstance;
-    if (activeInstance?.session.runtimeMetadata.languageId.toLowerCase() === languageId) {
+    if (
+        activeInstance?.session.runtimeMetadata.languageId.toLowerCase() === languageId &&
+        activeInstance.session.sessionMetadata.sessionMode === LanguageRuntimeSessionMode.Console
+    ) {
         return activeInstance;
     }
     const compatibleInstances =
         variablesService.positronVariablesInstances?.filter(
-            (instance) => instance.session.runtimeMetadata.languageId.toLowerCase() === languageId,
+            (instance) =>
+                instance.session.runtimeMetadata.languageId.toLowerCase() === languageId &&
+                instance.session.sessionMetadata.sessionMode === LanguageRuntimeSessionMode.Console,
         ) ?? [];
     return compatibleInstances.length === 1 ? compatibleInstances[0] : undefined;
 }
@@ -93,13 +178,70 @@ export function resolveDataFrameAtPosition(
     variablesService: IPositronVariablesService,
     runtimeSessionService?: RuntimeSessionService,
     requestedSessionId?: string,
-): ResolvedDataFrame | undefined {
-    const range = document.getWordRangeAtPosition(position);
-    if (!range) {
-        return undefined;
+): ResolvedDataFrame | undefined;
+export function resolveDataFrameAtPosition(
+    document: vscode.TextDocument,
+    position: vscode.Position,
+    variablesService: IPositronVariablesService,
+    runtimeSessionService: RuntimeSessionService | undefined,
+    requestedSessionId: string | undefined,
+    options: IDataFrameResolutionOptions,
+): Promise<ResolvedDataFrame | undefined>;
+export function resolveDataFrameAtPosition(
+    document: vscode.TextDocument,
+    position: vscode.Position,
+    variablesService: IPositronVariablesService,
+    runtimeSessionService?: RuntimeSessionService,
+    requestedSessionId?: string,
+    options?: IDataFrameResolutionOptions,
+): ResolvedDataFrame | undefined | Promise<ResolvedDataFrame | undefined> {
+    if (options) {
+        return (async () => {
+            const languageId = getDataExplorerLanguageIdAtPosition(document, position);
+            if (languageId !== 'python' && languageId !== 'r') {
+                return undefined;
+            }
+            const instance = resolveVariablesInstance(
+                languageId,
+                variablesService,
+                runtimeSessionService,
+                requestedSessionId,
+                document,
+            );
+            if (instance && options.wait) {
+                await waitForVariables(instance);
+            }
+            return resolveDataFrameAtPosition(
+                document,
+                position,
+                variablesService,
+                runtimeSessionService,
+                requestedSessionId,
+            );
+        })();
     }
+    return resolveCachedDataFrameAtPosition(
+        document,
+        position,
+        variablesService,
+        runtimeSessionService,
+        requestedSessionId,
+    );
+}
+
+function resolveCachedDataFrameAtPosition(
+    document: vscode.TextDocument,
+    position: vscode.Position,
+    variablesService: IPositronVariablesService,
+    runtimeSessionService?: RuntimeSessionService,
+    requestedSessionId?: string,
+): ResolvedDataFrame | undefined {
     const languageId = getDataExplorerLanguageIdAtPosition(document, position);
     if (languageId !== 'python' && languageId !== 'r') {
+        return undefined;
+    }
+    const range = document.getWordRangeAtPosition(position, getDataExplorerWordPattern(languageId));
+    if (!range) {
         return undefined;
     }
     const name = document.getText(range);
@@ -108,12 +250,13 @@ export function resolveDataFrameAtPosition(
         variablesService,
         runtimeSessionService,
         requestedSessionId,
+        document,
     );
     if (!instance) {
         return undefined;
     }
     const variable = instance.variableItems.find(
-        (item) => item.hasViewer && (item.displayName === name || item.path.at(-1) === name),
+        (item) => item.hasViewer && item.displayName === name,
     );
     return variable
         ? {
@@ -133,23 +276,10 @@ export function resolveDataFrameAtPosition(
  */
 export function findDataExplorerIdentifierRanges(document: vscode.TextDocument): vscode.Range[] {
     const ranges: vscode.Range[] = [];
-    let quartoLanguageId: string | undefined;
     let multilineQuote: "'''" | '"""' | undefined;
-    for (let lineIndex = 0; lineIndex < document.lineCount; lineIndex++) {
-        const line = document.lineAt(lineIndex).text;
-        let languageId = document.languageId.toLowerCase();
-        if (languageId === 'quarto') {
-            if (!quartoLanguageId) {
-                quartoLanguageId = QUARTO_FENCE_START.exec(line)?.[1]?.toLowerCase();
-                continue;
-            }
-            if (QUARTO_FENCE_END.test(line)) {
-                quartoLanguageId = undefined;
-                continue;
-            }
-            languageId = quartoLanguageId;
-        }
+    for (const { lineIndex, line, languageId } of getDataExplorerCodeLines(document)) {
         if (languageId !== 'python' && languageId !== 'r') {
+            multilineQuote = undefined;
             continue;
         }
         let quote: "'" | '"' | undefined;
@@ -198,7 +328,7 @@ export function findDataExplorerIdentifierRanges(document: vscode.TextDocument):
             }
             code += value;
         }
-        for (const match of code.matchAll(/[A-Za-z_][A-Za-z0-9_]*/g)) {
+        for (const match of code.matchAll(getDataExplorerWordPattern(languageId))) {
             const start = new vscode.Position(lineIndex, match.index ?? 0);
             ranges.push(new vscode.Range(start, start.translate(0, match[0].length)));
         }

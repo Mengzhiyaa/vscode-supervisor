@@ -342,7 +342,14 @@ export class PositronDataExplorerInstance implements IPositronDataExplorerInstan
         token?: vscode.CancellationToken,
         onProgress?: (completedRows: number, totalRows: number) => void,
     ): Promise<string> {
-        return this._tableDataCache.getTableDataTsv(
+        return this.getTableDataTSV(token, onProgress);
+    }
+
+    getTableDataTSV(
+        token?: vscode.CancellationToken,
+        onProgress?: (completedRows: number, totalRows: number) => void,
+    ): Promise<string> {
+        return this._tableDataCache.getTableDataTSV(
             this.numRows,
             this.numColumns,
             this._dataGeneration,

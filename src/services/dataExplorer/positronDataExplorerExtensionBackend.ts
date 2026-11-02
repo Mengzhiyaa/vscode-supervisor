@@ -140,7 +140,7 @@ export class PositronDataExplorerExtensionBackend implements IDataExplorerComm {
             column_filters: columnFilters,
             row_filters: rowFilters,
             sort_keys: sortKeys,
-            code_syntax: codeSyntaxName,
+            code_syntax_name: codeSyntaxName,
         });
     }
     suggestCodeSyntax(): Promise<CodeSyntaxName | undefined> {
@@ -170,7 +170,7 @@ export class PositronDataExplorerExtensionBackend implements IDataExplorerComm {
         });
     }
     setDatasetImportOptions(options: DatasetImportOptions): Promise<SetDatasetImportOptionsResult> {
-        return this._rpc(DataExplorerBackendRequest.SetDatasetImportOptions, { ...options });
+        return this._rpc(DataExplorerBackendRequest.SetDatasetImportOptions, { options });
     }
 
     closeClient(): void {

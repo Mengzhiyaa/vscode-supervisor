@@ -70,6 +70,7 @@ import {
     DataExplorerBackendStateNotification,
     DataExplorerLoadingNotification,
     DataExplorerErrorNotification,
+    DataExplorerVisibilityChangedNotification,
 } from '../../rpc/webview/dataExplorer';
 import {
     isSpreadsheetDataExplorerIdentifier,
@@ -528,9 +529,27 @@ export class DataExplorerWebviewBridge {
                         supportedProfileTypes,
                     );
 
-                    const requestsWithProfiles = requests.filter(
+                    let requestsWithProfiles = requests.filter(
                         (request) => request.profiles.length > 0,
                     );
+                    if (params.profiles) {
+                        const requestedProfiles = new Map(
+                            params.profiles.map((request) => [
+                                request.column_index,
+                                new Set(request.profiles.map((profile) => profile.profile_type)),
+                            ]),
+                        );
+                        for (const request of requestsWithProfiles) {
+                            request.profiles = request.profiles.filter((profile) =>
+                                requestedProfiles
+                                    .get(request.column_index)
+                                    ?.has(profile.profile_type),
+                            );
+                        }
+                        requestsWithProfiles = requestsWithProfiles.filter(
+                            (request) => request.profiles.length > 0,
+                        );
+                    }
                     if (requestsWithProfiles.length === 0) {
                         connection.sendNotification(DataExplorerColumnProfilesNotification.type, {
                             profiles: params.columnIndices.map((columnIndex) => ({
@@ -604,51 +623,56 @@ export class DataExplorerWebviewBridge {
             const column = schemaByIndex.get(columnIndex);
             const expanded = expandedColumnIndices.has(columnIndex);
             const type = normalizeColumnDisplayType(column?.type_display, column?.type_name);
-            const profiles: ColumnProfileSpec[] = [{ profile_type: ColumnProfileType.NullCount }];
+            const profiles: ColumnProfileSpec[] = [];
+            if (supportedProfileTypes.has(ColumnProfileType.NullCount)) {
+                profiles.push({ profile_type: ColumnProfileType.NullCount });
+            }
             if (expanded && supportedProfileTypes.has(ColumnProfileType.SummaryStats)) {
                 profiles.push({ profile_type: ColumnProfileType.SummaryStats });
             }
-            if (
-                isNumericColumnDisplayType(type) &&
-                supportedProfileTypes.has(ColumnProfileType.SmallHistogram)
-            ) {
-                profiles.push({
-                    profile_type: ColumnProfileType.SmallHistogram,
-                    params: {
-                        method: ColumnHistogramParamsMethod.FreedmanDiaconis,
-                        num_bins: SMALL_HISTOGRAM_NUM_BINS,
-                    },
-                });
-                if (expanded) {
+            const addHistogram = (
+                profileType: ColumnProfileType.SmallHistogram | ColumnProfileType.LargeHistogram,
+                numBins: number,
+            ) => {
+                if (supportedProfileTypes.has(profileType)) {
                     profiles.push({
-                        profile_type: ColumnProfileType.LargeHistogram,
+                        profile_type: profileType,
                         params: {
                             method: ColumnHistogramParamsMethod.FreedmanDiaconis,
-                            num_bins: LARGE_HISTOGRAM_NUM_BINS,
+                            num_bins: numBins,
                         },
                     });
                 }
-            } else if (
-                isBooleanColumnDisplayType(type) &&
-                supportedProfileTypes.has(ColumnProfileType.SmallFrequencyTable)
-            ) {
-                profiles.push({
-                    profile_type: ColumnProfileType.SmallFrequencyTable,
-                    params: { limit: BOOLEAN_FREQUENCY_TABLE_LIMIT },
-                });
-            } else if (
-                isStringColumnDisplayType(type) &&
-                supportedProfileTypes.has(ColumnProfileType.SmallFrequencyTable)
-            ) {
-                profiles.push({
-                    profile_type: ColumnProfileType.SmallFrequencyTable,
-                    params: { limit: SMALL_FREQUENCY_TABLE_LIMIT },
-                });
+            };
+            const addFrequencyTable = (
+                profileType:
+                    ColumnProfileType.SmallFrequencyTable | ColumnProfileType.LargeFrequencyTable,
+                limit: number,
+            ) => {
+                if (supportedProfileTypes.has(profileType)) {
+                    profiles.push({ profile_type: profileType, params: { limit } });
+                }
+            };
+            if (isNumericColumnDisplayType(type)) {
+                addHistogram(ColumnProfileType.SmallHistogram, SMALL_HISTOGRAM_NUM_BINS);
                 if (expanded) {
-                    profiles.push({
-                        profile_type: ColumnProfileType.LargeFrequencyTable,
-                        params: { limit: LARGE_FREQUENCY_TABLE_LIMIT },
-                    });
+                    addHistogram(ColumnProfileType.LargeHistogram, LARGE_HISTOGRAM_NUM_BINS);
+                }
+            } else if (isBooleanColumnDisplayType(type)) {
+                addFrequencyTable(
+                    ColumnProfileType.SmallFrequencyTable,
+                    BOOLEAN_FREQUENCY_TABLE_LIMIT,
+                );
+            } else if (isStringColumnDisplayType(type)) {
+                addFrequencyTable(
+                    ColumnProfileType.SmallFrequencyTable,
+                    SMALL_FREQUENCY_TABLE_LIMIT,
+                );
+                if (expanded) {
+                    addFrequencyTable(
+                        ColumnProfileType.LargeFrequencyTable,
+                        LARGE_FREQUENCY_TABLE_LIMIT,
+                    );
                 }
             }
             return { column_index: columnIndex, profiles };
@@ -841,9 +865,6 @@ export class DataExplorerWebviewBridge {
         connection.onNotification(DataExplorerCopyTableDataNotification.type, async () => {
             logChannel.debug('[DataExplorerEditor] Received: dataExplorer/copyTableData');
             try {
-                const backendState = await instance.clientInstance.getBackendState();
-                const supportStatus =
-                    backendState.supported_features.export_data_selection.support_status;
                 await vscode.window.withProgress(
                     {
                         location: vscode.ProgressLocation.Notification,
@@ -851,52 +872,35 @@ export class DataExplorerWebviewBridge {
                         cancellable: true,
                     },
                     async (progress, token) => {
-                        let tableData: string;
-                        if (supportStatus === SupportStatus.Supported) {
-                            const exported = await instance.clientInstance.exportDataSelection(
-                                {
-                                    kind: TableSelectionKind.CellRange,
-                                    selection: {
-                                        first_row_index: 0,
-                                        last_row_index: Math.max(
-                                            0,
-                                            backendState.table_shape.num_rows - 1,
-                                        ),
-                                        first_column_index: 0,
-                                        last_column_index: Math.max(
-                                            0,
-                                            backendState.table_shape.num_columns - 1,
-                                        ),
-                                    },
-                                },
-                                ExportFormat.Tsv,
-                            );
-                            tableData = exported.data;
-                        } else {
-                            let reportedProgress = 0;
-                            tableData = await instance.getTableDataTsv(
-                                token,
-                                (completedRows, totalRows) => {
-                                    const nextProgress =
-                                        totalRows > 0 ? (completedRows / totalRows) * 100 : 100;
-                                    progress.report({
-                                        increment: nextProgress - reportedProgress,
-                                        message: `${completedRows} / ${totalRows} rows`,
-                                    });
-                                    reportedProgress = nextProgress;
-                                },
-                            );
+                        let reportedProgress = 0;
+                        const tableDataTSV = await instance.getTableDataTSV(
+                            token,
+                            (completedRows, totalRows) => {
+                                const nextProgress =
+                                    totalRows > 0 ? (completedRows / totalRows) * 100 : 100;
+                                progress.report({
+                                    increment: nextProgress - reportedProgress,
+                                    message: `${completedRows} / ${totalRows} rows`,
+                                });
+                                reportedProgress = nextProgress;
+                            },
+                        );
+                        if (token.isCancellationRequested) {
+                            throw new vscode.CancellationError();
                         }
                         progress.report({
                             message: 'Copying table data to the clipboard',
                         });
-                        await vscode.env.clipboard.writeText(tableData);
+                        await vscode.env.clipboard.writeText(tableDataTSV);
                     },
                 );
 
                 vscode.window.showInformationMessage('Table data copied to the clipboard.');
                 logChannel.info('[DataExplorerEditor] Copied table data to clipboard');
             } catch (error) {
+                if (error instanceof vscode.CancellationError) {
+                    return;
+                }
                 logChannel.error(
                     `[DataExplorerEditor] Copy table data failed: ${getErrorMessage(error)}`,
                 );
@@ -1122,6 +1126,9 @@ export class DataExplorerWebviewBridge {
             return;
         }
         this._surfaceVisible = visible;
+        this._options.connection.sendNotification(DataExplorerVisibilityChangedNotification.type, {
+            visible,
+        });
         if (!visible) {
             for (const tokenSource of this._profileRequestTokens.values()) {
                 tokenSource.cancel();
@@ -1141,6 +1148,10 @@ export class DataExplorerWebviewBridge {
     async sendInitialize(): Promise<void> {
         const { connection, instance } = this._options;
         const uiState = instance.uiState;
+
+        connection.sendNotification(DataExplorerVisibilityChangedNotification.type, {
+            visible: this._surfaceVisible,
+        });
 
         connection.sendNotification(DataExplorerInitializeNotification.type, {
             identifier: instance.identifier,
@@ -1327,8 +1338,8 @@ export class DataExplorerWebviewBridge {
 
     private _updateData(request: DataExplorerDataRequest): Promise<void> {
         const instance = this._options.instance;
-        const coordinator = dataUpdateCoordinators.get(instance as object) ?? {};
-        dataUpdateCoordinators.set(instance as object, coordinator);
+        const coordinator = dataUpdateCoordinators.get(this) ?? {};
+        dataUpdateCoordinators.set(this, coordinator);
         coordinator.pending = { bridge: this, request };
         instance.setLastDataRequest(request);
         if (!coordinator.promise) {
@@ -1358,7 +1369,7 @@ export class DataExplorerWebviewBridge {
     }
 
     dispose(): void {
-        const coordinator = dataUpdateCoordinators.get(this._options.instance as object);
+        const coordinator = dataUpdateCoordinators.get(this);
         if (coordinator?.pending?.bridge === this) {
             coordinator.pending = undefined;
         }

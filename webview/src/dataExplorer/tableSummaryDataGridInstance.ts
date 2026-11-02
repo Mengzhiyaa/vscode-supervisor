@@ -301,8 +301,11 @@ export class TableSummaryDataGridInstance extends DataGridInstance {
 
     async setVisible(visible: boolean): Promise<void> {
         this._visible = visible;
+        this._summaryCache.setVisible(visible);
 
         if (!visible) {
+            this._activeSearchRequestId++;
+            this._pendingSearchRefresh = true;
             return;
         }
 
@@ -332,6 +335,7 @@ export class TableSummaryDataGridInstance extends DataGridInstance {
         );
 
         this._updateSupportedFeatures(nextState);
+        this._summaryCache.setConnected(nextState?.connected !== false);
         this._summaryCache.setDimensions(
             nextState?.table_shape.num_columns ?? 0,
             nextState?.table_shape.num_rows ?? 0,
@@ -360,6 +364,8 @@ export class TableSummaryDataGridInstance extends DataGridInstance {
             JSON.stringify(nextState.row_filters ?? []);
         const searchSupportChanged = previousSupportsSearch !== this._supportsSearchSchema;
         const profileSupportChanged = previousSupportsProfiles !== this._supportsColumnProfiles;
+        const connectionRestored =
+            previousState.connected === false && nextState.connected !== false;
 
         if (columnsChanged || searchSupportChanged) {
             this._summaryCache.clear();
@@ -376,7 +382,7 @@ export class TableSummaryDataGridInstance extends DataGridInstance {
             return;
         }
 
-        if (profileSupportChanged) {
+        if (profileSupportChanged || connectionRestored) {
             if (!this._supportsColumnProfiles) {
                 this._summaryCache.invalidateProfiles();
             } else {
@@ -386,6 +392,7 @@ export class TableSummaryDataGridInstance extends DataGridInstance {
     }
 
     handleSchemaUpdated(generation?: number): void {
+        this.softReset();
         this._summaryCache.clear(generation);
         this._columnSchemaCache.clear();
         this._applyColumnIndices([]);
@@ -437,6 +444,11 @@ export class TableSummaryDataGridInstance extends DataGridInstance {
         if (this._expandedColumns.size > 0) {
             this._applyExpandedRowHeights();
         }
+        this.fireOnDidUpdateEvent();
+    }
+
+    async retryColumnProfiles(): Promise<void> {
+        await this._summaryCache.retryColumnProfiles();
         this.fireOnDidUpdateEvent();
     }
 

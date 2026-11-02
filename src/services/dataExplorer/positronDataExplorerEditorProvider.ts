@@ -102,11 +102,13 @@ export function formatDataExplorerEditorTitle(displayName: string | undefined): 
 export class PositronDataExplorerEditorProvider implements vscode.Disposable {
     public static readonly viewType = 'positron.dataExplorerEditor';
 
-    private readonly _panels = new Map<string, vscode.WebviewPanel>();
-    private readonly _connections = new Map<string, MessageConnection>();
+    private readonly _editorPanels = new Map<string, Set<vscode.WebviewPanel>>();
+    private readonly _panelConnections = new Map<vscode.WebviewPanel, MessageConnection>();
+    private _nextEditorId = 0;
     private readonly _disposables: vscode.Disposable[] = [];
     private readonly _instancesInNewWindow = new Set<string>();
-    private readonly _skipInstanceCloseOnNextPanelDispose = new Set<string>();
+    private readonly _skipInstanceCloseOnNextPanelDispose = new Set<vscode.WebviewPanel>();
+    private readonly _panelsInNewWindow = new WeakSet<vscode.WebviewPanel>();
     private readonly _instanceFocusDisposables = new Map<string, vscode.Disposable>();
     /** Instance IDs being opened by an external panel provider (e.g. Custom Editor). */
     private readonly _externalPanelInstances = new Set<string>();
@@ -137,9 +139,12 @@ export class PositronDataExplorerEditorProvider implements vscode.Disposable {
                     instance.onDidRequestFocus(() => {
                         this.openInstance(instance, true);
                         setTimeout(() => {
-                            this._connections
-                                .get(instance.identifier)
-                                ?.sendNotification(DataExplorerFocusNotification.type);
+                            const panel = this._getPanelForInstance(instance.identifier);
+                            if (panel) {
+                                this._panelConnections
+                                    .get(panel)
+                                    ?.sendNotification(DataExplorerFocusNotification.type);
+                            }
                         }, 0);
                     }),
                 );
@@ -159,10 +164,8 @@ export class PositronDataExplorerEditorProvider implements vscode.Disposable {
                 this._instanceFocusDisposables.get(instanceId)?.dispose();
                 this._instanceFocusDisposables.delete(instanceId);
                 this._instancesInNewWindow.delete(instanceId);
-                const panel = this._panels.get(instanceId);
-                if (panel) {
+                for (const panel of [...(this._editorPanels.get(instanceId) ?? [])]) {
                     panel.dispose();
-                    this._panels.delete(instanceId);
                 }
             }),
         );
@@ -343,7 +346,7 @@ export class PositronDataExplorerEditorProvider implements vscode.Disposable {
             vscode.window.showWarningMessage('No active Data Explorer editor.');
             return;
         }
-        const connection = this._connections.get(active.identifier);
+        const connection = this._panelConnections.get(active.panel);
         if (!connection) {
             vscode.window.showWarningMessage('No active Data Explorer connection.');
             return;
@@ -353,9 +356,11 @@ export class PositronDataExplorerEditorProvider implements vscode.Disposable {
 
     private _getActiveDataExplorer():
         { identifier: string; panel: vscode.WebviewPanel } | undefined {
-        for (const [identifier, panel] of this._panels) {
-            if (panel.active) {
-                return { identifier, panel };
+        for (const [identifier, panels] of this._editorPanels) {
+            for (const panel of panels) {
+                if (panel.active) {
+                    return { identifier, panel };
+                }
             }
         }
         return undefined;
@@ -399,7 +404,7 @@ export class PositronDataExplorerEditorProvider implements vscode.Disposable {
         }
 
         const instance = this._dataExplorerService.getInstance(active.identifier);
-        const connection = this._connections.get(active.identifier);
+        const connection = this._panelConnections.get(active.panel);
         if (!instance || !connection) {
             return undefined;
         }
@@ -411,12 +416,20 @@ export class PositronDataExplorerEditorProvider implements vscode.Disposable {
         };
     }
 
-    private _isInstanceActive(instanceId: string): boolean {
-        return this._panels.get(instanceId)?.active ?? false;
+    private _getPanelForInstance(instanceId: string): vscode.WebviewPanel | undefined {
+        const panels = [...(this._editorPanels.get(instanceId) ?? [])];
+        return (
+            panels.find((panel) => panel.active) ??
+            panels.find((panel) => panel.visible) ??
+            panels[0]
+        );
     }
 
     private _isInstanceInNewWindow(instanceId: string): boolean {
-        return this._instancesInNewWindow.has(instanceId);
+        const panel = this._getPanelForInstance(instanceId);
+        return panel
+            ? this._panelsInNewWindow.has(panel)
+            : this._instancesInNewWindow.has(instanceId);
     }
 
     private async _showConvertToCodeForActive(): Promise<void> {
@@ -734,7 +747,7 @@ export class PositronDataExplorerEditorProvider implements vscode.Disposable {
         }
 
         // Check if panel already exists
-        const existingPanel = this._panels.get(instance.identifier);
+        const existingPanel = this._getPanelForInstance(instance.identifier);
         if (existingPanel) {
             existingPanel.reveal();
             return;
@@ -825,16 +838,18 @@ export class PositronDataExplorerEditorProvider implements vscode.Disposable {
         panel.title = formatDataExplorerEditorTitle(instance.displayName);
 
         // Store panel
-        this._panels.set(instance.identifier, panel);
+        const editorPanels =
+            this._editorPanels.get(instance.identifier) ?? new Set<vscode.WebviewPanel>();
+        editorPanels.add(panel);
+        this._editorPanels.set(instance.identifier, editorPanels);
+        const surfaceId = `data-explorer-editor:${instance.identifier}:${++this._nextEditorId}`;
 
         const modelId = createSurfaceModelId(SurfaceModelKind.DataExplorer, instance.identifier);
         let surfaceAttachment: vscode.Disposable | undefined;
         let visibilityLease: vscode.Disposable | undefined;
         const updateVisibility = (visible: boolean) => {
             if (visible && !visibilityLease) {
-                visibilityLease = instance.acquireVisibility(
-                    `data-explorer-editor:${instance.identifier}`,
-                );
+                visibilityLease = instance.acquireVisibility(surfaceId);
             } else if (!visible && visibilityLease) {
                 visibilityLease.dispose();
                 visibilityLease = undefined;
@@ -846,7 +861,7 @@ export class PositronDataExplorerEditorProvider implements vscode.Disposable {
                 return false;
             }
             surfaceAttachment = this._surfaceLifecycle.attach(modelId, {
-                surfaceId: `data-explorer-editor:${instance.identifier}`,
+                surfaceId,
                 kind: SurfaceKind.DataExplorerEditor,
                 ownerId: 'data-explorer-editor-provider',
                 metadata: { identifier: instance.identifier },
@@ -883,19 +898,19 @@ export class PositronDataExplorerEditorProvider implements vscode.Disposable {
         const reader = new WebviewMessageReader(panel.webview);
         const writer = new WebviewMessageWriter(panel.webview);
         const connection = createMessageConnection(reader, writer);
-        this._connections.set(instance.identifier, connection);
+        this._panelConnections.set(panel, connection);
         const bridge = new DataExplorerWebviewBridge({
             connection,
             panel,
             instance,
             logChannel: this._logChannel,
-            isInstanceActive: () => this._isInstanceActive(instance.identifier),
-            isInstanceInNewWindow: () => this._isInstanceInNewWindow(instance.identifier),
+            isInstanceActive: () => panel.active,
+            isInstanceInNewWindow: () => this._panelsInNewWindow.has(panel),
             onSyncActiveContexts: () => {
                 this._syncActiveContexts();
             },
             onMoveToNewWindow: async () => {
-                await this._moveInstanceToNewWindow(instance, bridge);
+                await this._moveInstanceToNewWindow(instance, bridge, panel);
             },
             openAsPlaintext: async () => {
                 await this._openAsPlaintext(instance);
@@ -943,8 +958,7 @@ export class PositronDataExplorerEditorProvider implements vscode.Disposable {
         // Handle panel dispose
         panel.onDidDispose(() => {
             const shouldKeepInstanceOpen =
-                this._isDisposing ||
-                this._skipInstanceCloseOnNextPanelDispose.delete(instance.identifier);
+                this._isDisposing || this._skipInstanceCloseOnNextPanelDispose.delete(panel);
 
             surfaceAttachment?.dispose();
             visibilityLease?.dispose();
@@ -952,11 +966,14 @@ export class PositronDataExplorerEditorProvider implements vscode.Disposable {
             bridge.dispose();
             disposePanelListeners();
             connection.dispose();
-            this._connections.delete(instance.identifier);
-            this._panels.delete(instance.identifier);
-            this._instancesInNewWindow.delete(instance.identifier);
+            this._panelConnections.delete(panel);
+            editorPanels.delete(panel);
+            if (editorPanels.size === 0) {
+                this._editorPanels.delete(instance.identifier);
+                this._instancesInNewWindow.delete(instance.identifier);
+            }
 
-            if (!shouldKeepInstanceOpen) {
+            if (!shouldKeepInstanceOpen && editorPanels.size === 0) {
                 const model = this._surfaceLifecycle?.getModel(modelId);
                 if (model && model.attachments.length === 0) {
                     this._surfaceLifecycle!.disposeModel(modelId, 'data-explorer-surface-closed');
@@ -1002,20 +1019,22 @@ export class PositronDataExplorerEditorProvider implements vscode.Disposable {
     private async _moveInstanceToNewWindow(
         instance: IPositronDataExplorerInstance,
         bridge: DataExplorerWebviewBridge,
+        panel: vscode.WebviewPanel,
     ): Promise<void> {
-        this._skipInstanceCloseOnNextPanelDispose.add(instance.identifier);
+        this._skipInstanceCloseOnNextPanelDispose.add(panel);
         try {
             await vscode.commands.executeCommand('workbench.action.moveEditorToNewWindow');
             this._instancesInNewWindow.add(instance.identifier);
+            this._panelsInNewWindow.add(panel);
             bridge.sendBackendStateUpdate();
             this._syncActiveContexts();
             setTimeout(() => {
-                if (this._panels.has(instance.identifier)) {
-                    this._skipInstanceCloseOnNextPanelDispose.delete(instance.identifier);
+                if (this._editorPanels.has(instance.identifier)) {
+                    this._skipInstanceCloseOnNextPanelDispose.delete(panel);
                 }
             }, 1000);
         } catch (error) {
-            this._skipInstanceCloseOnNextPanelDispose.delete(instance.identifier);
+            this._skipInstanceCloseOnNextPanelDispose.delete(panel);
             throw error;
         }
     }
@@ -1174,10 +1193,11 @@ export class PositronDataExplorerEditorProvider implements vscode.Disposable {
         this._isDisposing = true;
 
         // Dispose all panels
-        for (const panel of this._panels.values()) {
+        for (const panel of [...this._editorPanels.values()].flatMap((panels) => [...panels])) {
             panel.dispose();
         }
-        this._panels.clear();
+        this._editorPanels.clear();
+        this._panelConnections.clear();
         this._instancesInNewWindow.clear();
         this._instanceFocusDisposables.forEach((disposable) => disposable.dispose());
         this._instanceFocusDisposables.clear();

@@ -2589,6 +2589,14 @@ export abstract class DataGridInstance {
         this.fireOnDidUpdateEvent();
     }
 
+    protected softReset(): void {
+        this._horizontalScrollOffset = 0;
+        this._verticalScrollOffset = 0;
+        this._cursorColumnIndex = this._cursorInitiallyHidden ? -1 : 0;
+        this._cursorRowIndex = this._cursorInitiallyHidden ? -1 : 0;
+        this.clearSelection();
+    }
+
     clearSelection(): void {
         this._cellSelectionIndexes = undefined;
         this._columnSelectionIndexes = undefined;
@@ -2597,10 +2605,10 @@ export abstract class DataGridInstance {
 
     restoreClipboardDataSelection(clipboardData: ClipboardData): void {
         if (clipboardData instanceof ClipboardCell) {
-            this.selectCell(clipboardData.columnIndex, clipboardData.rowIndex);
-            return;
-        }
-        if (clipboardData instanceof ClipboardCellIndexes) {
+            this.clearSelection();
+            this._cursorColumnIndex = clipboardData.columnIndex;
+            this._cursorRowIndex = clipboardData.rowIndex;
+        } else if (clipboardData instanceof ClipboardCellIndexes) {
             this._cellSelectionIndexes = new CellSelectionIndexes(
                 clipboardData.columnIndexes,
                 clipboardData.rowIndexes,
@@ -2623,6 +2631,22 @@ export abstract class DataGridInstance {
         this.fireOnDidUpdateEvent();
     }
 
+    /** Gets the selection without expanding whole rows or columns for copying. */
+    getSelection():
+        ClipboardCellIndexes | ClipboardColumnIndexes | ClipboardRowIndexes | undefined {
+        if (this._cellSelectionIndexes) {
+            return new ClipboardCellIndexes(
+                this._cellSelectionIndexes.columnIndexes,
+                this._cellSelectionIndexes.rowIndexes,
+            );
+        } else if (this._columnSelectionIndexes?.indexes.length) {
+            return new ClipboardColumnIndexes(this._columnSelectionIndexes.indexes);
+        } else if (this._rowSelectionIndexes?.indexes.length) {
+            return new ClipboardRowIndexes(this._rowSelectionIndexes.indexes);
+        }
+        return undefined;
+    }
+
     /**
      * Gets the clipboard data based on current selection.
      * @returns The clipboard data, or undefined if nothing is selected.
@@ -2636,22 +2660,59 @@ export abstract class DataGridInstance {
             );
         }
 
-        // Column selection
+        const sortSelectionIndexesByPosition = (
+            selectionIndexes: number[],
+            layoutManager: LayoutManager,
+        ): number[] => {
+            const positionIndexes: Array<{ position: number; index: number }> = [];
+            for (const index of selectionIndexes) {
+                const position = layoutManager.mapIndexToPosition(index);
+                if (position === undefined) {
+                    return selectionIndexes;
+                }
+                positionIndexes.push({ position, index });
+            }
+            return positionIndexes
+                .sort((a, b) => a.position - b.position)
+                .map((positionIndex) => positionIndex.index);
+        };
+
+        // Expand whole columns in display order, including pinned rows.
         if (this._columnSelectionIndexes) {
-            const columnIndexes = this._columnSelectionIndexes.indexes;
-            if (columnIndexes.length === 0) {
+            const columnSelectionIndexes = this._columnSelectionIndexes.indexes;
+            if (columnSelectionIndexes.length === 0) {
                 return undefined;
             }
-            return new ClipboardColumnIndexes(columnIndexes);
+            const rowIndexes = this._rowLayoutManager.mapPositionsToIndexes(
+                0,
+                this._rowLayoutManager.entryCount - 1,
+            );
+            if (rowIndexes === undefined) {
+                return undefined;
+            }
+            return new ClipboardCellIndexes(
+                sortSelectionIndexesByPosition(columnSelectionIndexes, this._columnLayoutManager),
+                rowIndexes,
+            );
         }
 
-        // Row selection
+        // Expand whole rows in display order, including pinned columns.
         if (this._rowSelectionIndexes) {
-            const rowIndexes = this._rowSelectionIndexes.indexes;
-            if (rowIndexes.length === 0) {
+            const rowSelectionIndexes = this._rowSelectionIndexes.indexes;
+            if (rowSelectionIndexes.length === 0) {
                 return undefined;
             }
-            return new ClipboardRowIndexes(rowIndexes);
+            const columnIndexes = this._columnLayoutManager.mapPositionsToIndexes(
+                0,
+                this._columnLayoutManager.entryCount - 1,
+            );
+            if (columnIndexes === undefined) {
+                return undefined;
+            }
+            return new ClipboardCellIndexes(
+                columnIndexes,
+                sortSelectionIndexesByPosition(rowSelectionIndexes, this._rowLayoutManager),
+            );
         }
 
         // Cursor cell (fallback when no selection)
