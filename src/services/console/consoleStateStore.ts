@@ -5,6 +5,7 @@ import { PositronConsoleInstance, SerializedConsoleState } from './consoleInstan
 import { SessionAttachMode } from './interfaces/consoleService';
 import type { SerializedRuntimeItem, SerializedActivityItem } from '../../shared/consoleState';
 import { ConsoleRecoveryFileStore } from './consoleRecoveryFileStore';
+import { ANSIOutput } from '../../shared/ansiOutput';
 
 const ConsoleStateKeyPrefix = 'vscode-supervisor.console.state.';
 const ActiveConsoleSessionKey = 'vscode-supervisor.console.activeSession.v1';
@@ -536,10 +537,27 @@ export class ConsoleStateStore implements vscode.Disposable {
         switch (item.type) {
             case 'stream':
                 if (typeof item.text === 'string' && item.text.length > MaxStringFieldChars) {
-                    return {
-                        ...item,
-                        text: item.text.slice(-MaxStringFieldChars) + '\n…(truncated)',
-                    };
+                    const output = new ANSIOutput();
+                    output.processOutput(item.text);
+                    const lines = output.outputLines;
+                    let retainedChars = 0;
+                    let firstKeepIndex = lines.length;
+                    for (let i = lines.length - 1; i >= 0; i--) {
+                        const lineChars = lines[i].outputRuns.reduce(
+                            (total, run) => total + run.text.length,
+                            1,
+                        );
+                        if (retainedChars + lineChars > MaxStringFieldChars) {
+                            break;
+                        }
+                        retainedChars += lineChars;
+                        firstKeepIndex = i;
+                    }
+                    output.dropTop(firstKeepIndex);
+                    const text = output.getReplayText();
+                    // An active cursor or one very long line can prevent a safe
+                    // trim. The existing whole-item byte-budget pass handles it.
+                    return text.length < item.text.length ? { ...item, text } : item;
                 }
                 return item;
 

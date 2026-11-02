@@ -7,6 +7,8 @@
 <script lang="ts">
     import OutputRunWithLinks from './OutputRunWithLinks.svelte';
     import type { ANSIOutputRun, ANSIFormat, ANSIColor } from '$lib/ansi/ansiOutput';
+    import { getRpcConnection } from '$lib/rpc/client';
+    import { resolveAnsiFileLink } from './utils/fileLinkDetector';
 
     interface Props {
         outputRun: ANSIOutputRun;
@@ -127,18 +129,40 @@
     // Compute style and link mode.
     let inlineStyle = $derived(buildStyle(outputRun.format));
     let hasHyperlink = $derived(detectLinks && !!outputRun.hyperlink);
+    const fileLocation = $derived(
+        hasHyperlink && outputRun.hyperlink ? resolveAnsiFileLink(outputRun.hyperlink) : undefined,
+    );
     let shouldDetectHttpLinks = $derived(
         detectLinks && !hasHyperlink && outputRun.text.indexOf('http') !== -1,
     );
+
+    function handleHyperlinkClick(event: MouseEvent): void {
+        if (fileLocation) {
+            // ConsoleInstance supplies the session and delegates to the Host's
+            // working-directory-aware file opener.
+            return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        if (outputRun.hyperlink) {
+            void getRpcConnection().sendNotification('console/openExternal', {
+                url: outputRun.hyperlink.url,
+            });
+        }
+    }
 </script>
 
 {#if hasHyperlink}
     <a
         href={outputRun.hyperlink?.url}
         class="output-run output-link"
+        class:console-file-link={!!fileLocation}
+        data-console-ansi-hyperlink={fileLocation ? 'true' : undefined}
+        data-console-file-path={fileLocation?.path}
+        data-console-file-line={fileLocation?.line}
+        data-console-file-column={fileLocation?.column}
         style={inlineStyle}
-        target="_blank"
-        rel="noopener noreferrer"
+        onclick={handleHyperlinkClick}
     >
         {outputRun.text}
     </a>

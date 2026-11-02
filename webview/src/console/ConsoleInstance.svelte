@@ -299,7 +299,12 @@
             event.preventDefault();
             // Do not refocus the Console after the editor has been opened.
             event.stopPropagation();
-            if (event.ctrlKey || event.metaKey || event.detail === 0) {
+            if (
+                fileLink.dataset.consoleAnsiHyperlink === 'true' ||
+                event.ctrlKey ||
+                event.metaKey ||
+                event.detail === 0
+            ) {
                 void getRpcConnection().sendNotification('console/openFile', {
                     sessionId: session.id,
                     path: fileLink.dataset.consoleFilePath,

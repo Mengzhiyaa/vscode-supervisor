@@ -5,6 +5,7 @@
 
 import { SessionAttachMode } from '../interfaces/consoleService';
 import type { ConsoleErrorSuggestion } from '../consoleErrorFollowup';
+import { ANSIOutput } from '../../../shared/ansiOutput';
 import {
     type ConsoleExecutionAttribution,
     ActivityItemInputState,
@@ -20,31 +21,12 @@ export {
 } from '../../../shared/console';
 
 const htmlOutputPlaceholder = '[HTML output]';
-const ansiOscPattern = /\x1B\][^\x07]*(?:\x07|\x1B\\)|\x9D[^\x07\x9C]*(?:\x07|\x9C)/g;
-const ansiCsiPattern = /\x1B\[[0-?]*[ -/]*[@-~]|\x9B[0-?]*[ -/]*[@-~]/g;
-const ansiSinglePattern = /\x1B[@-Z\\-_]/g;
-
-function normalizeConsoleText(text: string): string {
-    return text
-        .replace(/\r\n/g, '\n')
-        .replace(/\r/g, '\n')
-        .replace(ansiOscPattern, '')
-        .replace(ansiCsiPattern, '')
-        .replace(ansiSinglePattern, '');
-}
-
 function splitConsoleTextLines(text: string): string[] {
-    const normalized = normalizeConsoleText(text);
-    if (!normalized.length) {
-        return [];
-    }
-
-    const lines = normalized.split('\n');
-    if (normalized.endsWith('\n')) {
-        lines.pop();
-    }
-
-    return lines;
+    return !text.length
+        ? []
+        : ANSIOutput.processOutput(text).map((line) =>
+              line.outputRuns.map((run) => run.text).join(''),
+          );
 }
 
 function formatConsoleTextForClipboard(text: string, commentPrefix: string = ''): string[] {
@@ -142,12 +124,22 @@ export class RuntimeItemActivity extends RuntimeItem {
     }
 
     override getClipboardRepresentation(commentPrefix: string): string[] {
-        return this._activityItems.flatMap((item) =>
-            item.getClipboardRepresentation(commentPrefix),
-        );
+        return this._activityItems
+            .filter((item) => !item.isHidden)
+            .flatMap((item) => item.getClipboardRepresentation(commentPrefix));
     }
 
     addActivityItem(item: ActivityItem): void {
+        const last = this.lastActivityItem;
+        if (
+            item instanceof ActivityItemStream &&
+            last instanceof ActivityItemStream &&
+            item.streamType === last.streamType &&
+            item.parentId === last.parentId
+        ) {
+            last.append(item.text);
+            return;
+        }
         if (
             item instanceof ActivityItemInput &&
             item.state !== ActivityItemInputState.Provisional
@@ -240,6 +232,7 @@ export class RuntimeItemActivity extends RuntimeItem {
         for (let i = this._activityItems.length - 1; i >= 0; i--) {
             scrollbackSize = this._activityItems[i].optimizeScrollback(scrollbackSize);
         }
+        this._activityItems = this._activityItems.filter((item) => !item.isHidden);
         return scrollbackSize;
     }
 }
@@ -482,6 +475,16 @@ export class ActivityItemInput extends ActivityItem {
  */
 export class ActivityItemStream extends ActivityItem {
     text: string;
+    private _ansiOutput: ANSIOutput | undefined;
+    private _nextCompactionSize = 64 * 1024;
+
+    private get ansiOutput(): ANSIOutput {
+        if (!this._ansiOutput) {
+            this._ansiOutput = new ANSIOutput();
+            this._ansiOutput.processOutput(this.text);
+        }
+        return this._ansiOutput;
+    }
 
     constructor(
         id: string,
@@ -494,19 +497,43 @@ export class ActivityItemStream extends ActivityItem {
         this.text = text;
     }
 
+    append(text: string): void {
+        const ansiOutput = this.ansiOutput;
+        this.text += text;
+        ansiOutput.processOutput(text);
+        if (this.text.length >= this._nextCompactionSize) {
+            // Repeated CR/progress updates can have a small rendered projection
+            // even when the original byte stream keeps growing.
+            const replay = ansiOutput.getReplayText();
+            if (replay.length < this.text.length) {
+                this.text = replay;
+            }
+            this._nextCompactionSize = Math.max(64 * 1024, this.text.length * 2);
+        }
+    }
+
     override getClipboardRepresentation(commentPrefix: string): string[] {
-        return formatConsoleTextForClipboard(this.text, commentPrefix);
+        return this.ansiOutput.outputLines.map(
+            (line) => commentPrefix + line.outputRuns.map((run) => run.text).join(''),
+        );
     }
 
     override optimizeScrollback(scrollbackSize: number): number {
-        const lineCount = countConsoleTextLines(this.text, this.text.length > 0 ? 1 : 0);
-
+        this._isHidden = scrollbackSize <= 0;
+        if (this._isHidden) {
+            return 0;
+        }
+        const ansiOutput = this.ansiOutput;
+        const lineCount = ansiOutput.outputLines.length;
         if (lineCount <= scrollbackSize) {
-            this._isHidden = false;
             return scrollbackSize - lineCount;
         }
-
-        this._isHidden = lineCount > 0;
+        if (ansiOutput.dropTop(lineCount - scrollbackSize) > 0) {
+            // Persist the retained ANSI projection, including state for future
+            // output, instead of cutting arbitrary raw messages or escape codes.
+            this.text = ansiOutput.getReplayText();
+            this._nextCompactionSize = Math.max(64 * 1024, this.text.length * 2);
+        }
         return 0;
     }
 }

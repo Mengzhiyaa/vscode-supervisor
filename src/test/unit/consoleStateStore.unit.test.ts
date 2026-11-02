@@ -2,7 +2,8 @@ import * as assert from 'assert';
 import * as vscode from 'vscode';
 import { ConsoleStateStore } from '../../services/console/consoleStateStore';
 import type { SerializedConsoleState } from '../../shared/consoleState';
-import { ActivityItemInputState } from '../../shared/console';
+import { ActivityItemInputState, ActivityItemStreamType } from '../../shared/console';
+import { ANSIColor, ANSIOutput } from '../../shared/ansiOutput';
 
 function createMemento(initialEntries: Record<string, unknown> = {}): vscode.Memento {
     const store = new Map<string, unknown>(Object.entries(initialEntries));
@@ -181,26 +182,90 @@ suite('[Unit] ConsoleStateStore — progressive truncation', () => {
         store.dispose();
     });
 
-    test('stream text fields are truncated before item removal', () => {
+    test('an oversized cursor line is removed as a whole instead of cutting raw ANSI text', () => {
         const memento = createMemento();
         const store = new ConsoleStateStore(memento, makeNoopLogChannel());
 
-        // Single item with 300KB stream text — should truncate the string, not remove the item
+        // The cursor's only line cannot be safely cut by line-based trimming.
         const state = makeState({
             items: [makeStreamItem(300_000, 'big-stream')],
         });
 
         const prepared = (store as any)._prepareStateForStorage(state);
-        assert.strictEqual(prepared.items.length, 1, 'item should be retained after truncation');
-
-        const streamItem = prepared.items[0].items.find((i: any) => i.type === 'stream');
-        assert.ok(streamItem, 'stream child should exist');
-        assert.ok(
-            streamItem.text.length <= 4096 + 20, // MaxStringFieldChars + suffix
-            `stream text should be truncated, got ${streamItem.text.length}`,
-        );
+        assert.deepStrictEqual(prepared.items, []);
+        assert.strictEqual(prepared.truncatedBefore, true);
 
         store.dispose();
+    });
+
+    test('storage budget trimming preserves styles, OSC 8 labels and an incomplete CSI', () => {
+        const store = new ConsoleStateStore(createMemento(), makeNoopLogChannel());
+        const budget = 20 * 1024;
+        const originalText =
+            'obsolete-line\n'.repeat(4000) +
+            '\x1b[32mretained\n' +
+            '\x1b]8;line=12:col=3;file:///workspace/source.R\x1b\\source\x1b]8;;\x1b\\\n' +
+            '\x1b[38;2;12;';
+        const state = makeState({
+            items: [
+                {
+                    type: 'activity',
+                    parentId: 'ansi-budget',
+                    items: [
+                        {
+                            type: 'stream',
+                            id: 'ansi-stream',
+                            parentId: 'ansi-budget',
+                            when: 1,
+                            streamType: ActivityItemStreamType.OUTPUT,
+                            text: originalText,
+                        },
+                    ],
+                },
+            ],
+        });
+        try {
+            const preparation = store as unknown as {
+                _prepareStateForStorage(
+                    state: SerializedConsoleState,
+                    maxBytes: number,
+                ): SerializedConsoleState;
+            };
+            const prepared = preparation._prepareStateForStorage(state, budget);
+            const activity = prepared.items[0];
+            assert.ok(activity?.type === 'activity', 'retain the newest stream activity');
+            const stream = activity.items.find((item) => item.type === 'stream');
+            assert.ok(stream?.type === 'stream');
+            assert.ok(
+                stream.text.length < originalText.length,
+                'actually exercise string trimming',
+            );
+            assert.ok(Buffer.byteLength(JSON.stringify(prepared), 'utf8') <= budget);
+
+            const restored = new ANSIOutput();
+            restored.processOutput(stream.text);
+            const runs = restored.outputLines.flatMap((line) => [...line.outputRuns]);
+            assert.ok(
+                runs.some(
+                    (run) =>
+                        run.text === 'retained' && run.format?.foregroundColor === ANSIColor.Green,
+                ),
+            );
+            const link = runs.find((run) => run.text === 'source')?.hyperlink;
+            assert.deepStrictEqual(
+                { url: link?.url, line: link?.params?.get('line'), col: link?.params?.get('col') },
+                { url: 'file:///workspace/source.R', line: '12', col: '3' },
+            );
+            restored.processOutput('34;56mcontinued\x1b[0m');
+            assert.deepStrictEqual(
+                restored.outputLines
+                    .at(-1)
+                    ?.outputRuns.map((run) => [run.text, run.format?.foregroundColor]),
+                [['continued', '#0c2238']],
+            );
+        } finally {
+            store.dispose();
+        }
     });
 
     test('output.data values are truncated (non-stream/error/html type)', () => {

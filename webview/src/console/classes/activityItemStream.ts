@@ -66,6 +66,7 @@ export class ActivityItemStream extends ActivityItem {
      * Gets the output lines store.
      */
     get outputLinesStore(): Readable<readonly ANSIOutputLine[]> {
+        this.processActivityItemStreams();
         return this._outputLinesStore;
     }
 
@@ -93,7 +94,6 @@ export class ActivityItemStream extends ActivityItem {
 
         // Initialize.
         this._activityItemStreams.push(this);
-        this.processActivityItemStreams();
     }
 
     //#endregion Constructor
@@ -119,8 +119,6 @@ export class ActivityItemStream extends ActivityItem {
         const newlineIndex = activityItemStream.text.lastIndexOf('\n');
         if (newlineIndex === -1) {
             this._activityItemStreams.push(activityItemStream);
-            this.processActivityItemStreams();
-            this._terminated = !this._ansiOutput.isBuffering;
             return undefined;
         }
 
@@ -175,6 +173,10 @@ export class ActivityItemStream extends ActivityItem {
      * @returns The remaining scrollback size.
      */
     public override optimizeScrollback(scrollbackSize: number, clearData: boolean = true): number {
+        this.hidden = scrollbackSize <= 0;
+        if (this.isHidden) {
+            return 0;
+        }
         // Process the activity items streams.
         this.processActivityItemStreams();
 
@@ -191,7 +193,7 @@ export class ActivityItemStream extends ActivityItem {
 
         // If clearData is enabled, permanently truncate the internal data to free memory.
         if (clearData) {
-            this._ansiOutput.truncate(scrollbackSize);
+            this._ansiOutput.dropTop(this._ansiOutput.outputLines.length - scrollbackSize);
         }
 
         this.syncOutputLinesStore();

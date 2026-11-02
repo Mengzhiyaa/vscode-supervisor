@@ -67,6 +67,17 @@
     const visibleRuntimeItems = $derived(
         consoleInstance.runtimeItems.filter((runtimeItem) => !runtimeItem.isHidden),
     );
+    const restartItem = $derived(
+        consoleInstance.state === 'exited'
+            ? visibleRuntimeItems
+                  .filter(
+                      (item) =>
+                          item instanceof RuntimeItemExited ||
+                          item instanceof RuntimeItemRestartButton,
+                  )
+                  .at(-1)
+            : undefined,
+    );
     const trace = $derived(consoleInstance.trace);
     const disconnected = $derived(consoleInstance.disconnected);
     const languageId = $derived(consoleInstance.languageId);
@@ -129,9 +140,9 @@
                 <div class="exited-message">
                     <ConsoleOutputLines outputLines={runtimeItem.outputLines} />
                 </div>
-                <!-- Restart button for exited sessions -->
-                {#if onRestart}
-                    <RuntimeRestartButton {languageName} disabled={false} onrestart={onRestart} />
+                <!-- Only the latest exit of a stopped session offers a restart. -->
+                {#if onRestart && runtimeItem === restartItem}
+                    <RuntimeRestartButton {languageName} onrestart={onRestart} />
                 {/if}
             </div>
         {:else if runtimeItem instanceof RuntimeItemTrace}
@@ -146,11 +157,9 @@
         {:else if runtimeItem instanceof RuntimeItemReconnected}
             <!-- Positron does not render a reconnected banner item here. -->
         {:else if runtimeItem instanceof RuntimeItemRestartButton}
-            <RuntimeRestartButton
-                {languageName}
-                disabled={false}
-                onrestart={() => runtimeItem.onRestart()}
-            />
+            {#if runtimeItem === restartItem}
+                <RuntimeRestartButton {languageName} onrestart={() => runtimeItem.onRestart()} />
+            {/if}
         {:else if runtimeItem instanceof RuntimeItemStartupFailure}
             <RuntimeStartupFailure runtimeItemStartupFailure={runtimeItem} />
         {:else}

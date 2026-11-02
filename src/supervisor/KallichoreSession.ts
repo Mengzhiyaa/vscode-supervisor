@@ -2689,7 +2689,12 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
     }
 
     private onExited(exitCode: number) {
-        if (this._restarting) {
+        // The replacement can report Starting before the previous kernel's exit
+        // arrives, clearing _restarting. The exit reason still identifies that
+        // late notification, which must not close the replacement's connection.
+        const restarting =
+            this._restarting || this._exitReason === positron.RuntimeExitReason.Restart;
+        if (restarting) {
             // If we're restarting, wait for the kernel to start up again
             this.log(
                 `Kernel exited with code ${exitCode}; waiting for restart to finish.`,

@@ -1298,15 +1298,15 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
             throw new Error(`Session ${sessionId} not found`);
         }
 
-        this._outputChannel.info(
-            `[RuntimeSession] Restarting session ${session.sessionId} from ` +
-                `state '${session.state}'. Source: ${source}`,
-        );
-
         const existingRestart = this._restartingSessionPromises.get(sessionId);
         if (existingRestart) {
             return existingRestart;
         }
+
+        this._outputChannel.info(
+            `[RuntimeSession] Restarting session ${session.sessionId} from ` +
+                `state '${session.state}'. Source: ${source}`,
+        );
 
         const restartPromise = this._restartSession(session, interrupt).finally(() => {
             if (this._restartingSessionPromises.get(sessionId) === restartPromise) {

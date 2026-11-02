@@ -3455,6 +3455,21 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
                             );
                         }
 
+                        // A late restart exit belongs to the previous kernel. Keep
+                        // the replacement's startup item and message subscriptions,
+                        // including when it has already become ready or busy.
+                        if (
+                            exit.reason === RuntimeExitReason.Restart &&
+                            (session.state === RuntimeState.Starting ||
+                                session.state === RuntimeState.Restarting ||
+                                session.state === RuntimeState.Ready ||
+                                session.state === RuntimeState.Idle ||
+                                session.state === RuntimeState.Busy ||
+                                session.state === RuntimeState.Interrupting)
+                        ) {
+                            return;
+                        }
+
                         if (exit.reason === RuntimeExitReason.StartupFailed) {
                             if (this._startupFailureHandled) {
                                 if (this._runtimeAttached) {

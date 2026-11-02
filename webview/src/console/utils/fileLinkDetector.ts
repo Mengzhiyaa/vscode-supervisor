@@ -1,4 +1,4 @@
-import type { ANSIOutputLine, ANSIOutputRun } from '../../lib/ansi/ansiOutput';
+import type { ANSIHyperlink, ANSIOutputLine, ANSIOutputRun } from '../../lib/ansi/ansiOutput';
 
 export interface ConsoleFileLocation {
     path: string;
@@ -9,6 +9,47 @@ export interface ConsoleFileLocation {
 export interface ConsoleFileLink extends ConsoleFileLocation {
     start: number;
     end: number;
+}
+
+/** Resolve OSC 8 file positions using Positron's parameter/URL precedence. */
+export function resolveAnsiFileLink(hyperlink: ANSIHyperlink): ConsoleFileLocation | undefined {
+    if (!/^file:/i.test(hyperlink.url)) {
+        return undefined;
+    }
+    const positiveInteger = (value: string | undefined): number | undefined => {
+        if (!value || !/^\d+$/.test(value)) {
+            return undefined;
+        }
+        const number = Number(value);
+        return Number.isSafeInteger(number) && number > 0 ? number : undefined;
+    };
+    try {
+        // cli versions can emit file://C:\path in Windows sessions.
+        const url = new URL(
+            hyperlink.url.replace(/\\/g, '/').replace(/^(file:\/\/)([a-z]:)/i, '$1/$2'),
+        );
+        let line = positiveInteger(hyperlink.params?.get('line'));
+        let column = line ? positiveInteger(hyperlink.params?.get('col')) : undefined;
+        if (!line && !hyperlink.params?.get('line')) {
+            const fragment = url.hash.match(/^#(\d+)(?:,(\d+))?$/);
+            const suffix =
+                url.pathname.match(/^(.*):(\d+):(\d+)$/) ?? url.pathname.match(/^(.*):(\d+)$/);
+            if (fragment) {
+                line = positiveInteger(fragment[1]);
+                column = positiveInteger(fragment[2]);
+            } else if (suffix) {
+                line = positiveInteger(suffix[2]);
+                column = positiveInteger(suffix[3]);
+                if (line) {
+                    url.pathname = suffix[1];
+                }
+            }
+        }
+        url.hash = '';
+        return { path: url.toString(), line: line ?? 1, column };
+    } catch {
+        return undefined;
+    }
 }
 
 /** Detect locations in visible text, after ANSI processing. Positions are 1-based. */
@@ -52,11 +93,7 @@ export function splitOutputLine(line: ANSIOutputLine): ConsoleOutputSegment[] {
     const links = detectFileLinks(text).filter(
         (link) =>
             !ranges.some(
-                ({ run, start, end }) =>
-                    start < link.end &&
-                    end > link.start &&
-                    run.hyperlink &&
-                    !run.hyperlink.url.startsWith('file:'),
+                ({ run, start, end }) => start < link.end && end > link.start && run.hyperlink,
             ),
     );
     if (links.length === 0) {
@@ -82,19 +119,10 @@ export function splitOutputLine(line: ANSIOutputLine): ConsoleOutputSegment[] {
         if (offset < link.start) {
             segments.push({ runs: slice(offset, link.start) });
         }
-        let path = link.path;
-        const explicitLink = ranges.find(
-            ({ run, start, end }) =>
-                start <= link.start && end >= link.end && run.hyperlink?.url.startsWith('file:'),
-        )?.run.hyperlink;
-        if (explicitLink) {
-            // OSC 8 may display a relative label but carry the exact absolute file URI.
-            path = explicitLink.url;
-        }
         segments.push({
             runs: slice(link.start, link.end),
             location: {
-                path,
+                path: link.path,
                 line: link.line,
                 column: link.column,
             },
