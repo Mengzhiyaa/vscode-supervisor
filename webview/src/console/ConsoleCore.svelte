@@ -513,7 +513,7 @@
             return '';
         }
 
-        switch (session.state) {
+        switch (session.runtimeState) {
             case 'starting':
                 return localize('console.state.starting', 'Starting');
             case 'restarting':
@@ -2249,7 +2249,7 @@
                 stateLabel={stateLabelForSession(activeSession)}
                 interruptible={activeSession?.state === 'busy'}
                 submitting={activeConsoleSessionId ? isSubmitting(activeConsoleSessionId) : false}
-                interrupting={activeSession?.state === 'interrupting'}
+                interrupting={activeSession?.runtimeState === 'interrupting'}
                 restarting={activeSession?.state === 'starting' ||
                     activeSession?.state === 'restarting'}
                 showDeleteButton={Boolean(activeSession) && !showSessionTabs}

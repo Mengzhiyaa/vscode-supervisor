@@ -1753,7 +1753,7 @@ export class SupervisorApplication implements vscode.Disposable, ISupervisorFram
                     : this._consoleService.activePositronConsoleInstance;
 
                 if (instance) {
-                    instance.interrupt();
+                    await instance.interrupt();
                 } else if (session) {
                     await session.interrupt();
                 } else {

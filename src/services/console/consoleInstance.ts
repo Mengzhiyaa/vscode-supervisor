@@ -866,7 +866,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
         this._emitAppendRuntimeItem(this._runtimeItems[this._runtimeItems.length - 1]);
     }
 
-    interrupt(code?: string): void {
+    async interrupt(code?: string): Promise<void> {
         if (this._alignConsoleSubmission && this.codeSubmissionInProgress) {
             this.cancelCodeSubmission();
             return;
@@ -880,9 +880,7 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
 
         const runtimeState = this._session?.state ?? RuntimeState.Uninitialized;
 
-        if (this._session) {
-            this._session.interrupt();
-        }
+        const interrupt = this._session?.interrupt();
 
         this.clearPendingInput();
         this.setPendingCode(undefined, undefined, this._inputDraft);
@@ -907,6 +905,15 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
         setTimeout(() => {
             this.focusInput();
         }, 0);
+
+        try {
+            await interrupt;
+        } catch (error) {
+            this._outputChannel.error(
+                `[ConsoleInstance] Interrupt failed: ${getErrorMessage(error)}`,
+            );
+            throw error;
+        }
     }
 
     /**
@@ -3401,6 +3408,36 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
     }
 
     private subscribeToSessionEvents(session: RuntimeSession): void {
+        if (session.onDidConfirmInterruptIdle) {
+            this._disposables.push(
+                session.onDidConfirmInterruptIdle(() => {
+                    // This is a supervisor snapshot, not an unrelated comm's
+                    // Idle message. Recover even if the execution's Idle was lost.
+                    for (const [executionId, activity] of this._runtimeItemActivities) {
+                        if (
+                            activity.activityItems.some(
+                                (item) =>
+                                    item instanceof ActivityItemInput &&
+                                    item.state === ActivityItemInputState.Executing,
+                            )
+                        ) {
+                            this.markExecutionCompleted(executionId);
+                            this._executionHistoryService?.completeExecution(
+                                this.sessionId,
+                                executionId,
+                            );
+                        }
+                    }
+                    if (
+                        this._state === PositronConsoleState.Busy ||
+                        this._state === PositronConsoleState.Interrupting
+                    ) {
+                        this.setState(PositronConsoleState.Ready);
+                    }
+                }),
+            );
+        }
+
         // Subscribe to runtime state changes
         this._disposables.push(
             session.onDidChangeRuntimeState((state: RuntimeState) =>
@@ -3597,7 +3634,9 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
         // disabled. Console execution Busy/Idle is handled by handleState(), which
         // can correlate the event through its parent execution ID. The startup
         // exception preserves the state of a reconnect to an already-busy kernel.
-        if (state === RuntimeState.Busy) {
+        // Interrupting belongs to the toolbar's runtime state. Preserve ready
+        // input or correlated Busy; a reattach still needs a lifecycle Busy.
+        if (state === RuntimeState.Busy || state === RuntimeState.Interrupting) {
             if (
                 this._state === PositronConsoleState.Starting ||
                 this._state === PositronConsoleState.Uninitialized
@@ -3608,7 +3647,10 @@ export class PositronConsoleInstance implements IPositronConsoleInstance {
             return;
         }
         if (state === RuntimeState.Idle) {
-            if (this._runtimeLifecycleBusy) {
+            if (
+                this._runtimeLifecycleBusy ||
+                this._state === PositronConsoleState.Interrupting
+            ) {
                 this._runtimeLifecycleBusy = false;
                 if (this._state !== PositronConsoleState.Ready) {
                     this.setState(PositronConsoleState.Ready);

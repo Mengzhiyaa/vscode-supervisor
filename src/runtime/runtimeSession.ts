@@ -2570,10 +2570,24 @@ export class RuntimeSessionService implements vscode.Disposable, IRuntimeSession
                 return;
         }
 
-        const timer = setTimeout(() => {
+        const timer = setTimeout(async () => {
             const watchdog = this._stateWatchdogs.get(session.sessionId);
             if (!watchdog || watchdog.timer !== timer) {
                 return;
+            }
+            if (state === RuntimeState.Interrupting) {
+                try {
+                    await session.reconcileInterruptState();
+                } catch (error) {
+                    this._outputChannel.warn(
+                        `[RuntimeSession] Could not reconcile interrupt for ${session.sessionId}: ${getErrorMessage(error)}`,
+                    );
+                }
+                // Reconciliation may have delivered a state change or a newer
+                // operation may have replaced this watchdog while querying.
+                if (this._stateWatchdogs.get(session.sessionId) !== watchdog) {
+                    return;
+                }
             }
             this._stateWatchdogs.delete(session.sessionId);
             if (watchdog.expectedStates.includes(session.state)) {

@@ -275,7 +275,7 @@ export interface IPositronConsoleInstance extends vscode.Disposable {
     selectAll(): void;
     clearConsole(): boolean;
     completeStartup(): void;
-    interrupt(code?: string): void;
+    interrupt(code?: string): void | Promise<void>;
     enqueueCode(
         code: string,
         attribution: IConsoleCodeAttribution,

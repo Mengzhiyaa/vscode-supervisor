@@ -275,8 +275,16 @@ export class ViewerViewProvider extends BaseWebviewProvider {
                 const instance = sessionId
                     ? this._consoleService?.getConsoleInstance(sessionId)
                     : undefined;
-                instance?.interrupt();
-                void this._sendInterruptState();
+                try {
+                    await instance?.interrupt();
+                } catch (error) {
+                    this.log(
+                        `[ViewerViewProvider] Source interrupt failed: ${getErrorMessage(error)}`,
+                        vscode.LogLevel.Warning,
+                    );
+                } finally {
+                    void this._sendInterruptState();
+                }
                 return;
             }
             try {

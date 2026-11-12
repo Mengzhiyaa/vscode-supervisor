@@ -82,6 +82,12 @@ export interface JupyterKernelSpec {
  * A language runtime that wraps a Jupyter kernel.
  */
 export interface JupyterLanguageRuntimeSession extends positron.LanguageRuntimeSession {
+    /** Refreshes a stalled interrupt from the supervisor when supported. */
+    reconcileInterruptState?(): Promise<void>;
+
+    /** An authoritative Idle snapshot recovered a missing interrupt completion. */
+    readonly onDidConfirmInterruptIdle?: vscode.Event<void>;
+
     /**
      * Convenience method for starting the Positron LSP server, if the
      * language runtime supports it.

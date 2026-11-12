@@ -170,6 +170,7 @@ export class RuntimeSession implements vscode.Disposable {
     private readonly _stateEmitter = new vscode.EventEmitter<RuntimeState>();
     private readonly _exitEmitter = new vscode.EventEmitter<LanguageRuntimeExit>();
     private readonly _cancelExecutionEmitter = new vscode.EventEmitter<string>();
+    private readonly _interruptIdleEmitter = new vscode.EventEmitter<void>();
     private readonly _pendingExecutionIds = new Set<string>();
     private readonly _executionCodeLocations = new Map<string, Utf8Location>();
     private readonly _startupCompleteEmitter = new vscode.EventEmitter<LanguageRuntimeInfo>();
@@ -268,6 +269,7 @@ export class RuntimeSession implements vscode.Disposable {
     readonly onDidChangeRuntimeState = this._stateEmitter.event;
     readonly onDidEndSession = this._exitEmitter.event;
     readonly onDidCancelExecution = this._cancelExecutionEmitter.event;
+    readonly onDidConfirmInterruptIdle = this._interruptIdleEmitter.event;
     readonly onDidCompleteStartup = this._startupCompleteEmitter.event;
     readonly onDidEncounterStartupFailure = this._startupFailureEmitter.event;
     readonly onDidChangeWorkingDirectory = this._workingDirectoryEmitter.event;
@@ -328,6 +330,7 @@ export class RuntimeSession implements vscode.Disposable {
         this._disposables.push(this._stateEmitter);
         this._disposables.push(this._exitEmitter);
         this._disposables.push(this._cancelExecutionEmitter);
+        this._disposables.push(this._interruptIdleEmitter);
         this._disposables.push(this._startupCompleteEmitter);
         this._disposables.push(this._startupFailureEmitter);
         this._disposables.push(this._workingDirectoryEmitter);
@@ -496,6 +499,11 @@ export class RuntimeSession implements vscode.Disposable {
         let previousState = this._state;
 
         // Forward events
+        if (kernel.onDidConfirmInterruptIdle) {
+            this._disposables.push(
+                kernel.onDidConfirmInterruptIdle(() => this._interruptIdleEmitter.fire()),
+            );
+        }
         this._disposables.push(
             kernel.onDidChangeRuntimeState((state) => {
                 // Positron-style state logging: State: idle => busy (reason)
@@ -1193,6 +1201,11 @@ export class RuntimeSession implements vscode.Disposable {
             // when the backend cannot acknowledge the interrupt.
             this.cancelExecutions(executionIds);
         }
+    }
+
+    /** Reconciles a stalled interrupt against the supervisor's actual state. */
+    async reconcileInterruptState(): Promise<void> {
+        await this._kernel?.reconcileInterruptState?.();
     }
 
     /** Retires work dropped by the Console queue or rejected by the runtime. */

@@ -135,6 +135,9 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
     /** Emitter for runtime state changes */
     private readonly _state: vscode.EventEmitter<positron.RuntimeState>;
 
+    private readonly _interruptIdle = new vscode.EventEmitter<void>();
+    readonly onDidConfirmInterruptIdle = this._interruptIdle.event;
+
     /** Emitter for runtime exit events */
     private readonly _exit: vscode.EventEmitter<positron.LanguageRuntimeExit>;
 
@@ -162,6 +165,7 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 
     /** The current runtime state of this session */
     private _runtimeState: positron.RuntimeState = positron.RuntimeState.Uninitialized;
+    private _runtimeStateVersion = 0;
     private _validatingStartup = false;
     private _pendingKernelState: positron.RuntimeState | undefined;
 
@@ -267,6 +271,7 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
         // Ensure the emitters are disposed when the session is disposed
         this._disposables.push(this._messages);
         this._disposables.push(this._state);
+        this._disposables.push(this._interruptIdle);
         this._disposables.push(this._exit);
         this._disposables.push(this.disconnected);
 
@@ -939,6 +944,8 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
                 ? attributionSource
                 : undefined,
         );
+        // Dispatching new work also invalidates an in-flight state snapshot.
+        this._runtimeStateVersion += 1;
         this.sendRequest(execute)
             .then((reply) => {
                 this.log(`Execution result: ${JSON.stringify(reply)}`, vscode.LogLevel.Debug);
@@ -2194,26 +2201,91 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
      */
     async interrupt(): Promise<void> {
         const hadPendingChecks = this._pendingUnprocessedExecutions.size > 0;
-        for (const cancel of this._pendingUnprocessedExecutions.values()) {
+        for (const cancel of Array.from(this._pendingUnprocessedExecutions.values())) {
             cancel();
         }
         this._pendingUnprocessedExecutions.clear();
         if (hadPendingChecks && this._runtimeState !== positron.RuntimeState.Busy) {
             return;
         }
-        // Mark the session as interrupting
-        this.onStateChange(positron.RuntimeState.Interrupting, 'interrupting kernel');
+        if (this._runtimeState === positron.RuntimeState.Interrupting) {
+            return;
+        }
+
+        // Preserve idle Ctrl+C signalling, but only wait for completion when
+        // there is running work, an input prompt, or an execution awaiting Busy.
+        // An idle kernel need not emit a new Idle notification for SIGINT.
+        if (
+            this._runtimeState === positron.RuntimeState.Busy ||
+            this._activeBackendRequestHeader ||
+            Array.from(this._pendingRequests.values()).some(
+                (request) => request instanceof ExecuteRequest,
+            )
+        ) {
+            this.onStateChange(positron.RuntimeState.Interrupting, 'interrupting kernel');
+        }
 
         // Clear current input request if any
         this._activeBackendRequestHeader = null;
 
+        const interruptVersion = this._runtimeStateVersion;
         try {
-            await this._api.interruptSession(this.metadata.sessionId);
+            await this._api.interruptSession(this.metadata.sessionId, { timeout: 5000 });
         } catch (err) {
+            try {
+                if (this._runtimeStateVersion === interruptVersion) {
+                    await this.reconcileInterruptState(true);
+                }
+            } catch (error) {
+                this.log(
+                    `Could not reconcile failed interrupt: ${getErrorMessage(error)}`,
+                    vscode.LogLevel.Warning,
+                );
+            }
             if (isAxiosError(err)) {
                 throw new Error(summarizeAxiosError(err));
             }
             throw err;
+        }
+    }
+
+    /** Checks for a missed completion without treating HTTP success as Idle. */
+    async reconcileInterruptState(restoreBusy = false): Promise<void> {
+        if (this._runtimeState !== positron.RuntimeState.Interrupting) {
+            return;
+        }
+        const version = this._runtimeStateVersion;
+        const response = await this._api.getSession(this.metadata.sessionId, { timeout: 1000 });
+        // A newer websocket event, restart, or disposal wins over this snapshot.
+        if (this._runtimeStateVersion !== version) {
+            return;
+        }
+        switch (response.data.status) {
+            case Status.Idle:
+                this._interruptIdle.fire();
+                if (this._runtimeStateVersion !== version) {
+                    return;
+                }
+                this.onStateChange(positron.RuntimeState.Idle, 'reconciled interrupt');
+                break;
+            case Status.Ready:
+                this._interruptIdle.fire();
+                if (this._runtimeStateVersion !== version) {
+                    return;
+                }
+                this.onStateChange(positron.RuntimeState.Ready, 'reconciled interrupt');
+                break;
+            case Status.Busy:
+                if (restoreBusy) {
+                    this.onStateChange(positron.RuntimeState.Busy, 'interrupt request failed');
+                }
+                break;
+            case Status.Offline:
+                this.onStateChange(positron.RuntimeState.Offline, 'reconciled interrupt');
+                break;
+            case Status.Exited:
+                this.markExited(0, this._exitReason);
+                break;
         }
     }
 
@@ -2419,6 +2491,7 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
      * Clean up the session.
      */
     dispose() {
+        this._runtimeStateVersion += 1;
         for (const cancel of this._pendingUnprocessedExecutions.values()) {
             cancel();
         }
@@ -2648,6 +2721,7 @@ export class KallichoreSession implements JupyterLanguageRuntimeSession {
 
         // Fire an event if the state has changed.
         if (this._runtimeState !== newState) {
+            this._runtimeStateVersion += 1;
             this._runtimeState = newState;
             this._state.fire(newState);
         }

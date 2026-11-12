@@ -320,6 +320,11 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
 
         const disposables: vscode.Disposable[] = [];
 
+        // Runtime operation labels are independent of Console execution state.
+        disposables.push(
+            session.onDidChangeRuntimeState(() => this._sendSessionInfoUpdate()),
+        );
+
         // Listen for startup complete event (Positron pattern: onDidCompleteStartup)
         disposables.push(
             session.onDidCompleteStartup((info) => {
@@ -675,7 +680,7 @@ export class ConsoleViewProvider extends BaseWebviewProvider {
 
             const instance = this._resolveConsoleInstance('interrupt', params?.sessionId);
             if (instance) {
-                instance.interrupt();
+                await instance.interrupt();
             }
         });
     }
